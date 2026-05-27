@@ -567,24 +567,46 @@ class IronBloodUniverse(SimulatedUniverse):
         else:
             #不是肉体帝候一律放弃
             self.click_text(text="放弃", box=[1221, 1276, 967, 998])
+    def try_get_kill_count(self):
+        screen = self.get_screen()
+        num1 = extract_number(match_numbers_in_region(screen))
+        try:
+           if num1 is not None:
+                num1 = int(num1)
+           else:
+                return None
+        except (ValueError, TypeError):
+            return None
+        if num1 is None or num1 % 8 != 0:
+            return None
+        time.sleep(0.5)
+        screen2 = self.get_screen()
+        num2 = extract_number(match_numbers_in_region(screen2))
+        if num2 is not None:
+            try:
+                num2 = int(num2)
+            except (ValueError, TypeError):
+                return None
+        else:
+            return None
+        if num2 % 8 == 0 and num2 == num1:
+            return num1 // 8
+        return None
     def select_go(self):
-        num = extract_number(match_numbers_in_region(self.screen))
-        retry=True
-        if num is not None:
-            num=int(num)
-            if num%8==0:
-                self.kill_count=num//8
-                retry=False
+        max_retries = 5
+        kill = None
+        for attempt in range(max_retries):
+            kill = self.try_get_kill_count()
+            if kill is not None:
+                self.kill_count = kill
+                CUS_LOGGER.debug(f"识别成功，击杀数{self.kill_count}")
+                break
             else:
-                CUS_LOGGER.warning("异常的被动效果参数")
-        if retry:
-            time.sleep(2)
-            num = extract_number(match_numbers_in_region(self.get_screen()))
-            if num is None or int(num)%8!=0:
-                return
-            else:
-                num = int(num)
-                self.kill_count = num // 8
+                CUS_LOGGER.warning(f"第{attempt+1}次完整识别与复核失败，重试")
+                time.sleep(2)   # 等待后重试整个流程
+        if kill is None:
+            CUS_LOGGER.error("多次尝试仍无法获取击杀数，放弃本次计数")
+            return
         CUS_LOGGER.debug(f"当前击杀数{self.kill_count}")
         self.set_kill_num(str(self.kill_count))
         key_mouse_manager.clean()

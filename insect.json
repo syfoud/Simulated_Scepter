@@ -1,0 +1,800 @@
+[ {
+        "name": "点击空白结算",
+        "trigger":{
+            "text": "点击空白",
+            "box": [873, 1047, 878, 909],
+            "redundancy": 30,
+            "condition": "end"
+        },
+        "actions":
+        [
+            {
+                "position": [900, 1000]
+            },
+            "restart_recording"
+        ]
+    },
+    {
+        "name": "结算界面",
+        "trigger":{
+            "text": "来自黑塔的分析报告",
+            "box": [716, 1013, 217, 252],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "end_of_university"
+        ]
+    },
+{
+        "name": "点击空白",
+        "trigger":{
+            "text": "点击空白",
+            "box": [872, 1048, 729, 1015],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [900, 1000]
+            }
+        ]
+    },
+        {
+        "name": "选择开局奖励",
+        "trigger":{
+            "text": "开拓",
+            "box": [589, 1327, 130, 163],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "select_bless"
+        ]
+    },
+    {
+        "name": "选择祝福",
+        "trigger":{
+            "text": "选择祝福",
+            "box": [98, 202, 59, 95],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+          { "position": [962, 491] },
+          { "sleep": 0.5 },
+          { "position": [1699, 972] },
+          { "sleep": 0.5 },
+          { "position": [1165, 491] },
+          { "sleep": 0.5 },
+          { "position": [1699, 972] },
+          { "sleep": 0.5 }
+        ]
+    },
+    {
+        "name": "强化祝福",
+        "trigger":{
+            "text": "祝福强化",
+            "box": [98, 202, 60, 96],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "enhance"
+        ]
+    },
+        {
+        "name": "选择奇物",
+        "trigger":{
+            "text": "选择奇物",
+            "box": [98, 202, 60, 95],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "select_strange",
+            {
+                "set_state": "strange"
+            }
+        ]
+    },{
+        "name": "丢弃奇物",
+        "trigger":{
+            "text": "丢弃奇物",
+            "box": [100, 201, 62, 94],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "drop_strange"
+        ]
+    },
+    {
+        "name": "丢弃祝福",
+        "trigger":{
+            "text": "丢弃祝福",
+            "box": [99, 200, 62, 94],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "drop_bless"
+        ]
+    },{
+        "name": "祝福商店",
+        "trigger":{
+            "text": "祝福商店",
+            "box": [99, 202, 60, 96],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "press": "esc"
+            }
+        ]
+    },
+    {
+        "name": "奇物商店",
+        "trigger":{
+            "text": "奇物商店",
+            "box": [101, 200, 65, 93],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "strange_shop"
+        ]
+    },
+        {
+        "name": "自动战斗检测",
+        "trigger":{
+            "photo": "c",
+            "pos": {"x":0.9891,"y":0.1491},
+            "threshold":0.9
+        },
+        "actions":
+        [
+            "auto_battle"
+        ]
+    },
+    {
+        "name": "战斗状态检测",
+        "trigger":{
+            "photo": "battle",
+            "pos": {"x":0.9594,"y":0.9778},
+            "threshold":0.97
+        },
+        "actions":
+        [
+            {
+                "set_state": "battle"
+            }
+        ]
+    },
+        {
+        "name": "事件触发箭头",
+        "trigger":{
+            "photo": "arrow",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "condition": "event"
+        },
+        "actions":
+        [
+            {
+                "photo": "arrow"
+            }
+        ]
+    },
+    {
+        "name": "黑塔触发箭头",
+        "trigger":{
+            "photo": "arrow_1",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "condition": "event"
+        },
+        "actions":
+        [
+            {
+                "photo": "arrow_1"
+            }
+        ]
+    },
+    {
+        "name": "黑塔商店触发箭头",
+        "trigger":{
+            "photo": "shop_herta",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "condition": "event"
+        },
+        "actions":
+        [
+            {
+                "photo": "shop_herta"
+            }
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate1",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate2",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate3",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate4",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate5",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate6",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate7",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "命途选择事件",
+        "trigger":{
+            "photo": "fate8",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+        {
+        "name": "正式选择事件",
+        "trigger":{
+            "photo": "star",
+            "pos": {"x":0.1828,"y":0.5000},
+            "mask":"mask_event",
+            "threshold":0.965,
+            "condition": "event"
+        },
+        "actions":
+        [
+             "select_event"
+        ]
+    },
+    {
+        "name": "选择事件空白",
+        "trigger":{
+            "text": "事件",
+            "box": [93, 156, 55, 96],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [100, 47]
+            },
+            {
+                "set_state": "event"
+            }
+        ]
+    },
+    {
+        "name": "选择移动目标",
+        "trigger":{
+            "text": "被动效果",
+            "box": [205, 296, 826, 855],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions":
+        [
+           "select_go"
+        ]
+    },
+    {
+        "name": "选择生效目标",
+        "trigger":{
+            "text": "选择生效目标",
+            "box": [803, 961, 128, 159],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions":
+        [
+           "select_doing"
+        ]
+    },
+    {
+        "name": "选择首领",
+        "trigger":{
+            "text": "首领区域",
+            "box": [805, 911, 127, 159],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+           "select_head"
+        ]
+    },
+    {
+        "name": "作弊界面",
+        "trigger":{
+            "text": "作弊",
+            "box": [923, 996, 230, 270],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions":
+        [
+           "cheat"
+        ]
+    },
+    {
+        "name": "重投界面",
+        "trigger":{
+            "text": "确认效果",
+            "box": [1585, 1687, 964, 992],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "calculated_roll"
+        ]
+    },
+    {
+        "name": "设置界面进行结算",
+        "trigger":{
+            "text": "结束并结算",
+            "box": [1321, 1465, 931, 964],
+            "interval": 1,
+            "redundancy": 30,
+            "condition": "exit"
+        },
+        "actions":
+        [
+            {
+                "position": [1393, 948]
+            }
+        ]
+    },
+    {
+        "name": "设置界面暂离",
+        "trigger":{
+            "text": "暂离",
+            "box": [1328, 1389, 792, 829],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "setting_exit"
+        ]
+    },
+    {
+        "name": "地图更新",
+        "trigger":{
+            "text": "地图",
+            "box": [99, 155, 60, 95],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "initing_map2"
+        ]
+    },
+    {
+        "name": "进入位面",
+        "trigger":{
+            "text": "进入位面",
+            "box": [907, 1009, 857, 891],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "initing_map"
+        ]
+    },
+{
+        "name": "模拟宇宙外",
+        "trigger":{
+            "text": "模拟宇宙",
+            "box": [1217, 1351, 589, 621],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "press": "f"
+            },
+            {
+                "sleep": 1
+            }
+        ]
+    },{
+        "name": "确认命途",
+        "trigger":{
+            "text": "确认命途",
+            "box": [1525, 1628, 968, 996],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1576, 982]
+            }
+        ]
+    },{
+        "name": "选择命途",
+        "trigger":{
+            "text": "踏上的命途",
+            "box": [837, 1083, 155, 186],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "select_fate"
+        ]
+    },{
+        "name": "开始游戏",
+        "trigger":{
+            "text": "首次通关奖励",
+            "box": [1195, 1343, 235, 266],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "begin_universe"
+        ]
+    },
+    {
+        "name": "备战开始",
+        "trigger":{
+            "text": "推荐信息",
+            "box": [611, 717, 169, 201],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "pre_start"
+        ]
+    },
+            {
+        "name": "开始寰宇蝗灾",
+        "trigger":{
+            "text": "开始探索",
+            "box": [872, 1052, 728, 774],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [962,751]
+            }
+        ]
+    },
+        {
+        "name": "进入寰宇蝗灾",
+        "trigger":{
+            "text": "寰宇蝗灾",
+            "box": [815, 940, 544, 576],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1270,598]
+            }
+        ]
+    },
+        {
+        "name": "切换宇宙类型",
+        "trigger":{
+            "text": "扩展装置",
+            "box": [135, 345, 798, 821],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [240, 809]
+            }
+        ]
+    },
+{
+        "name": "打开模拟宇宙",
+        "trigger":{
+            "text": "黑塔的办公室",
+            "box": [55, 187, 11, 42],
+            "redundancy": 30,
+            "condition": "init2"
+        },
+        "actions":
+        [
+        "goto_survival_room"
+        ]
+    },
+    {
+        "name": "打开地图6",
+        "trigger":{
+            "text": "传送",
+            "box": [1623, 1687, 951, 990],
+            "redundancy": 30,
+            "condition": "init"
+        },
+        "actions":
+        [
+           {
+                "position": [1655, 970]
+            },
+            {
+                "set_state": "init2"
+            }
+        ]
+    },
+    {
+        "name": "确认图片",
+        "trigger":{
+            "photo": "yes1",
+            "pos": {"x":0.5,"y":0.5},
+            "mask":"mask_end"
+        },
+        "actions":
+        [
+            "confirm_yes"
+        ]
+    },
+    {
+        "name": "确认纯文本",
+        "trigger":{
+            "text": "确认",
+            "box": [232, 1690, 154, 928],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "confirm_yes"
+        ]
+    },
+    {
+        "name": "打开地图5",
+        "trigger":{
+            "text": "黑塔的办公室",
+            "box": [844, 998, 739, 768],
+            "redundancy": 30,
+            "condition": "init"
+        },
+        "actions":
+        [
+           {
+                "position": [921, 754]
+            }
+        ]
+    },
+    {
+        "name": "打开地图4",
+        "trigger":{
+            "photo": "herta_office",
+            "threshold":0.95
+        },
+        "actions":
+        [
+           {
+                "photo": "herta_office"
+            }
+        ]
+    },
+    {
+        "name": "打开地图3",
+        "trigger":{
+            "text": "主控舱段",
+            "box": [1463, 1599, 336, 369],
+            "redundancy": 30,
+            "condition": "init"
+        },
+        "actions":
+        [
+           {
+                "position": [1528, 353]
+            },
+            {
+                "scroll": -10
+            },
+           {
+                "drag": [0.5,0.1520,0.5,0.8620]
+            }
+        ]
+    },
+    {
+        "name": "打开地图2",
+        "trigger":{
+            "text": "空间站",
+            "box": [0, 1920, 540, 1080],
+            "redundancy": 30,
+            "condition": "init"
+        },
+        "actions":
+        [
+           {
+                "text": "空间站"
+            }
+        ]
+    },
+    {
+        "name": "拖拽地图",
+        "trigger":{
+            "text": "星轨航图",
+            "box": [93, 196, 55, 88],
+            "redundancy": 30,
+            "condition": "init"
+        },
+        "actions":
+        [   
+           {
+                "drag": [0.8521,0.5620,0.1521,0.5620]
+            }
+        ]
+    },
+    {
+        "name": "打开地图",
+        "trigger":{
+            "text": "星轨航图",
+            "box": [1585, 1692, 135, 167],
+            "redundancy": 30,
+            "condition": "init"
+        },
+        "actions":
+        [   {
+                "position": [1678, 160]
+            }
+        ]
+    },
+    {
+        "name": "关闭积分奖励",
+        "trigger":{
+            "text": "积分奖励",
+            "box": [119, 253, 271, 308],
+            "redundancy": 30
+        },
+        "actions":
+        [   {
+                "press": "esc"
+            }
+        ]
+    },
+    {
+        "name": "大世界",
+        "trigger":{
+            "photo": "smartphone",
+            "pos": {"x":0.9833,"y":0.9380},
+            "threshold":0.96
+        },
+        "actions":
+        [
+            "goto_herta_office"
+        ]
+    },{
+        "name": "可能处于模拟宇宙中",
+        "trigger":{
+            "photo": "big_world",
+            "pos": {"x":0.0245,"y":0.5185},
+            "threshold":0.98
+        },
+        "actions":
+        [
+            "is_run"
+        ]
+    },
+    {
+        "name": "列车补给",
+        "trigger": {
+            "text": "列车补给",
+            "box": [880, 1039, 55, 97],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [1200, 1000]
+            },
+            {
+                "delay": 5000
+            },
+            {
+                "position": [1200, 1000]
+            }
+        ]
+    }
+]
