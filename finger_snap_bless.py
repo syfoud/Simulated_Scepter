@@ -958,6 +958,12 @@ class FingerSnapBless(FingerSnap):
             if countdown != self.countdown:
                 return
         CUS_LOGGER.debug(f"当前倒计时{self.countdown}")
+
+        if self.countdown > 75:
+            CUS_LOGGER.info(f"[停止] 当前倒计时{self.countdown}已经超过75，成就目标已经达成，脚本停止等待手动接管")
+            self.stop()
+            return
+
         self.set_kill_num(str(self.countdown))
         key_mouse_manager.clean()
         key_mouse_manager.keyUp("w")
