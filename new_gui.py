@@ -26,7 +26,8 @@ from PyQt5.QtCore import pyqtSignal, Qt, pyqtSlot
 from simul import SimulatedUniverse
 from diver import DivergentUniverse
 from iron_blood import IronBloodUniverse
-from finger_snap import FingerSnap
+#from finger_snap import FingerSnap
+from finger_snap_bless import FingerSnapBless as FingerSnap
 
 import faulthandler
 
