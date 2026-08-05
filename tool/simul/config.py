@@ -39,13 +39,10 @@ class Config:
     @property
     def multi(self) -> float:
         x = float(self.angle)
-        if x > 5:
+        if x > 10 or x <= 0:
             self.angle = '1.0'
             return 1.0
-        elif x > 2:
-            return x - 2
-        else:
-            return x
+        return x
 
     @property
     def order(self) -> List[int]:

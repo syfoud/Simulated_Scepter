@@ -62,7 +62,8 @@ def main(ang=[1,1,3], su=None):
         key_mouse_manager.multi *= ax / ay
     key_mouse_manager.multi += 1e-9
     try:
-        if abs(key_mouse_manager.multi) > 2:
+        if abs(key_mouse_manager.multi) > 10 or key_mouse_manager.multi <= 0:
+            CUS_LOGGER.warning(f"校准结果{key_mouse_manager.multi}超出合理范围，重置为默认值1")
             key_mouse_manager.multi = 1
     except:
         key_mouse_manager.multi = 1
