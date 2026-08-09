@@ -20,14 +20,18 @@
     1. 第1次骰子（进位面后休整点那次）判断前，打开地图总览
        （骰子界面右下角图标），检测"洞"（被真实格子包围的镂空区域），
        超过2个直接重开；同一次顺便检查命途增益开局送的2个初始慈怀
-       区域是不是都挤在地图前半场，都在前半场也直接重开
+       区域是不是都挤在地图前半场，都在前半场也直接重开；再检查最长
+       路径前3步有没有奖励关卡，没有直接重开，有的话把奖励所在的
+       步数标记下来，走完标记的最后那一步（对应奖励的交互也已经
+       完成）之后，如果没有触发阮2停止，直接重开
     2. 第1次骰子固定强制"对症"；第2~4次固定强制"浇灌"；4次之后打开
        地图检查是否已铺满（当前可达范围内还有没有未慈怀候选），没
        铺满就继续强制浇灌，最多到第5次封顶（不管满没满，第5次后都
        切到为善阶段）；作弊/重投用完了还没换到想要的骰面，直接重开
-    3. 阮2检测：事件类型节点在互动前用OCR判断，含"阮"直接停止程序
-       等待手动处理；奖励/战斗类节点走的是底层导航"按F互动"那条路，
-       改成移动循环里每2秒轮询一次全屏OCR，命中同样直接停止
+    3. 阮2检测：不管是奖励类型还是事件类型的节点，只要走到"事件画面
+       已经出现"这一刻（select_event 被调用），就检查一次事件名有没有
+       "阮"字，命中就交互前停止程序等待手动处理；不对移动/靠近交互点
+       的过程做持续OCR轮询
     4. 全程走"斜着走"的单跳路线（不允许跳格），寻路目标是奖励最多、
        同分再看事件最多；这套逻辑通过给节点固定正权重(1) + 奖励/事件
        加成实现，配合"从不允许跳格的邻接图"自然走满步数
@@ -40,15 +44,14 @@
     - "洞"的判定阈值（被包围方向数 >= 4）
 """
 
+import os
 import time
 
 import cv2
 import numpy as np
 
 from finger_snap import FingerSnap
-from tool.GLOBAL import key_mouse_manager, factor
-from tool.thread import ThreadWithException
-from tool.simul.utils import sprint
+from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
 from tool.utils.Error import NoMatchError, NoBossError
@@ -62,7 +65,7 @@ from tool.utils.image_tool import find_image_by_name
 
 
 def detect_infectable_nodes(color_image, matches, pad=6, cyan_ratio_threshold=0.20,
-                             b_min=120, g_min=90):
+                             b_min=120, g_min=95):
     """检测节点周围是否有青绿色光晕（判断该节点当前是否已处于"慈怀"状态）。
     直接从 test/test_infectable_path.py 搬过来的同一份逻辑，就地给 matches
     里每个节点加上 'infectable' 属性，不改变判定阈值。
@@ -122,8 +125,12 @@ class FingerSnapBless(FingerSnap):
         self._floor2_survey_done = False        # 是否已经做过开局地图总览判断
         self._floor2_phase = "bless"            # "bless"强制浇灌阶段 / "weishan"强制为善阶段
         self._floor2_bless_rolls = 0            # bless阶段已经骰了几次
-        self._last_ruan_mei_check = 0.0  # 阮2轮询节流用的上次检测时间戳
+        self._floor2_weishan_rolls = 0          # 为善阶段已经骰了几次
         self._floor2_last_confirmed_text = None  # 上一次真正点过"确认效果"的骰面文本，用于识别重复评估
+        self._floor2_reward_steps = []  # 最长路径前3步里，奖励关卡所在的步数列表
+        self._floor2_reward_check_step = None  # 上面这些步数里最大的一个，走完它之后检查有没有遇到阮2
+        self._floor2_reward_check_done = False  # 上面这个检查是否已经做过
+        self._floor2_reward_survey_done = False  # "前3步有没有奖励"这项勘察本身是否已经做过（在select_go里做）
 
     # ------------------------------------------------------------------
     # 地图识图 + 权重
@@ -189,8 +196,14 @@ class FingerSnapBless(FingerSnap):
                 max_gap=110, max_overlap=50, max_dy=130
             )
         else:
+            # 默认阈值(90/40/120)在实测中出现过"最近的候选节点纵向间距
+            # 120.5，只比阈值多0.5就连不上边"导致起点孤立、无限卡死的
+            # 情况——找不到路径又没法通过重试解决（角色位置不变，读数
+            # 每次都一样），会一直卡在原地出不去。放宽到跟mode3同一档
+            # (110/50/130)，减少这种"差一点点连不上"导致卡死的情况。
             self.nodes, self.edges, start_idx = build_rightward_graph2(
-                matches, start=start
+                matches, start=start,
+                max_gap=110, max_overlap=50, max_dy=130
             )
 
         if self.plane_floor == 1:
@@ -204,14 +217,31 @@ class FingerSnapBless(FingerSnap):
                 else:
                     n['weight'] = -3.0
         elif self.plane_floor == 2:
-            # 第二位面目标是"5步内奖励最多、同分事件最多，且走满步数"。
-            # 奖励权重大幅拉高，让DP优先冲奖励，而不是随便凑够步数；
-            # 基础权重(1)仍然给所有节点，保证同等奖励数量下继续偏好更长路径。
+            # 第二位面目标是"前3步奖励尽量多、同分事件最多，且走到终点时
+            # 走满步数（斜着走单跳，不允许跳格）"。奖励权重大幅拉高，
+            # 让DP优先冲奖励；基础权重(1)保证同等奖励数量下继续偏好更
+            # 长路径；额外给"距离起点3跳以内"的奖励节点加一层大额加成，
+            # 明确让算法把奖励往前3步堆，而不是只看整条路径奖励总数——
+            # 两条路都能到终点、总奖励数一样时，前面有奖励的那条权重会
+            # 更高，会被优先选中。
+            depth = {start_idx: 0}
+            queue = [start_idx]
+            while queue:
+                cur = queue.pop(0)
+                if depth[cur] >= 3:
+                    continue
+                for nxt in self.edges.get(cur, []):
+                    if nxt not in depth:
+                        depth[nxt] = depth[cur] + 1
+                        queue.append(nxt)
+
             for n in self.nodes:
                 if n['name'] == 'start':
                     continue
                 if n['name'] in ('reward', 'reward2'):
                     n['weight'] = 50.0
+                    if depth.get(n['idx'], 99) <= 3:
+                        n['weight'] += 200.0
                 elif n['name'] == 'event':
                     n['weight'] = 5.0
                 else:
@@ -276,8 +306,13 @@ class FingerSnapBless(FingerSnap):
             self._floor2_survey_done = False
             self._floor2_phase = "bless"
             self._floor2_bless_rolls = 0
+            self._floor2_weishan_rolls = 0
             self._pending_duizheng = False
             self._floor2_last_confirmed_text = None
+            self._floor2_reward_steps = []
+            self._floor2_reward_check_step = None
+            self._floor2_reward_check_done = False
+            self._floor2_reward_survey_done = False
 
         try:
             self.try_analysis_map(1)
@@ -405,22 +440,61 @@ class FingerSnapBless(FingerSnap):
         mid = (min(xs) + max(xs)) / 2
         return all(x < mid for x in blessed_x)
 
-    def _floor2_check_and_decide(self):
+    def _floor2_mark_reward_steps_in_first3(self):
+        """路线（self.path，已经是按第二位面权重表算出来的最长路径）
+        刚确定的时候调用：标记前3步里哪几步是奖励关卡（步数从1开始，
+        对应 self._floor2_step 的计数方式）。没有奖励就返回空列表。
+        """
+        if not self.path:
+            return []
+        return [
+            step for step, n in enumerate(self.path[1:4], start=1)
+            if n["name"] in ("reward", "reward2")
+        ]
+
+    def _floor2_check_holes_and_blessed(self):
         """检查"洞"和"初始2个慈怀区域是否都在前半场"，决定要不要直接重开。
-        直接复用当前已经算好的 self.nodes/self.path（不管是哪次
-        try_analysis_map 算出来的），不再需要专门打开地图总览——
-        第二位面正常寻路时 mode=2 识别到的节点数据本身就够用了。
+        这两项都不依赖准确的起点坐标（洞检测只看节点间距，前半场检测
+        只看所有节点自己的坐标分布），可以放心在"完整地图"总览界面上做。
         """
         holes = self._detect_holes()
         CUS_LOGGER.info(f"[Floor2勘察] 检测到洞数量约为 {holes}")
         if holes > 2:
             CUS_LOGGER.info("[Floor2勘察] 洞数量超过2个，直接重开")
             self.need_end = True
-        elif self._floor2_front_half_blessed_only():
+            return
+        if self._floor2_front_half_blessed_only():
             CUS_LOGGER.info("[Floor2勘察] 初始2个慈怀区域都在前半场，直接重开")
             self.need_end = True
-        else:
-            CUS_LOGGER.info("[Floor2勘察] 通过检查，继续本轮")
+            return
+
+    def _floor2_check_reward_in_first3(self):
+        """检查最长路径前3步有没有奖励，决定要不要直接重开；有奖励的话
+        把奖励所在的步数标记下来。这一项依赖 self.path，也就依赖准确的
+        起点定位——"完整地图"总览界面上角色定位不一定准（跟正常移动
+        界面绝对坐标不一样，实测过 compute_start_point_from_crop 在那个
+        界面上可能定位错，导致起点在图里孤立、路径整个算错），所以这项
+        检查必须在关闭地图、回到正常移动界面之后单独做一次识图再判断，
+        不能沿用"完整地图"界面识别出来的 self.path。
+        """
+        start_edge_count = len(self.edges.get(self.start_nodes["idx"], [])) if self.start_nodes else -1
+        path_desc = [f"{n['name']}({n['cx']:.0f},{n['cy']:.0f})" for n in (self.path or [])]
+        CUS_LOGGER.info(
+            f"[Floor2勘察] 起点可达边数={start_edge_count}，"
+            f"当前算出的path(共{len(self.path or [])}个节点)：{path_desc}"
+        )
+        reward_steps = self._floor2_mark_reward_steps_in_first3()
+        if not reward_steps:
+            CUS_LOGGER.info("[Floor2勘察] 最长路径前3步没有奖励关卡，直接重开")
+            self.need_end = True
+            return
+
+        self._floor2_reward_steps = reward_steps
+        self._floor2_reward_check_step = max(reward_steps)
+        CUS_LOGGER.info(
+            f"[Floor2勘察] 通过检查，前3步的奖励关卡在第{reward_steps}步，"
+            f"走完第{self._floor2_reward_check_step}步后检查是否遇到阮2"
+        )
 
     # ------------------------------------------------------------------
     # 骰子结算
@@ -472,15 +546,27 @@ class FingerSnapBless(FingerSnap):
         key_mouse_manager.wait()
 
     def _floor2_pre_roll_check(self):
-        """第一次骰子判断前：打开地图，检测洞+初始2个慈怀区域是否都在
-        前半场，决定要不要直接重开。"""
+        """第一次骰子判断前：打开完整地图，检测洞+初始2个慈怀区域是否都
+        在前半场，决定要不要直接重开。这两项都不依赖起点定位准不准，
+        可以放心用这个总览界面。
+        "最长路径前3步有没有奖励"这项不在这里做——骰子界面本身是叠在
+        3D场景上的浮层，按esc关掉总览之后露出来的还是3D场景+骰子界面，
+        根本看不到六边形地图，没法在这个时间点重新识图算路径。这项挪到
+        了 select_go 第一次真正开始寻路移动的时候（那时候才是正常能看到
+        地图、起点定位可靠的视角）。
+        返回True表示识图成功、判断已经做出；False表示识图失败，
+        下次骰子再重新尝试一次。
+        """
         self._open_full_map()
+        ok = False
         try:
             self.try_analysis_map(mode=2)
-            self._floor2_check_and_decide()
+            self._floor2_check_holes_and_blessed()
+            ok = True
         except (NoMatchError, NoBossError) as e:
             CUS_LOGGER.warning(f"[Floor2勘察] 打开地图后仍识图失败({type(e).__name__})")
         self._close_full_map()
+        return ok
 
     def _floor2_is_covered_via_map(self):
         """铺满阶段第4/5次骰子后，判断是否已铺满：打开地图拿一份完整、
@@ -496,9 +582,11 @@ class FingerSnapBless(FingerSnap):
         return covered
 
     def _floor2_bless_target(self):
-        """铺满阶段每次骰子该指望哪个效果：第1次（进位面后休整点那次）
-        固定对症，第2次开始固定浇灌，一直到铺满为止（不封顶在第5次）。"""
-        return "对症" if self._floor2_bless_rolls == 0 else "浇灌"
+        """铺满阶段用作弊强制指定骰面时该找哪个效果：不管第几次，都指定
+        "浇灌"。第1次骰子虽然"浇灌"和"对症"两个都能接受（不强制换），
+        但如果两个都没中、非要靠作弊硬指定不可的话，还是固定选浇灌——
+        对症只是"自然骰到就接受"，不是需要主动追求的目标。"""
+        return "浇灌"
 
     def calculated_roll(self):
         if self.plane_floor != 2:
@@ -512,8 +600,8 @@ class FingerSnapBless(FingerSnap):
             return
 
         if not self._floor2_survey_done:
-            self._floor2_pre_roll_check()
-            self._floor2_survey_done = True
+            if self._floor2_pre_roll_check():
+                self._floor2_survey_done = True
             if self.need_end:
                 self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
                 self.init_map()
@@ -539,7 +627,10 @@ class FingerSnapBless(FingerSnap):
             return
 
         if self._floor2_phase == "bless":
-            want_ok = self._floor2_bless_target() in text
+            if self._floor2_bless_rolls == 0:
+                want_ok = ("浇灌" in text) or ("对症" in text)
+            else:
+                want_ok = "浇灌" in text
         else:
             want_ok = "为善" in text
 
@@ -580,217 +671,49 @@ class FingerSnapBless(FingerSnap):
                     CUS_LOGGER.info(
                         f"[Floor2] 第{self._floor2_bless_rolls}次骰子后仍未铺满，继续强制浇灌"
                     )
+        elif self._floor2_phase == "weishan":
+            self._floor2_weishan_rolls += 1
+            CUS_LOGGER.info(f"[Floor2] 为善第{self._floor2_weishan_rolls}次已确认")
+            if self._floor2_weishan_rolls >= 4:
+                CUS_LOGGER.info("[停止] 为善阶段已经骰满4次，脚本停止等待手动接管")
+                self.stop()
 
     # ------------------------------------------------------------------
     # 事件识别（阮2）
     # ------------------------------------------------------------------
+    # 阮2检测只在 select_event 里做单点检查（事件画面出现时读一次），
+    # 不再对移动/靠近交互点的过程做持续OCR轮询，所以这里不再覆写
+    # get_event_only_minimap，直接用基类原版。
 
-    def _abort_if_ruan_mei(self):
-        """奖励/战斗类节点走的是"靠近后按F互动"这条路（跟事件类型的
-        "选择事件→star→确认"完全是两套系统，藏在 tool/simul/utils.py
-        几千行的底层导航代码里，没法像 select_event 那样干净地在互动前
-        插入检查）。这里用的是最早 ruan_mei_stop.py 验证过能用的方案：
-        移动循环里每2秒轮询一次全屏OCR找"阮"，不管当前具体处于导航的
-        哪一步、也不需要知道F键在哪按。
+    _REWARD_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "floor2_reward_events.txt")
 
-        阮2只会出现在奖励/事件类型区域，战斗类型不可能有，所以先按
-        self.start_nodes 的类型过滤——只有当前正在走向的目标是
-        reward/reward2/event/bugevent 时才轮询，战斗/精英/贸易等类型
-        直接跳过，省掉没必要的OCR调用。
+    def _log_reward_event(self, node_type, text):
+        """把奖励格子遇到的事件名追加写到脚本同目录下的txt文件里，
+        文件不存在就创建，存在就追加。写入失败只打警告，不影响主流程。
         """
-        node_type = self.start_nodes.get("name") if self.start_nodes else None
-        if node_type not in ("reward", "reward2", "event", "bugevent"):
-            return False
-
-        now = time.time()
-        if now - self._last_ruan_mei_check < 2.0:
-            return False
-        self._last_ruan_mei_check = now
-
-        self.ts.forward(self.screen)
-        full_text = merge_text(self.ts.res)
-        CUS_LOGGER.debug(f"[阮2检测] 目标类型={node_type} 本次OCR全屏文本：{full_text}")
-        if "阮" in full_text:
-            CUS_LOGGER.info(f"[阮2检测] 命中'阮'字（当前全屏文本：{full_text}），脚本已终止，不会触发互动")
-            key_mouse_manager.keyUp("w")
-            self.stop_move = 1
-            self.should_update_map = False
-            self.stop()
-            return True
-        return False
-
-    def get_event_only_minimap(self):
-        """
-        跟 tool/simul/utils.py 里的同名方法基本一致（这是处理靠近交互点、
-        按F互动的底层导航循环），只在两处 self.get_screen() 之后插入
-        self._abort_if_ruan_mei() 轮询——第二位面时命中"阮"就直接返回，
-        不再继续走向互动点、更不会按F。仅当 self.plane_floor==2 时插入
-        检查，第一位面等不受影响。
-        self.mini_state 含义
-        0: 初始状态
-        1: 寻路中状态
-        3: 接近目标点状态
-        >=7: 完成一轮寻路
-        """
-        CUS_LOGGER.info(f"{factor}以「负世」之名向你保证……刻法勒永志不忘。")
-        self.should_update_map = True
-        ThreadWithException(target=self.auto_update_map, name="更新地图").start()
-        if self.debug:
-            CUS_LOGGER.debug(f'当前状态{self.mini_state}')
-        self.stop_move = 0
-        self.ready = 0
-        self.is_target = 0
-        self.moving_direct = False
-        self.has_target = True
-        self.is_find_end = 0
-        self.get_screen()
-        CUS_LOGGER.info(f"{factor}决定穿过那道门扉，去拥抱一个更适合「毁灭」的结局.")
-        self.target_type = -1
-        if not self.move_to_event():
-            CUS_LOGGER.info("相比一团只懂得燃烧的火焰，她一定能在救世的路上走得更远。")
-            self.has_target = False
-            if self.mini_state > 2:
-                CUS_LOGGER.info(f"{factor}也会和曾经的他们一样，带着记忆和火焰…走进新生的混沌。")
-                self.is_find_end = self.move_to_end(mode=2, device=1)
-                self.has_target = bool(self.is_find_end)
-                if self.has_target:
-                    self.target_type = 4
-            else:
-                self.map_data_load(create=False)
-                if int(self.now_map) == 27793:
-                    key_mouse_manager.mouse_move(15)
-                else:
-                    self.has_target = self.move_direct_to_text()
-            CUS_LOGGER.info(f"{factor}需要在此驻足片刻，消化那千万次循环中沉积的悲伤、痛苦和挣扎。")
-        else:
-            self.has_target = True
-            self.target_type = 1
-        if not self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
-            key_mouse_manager.keyDown("w")
-        run_wait_time = 2
-        self.first_mini = 0
-        self.is_sprinting = 0
-        if self.has_target:
-            run_wait_time += 4
-        if self.mini_state == 1:
-            sprint()
-            self.is_sprinting = 1
-        need_confirm = 0
-        init_time = time.time()
-        while True:
-            key_mouse_manager.wait()
-            CUS_LOGGER.info("请求：「救世主，带领吾等前进吧。」")
-            if self._stop == 1:
-                key_mouse_manager.keyUp("w")
-                self.stop_move = 1
-                break
-            if self.mini_state > 1:
-                key_mouse_manager.keyUp("w")
-                key_mouse_manager.wait()
-            self.get_screen()
-            if self.plane_floor == 2 and self._abort_if_ruan_mei():
-                return
-            have_f = self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96)
-            if not have_f:
-                CUS_LOGGER.info("「但倘若黎明从一开始就不存在……」")
-                key_mouse_manager.keyDown("w")
-            if have_f:
-                key_mouse_manager.keyUp("w")
-                key_mouse_manager.press('f')
-                CUS_LOGGER.info('「那就让怒火燃尽此身，化作明日的烈阳！」')
-                self.stop_move = 1
-                need_confirm = 1
-                if self.nof(must_be='event'):
-                    self.should_update_map = False
-                    return
-                break
-            if not self.is_run():
-                key_mouse_manager.keyUp("w")
-                self.stop_move = 1
-                self.should_update_map = False
-                key_mouse_manager.wait()
-                CUS_LOGGER.info("响应：「一道无足轻重的伤疤。」")
-                return
-            if time.time() - init_time > run_wait_time:
-                CUS_LOGGER.warning(f"警告：等待时间超时," + ("不" if not self.has_target else "") + "存在「毁灭」目标")
-                self.stop_move = 1
-                key_mouse_manager.keyUp("w")
-                self.mini_state += 2
-                if self.mini_state >= 7:
-                    self.should_update_map = False
-                    return
-                if self.has_target:
-                    key_mouse_manager.press('s', 0.3)
-                    key_mouse_manager.press('a', 0.7)
-                    key_mouse_manager.press('d', 0.45)
-                    key_mouse_manager.press('w', 0.5)
-                    if self.mini_state == 3:
-                        key_mouse_manager.click(0.5, 0.5)
-                    key_mouse_manager.wait()
-                break
-        self.stop_move = 1
-        key_mouse_manager.keyUp("w")
-        self.update_state("check")
-        if not self.is_run():
-            self.should_update_map = False
-            return
-        first_find = self.first_mini
-        if need_confirm or self.has_target:
-            CUS_LOGGER.info(f"{factor}会坚守。直到有人前来打破这漫长的轮回，为翁法罗斯的命运添上结尾。")
-            for i in "sasddwwaa":
-                if self._stop:
-                    self.should_update_map = False
-                    return
-                self.get_screen()
-                if self.plane_floor == 2 and self._abort_if_ruan_mei():
-                    return
-                if self.target_type == 1:
-                    CUS_LOGGER.info(f"沿着他们的足迹……写下前所未有的结局。")
-                    if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
-                        key_mouse_manager.press('f', force=True)
-                        if self.nof(must_be='event'):
-                            self.should_update_map = False
-                            return
-                        else:
-                            key_mouse_manager.press('f')
-                            if self.nof(must_be='event'):
-                                self.should_update_map = False
-                                return
-                if (self.is_find_end == 1 or first_find) and self.mini_state > 2:
-                    first_find = False
-                    if self.move_to_end(mode=0, device=1):
-                        i = "w"
-                elif self.move_to_event():
-                    i = "w"
-                elif self.move_direct_to_text():
-                    i = "w"
-                if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
-                    key_mouse_manager.press('f', force=True)
-                    if self.nof(must_be='event'):
-                        self.should_update_map = False
-                        return
-                    else:
-                        key_mouse_manager.press('f')
-                        if self.nof(must_be='event'):
-                            self.should_update_map = False
-                            return
-                key_mouse_manager.press(i, 0.25)
-                CUS_LOGGER.debug(f"向{i}走0.25秒")
-                key_mouse_manager.wait()
-            key_mouse_manager.click(0.5, 0.5)
-            self.should_update_map = False
+        try:
+            with open(self._REWARD_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(
+                    f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t"
+                    f"第{self._floor2_step}步\t类型={node_type}\t事件名={text}\n"
+                )
+        except Exception as e:
+            CUS_LOGGER.warning(f"[奖励记录] 写入失败: {e}")
 
     def select_event(self):
-        # 阮2判断必须在 super().select_event() 之前——super() 内部会真正
-        # 完成事件互动（选子选项、确认），等它跑完再判断就已经互动过了，
-        # 跟"交互之前拦截"的要求不符。这里先自己读一遍事件名，命中"阮"
-        # 就直接停止、不再调用 super()（也就跳过了后续所有交互点击）；
-        # 没命中才正常走原来的互动流程。
+        # 阮2检测放在这里——不管是奖励类型还是事件类型的节点，只要走到
+        # 了这个"事件画面已经出现"的时刻（select_event 被调用），就检查
+        # 一次事件名有没有"阮"字，命中就交互前停止；不做移动过程中的
+        # 持续OCR轮询（那套已经去掉，改回单点检查）。
         if self.plane_floor == 2 and self.new_node:
             event_name = self.ts.find_with_box(box=[191, 750, 963, 998], forward=True, re_screen=False)
             text = merge_text(event_name) if len(event_name) else ""
             node_type = self.start_nodes.get("name") if self.start_nodes else None
             CUS_LOGGER.debug(f"[Floor2事件-预检] 节点类型={node_type} 文本={text}")
+
+            if node_type in ("reward", "reward2"):
+                self._log_reward_event(node_type, text)
+
             if "阮" in text:
                 CUS_LOGGER.info(f"[阮2] 检测到目标事件: {text}，交互前停止程序等待手动处理")
                 self.stop()
@@ -937,6 +860,22 @@ class FingerSnapBless(FingerSnap):
     # ------------------------------------------------------------------
 
     def select_go(self):
+        if (
+            self.plane_floor == 2
+            and self._floor2_reward_check_step is not None
+            and not self._floor2_reward_check_done
+            and self._floor2_step >= self._floor2_reward_check_step + 1
+        ):
+            # 多等一步再判断：标记的奖励关卡那一步走完之后，还得再往下走
+            # 一格，此时上一格的事件互动必然已经处理完（不可能带着还没
+            # 结束的互动往下走），不用再纠结互动到底是不是真的走完了。
+            self._floor2_reward_check_done = True
+            CUS_LOGGER.info(
+                f"[Floor2] 前3步标记的奖励关卡（第{self._floor2_reward_steps}步）"
+                f"已经走完并且多走了一步，没有触发阮2，直接重开"
+            )
+            self.need_end = True
+
         num = extract_number(match_numbers_in_region(self.screen))
         if num is not None:
             num = int(num)
@@ -959,8 +898,8 @@ class FingerSnapBless(FingerSnap):
                 return
         CUS_LOGGER.debug(f"当前倒计时{self.countdown}")
 
-        if self.countdown > 75:
-            CUS_LOGGER.info(f"[停止] 当前倒计时{self.countdown}已经超过75，成就目标已经达成，脚本停止等待手动接管")
+        if self.countdown >= 70:
+            CUS_LOGGER.info(f"[停止] 当前倒计时{self.countdown}已经达到70，脚本停止等待手动接管")
             self.stop()
             return
 
@@ -973,7 +912,35 @@ class FingerSnapBless(FingerSnap):
                 CUS_LOGGER.info("「下一世，真理定会解明，死生……将有序流转。」")
                 key_mouse_manager.wait()
                 return
-            self.try_analysis_map(mode=2)
+            for attempt in range(3):
+                try:
+                    self.try_analysis_map(mode=2)
+                    break
+                except (NoMatchError, NoBossError) as e:
+                    CUS_LOGGER.warning(
+                        f"[select_go] 寻路识图失败({type(e).__name__})，"
+                        f"第{attempt + 1}/3次重新识别"
+                    )
+                    if attempt >= 2:
+                        CUS_LOGGER.error("[select_go] 重新识别仍然失败，跳过本次，等待下次触发")
+                        key_mouse_manager.keyUp("w")
+                        return
+                    time.sleep(1)
+                    self.get_screen()
+
+            if self.plane_floor == 2 and not self._floor2_reward_survey_done:
+                # "前3步有没有奖励"这项检查放在这里做，而不是骰子判断前的
+                # 地图总览界面——这里是正常寻路一直在用的视角，起点定位
+                # 可靠；如果路径明显退化（起点孤立），当成识图偶发失败，
+                # 不计入判断，等下一次 select_go 调用再试。
+                if self.path and len(self.path) > 1:
+                    self._floor2_reward_survey_done = True
+                    self._floor2_check_reward_in_first3()
+                else:
+                    CUS_LOGGER.warning(
+                        f"[Floor2勘察] 路径退化（长度{len(self.path) if self.path else 0}），"
+                        f"本次识图作废，不计入判断，下次再试"
+                    )
 
             if self._pending_duizheng and self.start_nodes is not None:
                 node_map = {n["idx"]: n for n in self.nodes}
