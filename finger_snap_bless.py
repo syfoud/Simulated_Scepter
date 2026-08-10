@@ -198,10 +198,6 @@ class FingerSnapBless(FingerSnap):
     # ------------------------------------------------------------------
 
     def initing_map(self):
-        if not self.debug:
-            CUS_LOGGER.error("本功能为实验性功能，当前仅供开发人员测试，现已终止程序")
-            self.stop()
-            return
         key_mouse_manager.keyUp("w")
         if self.click_text(text="振翅", box=[10, 220, 0, 112], click=False, warning=False):
             self.plane_floor = 1
