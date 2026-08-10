@@ -4,7 +4,7 @@ import ctypes
 def get_window_rect(hwnd):
     try:
         f = ctypes.windll.dwmapi.DwmGetWindowAttribute
-    except WindowsError:
+    except OSError:
         f = None
     if f:
         rect = ctypes.wintypes.RECT()

@@ -1,5 +1,6 @@
-import cv2 as cv
 import os
+
+import cv2 as cv
 
 
 def extract_features(img):
@@ -36,7 +37,7 @@ def filter_similar_images(img_set, threshold):
                 if similarity_score > sim:
                     sim = similarity_score
                     similar_img_index = j
-            except:
+            except Exception:
                 pass
         if sim >= threshold:
             similar_images.append((img_set[i][0], img_set[similar_img_index][0], sim))

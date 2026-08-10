@@ -1,5 +1,7 @@
 import pyautogui
+
 from tool.simul.config import config
+
 
 def get_mapping(x):
     if x in config.origin_key:

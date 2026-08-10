@@ -1,22 +1,37 @@
+import json
 import os
-import shutil
 import random
-from tool import EXTRA
+import shutil
+import sqlite3
 import time
+
 import cv2 as cv
 import yaml
-import json
-import sqlite3
-from tool.GLOBAL import key_mouse_manager, factor
+
 from route import PATHS
 from simul import SimulatedUniverse
+from tool import EXTRA
+from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER, log_emitter
 from tool.public_ocr import load_actions, merge_text
-from tool.utils.Error import NoMatchError, NoBossError
-from tool.utils.analysis_map import match_multiple_targets, build_rightward_graph, compute_start_point_from_crop, \
-    max_weight_path, display_matches, evaluate_best_single_replacement, compute_all_max_steps, detect_corner_markers
+from tool.utils.analysis_map import (
+    build_rightward_graph,
+    compute_all_max_steps,
+    compute_start_point_from_crop,
+    detect_corner_markers,
+    display_matches,
+    evaluate_best_single_replacement,
+    match_multiple_targets,
+    max_weight_path,
+)
+from tool.utils.Error import NoBossError, NoMatchError
 from tool.utils.image_tool import find_image_by_name
-from tool.utils.minimap_util import MINIMAP_RADIUS, deal_minimap, get_minimap, re_get_position
+from tool.utils.minimap_util import (
+    MINIMAP_RADIUS,
+    deal_minimap,
+    get_minimap,
+    re_get_position,
+)
 from tool.utils.ocr_num import (
     extract_number,
     match_cheat_count_in_region,
@@ -35,7 +50,7 @@ class IronBloodUniverse(SimulatedUniverse):
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="r", encoding="UTF-8") as file:
+            with open(settings_path, encoding="UTF-8") as file:
                 self.opt = json.load(file)
         super().__init__(find=True,speed=False,consumable=False, slow=False,debug=self.opt.get("debug", True), nums=self.opt.get("max_run_time", 0))
         self.plane_floor = -1
@@ -61,14 +76,14 @@ class IronBloodUniverse(SimulatedUniverse):
             CUS_LOGGER.debug(f"特殊地图录图模式已开启，各类地图将分别保存至{roots}")
         self.default_json_path = "actions/insect.json"
         self.default_json = load_actions(self.default_json_path)
-        
+
         config_file = "config/config/event_info.yml"
         example_file = "config/config/info_example.yml"
         if not os.path.exists(config_file):
             if os.path.exists(example_file):
                 shutil.copy2(example_file, config_file)
-        
-        with open(config_file, "r", encoding="utf-8", errors="ignore") as f:
+
+        with open(config_file, encoding="utf-8", errors="ignore") as f:
             self.event_prior = yaml.safe_load(f)["event"]
         self.action_history = []
         self.steps=None
@@ -90,9 +105,10 @@ class IronBloodUniverse(SimulatedUniverse):
         self.area=""
         self.now_map=-1
         self.new_node = True
+        self.node_count=0
         self.fail_match_count = 0
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
-    
+
     def restart_recording(self):
         if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
             need_del=self.del_record_time and self.del_record_time>self.kill_count
@@ -103,6 +119,7 @@ class IronBloodUniverse(SimulatedUniverse):
             self.update_state("re_start")
         self.kill_count = 0
         self.fail_match_count=0
+        self.node_count=0
     def end_of_university(self):
         super().end_of_university()
         elapsed = int(time.time() - self.run_start_time)
@@ -150,11 +167,11 @@ class IronBloodUniverse(SimulatedUniverse):
         if read:
             new_cnt = 0
             if os.path.exists(file_name):
-                with open(file_name, "r", encoding="utf-8", errors="ignore") as fh:
+                with open(file_name, encoding="utf-8", errors="ignore") as fh:
                     s = fh.readlines()
                     try:
                         new_cnt = int(s[0].strip("\n"))
-                    except:
+                    except Exception:
                         pass
             else:
                 os.makedirs("config/backup", exist_ok=True)
@@ -451,7 +468,7 @@ class IronBloodUniverse(SimulatedUniverse):
                 if target_path is not None:
                     self.target = self.get_target(target_path,self.upx,self.upy)
                     self.pos_map=cv.imread(target_path)
-                    CUS_LOGGER.debug("已从地图获取目标路径点%s" % self.target)
+                    CUS_LOGGER.debug(f"已从地图获取目标路径点{self.target}")
                 self.rotation, d = self.pos_predictor.update_minimap_data(self.screen)
             elif (not find) and self.first_save_map and create:
                 # 录制模式，保存初始小地图
@@ -498,7 +515,7 @@ class IronBloodUniverse(SimulatedUniverse):
             key_mouse_manager.click(0.9375, 0.8565)
         key_mouse_manager.click(0.1083, 0.1009)
         if con:
-            CUS_LOGGER.info(f"继续，燃烧下去。只要我们不曾熄灭……逐火就不会终结…")
+            CUS_LOGGER.info("继续，燃烧下去。只要我们不曾熄灭……逐火就不会终结…")
             return
         else:
             self.update_floor(1)
@@ -515,8 +532,8 @@ class IronBloodUniverse(SimulatedUniverse):
         CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
         if len(matches)==0:
             CUS_LOGGER.warning("未匹配到任何地图图标却错误进入寻路阶段，可能是误识别")
-            self.save_screen(not_now=True,save_path=f"/temp/bigmaperror/")
-            self.save_screen(save_path=f"/temp/bigmaperror/")
+            self.save_screen(not_now=True,save_path="/temp/bigmaperror/")
+            self.save_screen(save_path="/temp/bigmaperror/")
             CUS_LOGGER.warning("刷新截图缓冲区后最后一次尝试匹配地图图标")
             matches = match_multiple_targets(image, mode)
             CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
@@ -674,6 +691,7 @@ class IronBloodUniverse(SimulatedUniverse):
         self.save_screen(save_path=f"/temp/map{self.plane_floor}/")
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
+            self.node_count=0
         key_mouse_manager.wait()
         return
     def initing_map2(self):
@@ -772,7 +790,8 @@ class IronBloodUniverse(SimulatedUniverse):
                 return
             path_ids = {n['idx'] for n in self.path}
             start_cx = self.start_nodes['cx']
-            has_pig = lambda n: ((n.get('orig') or {}).get('corner_marker') or {}).get('name') in ('pig1', 'pig2')
+            def has_pig(n):
+                return ((n.get('orig') or {}).get('corner_marker') or {}).get('name') in ('pig1', 'pig2')
             # 第一优先级：path上最靠前的pig节点；第二优先级：不在path且在起点右侧的最靠左pig节点
             target_node = (
                 next((n for n in self.path if has_pig(n)), None)
@@ -908,9 +927,12 @@ class IronBloodUniverse(SimulatedUniverse):
                                 self.click_text(text="重投", box=[1599, 1657, 760, 795])
                                 return
         self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
-        self.init_map()
+        self.init_map(self.new_node)
         self.mini_state = 1
-
+    def init_map(self,add=False):
+        super().init_map()
+        if add:
+            self.node_count+=1
     def strange_shop(self):
         img = self.get_small_interaction_img(x=0.5000, y=0.7333, mask="mask_strange", fresh=True)
         res=self.ts.split_strange(img)
@@ -959,10 +981,11 @@ class IronBloodUniverse(SimulatedUniverse):
     def select_event(self):
         super().select_event()
         if self.new_node:
-            event_name = self.ts.find_with_box(box=[191, 750, 963, 998], forward=True, re_screen=False)
-            if len(event_name)==0:
-                self.save_screen(not_now=True,save_path=f"/temp/event/")
-            if self.area!="":
+            event_name = self.ts.find_with_box(box=[185, 750, 953, 1008], forward=True, re_screen=False)
+            if len(event_name)==0 and self.area!="休整":
+                self.save_screen(not_now=True,save_path="/temp/event/")
+                self.stop()
+            if self.area!="" and self.area!="休整":
                 try:
                     db_file = "config/backup/node_log.db"
                     os.makedirs("config/backup", exist_ok=True)
@@ -985,6 +1008,33 @@ class IronBloodUniverse(SimulatedUniverse):
                 except Exception as e:
                     CUS_LOGGER.error(f"写入节点日志失败: {e}")
             self.new_node=False
+    def emergency(self):
+        event_name = self.ts.find_with_box(box=[897, 1023, 500, 540], forward=True, re_screen=False)
+        if len(event_name)==0:
+            self.save_screen(not_now=True,save_path="/temp/event/")
+            self.stop()
+        try:
+            db_file = "config/backup/emergency.db"
+            os.makedirs("config/backup", exist_ok=True)
+            conn = sqlite3.connect(db_file)
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS node_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT DEFAULT (datetime('now','localtime')),
+                data TEXT
+            )''')
+            data = {
+                "count": self.count,
+                "node_count": self.node_count,
+                "event": event_name,
+                "plane_floor": self.plane_floor,
+            }
+            cursor.execute('INSERT INTO node_log (data) VALUES (?)',
+                           (json.dumps(data, ensure_ascii=False),))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            CUS_LOGGER.error(f"写入节点日志失败: {e}")
     @staticmethod
     def set_kill_num(num):
         log_emitter.kill_num_signal.emit(num)
@@ -993,19 +1043,19 @@ class IronBloodUniverse(SimulatedUniverse):
     def record_map_visit(map_id):
         """
         记录并返回地图访问次数（使用SQLite数据库）
-        
+
         参数:
             map_id: 地图编号
-            
+
         返回:
             int: 该地图的累计访问次数
         """
         db_file = "config/backup/map_visits.db"
         os.makedirs("config/backup", exist_ok=True)
-        
+
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        
+
         # 创建表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS map_visits (
@@ -1013,19 +1063,19 @@ class IronBloodUniverse(SimulatedUniverse):
                 visit_count INTEGER DEFAULT 0
             )
         ''')
-        
+
         # 查询并更新
         cursor.execute('SELECT visit_count FROM map_visits WHERE map_id = ?', (str(map_id),))
         result = cursor.fetchone()
-        
+
         if result:
             new_count = result[0] + 1
             cursor.execute('UPDATE map_visits SET visit_count = ? WHERE map_id = ?', (new_count, str(map_id)))
         else:
             new_count = 1
             cursor.execute('INSERT INTO map_visits (map_id, visit_count) VALUES (?, ?)', (str(map_id), new_count))
-        
+
         conn.commit()
         conn.close()
-        
+
         return new_count

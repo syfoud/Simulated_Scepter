@@ -1,32 +1,32 @@
+import argparse
+import bisect
+import csv
+import datetime
+import json
 import os
 import shutil
-import traceback
-import pyautogui
-import cv2 as cv
-import numpy as np
 import time
-import win32gui, win32api, win32con
-import json
-
-from route import PATHS
-from tool.log import CUS_LOGGER
-from tool.log import my_print as print
-from tool.log import print_exc
-from tool.diver.utils import UniverseUtils, set_forground
-from tool.GLOBAL import key_mouse_manager
-from tool import EXTRA
-from tool import GLOBAL, EXTRA
-from tool.diver.config import config
-import datetime
-import csv
-import pytz
-import pyuac
-import tool.diver.keyops as keyops
-from tool.diver.keyops import KeyController
-import bisect
+import traceback
 from collections import defaultdict
 
-from tool.public_ocr import load_actions, clean_text, merge_text
+import cv2 as cv
+import numpy as np
+import pyautogui
+import pytz
+import pyuac
+import win32api
+import win32con
+
+import tool.diver.keyops as keyops
+from route import PATHS
+from tool import EXTRA, GLOBAL
+from tool.diver.config import config
+from tool.diver.keyops import KeyController
+from tool.diver.utils import UniverseUtils, set_forground
+from tool.GLOBAL import key_mouse_manager
+from tool.log import CUS_LOGGER, print_exc
+from tool.log import my_print as print
+from tool.public_ocr import clean_text, load_actions, merge_text
 from tool.utils.image_tool import find_image_by_name
 from tool.utils.tool import get_hwnd_and_text
 from tool.window_recorder import WindowRecorder
@@ -48,7 +48,7 @@ class DivergentUniverse(UniverseUtils):
         key_mouse_manager.set_config(config)
         # 设置屏幕参数以支持坐标转换
         key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
-        
+
         self.is_get_team = True #首次进入差分宇宙后,获取队伍成员
         self.team_detect = {} #队伍成员检测
 
@@ -80,7 +80,7 @@ class DivergentUniverse(UniverseUtils):
         self.total_empty_saves = 1
 
         # 对黄泉角色的优化,判断是否需要使用黄泉角色
-        self.quan = 0 
+        self.quan = 0
 
         # 对大黑塔角色的优化,判断是否需要使用大黑塔角色,同时存在大黑塔和黄泉时,优先使用大黑塔,或许后面可以考虑自定义优先级
         self.da_hei_ta = False
@@ -108,7 +108,7 @@ class DivergentUniverse(UniverseUtils):
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="r", encoding="UTF-8") as file:
+            with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
         self.record = data.get("recording_state", True)
         self.recorder = WindowRecorder('logs/video/', fps=30, window_title="崩坏：星穹铁道",
@@ -190,9 +190,9 @@ class DivergentUniverse(UniverseUtils):
             time.sleep(2)
             self.press('esc')
             self._stop = True
-        
+
     def do_action(self, action) -> int:
-        if type(action) == str:
+        if isinstance(action, str):
             return getattr(self, action)()
         if "text" in action:
             if "box" in action:
@@ -240,13 +240,13 @@ class DivergentUniverse(UniverseUtils):
                     #返回触发的名字
                     return i['name']
         return ''
-    
+
     def select_difficulty(self):
         time.sleep(0.5)
         self.click_position([125, 175+int((self.diffi-1)*(605-175)/4)])
 
     def read_csv(self, file_path, name):
-        with open(file_path, mode='r', newline='', encoding='cp936') as file:
+        with open(file_path, newline='', encoding='cp936') as file:
             reader = csv.reader(file)
             next(reader)
             if name == 'char':
@@ -259,7 +259,7 @@ class DivergentUniverse(UniverseUtils):
         return data
 
     def init_floor(self):
-        self.portal_cnt = 0 
+        self.portal_cnt = 0
         self.area_state = 0
         self.event_solved = 0
         self.bless_solved = 0
@@ -318,7 +318,7 @@ class DivergentUniverse(UniverseUtils):
             if i[:prefix] in text:
                 return i
         return None
-    
+
     def test(self):
         self.find_team_member(self.team_member)
 
@@ -354,7 +354,7 @@ class DivergentUniverse(UniverseUtils):
                         self.long_range = str(self.team_member[i]+1) # 更新默认远程角色
                         break
 
-            res = self.get_text_type(self.area_text, ['事件', '奖励', '遭遇', '商店', '首领', '战斗', '财富', '休整', '位面'])            
+            res = self.get_text_type(self.area_text, ['事件', '奖励', '遭遇', '商店', '首领', '战斗', '财富', '休整', '位面'])
             if (res == '位面' or res is None) and deep == 0:
                 self.mouse_move(20)
                 scr = self.screen
@@ -366,7 +366,7 @@ class DivergentUniverse(UniverseUtils):
             return res
         else:
             return None
-    
+
     def find_portal(self, type=None):
         prefer_portal = {'奖励':3, '事件':3, '战斗':2, '遭遇':2, '商店':1, '财富':1}
         if self.speed:
@@ -394,14 +394,14 @@ class DivergentUniverse(UniverseUtils):
         self.ocr_time_list = self.ocr_time_list[-5:] + [ocr_time]
         print(f'识别时间:{int(ocr_time*1000)}ms', text, portal)
         return portal
-    
+
     def sleep(self, tm=2):
         time.sleep(tm)
         self.ts.forward(self.get_screen())
-        
+
     def portal_bias(self, portal):
         return (portal['box'][0] + portal['box'][1]) // 2 - 950
-    
+
     def aim_portal(self, portal):
         zero = bisect.bisect_left(config.angles, 0)
         # win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, int(-200 * self.multi * self.scale))
@@ -419,7 +419,7 @@ class DivergentUniverse(UniverseUtils):
                     return portal
             portal = portal_after
         return portal
-    
+
     def forward_until(self, text_list=[], timeout=5, moving=0, chaos=0):
         tm = time.time()
         if not moving:
@@ -559,7 +559,7 @@ class DivergentUniverse(UniverseUtils):
                 CUS_LOGGER.info(f"event:{event_id},start:{start}")
             if '事件' not in merge_text(self.ts.find_with_box([92, 195, 54, 88])):
                 return
-            
+
             self.get_screen()
             if self.check("arrow", 0.1828, 0.5000, mask="mask_event"):
                 self.click((self.tx, self.ty))
@@ -678,7 +678,7 @@ class DivergentUniverse(UniverseUtils):
         if save:
             self.event_text = event_text
         return res
-    
+
     def check_pop(self):
         in_time = time.time()
         while True:
@@ -690,7 +690,7 @@ class DivergentUniverse(UniverseUtils):
                 time.sleep(0.3)
             elif time.time() - in_time > 3:
                 break
-    
+
     def align_event(self, key, deep=0, event_text=None, click=0):
         find = 0
         if deep == 0 and key == 'd' and (event_text is None or event_text != 950):
@@ -749,7 +749,7 @@ class DivergentUniverse(UniverseUtils):
                 time.sleep(0.5)
 
             if click:
-                CUS_LOGGER.info(f"点击了一下")
+                CUS_LOGGER.info("点击了一下")
                 self.press('w')
                 pyautogui.click()
                 self.check_pop()
@@ -761,7 +761,7 @@ class DivergentUniverse(UniverseUtils):
                 self.press('w',[0,0.3,0.5][deep])
                 self.align_event(key, deep+1)
             return
-            
+
     def skill(self, quan=0):
         if not self.allow_e:
             return
@@ -847,7 +847,7 @@ class DivergentUniverse(UniverseUtils):
                 else:
                     # 切远程角色
                     self.press(self.long_range)
-            
+
             else:
                 # 无秘技,切远程角色
                 self.press(self.long_range)
@@ -859,7 +859,7 @@ class DivergentUniverse(UniverseUtils):
             self.click_position([413, 79])
             keyops.keyUp('alt')
         time.sleep(0.7)
-        
+
         self.check_dead()
 
         if area_now is not None:
@@ -871,7 +871,7 @@ class DivergentUniverse(UniverseUtils):
             # 这里考虑的是全局异常暂离次数达到2次,就结束本次探索,或许可以考虑改为单个区域
             self.close_and_exit(click = False)
             return 1
-        
+
         CUS_LOGGER.info(f"floor:{self.floor}, state:{self.area_state}, area:{area_now}, text:{self.area_text}")
 
         if area_now in ['事件', '奖励', '遭遇']:
@@ -915,7 +915,7 @@ class DivergentUniverse(UniverseUtils):
                     self.close_and_exit()
                     return 1
                 CUS_LOGGER.info(f"total_events step: {total_events}")
-                
+
                 if not total_events or not (933 <= total_events[0][0] <= 972):
                     win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, int(-100 * self.multi * self.scale))
                     time.sleep(0.3)
@@ -929,7 +929,7 @@ class DivergentUniverse(UniverseUtils):
                 if total_events is None:
                     self.press('d', 0.5)
                     return 1
-                
+
                 if not total_events:
                     total_events = [(950, 0)]
 
@@ -1021,7 +1021,7 @@ class DivergentUniverse(UniverseUtils):
                 self.skill()
                 self.da_hei_ta_effecting = True
 
-            if self.area_state == 0:                
+            if self.area_state == 0:
                 keyops.keyDown('w')
                 time.sleep(0.2)
                 keyops.keyDown('shift')
@@ -1074,7 +1074,7 @@ class DivergentUniverse(UniverseUtils):
         else:
             self.press('F4')
         return 1
-    
+
     def update_bless_prior(self):
         self.bless_prior = defaultdict(int)
         for i in list(self.team_member) + ['全局', config.team]:
@@ -1082,7 +1082,7 @@ class DivergentUniverse(UniverseUtils):
                 prior = self.character_prior[i]
                 for j in prior:
                     self.bless_prior[j] += prior[j]
-    
+
     def bless_score(self, text):
         score = 0
         for i in self.bless_prior:
@@ -1095,7 +1095,7 @@ class DivergentUniverse(UniverseUtils):
 
     def drop_bless(self):
         self.bless(reverse=0)
-        
+
     def bless_blood(self):
         self.bless(blood=1)
 
@@ -1114,7 +1114,7 @@ class DivergentUniverse(UniverseUtils):
         blesses = []
         for i in text:
             box = i["box"]
-            x, y = (box[0] + box[1]) // 2, (box[2] + box[3]) // 2
+            x = (box[0] + box[1]) // 2
             box = [x - 220, x + 220, 450, 850]
             bless_text = self.ts.find_with_box(box)
             bless_raw_text = merge_text(bless_text, char=0)
@@ -1154,12 +1154,12 @@ class DivergentUniverse(UniverseUtils):
             new_cnt = 0
             if os.path.exists(file_name):
                 time_cnt = os.path.getmtime(file_name)
-                with open(file_name, "r", encoding="utf-8", errors="ignore") as fh:
+                with open(file_name, encoding="utf-8", errors="ignore") as fh:
                     s = fh.readlines()
                     try:
                         new_cnt = int(s[0].strip("\n"))
                         time_cnt = float(s[3].strip("\n"))
-                    except:
+                    except Exception:
                         pass
             else:
                 os.makedirs("logs", exist_ok=1)
@@ -1186,7 +1186,7 @@ class DivergentUniverse(UniverseUtils):
                 "Europe": pytz.timezone("Europe/London"),
             }
             tz_info = tz_dict[config.timezone]
-        except:
+        except Exception:
             pass
 
         # convert to server time
@@ -1213,7 +1213,7 @@ class DivergentUniverse(UniverseUtils):
                 CUS_LOGGER.error(f"停止录制时发生错误: {e}")
         try:
             self.init_floor()
-        except:
+        except Exception:
             pass
         self._stop = True
         key_mouse_manager.stop()
@@ -1231,7 +1231,7 @@ class DivergentUniverse(UniverseUtils):
             print("KeyboardInterrupt")
             try:
                 CUS_LOGGER.info('用户终止进程')
-            except:
+            except Exception:
                 pass
             if not self._stop:
                 self.stop()
@@ -1247,7 +1247,7 @@ class DivergentUniverse(UniverseUtils):
         try:
             cv.imshow("screen", self.save_screen())
             cv.waitKey(0)
-        except:
+        except Exception:
             pass
 
     def goto_diver_universe(self):
@@ -1260,6 +1260,12 @@ class DivergentUniverse(UniverseUtils):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", action="store_true", default=False)
+    parser.add_argument("--nums", type=int, default=1)
+    parser.add_argument("--speed", type=float, default=1.0)
+    args = parser.parse_args()
+
     CUS_LOGGER.info(f"debug: {args.debug}")
     su = DivergentUniverse(args.debug, args.nums, args.speed)
     try:

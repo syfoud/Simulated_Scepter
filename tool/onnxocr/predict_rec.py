@@ -1,15 +1,16 @@
+import math
+
 import cv2
 import numpy as np
-import math
 from PIL import Image
 
-
-from .rec_postprocess import CTCLabelDecode
 from .predict_base import PredictBase
+from .rec_postprocess import CTCLabelDecode
+
 
 class TextRecognizer(PredictBase):
     def __init__(self, args, cpu=False):
-        super(TextRecognizer, self).__init__(cpu)
+        super().__init__(cpu)
         self.rec_image_shape = [int(v) for v in args.rec_image_shape.split(",")]
         self.rec_batch_num = args.rec_batch_num
         self.rec_algorithm = args.rec_algorithm
@@ -51,7 +52,7 @@ class TextRecognizer(PredictBase):
             return resized_image
 
         assert imgC == img.shape[2]
-        imgW = int((imgH * max_wh_ratio))
+        imgW = int(imgH * max_wh_ratio)
 
         # w = self.rec_onnx_session.get_inputs()[0].shape[3:][0]
         # w = self.rec_onnx_session.get_inputs()[0].shape[3:][0]
@@ -181,7 +182,7 @@ class TextRecognizer(PredictBase):
             resize_w = min(imgW_max, resize_w)
         resized_image = cv2.resize(img, (resize_w, imgH))
         resized_image = resized_image.astype('float32')
-        # norm 
+        # norm
         if image_shape[0] == 1:
             resized_image = resized_image / 255
             resized_image = resized_image[np.newaxis, :]

@@ -1,12 +1,12 @@
 name: Bug 报告
 description: 报告一个 Bug 以帮助我们改进
-title: "[Bug] "
+title: "[Bug] 在此简述你遇到的问题（不要留空）"
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢你花时间填写这份 Bug 报告！
+        > :warning: **标题请勿留空或用默认文案！** 请用一两句话描述问题，例如 "[Bug] 启动时窗口闪退"。
 
   - type: textarea
     id: description

@@ -4,10 +4,10 @@ from typing import Any
 
 import cv2
 import numpy as np
-from scipy import signal
 from PIL import Image
+from scipy import signal
 
-from tool.utils.image_tool import find_image_in_folder, find_image_by_name
+from tool.utils.image_tool import find_image_by_name, find_image_in_folder
 
 MINIMAP_RADIUS = 93
 # MINIMAP_CENTER = (45 + MINIMAP_RADIUS, 56 + MINIMAP_RADIUS)#(138,149)
@@ -258,7 +258,7 @@ def get_bbox(image, threshold=0):
     max_y = 0
     # all black
     if not contours:
-        raise ImageNotSupported(f'Cannot get bbox from a pure black image')
+        raise ImageNotSupported('Cannot get bbox from a pure black image')
     for contour in contours:
         # x, y, w, h
         x1, y1, x2, y2 = cv2.boundingRect(contour)

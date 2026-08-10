@@ -1,11 +1,17 @@
 
-import numpy as np
-# import paddle
-# from paddle.nn import functional as F
 import re
 
+import numpy as np
 
-class BaseRecLabelDecode(object):
+
+# paddle is not used with onnxruntime; stub for backwards-compatible isinstance checks
+class _PaddleStub:
+    class Tensor:
+        pass
+paddle = _PaddleStub()
+
+
+class BaseRecLabelDecode:
     """ Convert between text-label and text-index """
 
     def __init__(self, character_dict_path=None, use_space_char=False):
@@ -95,7 +101,7 @@ class CTCLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(CTCLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                              use_space_char)
 
     def __call__(self, preds, label=None, *args, **kwargs):
@@ -118,7 +124,7 @@ class CTCLabelDecode(BaseRecLabelDecode):
 
 class DistillationCTCLabelDecode(CTCLabelDecode):
     """
-    Convert 
+    Convert
     Convert between text-label and text-index
     """
 
@@ -129,7 +135,7 @@ class DistillationCTCLabelDecode(CTCLabelDecode):
                  key=None,
                  multi_head=False,
                  **kwargs):
-        super(DistillationCTCLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                                          use_space_char)
         if not isinstance(model_name, list):
             model_name = [model_name]
@@ -155,7 +161,7 @@ class AttnLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(AttnLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                               use_space_char)
 
     def add_special_char(self, dict_character):
@@ -225,8 +231,7 @@ class AttnLabelDecode(BaseRecLabelDecode):
         elif beg_or_end == "end":
             idx = np.array(self.dict[self.end_str])
         else:
-            assert False, "unsupport type %s in get_beg_end_flag_idx" \
-                          % beg_or_end
+            assert False, f"unsupport type {beg_or_end} in get_beg_end_flag_idx"
         return idx
 
 
@@ -235,7 +240,7 @@ class RFLLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(RFLLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                              use_space_char)
 
     def add_special_char(self, dict_character):
@@ -314,8 +319,7 @@ class RFLLabelDecode(BaseRecLabelDecode):
         elif beg_or_end == "end":
             idx = np.array(self.dict[self.end_str])
         else:
-            assert False, "unsupport type %s in get_beg_end_flag_idx" \
-                          % beg_or_end
+            assert False, f"unsupport type {beg_or_end} in get_beg_end_flag_idx"
         return idx
 
 
@@ -324,7 +328,7 @@ class SEEDLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(SEEDLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                               use_space_char)
 
     def add_special_char(self, dict_character):
@@ -346,7 +350,7 @@ class SEEDLabelDecode(BaseRecLabelDecode):
         elif beg_or_end == "eos":
             idx = np.array(self.dict[self.end_str])
         else:
-            assert False, "unsupport type %s in get_beg_end_flag_idx" % beg_or_end
+            assert False, f"unsupport type {beg_or_end} in get_beg_end_flag_idx"
         return idx
 
     def decode(self, text_index, text_prob=None, is_remove_duplicate=False):
@@ -405,7 +409,7 @@ class SRNLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(SRNLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                              use_space_char)
         self.max_text_length = kwargs.get('max_text_length', 25)
 
@@ -474,8 +478,7 @@ class SRNLabelDecode(BaseRecLabelDecode):
         elif beg_or_end == "end":
             idx = np.array(self.dict[self.end_str])
         else:
-            assert False, "unsupport type %s in get_beg_end_flag_idx" \
-                          % beg_or_end
+            assert False, f"unsupport type {beg_or_end} in get_beg_end_flag_idx"
         return idx
 
 
@@ -484,7 +487,7 @@ class SARLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(SARLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                              use_space_char)
 
         self.rm_symbol = kwargs.get('rm_symbol', False)
@@ -557,7 +560,7 @@ class SARLabelDecode(BaseRecLabelDecode):
 
 class DistillationSARLabelDecode(SARLabelDecode):
     """
-    Convert 
+    Convert
     Convert between text-label and text-index
     """
 
@@ -568,7 +571,7 @@ class DistillationSARLabelDecode(SARLabelDecode):
                  key=None,
                  multi_head=False,
                  **kwargs):
-        super(DistillationSARLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                                          use_space_char)
         if not isinstance(model_name, list):
             model_name = [model_name]
@@ -594,11 +597,11 @@ class PRENLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(PRENLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                               use_space_char)
 
     def add_special_char(self, dict_character):
-        padding_str = '<PAD>'  # 0 
+        padding_str = '<PAD>'  # 0
         end_str = '<EOS>'  # 1
         unknown_str = '<UNK>'  # 2
 
@@ -654,7 +657,7 @@ class NRTRLabelDecode(BaseRecLabelDecode):
     """ Convert between text-label and text-index """
 
     def __init__(self, character_dict_path=None, use_space_char=True, **kwargs):
-        super(NRTRLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                               use_space_char)
 
     def __call__(self, preds, label=None, *args, **kwargs):
@@ -700,7 +703,7 @@ class NRTRLabelDecode(BaseRecLabelDecode):
             for idx in range(len(text_index[batch_idx])):
                 try:
                     char_idx = self.character[int(text_index[batch_idx][idx])]
-                except:
+                except Exception:
                     continue
                 if char_idx == '</s>':  # end
                     break
@@ -719,7 +722,7 @@ class ViTSTRLabelDecode(NRTRLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(ViTSTRLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                                 use_space_char)
 
     def __call__(self, preds, label=None, *args, **kwargs):
@@ -745,7 +748,7 @@ class ABINetLabelDecode(NRTRLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(ABINetLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                                 use_space_char)
 
     def __call__(self, preds, label=None, *args, **kwargs):
@@ -774,7 +777,7 @@ class SPINLabelDecode(AttnLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(SPINLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                               use_space_char)
 
     def add_special_char(self, dict_character):
@@ -890,7 +893,7 @@ class CANLabelDecode(BaseRecLabelDecode):
 
     def __init__(self, character_dict_path=None, use_space_char=False,
                  **kwargs):
-        super(CANLabelDecode, self).__init__(character_dict_path,
+        super().__init__(character_dict_path,
                                              use_space_char)
 
     def decode(self, text_index, preds_prob=None):

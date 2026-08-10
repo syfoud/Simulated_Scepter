@@ -1,36 +1,45 @@
 import ctypes
 import json
-import sys
 import os
 import shutil
-import keyboard
+import sys
 import time
 
+import keyboard
 from PyQt5.QtGui import QFont
 
+from route import PATHS
+from tool import EXTRA
 from tool.log import log_emitter
 from tool.thread import ThreadWithException
-from tool import EXTRA
-from route import PATHS
-from tool.utils.image_tool import load_all_images_from_directory, find_image_by_name
+from tool.utils.image_tool import find_image_by_name, load_all_images_from_directory
+
 load_all_images_from_directory()
-from tool.simul.config import config as config_simul
-from tool.diver.config import config as config_diver
-from currencywar import CurrencyWar
-
-from align_angle import main as align_angle_main
-from logger_printer import QMainWindowLog
-from PyQt5.QtWidgets import (
-    QApplication, QLineEdit, QMessageBox, QDialog, QVBoxLayout, QLabel, QTextBrowser, QHBoxLayout, QPushButton)
-from PyQt5.QtCore import pyqtSignal, Qt, pyqtSlot
-from simul import SimulatedUniverse
-from diver import DivergentUniverse
-from iron_blood import IronBloodUniverse
-from finger_snap import FingerSnap
-from finger_snap_bless import FingerSnapBless
-
 import faulthandler
 
+from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtWidgets import (
+    QApplication,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTextBrowser,
+    QVBoxLayout,
+)
+
+from align_angle import main as align_angle_main
+from currencywar import CurrencyWar
+from diver import DivergentUniverse
+from finger_snap import FingerSnap
+from finger_snap_bless import FingerSnapBless
+from iron_blood import IronBloodUniverse
+from logger_printer import QMainWindowLog
+from simul import SimulatedUniverse
+from tool.diver.config import config as config_diver
+from tool.simul.config import config as config_simul
 
 HOTKEY_DEBOUNCE_SECONDS = 1.0
 
@@ -38,7 +47,7 @@ HOTKEY_DEBOUNCE_SECONDS = 1.0
 class MainWindow(QMainWindowLog):
     calibration_finished = pyqtSignal(object)
     hotkey_pressed = pyqtSignal(str)
-    
+
     def __init__(self):
         super().__init__()
         # 任务管理相关属性
@@ -46,11 +55,11 @@ class MainWindow(QMainWindowLog):
         self.task_thread = None
         self._last_key_time = {}
         self._task_running_warning = None
-            
+
         # 加载快捷键配置并注册监听器
         self.hotkey_config = self.load_hotkey_config()
         self.registered_hotkeys = []
-    
+
         self.init_ui()
         self.setup_keyboard_listener()
         # 确保热键回调中的 GUI 操作排队回主线程执行
@@ -60,10 +69,10 @@ class MainWindow(QMainWindowLog):
         log_emitter.find_path_state_signal.connect(self.set_find_path_state)
         log_emitter.kill_num_signal.connect(self.set_kill_num)
         log_emitter.fps_update_signal.connect(self.set_FPS)
-        
+
         # 检查是否首次启动并显示用户协议
         self.check_first_launch()
-    
+
     def start_task(self, task_func):
         """
         启动一个新任务
@@ -109,18 +118,18 @@ class MainWindow(QMainWindowLog):
         msg.setWindowTitle("出错了！！！")
         msg.setText(title)
         msg.setStandardButtons(QMessageBox.Ok)
-        
+
         # 设置窗口标志，确保弹窗置顶显示
         msg.setWindowFlags(msg.windowFlags() | Qt.WindowStaysOnTopHint)
-        
+
         # 设置详细文本，这样用户可以选中并复制内容
         msg.setDetailedText(error_msg)
-        
+
         # 显示弹窗并强制置顶
         msg.show()
         msg.raise_()
         msg.activateWindow()
-        
+
         # 等待用户关闭弹窗
         msg.exec_()
 
@@ -128,7 +137,7 @@ class MainWindow(QMainWindowLog):
     def init_ui(self):
         # 检查模型文件是否存在
         self.check_model_file()
-        
+
         # 连接按钮信号
         self.run_simul_btn.clicked.connect(self.run_simul)
         self.run_diver_btn.clicked.connect(self.run_diver)
@@ -181,7 +190,7 @@ class MainWindow(QMainWindowLog):
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="r", encoding="UTF-8") as file:
+            with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
         self.recording_checkBox.setChecked(data.get("recording_state", True))
         self.recording_checkBox2.setChecked(data.get("recording_iron_blood", True))
@@ -195,55 +204,55 @@ class MainWindow(QMainWindowLog):
         self.Iron_blood_first_plane_min_weight_input.setText(str(data.get("first_plane_min_weight", 6)))
         self.Iron_blood_interact_time_input.setText(str(data.get("max_interact_time", 40)))
         self.debug_checkox2.setChecked(data.get("debug", True))
-        
+
         # 初始化快捷键配置输入框
         hotkey_config = data.get("hotkeys", {})
         self.stop_hotkey_input.setText(hotkey_config.get("stop", "f5"))
         self.test_hotkey_input.setText(hotkey_config.get("test", "f6"))
         self.print_hotkey_input.setText(hotkey_config.get("print", "f7"))
-        
+
         # 更新按钮文本显示当前快捷键
         self.update_button_hotkey_text(hotkey_config)
-        
+
         # 设置控件的启用/禁用状态
         self.update_dependent_controls_state()
-        
+
         # 连接信号以实现动态更新
         self.connect_dependency_signals()
 
         self.restore_action.triggered.connect(self.run_iron_blood)
-    
 
-    
+
+
     def load_hotkey_config(self):
         """从 settings.json 加载快捷键配置"""
         default_config = {
             "stop": "f5",
             "test": "f6",
-            "print": "f7"      
+            "print": "f7"
         }
-            
+
         try:
             settings_path = PATHS["root"] + "\\config\\config\\settings.json"
             example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
             if not os.path.exists(settings_path) and os.path.exists(example_path):
                 shutil.copy2(example_path, settings_path)
             with EXTRA.FILE_LOCK:
-                with open(settings_path, mode="r", encoding="UTF-8") as file:
+                with open(settings_path, encoding="UTF-8") as file:
                     data = json.load(file)
-                
+
             hotkey_config = data.get("hotkeys", default_config)
-                
+
             # 确保所有必需的快捷键都存在
             for key in ["stop", "test", "print"]:
                 if key not in hotkey_config:
                     hotkey_config[key] = default_config[key]
-                
+
             return hotkey_config
         except Exception as e:
             print(f"加载快捷键配置失败：{e}，使用默认配置")
             return default_config
-        
+
     def setup_keyboard_listener(self):
         """
         设置键盘监听器，根据 UI 配置监听自定义快捷键
@@ -256,15 +265,15 @@ class MainWindow(QMainWindowLog):
 
     def save_ui_settings(self):
         """保存 ui 的状态到 settings.json"""
-            
+
         settings_path = PATHS["root"] + "\\config\\config\\settings.json"
         example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="r", encoding="UTF-8") as file:
+            with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
-            
+
         data["recording_state"] = self.recording_checkBox.isChecked()
         data["recording_iron_blood"] = self.recording_checkBox2.isChecked()
         data["record_add_label"] = self.recording_label_checkbox.isChecked()
@@ -277,14 +286,14 @@ class MainWindow(QMainWindowLog):
         data["first_plane_min_weight"] = int(self.Iron_blood_first_plane_min_weight_input.text())
         data["max_interact_time"] = int(self.Iron_blood_interact_time_input.text())
         data["debug"] = self.debug_checkox2.isChecked()
-            
+
         # 保存快捷键配置
         data["hotkeys"] = {
             "stop": self.stop_hotkey_input.text().strip(),
             "test": self.test_hotkey_input.text().strip(),
             "print": self.print_hotkey_input.text().strip()
         }
-    
+
         with EXTRA.FILE_LOCK:
             with open(PATHS["root"] + "\\config\\config\\settings.json", mode="w", encoding="UTF-8") as file:
                 json.dump(data, file, ensure_ascii=False, indent=4)
@@ -351,16 +360,16 @@ class MainWindow(QMainWindowLog):
     @pyqtSlot(int)
     def clear_task_running_warning(self, _result):
         self._task_running_warning = None
-        
+
     def update_button_hotkey_text(self, hotkey_config):
         stop_key = hotkey_config.get("stop", "f5").upper()
         test_key = hotkey_config.get("test", "f6").upper()
         print_key = hotkey_config.get("print", "f7").upper()
-        
+
         self.stop_btn.setText(f"停止任务 {stop_key}")
         self.test_btn.setText(f"截图测试 {test_key}")
         self.print_btn.setText(f"打印坐标 {print_key}")
-    
+
     def refresh_keyboard_listener(self):
         keyboard.unhook_all()
         self.registered_hotkeys.clear()
@@ -368,7 +377,7 @@ class MainWindow(QMainWindowLog):
             if key and key.lower() != "none":
                 keyboard.on_press_key(key.lower(), lambda event, act=action: self._on_hotkey_pressed(event, act))
                 self.registered_hotkeys.append(key.lower())
-    
+
     def update_dependent_controls_state(self):
         debug_and_recording = self.debug_checkox2.isChecked() and self.recording_checkBox2.isChecked()
         self.recording_label_checkbox.setEnabled(debug_and_recording)
@@ -380,19 +389,19 @@ class MainWindow(QMainWindowLog):
         self.Iron_blood_first_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_second_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_first_plane_min_weight_input.setEnabled(early_stop_enabled)
-    
+
     def connect_dependency_signals(self):
         self.debug_checkox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.recording_checkBox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.early_stop_checkbox.stateChanged.connect(lambda: self.update_dependent_controls_state())
-    
+
     def closeEvent(self, event):
         """
         窗口关闭事件，清理键盘监听器
         """
         keyboard.unhook_all()
         super().closeEvent(event)
-        
+
     def clear_logs(self):
         """
         清除logs目录下的所有文件，跳过被占用的文件
@@ -415,18 +424,18 @@ class MainWindow(QMainWindowLog):
                     elif os.path.isdir(file_path):
                         shutil.rmtree(file_path)
                     success_count += 1
-                except Exception as e:
+                except Exception:
                     failed_files.append(filename)
 
             if failed_files:
                 QMessageBox.warning(
-                    self, 
-                    "完成（部分失败）", 
+                    self,
+                    "完成（部分失败）",
                     f"成功删除 {success_count} 个文件/目录\n以下文件/目录删除失败:\n" + "\n".join(failed_files)
                 )
             else:
                 QMessageBox.information(self, "成功", f"成功删除 {success_count} 个文件/目录")
-                
+
         except Exception as e:
             QMessageBox.critical(self, "错误", f"清除日志失败: {str(e)}")
 
@@ -444,7 +453,7 @@ class MainWindow(QMainWindowLog):
             self.current_task = su
             # 等待游戏窗口(可被中断)
             su.save_screen()
-            
+
         try:
             self.start_task(task)
         except RuntimeError as e:
@@ -489,7 +498,7 @@ class MainWindow(QMainWindowLog):
             self.current_task = su
             su.start()
 
-            
+
         try:
             self.start_task(task)
         except RuntimeError as r:
@@ -498,7 +507,7 @@ class MainWindow(QMainWindowLog):
             QMessageBox.critical(self, "错误", str(e))
 
     def run_diver(self):
-        
+
         def task():
             su = DivergentUniverse(
                 int(config_diver.debug_mode),
@@ -507,7 +516,7 @@ class MainWindow(QMainWindowLog):
             )
             self.current_task = su
             su.start()
-            
+
         try:
             self.start_task(task)
         except RuntimeError as r:
@@ -576,7 +585,7 @@ class MainWindow(QMainWindowLog):
                 self.calibration_finished.emit(res)
             except Exception as e:
                 self.calibration_finished.emit(e)
-            
+
         try:
             self.start_task(task)
         except RuntimeError as e:
@@ -604,7 +613,7 @@ class MainWindow(QMainWindowLog):
             config_simul.max_run = int(self.Simul_max_run_input.text())
         except ValueError:
             pass
-            
+
         # 保存差分宇宙配置
         config_diver.debug_mode = int(self.Diver_debug_checkbox.isChecked())
         config_diver.speed_mode = int(self.Diver_speed_checkbox.isChecked())
@@ -624,7 +633,7 @@ class MainWindow(QMainWindowLog):
         config_diver.save()
 
         self.save_ui_settings()
-        
+
         QMessageBox.information(self, "提示", "配置已保存")
     def save_iron_config(self):
         self.save_ui_settings()
@@ -638,18 +647,18 @@ class MainWindow(QMainWindowLog):
         self.state_text.setText(text)
     def set_kill_num(self, num:str):
         self.kill_num_text.setText(num)
-    
+
     def check_first_launch(self):
         """
         检查是否首次启动，如果是则显示用户协议弹窗
         """
         cache_dir = os.path.join(PATHS["root"], "cache")
         agreement_file = os.path.join(cache_dir, "agreement_accepted.txt")
-        
+
         # 如果标记文件不存在，则为首次启动
         if not os.path.exists(agreement_file):
             self.show_agreement_dialog(agreement_file)
-    
+
     def show_agreement_dialog(self, agreement_file):
         """
         显示用户协议弹窗
@@ -659,12 +668,12 @@ class MainWindow(QMainWindowLog):
         dialog.setWindowTitle("用户协议与免责声明")
         dialog.setModal(True)
         dialog.resize(800, 600)
-        
+
         # 设置窗口标志，确保弹窗置顶
         dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-        
+
         layout = QVBoxLayout(dialog)
-        
+
         # 标题
         title_label = QLabel("欢迎使用模拟权杖系统")
         title_font = QFont()
@@ -673,23 +682,23 @@ class MainWindow(QMainWindowLog):
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
-        
+
         # 协议内容文本框（带滚动条）
         text_browser = QTextBrowser()
         text_browser.setOpenExternalLinks(True)  # 允许点击链接
-        
+
         # 读取README.md中的免责声明内容
         disclaimer_content = self.load_disclaimer_content()
         text_browser.setMarkdown(disclaimer_content)
-        
+
         layout.addWidget(text_browser)
-        
+
         # 按钮区域
         button_layout = QHBoxLayout()
-        
+
         decline_btn = QPushButton("拒绝")
         accept_btn = QPushButton("同意并继续")
-        
+
         # 设置按钮样式
         accept_btn.setStyleSheet("""
             QPushButton {
@@ -703,7 +712,7 @@ class MainWindow(QMainWindowLog):
                 background-color: #45a049;
             }
         """)
-        
+
         decline_btn.setStyleSheet("""
             QPushButton {
                 background-color: #f44336;
@@ -715,35 +724,35 @@ class MainWindow(QMainWindowLog):
                 background-color: #da190b;
             }
         """)
-        
+
         button_layout.addWidget(decline_btn)
         button_layout.addWidget(accept_btn)
         layout.addLayout(button_layout)
-        
+
         # 按钮事件处理
         def on_accept():
             # 创建cache目录（如果不存在）
             cache_dir = os.path.dirname(agreement_file)
             if not os.path.exists(cache_dir):
                 os.makedirs(cache_dir)
-            
+
             # 创建标记文件
             with open(agreement_file, 'w', encoding='utf-8') as f:
                 from datetime import datetime
                 f.write(f"Agreement accepted at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("User has read and agreed to the terms and conditions.\n")
-            
+
             dialog.accept()
-        
+
         def on_decline():
             sys.exit(0)
-        
+
         accept_btn.clicked.connect(on_accept)
         decline_btn.clicked.connect(on_decline)
-        
+
         # 显示弹窗
         dialog.exec_()
-    
+
     def load_disclaimer_content(self):
         """
         从README.md中加载免责声明内容
@@ -752,13 +761,13 @@ class MainWindow(QMainWindowLog):
         try:
             readme_path = os.path.join(PATHS["root"], "README.md")
             if os.path.exists(readme_path):
-                with open(readme_path, 'r', encoding='utf-8') as f:
+                with open(readme_path, encoding='utf-8') as f:
                     content = f.read()
-                
+
                 # 提取免责声明部分
                 start_marker = "# 免责声明 | Disclaimer"
                 end_marker = "----------------------------------------------------------------------------------------------"
-                
+
                 start_idx = content.find(start_marker)
                 if start_idx != -1:
                     # 从免责声明标题开始查找
@@ -769,7 +778,7 @@ class MainWindow(QMainWindowLog):
                         # 提取从标题到分隔线之间的内容
                         disclaimer = remaining[:end_idx].strip()
                         return disclaimer
-                
+
                 # 如果提取失败，返回默认文本
                 return self.get_default_disclaimer()
             else:
@@ -777,7 +786,7 @@ class MainWindow(QMainWindowLog):
         except Exception as e:
             print(f"加载免责声明失败: {e}")
             return self.get_default_disclaimer()
-    
+
     def get_default_disclaimer(self):
         """
         获取默认免责声明文本
@@ -803,7 +812,7 @@ class MainWindow(QMainWindowLog):
 
 **使用本软件即表示您已阅读并同意以上条款。**
 """
-    
+
     def show_unlock_dialog(self):
         """
         显示高级用户功能解锁说明弹窗
@@ -812,12 +821,12 @@ class MainWindow(QMainWindowLog):
         dialog.setWindowTitle("高级用户功能解锁说明")
         dialog.setModal(True)
         dialog.resize(700, 550)
-        
+
         # 设置窗口标志，确保弹窗置顶
         dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-        
+
         layout = QVBoxLayout(dialog)
-        
+
         # 标题
         title_label = QLabel("🔓 高级用户功能解锁")
         title_font = QFont()
@@ -826,16 +835,16 @@ class MainWindow(QMainWindowLog):
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
-        
+
         # 分隔线
         line1 = QLabel("─" * 50)
         line1.setAlignment(Qt.AlignCenter)
         layout.addWidget(line1)
-        
+
         # 说明内容文本框（带滚动条）
         text_browser = QTextBrowser()
         text_browser.setOpenExternalLinks(True)  # 允许点击链接
-        
+
         unlock_content = """
 # 如何解锁高级用户功能？
 
@@ -847,11 +856,11 @@ class MainWindow(QMainWindowLog):
 
 1. **访问本项目 GitHub 仓库**
    - 项目地址：[https://github.com/syfoud/Simulated_Scepter](https://github.com/syfoud/Simulated_Scepter)
-   
+
 2. **点击 Star 按钮**
    - 在页面右上角找到 ⭐ Star 按钮
    - 点击即可为项目点亮 Star
-   
+
 3. **截图保存**
    - 截取包含您的 GitHub 用户名和 Star 状态的完整页面
    - 确保截图中能清晰看到您已 Star 该项目
@@ -890,16 +899,16 @@ class MainWindow(QMainWindowLog):
 - 重新启动本软件
 ---
 """
-        
+
         text_browser.setMarkdown(unlock_content)
         layout.addWidget(text_browser)
-        
+
         # 按钮区域
         button_layout = QHBoxLayout()
-        
+
         github_btn = QPushButton("前往 GitHub")
         close_btn = QPushButton("关闭")
-        
+
         # 设置按钮样式
         github_btn.setStyleSheet("""
             QPushButton {
@@ -915,7 +924,7 @@ class MainWindow(QMainWindowLog):
             }
         """)
 
-        
+
         close_btn.setStyleSheet("""
             QPushButton {
                 background-color: #6c757d;
@@ -928,27 +937,27 @@ class MainWindow(QMainWindowLog):
                 background-color: #5a6268;
             }
         """)
-        
+
         button_layout.addWidget(github_btn)
         button_layout.addWidget(close_btn)
         layout.addLayout(button_layout)
-        
+
         # 按钮事件处理
         def open_github():
             import webbrowser
             webbrowser.open("https://github.com/syfoud/Simulated_Scepter")  # 请替换为实际的 GitHub 地址
 
-        
+
         github_btn.clicked.connect(open_github)
         close_btn.clicked.connect(dialog.close)
-        
+
         # 显示弹窗
         dialog.exec_()
 def main(show):
     def is_admin():
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()
-        except:
+        except Exception:
             return False
 
 
@@ -964,7 +973,7 @@ def main(show):
                 show
             )
             return True
-        except:
+        except Exception:
             return False
 
 

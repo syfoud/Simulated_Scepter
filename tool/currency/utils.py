@@ -1,35 +1,36 @@
-import json
+import ctypes
+import math
 import os
+import sys
+import time
+import traceback
+from copy import deepcopy
 from datetime import datetime
+from math import cos, sin
 
-import cv2
 import cv2 as cv
 import numpy as np
-import time
-
-import win32api
-import win32print
+import pythoncom
+import win32com.client
 import win32con
-from copy import deepcopy
-import math
-import random
-import win32gui, win32com.client, pythoncom
-import sys
-import ctypes
+import win32gui
+import win32print
 from PIL import Image, ImageDraw, ImageFont
-from math import sin, cos
-import traceback
 
-from tool.GLOBAL import key_mouse_manager, factor, get_global_stop_flag, set_global_stop_flag
 from diver import merge_text
 from route import PATHS
 from tool.currency.config import config
-from tool.log import CUS_LOGGER, log_emitter
-from tool.screenshot import Screen
 from tool.currency.ocr import get_global_my_ts
 from tool.currency.text_key import text_keys
+from tool.GLOBAL import (
+    factor,
+    get_global_stop_flag,
+    key_mouse_manager,
+    set_global_stop_flag,
+)
+from tool.log import CUS_LOGGER, log_emitter
+from tool.screenshot import Screen
 from tool.timer import timer
-from tool.utils.get_win_rect import get_window_rect
 from tool.utils.game_window import (
     BASE_HEIGHT,
     BASE_WIDTH,
@@ -39,9 +40,11 @@ from tool.utils.game_window import (
     is_supported_resolution,
     set_game_foreground,
 )
+from tool.utils.get_win_rect import get_window_rect
 from tool.utils.image_tool import find_image_by_name, find_image_in_folder
-from tool.utils.minimap_util import get_minimap, MINIMAP_RADIUS, POSITION_SEARCH_SCALE
+from tool.utils.minimap_util import MINIMAP_RADIUS, POSITION_SEARCH_SCALE, get_minimap
 from tool.utils.mminimap import PositionPredict
+
 
 def set_forground():
     try:
@@ -52,7 +55,7 @@ def set_forground():
         else:
             shell.SendKeys("")
         set_game_foreground()
-    except:
+    except Exception:
         pass
 
 
@@ -155,7 +158,8 @@ class CurrencyUtils:
         while not get_global_stop_flag():
             try:
                 re=self.get_xy()
-                if re: break
+                if re:
+                    break
                 # 检查是否超时
                 if time.time() - start_time > timeout:
                     CUS_LOGGER.error(f"等待游戏窗口超时({timeout}秒)，请检查游戏是否启动")
@@ -218,13 +222,11 @@ class CurrencyUtils:
         self.scy = self.yy / self.by
         dc = win32gui.GetWindowDC(hwnd)
         dpi_x = win32print.GetDeviceCaps(dc, win32con.LOGPIXELSX)
-        dpi_y = win32print.GetDeviceCaps(dc, win32con.LOGPIXELSY)
         win32gui.ReleaseDC(hwnd, dc)
         scale_x = dpi_x / 96
-        scale_y = dpi_y / 96
         try:
             self.scale = ctypes.windll.user32.GetDpiForWindow(hwnd) / 96.0
-        except:
+        except Exception:
             CUS_LOGGER.warning('DPI获取失败')
             self.scale = 1.0
         CUS_LOGGER.debug(
@@ -457,7 +459,7 @@ class CurrencyUtils:
         else:
             try:
                 result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
-            except Exception as e:
+            except Exception:
                 CUS_LOGGER.error(f"{path}匹配失败，源图像{local_screen.shape}，目标图像{target.shape}")
                 raise
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
@@ -466,7 +468,7 @@ class CurrencyUtils:
         self.tm = max_val
         if max_val > threshold:
             if self.last_info != path:
-                CUS_LOGGER.debug("匹配到图片记忆切片 %s 相似度 %f 阈值 %f" % (path, max_val, threshold))
+                CUS_LOGGER.debug(f"匹配到图片记忆切片 {path} 相似度 {max_val} 阈值 {threshold}")
             self.last_info = path
         return max_val > threshold
 
@@ -545,7 +547,7 @@ class CurrencyUtils:
         # cv.imshow("匹配结果", loc_tp)
         # cv.imshow("匹配目标", combined_img_with_rect)
         # cv.waitKey(0)
-        
+
         return ang
 
     def nof(self,must_be=None):
@@ -613,7 +615,7 @@ class CurrencyUtils:
         save_path = PATHS["root"]+"/temp/"
         try:
             os.mkdir(save_path)
-        except:
+        except Exception:
             pass
         filename = save_path+datetime.now().strftime("%Y%m%d_%H%M%S") + ".png"
         cv.imwrite(filename,sc)
@@ -693,7 +695,7 @@ class CurrencyUtils:
         """
         精确匹配获得精确坐标，该坐标并非代表点位在大地图上的像素坐标，而是经过变换缩放而获得的
         """
-        
+
         CUS_LOGGER.debug(f"获取新坐标,当前坐标{self.now_loc}是否刷新{fresh}")
         if fresh:
             self.get_screen()
@@ -751,7 +753,7 @@ class CurrencyUtils:
     def click_box(self, box):
         """
         点击给定坐标框的中心位置
-        
+
         Args:
             box: 坐标框，格式为[x1, x2, y1, y2]，其中x1,x2为横向坐标，y1,y2为纵向坐标
         """
@@ -762,7 +764,7 @@ class CurrencyUtils:
     def click_position(self, position):
         """
         点击给定位置坐标
-        
+
         Args:
             position: 位置坐标，格式为[x, y]，其中x为横向坐标，y为纵向坐标
         """

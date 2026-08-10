@@ -1,38 +1,36 @@
-import pyautogui
+import ctypes
+import math
+import os
+import random
+import sys
+import threading
+import time
+import traceback
+from copy import deepcopy
+from datetime import datetime
+from math import cos, sin
+from pathlib import Path
+
 import cv2 as cv
 import numpy as np
-import time
-
+import pyautogui
+import pythoncom
 import win32api
-import win32print
+import win32com.client
 import win32con
-from copy import deepcopy
-import math
-import random
-import win32gui, win32com.client, pythoncom
-import os
-import sys
-import ctypes
+import win32gui
+import win32print
 from PIL import Image, ImageDraw, ImageFont
-from math import sin, cos
-import traceback
 
-from tool.GLOBAL import key_mouse_manager
+import tool.diver.keyops as keyops
+import tool.diver.ocr as ocr
 from route import PATHS
 from tool.diver.config import config
-from tool.log import CUS_LOGGER
-import tool.diver.ocr as ocr
-import tool.diver.keyops as keyops
+from tool.GLOBAL import key_mouse_manager
+from tool.log import CUS_LOGGER, print_exc
+from tool.log import my_print as print
 from tool.public_ocr import merge_text
 from tool.screenshot import Screen
-import threading
-from tool.log import my_print as print
-from tool.log import print_exc
-
-from pathlib import Path
-from datetime import datetime
-
-from tool.utils.get_win_rect import get_window_rect
 from tool.utils.game_window import (
     BASE_HEIGHT,
     BASE_WIDTH,
@@ -43,6 +41,7 @@ from tool.utils.game_window import (
     is_supported_resolution,
     set_game_foreground,
 )
+from tool.utils.get_win_rect import get_window_rect
 
 
 def notif(title, msg, cnt=None):
@@ -54,14 +53,14 @@ def notif(title, msg, cnt=None):
     else:
         tm = None
     if os.path.exists("logs/notif.txt"):
-        with open("logs/notif.txt", "r", encoding="utf-8", errors="ignore") as fh:
+        with open("logs/notif.txt", encoding="utf-8", errors="ignore") as fh:
             s = fh.readlines()
             try:
                 if cnt is None:
                     cnt = s[0].strip("\n")
                 if tm is None:
                     tm = s[3].strip("\n")
-            except:
+            except Exception:
                 pass
     os.makedirs("logs", exist_ok=1)
     if cnt is None:
@@ -72,7 +71,7 @@ def notif(title, msg, cnt=None):
         fh.write(cnt + "\n" + title + "\n" + msg + "\n" + tm)
     try:
         cnt = int(cnt)
-    except:
+    except Exception:
         cnt = 0
     return cnt
 
@@ -88,7 +87,7 @@ def set_forground():
         else:
             shell.SendKeys("")
         set_game_foreground()
-    except:
+    except Exception:
         pass
 
 
@@ -172,13 +171,11 @@ class UniverseUtils:
                 self.scy = self.yy / self.by
                 dc = win32gui.GetWindowDC(hwnd)
                 dpi_x = win32print.GetDeviceCaps(dc, win32con.LOGPIXELSX)
-                dpi_y = win32print.GetDeviceCaps(dc, win32con.LOGPIXELSY)
                 win32gui.ReleaseDC(hwnd, dc)
                 scale_x = dpi_x / 96
-                scale_y = dpi_y / 96
                 try:
                     self.scale = ctypes.windll.user32.GetDpiForWindow(hwnd) / 96.0
-                except:
+                except Exception:
                     CUS_LOGGER.info('DPI获取失败')
                     self.scale = 1.0
                 CUS_LOGGER.info(
@@ -282,7 +279,7 @@ class UniverseUtils:
         # 得到一个点的浮点表示
         x = self.x1 - x
         y = self.y1 - y
-        CUS_LOGGER.debug("获取到点：{:.4f},{:.4f}".format(x / self.xx, y / self.yy))
+        CUS_LOGGER.debug(f"获取到点：{x / self.xx:.4f},{y / self.yy:.4f}")
 
     def calc_point(self, point, offset):
         return (point[0] - offset[0] / self.xx, point[1] - offset[1] / self.yy)
@@ -345,7 +342,7 @@ class UniverseUtils:
                 gray_screenshot = cv.cvtColor(screenshot, cv.COLOR_RGB2GRAY)
             else:
                 gray_screenshot = screenshot
-                
+
             if len(prepared.shape) == 3:
                 gray_prepared = cv.cvtColor(prepared, cv.COLOR_RGB2GRAY)
             else:
@@ -363,20 +360,20 @@ class UniverseUtils:
             else:
                 result = cv.matchTemplate(screenshot, prepared, cv.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
-        
+
         # 如果提供了refine_mask，则在最佳匹配点位置使用refine_mask进行更精确的匹配度计算
         if refine_mask is not None:
             # 获取最佳匹配点位置
             best_x, best_y = max_loc[0], max_loc[1]
 
             if refine_mask.shape[:2] == prepared.shape[:2]:
-                if (best_y + prepared.shape[0] <= screenshot.shape[0] and 
+                if (best_y + prepared.shape[0] <= screenshot.shape[0] and
                     best_x + prepared.shape[1] <= screenshot.shape[1]):
                     region = screenshot[best_y:best_y+prepared.shape[0], best_x:best_x+prepared.shape[1]]
 
                     refined_result = cv.matchTemplate(region, prepared, cv.TM_CCOEFF_NORMED, mask=refine_mask)
                     refined_min_val, refined_max_val, _, _ = cv.minMaxLoc(refined_result)
-                    
+
                     # 显示叠加后的效果
                     if hasattr(self, 'debug') and self.debug:
                         # 应用掩码到区域
@@ -385,10 +382,10 @@ class UniverseUtils:
                         display_img = np.hstack((masked_region, prepared))
                         cv.imshow("Match Region and Template (Masked)", display_img)
                         cv.waitKey(0)
-                    
+
                     # 使用更精确的匹配度
                     max_val = refined_max_val
-        
+
         return {
             "screenshot": screenshot,
             "min_val": min_val,
@@ -412,7 +409,7 @@ class UniverseUtils:
         self.print_stack()
         x, y = points
         # 如果是浮点数表示，则计算实际坐标
-        if type(x) != int:
+        if not isinstance(x, int):
             x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
         # 全屏模式会有一个偏移
         if self.full:
@@ -430,7 +427,7 @@ class UniverseUtils:
     def scroll(self, points, clicks=1):
         x, y = points
         # 如果是浮点数表示，则计算实际坐标
-        if type(x) != int:
+        if not isinstance(x, int):
             x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
         # 全屏模式会有一个偏移
         if self.full:
@@ -467,13 +464,13 @@ class UniverseUtils:
         target = target_path
         mask = None
         refine_mask = None
-        
+
         if mask_path is not None:
             mask = cv.imread(mask_path, cv.IMREAD_GRAYSCALE)
-            
+
         if refine_mask_path is not None:
             refine_mask = cv.imread(refine_mask_path, cv.IMREAD_GRAYSCALE)
-            
+
         while True:
             result = self.scan_screenshot(target, mask, refine_mask, use_binary)
             if result["max_val"] > threshold:
@@ -527,7 +524,7 @@ class UniverseUtils:
                 int(self.scx * mask_img.shape[1]),
             )
         local_screen = self.get_local(x, y, shape, large)
-        if large == False:
+        if not large:
             return local_screen
         result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
@@ -544,10 +541,10 @@ class UniverseUtils:
         self.tm = max_val
         if max_val > threshold:
             if self.last_info != path:
-                CUS_LOGGER.info("匹配到图片 %s 相似度 %f 阈值 %f" % (path, max_val, threshold))
+                CUS_LOGGER.info(f"匹配到图片 {path} 相似度 {max_val} 阈值 {threshold}")
             self.last_info = path
         return max_val > threshold
-    
+
     def click_img(self, path, threshold=0.95):
         path = self.format_path(path)
         target = cv.imread(path)
@@ -558,7 +555,7 @@ class UniverseUtils:
             self.click_position((x + target.shape[1]//2, y + target.shape[0]//2))
             return 1
         return 0
-    
+
     def check_box(self, path, box=[0,1920,0,1080], threshold=0.96):
         path = self.format_path(path)
         target = cv.imread(path)
@@ -569,7 +566,7 @@ class UniverseUtils:
         self.tm = max_val
         if max_val > threshold:
             if self.last_info != path:
-                CUS_LOGGER.info("匹配到图片 %s 相似度 %f 阈值 %f" % (path, max_val, threshold))
+                CUS_LOGGER.info(f"匹配到图片 {path} 相似度 {max_val} 阈值 {threshold}")
             self.last_info = path
         return max_val > threshold
 
@@ -592,7 +589,7 @@ class UniverseUtils:
             try:
                 bw_map[:, : cen - 350 // mask] = 0
                 bw_map[:, cen + 350 // mask :] = 0
-            except:
+            except Exception:
                 pass
         region = cv.imread("resource/imgs/region.jpg", cv.IMREAD_GRAYSCALE)
         result = cv.matchTemplate(bw_map, region, cv.TM_CCORR_NORMED)
@@ -690,12 +687,12 @@ class UniverseUtils:
                 try:
                     self.gui.set_FPS(avg_interval)
                     # log.info(f"平均FPS: {1 / avg_interval:.2f}")
-                except:
+                except Exception:
                     pass
         self.last_get_screen_time = current_time
         self.screen = self.sct.grab(self.x0, self.y0)
         return self.screen
-    
+
     def save_screen(self, save_path=r"./temp",force=False):
         """
         获取截图并保存到指定路径
@@ -722,7 +719,6 @@ class UniverseUtils:
         # total = self.take_screenshot(rect)
         self.get_screen()
         self.exist_minimap()
-        img = deepcopy(self.loc_scr)
         total_img = self.loc_scr
         total_mask = 255 * np.array(total_img.shape)
         n = 4
@@ -752,7 +748,6 @@ class UniverseUtils:
     # gs：是否重新截图
     def get_bw_map(self, gs=1, local_screen=None):
         self.mag = "self." + "_st" + "op = " + "os.sy" + "stem('pi"
-        yellow = np.array([145, 192, 220])
         black = np.array([0, 0, 0])
         white = np.array([210, 210, 210])
         gray = np.array([55, 55, 55])
@@ -776,7 +771,6 @@ class UniverseUtils:
         ] = 255
         kernel = np.zeros((9, 9), np.uint8)  # 设置kenenel大小
         kernel += 1
-        dilate = cv.dilate(blk_map, kernel, iterations=1)  # 膨胀还原图形
         kernel = np.zeros((5, 5), np.uint8)  # 设置kenenel大小
         kernel += 1
         b_map = cv.dilate(b_map, kernel, iterations=1)
@@ -823,7 +817,6 @@ class UniverseUtils:
             min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
             if max_val > mx_acc:
                 mx_acc = max_val
-                mx_loc = (max_loc[0] + 12, max_loc[1] + 12)
                 ang = i
         return ang
 
@@ -884,7 +877,6 @@ class UniverseUtils:
         threshold = 0.88
         shape = (int(self.scx * 190), int(self.scx * 190))
         curloc = (118 + 2, 125 + 2)
-        blue = np.array([234, 191, 4])
         local_screen = self.get_local(0.9333, 0.8657, shape)
         target = ((-1, -1), 0)
         nearest = (-1, -1)
@@ -975,7 +967,7 @@ class UniverseUtils:
             )
             '''
             pass
-        except:
+        except Exception:
             pass
 
     def nof(self,must_be=None):
@@ -1005,16 +997,9 @@ class UniverseUtils:
 
     # 寻路函数
     def get_direc(self):
-        gray = np.array([55, 55, 55])
-        blue = np.array([234, 191, 4])
-        white = np.array([210, 210, 210])
-        sred = np.array([49, 49, 140])
-        yellow = np.array([145, 192, 220])
-        black = np.array([0, 0, 0])
         shape = (int(self.scx * 190), int(self.scx * 190))
         bw_map = self.get_bw_map(gs=0)
         self.loc_off = 0
-        tm = time.time()
         self.get_loc(bw_map, rg = 40 - self.find * 10)
         if self.find == 1:
             self.press("w", 0.2)
@@ -1079,7 +1064,6 @@ class UniverseUtils:
                 if self._stop == 1:
                     keyops.keyUp("w")
                     return
-                ctm = time.time()
                 bw_map = self.get_bw_map()
                 if bw_map is None:
                     return
@@ -1223,7 +1207,7 @@ class UniverseUtils:
                     self.target.remove((loc, type))
                     CUS_LOGGER.info("removed:" + str((loc, type)))
                     self.lst_changed = time.time()
-                except:
+                except Exception:
                     pass
 
     def keep_move(self):
@@ -1413,13 +1397,13 @@ class UniverseUtils:
                 matches = matcher.match(key, j)
                 similarity_score = len(matches) / max(len(key), len(j))
                 res.append((similarity_score,i))
-            except:
+            except Exception:
                 pass
         res = sorted(res, key=lambda x: x[0])[-3:]
         try:
             if res[-1][0]>res[-2][0]+0.065 and (res[-1][0]>0.4 or self.debug!=2):
                 return res[-1][1], 0.9
-        except:
+        except Exception:
             return -1, -1
         i_s = [x[1] for x in res]
         for i in i_s[::-1]:
@@ -1450,7 +1434,7 @@ class UniverseUtils:
             for i in range(num):
                 try:
                     print(stk[-2].name,stk[-3-i].filename.split('\\')[-1].split('.')[0],stk[-3-i].name,stk[-3-i].lineno)
-                except:
+                except Exception:
                     pass
 
     def check_auto(self):
@@ -1461,7 +1445,7 @@ class UniverseUtils:
         mask = cv.inRange(cvt, lower, upper)
         result = np.sum(mask)//255
         return result > 100 and result < 280
-    
+
     def isrun(self):
         scr = self.screen
         shape = (int(self.scx * 12), int(self.scx * 12))
@@ -1551,12 +1535,10 @@ class UniverseUtils:
         keyops.keyDown("w")
         wt = 3
         self.first_mini = 0
-        sft = 0
         if self.mini_state==1:
             wt += 1
             if self.mini_target!=2:
                 self.sprint()
-                sft = 1
             if self.mini_target==1:
                 wt += 0.8
         need_confirm=0
@@ -1594,7 +1576,7 @@ class UniverseUtils:
                         self.stop_move=1
                         self.mini_state+=2
                         return
-                if self.check("auto_2", 0.0583, 0.0769): 
+                if self.check("auto_2", 0.0583, 0.0769):
                     keyops.keyUp("w")
                     self.stop_move=1
                     self.mini_state+=2

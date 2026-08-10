@@ -1,10 +1,9 @@
+import argparse
 import time
 
 from .predict_system import TextSystem
+from .utils import draw_ocr
 from .utils import infer_args as init_args
-from .utils import str2bool, draw_ocr
-import argparse
-import sys
 
 
 class ONNXPaddleOcr(TextSystem):
@@ -15,7 +14,7 @@ class ONNXPaddleOcr(TextSystem):
         for action in parser._actions:
             inference_args_dict[action.dest] = action.default
         params = argparse.Namespace(**inference_args_dict)
-        
+
 
         # params.rec_image_shape = "3, 32, 320"
         params.rec_image_shape = "3, 48, 320"
@@ -57,7 +56,7 @@ if __name__ == '__main__':
     s = time.time()
     result = model.ocr(img)
     e = time.time()
-    print("total time: {:.3f}".format(e - s))
+    print(f"total time: {e - s:.3f}")
     print("result:", result)
     for box in result[0]:
         print(box)

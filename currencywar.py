@@ -1,35 +1,23 @@
+import json
 import os
 import shutil
-import random
-from tool import EXTRA
-import time
-import cv2 as cv
-import yaml
-import json
-import sqlite3
-from tool.GLOBAL import key_mouse_manager, factor
-from route import PATHS
+
 from currency import SimulatedCurrency
-from tool.log import CUS_LOGGER, log_emitter
+from route import PATHS
+from tool import EXTRA
+from tool.log import CUS_LOGGER
 from tool.public_ocr import load_actions, merge_text
-from tool.utils.Error import NoMatchError, NoBossError
-from tool.utils.analysis_map import match_multiple_targets, build_rightward_graph, compute_start_point_from_crop, \
-    max_weight_path, display_matches, evaluate_best_single_replacement, compute_all_max_steps, detect_corner_markers
-from tool.utils.image_tool import find_image_by_name
-from tool.utils.minimap_util import MINIMAP_RADIUS, get_minimap, re_get_position
-from tool.utils.ocr_num import match_numbers_in_region, extract_number
-from tool.utils.tool import find_latest_modified_file
-from tool.window_recorder import WindowRecorder
+
 
 class CurrencyWar (SimulatedCurrency):
-    
+
     def __init__ (self):
         settings_path = PATHS["root"] + "\\config\\config\\settings.json"
         example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="r", encoding="UTF-8") as file:
+            with open(settings_path, encoding="UTF-8") as file:
                 self.opt = json.load(file)
         self.default_json_path = "actions/currencywar.json"
         self.default_json = load_actions (self.default_json_path)
@@ -71,4 +59,4 @@ class CurrencyWar (SimulatedCurrency):
             return target_text in merged
         return False
 
-    
+

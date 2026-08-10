@@ -1,10 +1,8 @@
-import cv2 as cv
-import numpy as np
-import time
-import random
-import sys
 import os
 from shutil import copy
+
+import cv2 as cv
+import numpy as np
 
 
 def get_center(img, i, j):

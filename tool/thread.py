@@ -47,9 +47,9 @@ class ThreadWithException(threading.Thread):
             if self.is_print:
                 CUS_LOGGER.debug(f"[{self.name}] Start")
             self.return_value = self.target(**self.kwargs)
-        except Exception as e:
+        except Exception:
             PRINT_TO_UI = get_globals()
-            PRINT_TO_UI.emit(f"任务发生错误, 子线程已中断, 详见日志或信息框体.")
+            PRINT_TO_UI.emit("任务发生错误, 子线程已中断, 详见日志或信息框体.")
             _, log_emitter = get_logger()
             err_msg = traceback.format_exc()
             log_emitter.show_error_signal.emit(f"任务执行器的子线程中发生错误 - {self.name}", err_msg)

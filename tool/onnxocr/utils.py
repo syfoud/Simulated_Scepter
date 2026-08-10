@@ -1,10 +1,13 @@
-import numpy as np
-import cv2
 import argparse
 import math
-from PIL import Image, ImageDraw, ImageFont
 import os
+
+import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
 from tool.diver.config import config
+
 # 获取项目根目录，如果上层目录为 _internal 则跳转到更上层
 current_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if os.path.basename(current_dir) == '_internal':
@@ -161,9 +164,9 @@ def text_visual(texts,
                 count = 0
             count += 1
         if first_line:
-            new_txt = str(index) + ': ' + txt + '   ' + '%.3f' % (scores[idx])
+            new_txt = f'{index}: {txt}   {scores[idx]:.3f}'
         else:
-            new_txt = "  " + txt + "  " + '%.3f' % (scores[idx])
+            new_txt = f"  {txt}  {scores[idx]:.3f}"
         draw_txt.text((0, gap * count), new_txt, txt_color, font=font)
         # whether add new blank img or not
         if count >= img_h // gap - 1 and idx + 1 < len(texts):

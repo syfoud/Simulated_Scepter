@@ -1,25 +1,26 @@
-import logging
 import io
+import logging
 import sys
 import traceback
-import colorlog
+from datetime import datetime
 from logging import (
-    StreamHandler,
+    DEBUG,
+    INFO,
     FileHandler,
     Formatter,
-    INFO,
-    DEBUG,
+    StreamHandler,
 )
 from pathlib import Path
-from datetime import datetime
 
+import colorlog
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
+
+
 # 延迟导入 GLOBAL，避免循环导入
 def get_GLOBAL():
     try:
         from tool import GLOBAL
-        from tool.GLOBAL import factor
         return GLOBAL
     except ImportError:
         # 如果直接运行此文件，可能无法导入config模块
@@ -56,7 +57,7 @@ class UILogHandler(StreamHandler):
         # 非调试模式下过滤 DEBUG 日志
         if not getattr(GLOBAL, 'DEBUG_MODE', True) and record.levelno < logging.INFO:
             return
-        
+
         if GLOBAL.PRINT_TO_UI is not None:
             msg = self.format(record)
             level_colors = {
@@ -80,7 +81,7 @@ class PrintToFileLogger:
     def __init__(self, original_stdout):
         self.original_stdout = original_stdout
         self.linebuf = ''
-    
+
     def write(self, buf):
         temp_linebuf = self.linebuf + buf
         self.linebuf = ''
@@ -90,37 +91,37 @@ class PrintToFileLogger:
                 stripped_line = line.rstrip()
                 # 检查是否包含典型的logger标识符
                 is_logger_output = self._is_logger_output(stripped_line)
-                
+
                 if not is_logger_output:
                     # 不是logger输出，记录为PRINT
                     self._write_to_logfiles(stripped_line)
-                
+
                 # 总是输出到原始stdout（控制台）
                 self.original_stdout.write(line)
             else:
                 self.linebuf = line
-    
+
     def flush(self):
         if self.linebuf != '':
             # 写入剩余内容到原始输出
             self.original_stdout.write(self.linebuf)
-            
+
             # 检查是否为logger输出
             is_logger_output = self._is_logger_output(self.linebuf)
-            
+
             if not is_logger_output:
                 self._write_to_logfiles(self.linebuf)
-            
+
             self.linebuf = ''
-    
+
     def _is_logger_output(self, line):
         """判断是否为logger输出"""
         line_lower = line.lower()
-        
+
         # 检查是否包含典型的logger标识符
         if any(indicator.lower() in line_lower for indicator in ['INFO:', 'WARNING:', 'ERROR:', 'DEBUG:', 'CRITICAL:', 'my customize logger']):
             return True
-        
+
         # 检查是否为标准格式的logger输出（包含时间戳和级别）
         if '[' in line and any(level in line for level in ['INFO', 'WARNING', 'ERROR', 'DEBUG', 'CRITICAL']):
             # 进一步检查格式，如包含asctime、日期时间等
@@ -130,13 +131,13 @@ class PrintToFileLogger:
             timestamp_pattern = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}'
             if re.search(timestamp_pattern, line):
                 return True
-        
+
         # 检查是否包含formatter中的特定字段
         if any(field in line_lower for field in ['asctime', 'levelname', 'filename', 'lineno', 'message']):
             return True
-            
+
         return False
-    
+
     def _write_to_logfiles(self, message):
         # 只写入到日志文件
         with open(logs_path / "log.txt", "a", encoding="utf-8") as f:
@@ -217,25 +218,25 @@ class CusLogger(logging.Logger):
         import sys
         # 只在控制台显示，不在日志文件中重复记录
         console_formatter = colorlog.ColoredFormatter('%(log_color)s%(asctime)s - %(levelname)s - %(message)s')
-        
+
         class ConsoleOnlyHandler(logging.Handler):
             def __init__(self, original_stdout):
                 super().__init__()
                 self.original_stdout = original_stdout
                 self.setFormatter(console_formatter)
                 self.addFilter(keyword_filter)
-            
+
             def emit(self, record):
                 msg = self.format(record)
                 self.original_stdout.write(msg + '\n')
                 self.original_stdout.flush()
-        
+
         console_handler = ConsoleOnlyHandler(original_stdout)
         self.addHandler(console_handler)
 
         ui_handler = UILogHandler()
         self.addHandler(ui_handler)
-        
+
         # 异常处理
         sys.excepthook = self.handle_exception
 

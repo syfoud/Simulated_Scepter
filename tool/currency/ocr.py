@@ -1,11 +1,10 @@
-import time
 
-from tool.onnxocr.onnx_paddleocr import ONNXPaddleOcr
-import numpy as np
 import cv2 as cv
-from tool.log import CUS_LOGGER
-from tool.public_ocr import filter_non_white, box_contain, sort_text, merge
+import numpy as np
 
+from tool.log import CUS_LOGGER
+from tool.onnxocr.onnx_paddleocr import ONNXPaddleOcr
+from tool.public_ocr import box_contain, filter_non_white, merge, sort_text
 
 # mode: bless1 bless2 strange
 
@@ -56,7 +55,7 @@ def get_global_my_ts(father=None):
 class My_TS:
     # 类变量，用于共享底层 OCR 引擎
     _ts_shared = None
-    
+
     def __init__(self, lang='ch', father=None):
         self.lang = lang
         self.father = father
@@ -65,7 +64,7 @@ class My_TS:
         self.nothing = 1
         self.text = ''
         self._ts = None
-    
+
     @property
     def ts(self):
         """懒加载 OCR 实例"""
@@ -109,7 +108,7 @@ class My_TS:
         """
         try:
             self.text=self.ocr_one_row(img).lower()
-        except:
+        except Exception:
             self.text=''
     def similar_list(self, text_list, img=None):
         """
@@ -229,7 +228,7 @@ class My_TS:
                         break
             else:
                 found = text in self.text
-                
+
             if found:
                 CUS_LOGGER.debug(f"识别到文本：{matched_text}匹配文本：{self.text},位置：{[int(res['box'][0][0]), int(res['box'][1][0]), int(res['box'][0][1]), int(res['box'][2][1])]}")
                 if not find_all:

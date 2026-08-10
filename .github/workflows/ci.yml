@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ruff — only crash-level rules
+        run: uvx ruff check . --exclude test --select=F821,E722,F403
+
+      - name: Compile-check — catch syntax errors
+        run: python -m compileall -q -x test .
+
+  startup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies & verify main module imports
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          uv sync
+          uv run python -c "import new_gui; print('Startup import OK')"

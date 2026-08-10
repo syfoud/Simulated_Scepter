@@ -9,9 +9,10 @@ from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import QApplication
+
+from load_ui import QMainWindowLoadUI
 from route import PATHS
 from tool import GLOBAL
-from load_ui import QMainWindowLoadUI
 
 
 class QMainWindowLog(QMainWindowLoadUI):
@@ -201,7 +202,7 @@ class QMainWindowLog(QMainWindowLoadUI):
 
         # 颜色文本
         text_all = f'<span style="color:#{color};">{text_time}{text}</span>'
-    
+
         # 限制最大行数为1000行，避免内存爆炸
         max_lines = 1000
         document = self.TextBrowser.document()
@@ -212,7 +213,7 @@ class QMainWindowLog(QMainWindowLoadUI):
             cursor.select(cursor.BlockUnderCursor)
             cursor.removeSelectedText()
             cursor.deleteChar()  # 删除换行符
-    
+
         # 输出到输出框
         self.TextBrowser.append(text_all)
 

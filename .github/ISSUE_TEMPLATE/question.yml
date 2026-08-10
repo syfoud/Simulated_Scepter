@@ -1,11 +1,13 @@
 name: 使用提问 / Question
 description: 询问使用方法或寻求帮助
-title: "[Question] "
+title: "[Question] 在此简述你的问题（不要留空）"
 labels: ["question"]
 body:
   - type: markdown
     attributes:
       value: |
+        > :warning: **标题请勿留空或用默认文案！** 请用一两句话描述问题，例如 "[Question] 如何在后台运行脚本？"
+
         请优先查阅项目文档和已有 Issue / Discussions，避免重复提问。
 
   - type: textarea

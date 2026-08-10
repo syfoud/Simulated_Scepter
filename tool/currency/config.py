@@ -1,7 +1,3 @@
-import os
-import shutil
-from typing import List, Dict, Union
-import yaml
 import sys
 
 from route import PATHS
@@ -47,7 +43,7 @@ class Config:
             return x
 
     @property
-    def order(self) -> List[int]:
+    def order(self) -> list[int]:
         return [int(i) for i in self.order_text.strip(" ").split(" ")]
 
     @property

@@ -1,23 +1,25 @@
 import json
-import shutil
-import pyautogui
-import numpy as np
-import time
-import cv2
 import os
+import shutil
+import time
+
+import cv2
+import numpy as np
+import pyautogui
 import yaml
 
-from tool.GLOBAL import key_mouse_manager, factor
-from tool import GLOBAL, EXTRA
 from diver import load_actions, merge_text
-from tool.log import CUS_LOGGER
-from tool.currency.utils import CurrencyUtils, set_forground
+from route import PATHS
+from tool import EXTRA, GLOBAL
 from tool.currency.config import config
 from tool.currency.text_key import text_keys
+from tool.currency.utils import CurrencyUtils, set_forground
+from tool.GLOBAL import factor, key_mouse_manager
+from tool.log import CUS_LOGGER
 from tool.utils.Error import NormalEndError
 from tool.utils.image_tool import find_image_by_name
 from tool.utils.tool import get_hwnd_and_text
-from route import PATHS
+
 
 class SimulatedCurrency(CurrencyUtils):
 
@@ -53,7 +55,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.count = 0
         self.bonus_rounds_remaining = 0  # 剩余奖励轮次数
         self.tk = text_keys ()
-        
+
         self.ENVIR_BOXES = [[266, 610, 375, 413], [780, 1134, 375, 414], [1314, 1645, 373, 413]]
         self.BLESS_BOXES = [[298, 608, 472, 513], [783, 1095, 472, 513], [1298, 1605, 472, 513]]
 
@@ -63,13 +65,13 @@ class SimulatedCurrency(CurrencyUtils):
 
         CUS_LOGGER.debug (f"开始运行,初始计数：{self.count}")
         self.last_interact_time = time.time ()
-        
+
         settings_path = PATHS["root"] + "\\config\\config\\settings.json"
         example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="r", encoding="UTF-8") as file:
+            with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
 
         # 读取货币战争专用配置
@@ -88,7 +90,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         # 加载配置
         try:
-            with open(currency_config_file, "r", encoding="utf-8", errors="ignore") as f:
+            with open(currency_config_file, encoding="utf-8", errors="ignore") as f:
                 currency_config = yaml.safe_load(f) or {}
                 self.exit_plane = currency_config.get("exit_after_plane", 1)
                 CUS_LOGGER.info(f"货币战争退出位面设置为: 第{self.exit_plane}面")
@@ -136,7 +138,7 @@ class SimulatedCurrency(CurrencyUtils):
     def loop (self):
         CUS_LOGGER.info ("开始OCR识别，等待触发文字")
         while not self._stop:
-            self.ts.forward (self.get_screen())  
+            self.ts.forward (self.get_screen())
             self.run_static ()
 
     def goto_currency (self):
@@ -158,8 +160,8 @@ class SimulatedCurrency(CurrencyUtils):
             merged = merge_text (text_list)
             CUS_LOGGER.info (f"OCR 识别结果: {merged}")
             return "开局时获得" in merged
-        except Exception as e:
-            CUS_LOGGER.info (f"正在选择难度1")
+        except Exception:
+            CUS_LOGGER.info ("正在选择难度1")
             return False
 
     def select_difficulty_start (self):
@@ -177,13 +179,13 @@ class SimulatedCurrency(CurrencyUtils):
             time.sleep(0.3)   # 等待界面稳定
         CUS_LOGGER.warning ("等待选择难度1")
         return
-    
+
     def auto_battle(self):
         # 需要打开自动战斗
         key_mouse_manager.press("v")
 
-    
-    
+
+
     def select_envir (self):
         CUS_LOGGER.info ("=== 进入投资环境选择阶段===")
         time.sleep (1)#等待界面加载
@@ -199,7 +201,7 @@ class SimulatedCurrency(CurrencyUtils):
         texts = self.recognize_options (self.ENVIR_BOXES)
         CUS_LOGGER.info (f"OCR 识别结果: {texts}")
         matched, selected_idx = match_prior (texts)
-        
+
         if not matched:
             CUS_LOGGER.info ("未匹配到必选策略，点击刷新按钮")
             key_mouse_manager.click (672, 984)  # 刷新按钮坐标
@@ -230,11 +232,11 @@ class SimulatedCurrency(CurrencyUtils):
             if selected_idx == -1:
                 selected_idx = 1
                 CUS_LOGGER.warning("未匹配到任何优先级策略，默认选择中间")
-        
-        
+
+
         if any("银金彩" in text for text in texts):
             self.max_refresh = 3
-            CUS_LOGGER.info(f"选择银金彩，已将刷新次数调整至3次")
+            CUS_LOGGER.info("选择银金彩，已将刷新次数调整至3次")
         else:
             self.max_refresh = 1
         # 点击选中的选项（点击其中心位置）
@@ -244,7 +246,7 @@ class SimulatedCurrency(CurrencyUtils):
             cx = (box[0] + box[1]) // 2
             cy = (box[2] + box[3]) // 2
             centers.append((cx, cy))
-        
+
         key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
         time.sleep (0.1)  # 等待点击生效
 
@@ -258,7 +260,7 @@ class SimulatedCurrency(CurrencyUtils):
         time.sleep (0.1)
         CUS_LOGGER.info ("投资环境选择完成")
         return 1
-    
+
     def detect_has_icon(self, roi):
         """
         检测 ROI 中是否有图标（通过图像复杂度判断）
@@ -270,10 +272,10 @@ class SimulatedCurrency(CurrencyUtils):
         # 有图标时标准差 > 15，纯色背景时标准差 < 8
         # 这个阈值可以调整，你先用 10 测试
         return std > 10, std
-    
+
     def select_bless (self):
         """选择投资策略：第一次直接选中间，后续匹配必选'环保大使叽米'，否则选中间"""
-        
+
         CUS_LOGGER.info(f"=== 第 {self.select_bless_count} 次进入 select_bless ===")
         time.sleep (1)
         self.ts.forward (self.get_screen ())
@@ -328,7 +330,7 @@ class SimulatedCurrency(CurrencyUtils):
                         self.bonus_rounds_remaining = 2  # 赠送 2 次选择
                         CUS_LOGGER.info("检测到特殊投资，设置奖励轮次数: 2")
                     break
-                
+
                 # 如果没找到未解锁的，刷新...
                 if attempt < self.max_refresh:
                     CUS_LOGGER.info(f"第 {attempt+1} 次未匹配，点击刷新")
@@ -343,7 +345,7 @@ class SimulatedCurrency(CurrencyUtils):
                     selected_idx = 1
 
             # 点击选中的选项
-            
+
 
             key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
             time.sleep (0.1)
@@ -359,8 +361,8 @@ class SimulatedCurrency(CurrencyUtils):
             self.select_bless_count -= 1
             self.bonus_rounds_remaining -= 1
             CUS_LOGGER.info(f"抵消一次特殊投资，剩余奖励次数: {self.bonus_rounds_remaining}")
-        
-        
+
+
         CUS_LOGGER.info(f"比较: {self.select_bless_count} < {self.exit_plane} ? {self.select_bless_count < self.exit_plane}")
 
         if self.select_bless_count >= self.exit_plane:
@@ -384,22 +386,22 @@ class SimulatedCurrency(CurrencyUtils):
                 time.sleep(1)
             else:
                 self.update_state ("startbattle")
-        
+
         self.update_state ("startbattle")
         return 1
 
     def run_static (self, json_path = None, json_file = None, action_list = []) -> (str, int):
         """
         执行静态动作配置文件中的动作
-        
+
         根据提供的JSON配置文件或路径，查找并执行匹配的动作。
         支持基于文本或图像的触发条件，一旦匹配成功即执行相应动作序列。
-        
+
         参数:
             json_path: JSON配置文件路径，如果提供则加载该文件
             json_file: 已加载的JSON配置对象，优先级高于json_path
             action_list: 指定要执行的动作列表，为空则执行所有动作
-            
+
         返回值:
             tuple: (触发的动作名称, 执行结果)
                   - 触发的动作名称：空字符串表示未触发任何动作
@@ -484,27 +486,27 @@ class SimulatedCurrency(CurrencyUtils):
                                 #返回触发的名字
                                 return i['name'],resu
         return '',0
-    
+
     def do_action(self, action) -> int:
         """
         执行单个动作指令
-        
+
         根据传入的动作定义执行相应的操作，支持多种类型的动作：
         1. 字符串类型：调用同名方法
         2. 文本点击类型：在指定区域内查找包含特定文本的元素并点击
         3. 位置点击类型：直接点击指定坐标位置
         4. 延时类型：执行普通延时或真实延时
         5. 按键类型：按下指定按键
-        
+
         参数:
             action: 动作定义，可以是字符串或字典类型
                    - 字符串：表示要调用的方法名
                    - 字典：包含具体的动作参数，支持"text"、"position"、"sleep"、"real_sleep"、"press"等关键字
-        
+
         返回值:
             int: 执行结果，1表示执行成功，0表示未执行或执行失败
         """
-        if type(action) == str:
+        if isinstance(action, str):
             return getattr(self, action)()
         if "text" in action:
             if "box" in action:
@@ -547,13 +549,13 @@ class SimulatedCurrency(CurrencyUtils):
     def start (self):
         """
         启动货币战争自动化程序
-        
+
         该方法负责初始化并启动整个货币战争运行流程，包括：
         1. 初始化运行状态
         2. 启动键盘鼠标管理器
         3. 启动地图显示线程（如果启用）
         4. 开始执行主要路线逻辑
-        
+
         如果在执行过程中发生异常，会尝试停止运行并重新抛出异常。
         """
         self._stop = False
@@ -572,12 +574,12 @@ class SimulatedCurrency(CurrencyUtils):
     def stop(self, *_, **__):
         """
         停止任务运行
-        
+
         该方法负责安全地停止所有运行中的线程和操作，包括：
         1. 设置停止标志
         2. 停止键盘鼠标管理器
         3. 等待并终止地图显示线程
-        
+
         参数:
             *_: 忽略的位置参数
             **__: 忽略的关键字参数

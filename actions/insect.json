@@ -26,6 +26,21 @@
             "end_of_university"
         ]
     },
+    {
+        "name": "突发事件",
+        "trigger":{
+            "text": "突发事件",
+            "box": [883, 1039, 463, 505],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [    "emergency",
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
 {
         "name": "点击空白",
         "trigger":{
@@ -693,6 +708,21 @@
         "actions":
         [   {
                 "text": "重新启动"
+            }
+        ]
+    },
+    {
+        "name": "bug进入角色界面",
+        "trigger":{
+            "text": "角色攻略",
+            "box": [1685, 1791, 50, 82],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "press": "esc"
             }
         ]
     },

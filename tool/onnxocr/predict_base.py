@@ -1,7 +1,9 @@
-from onnxruntime import get_available_providers,SessionOptions,InferenceSession
+from onnxruntime import InferenceSession, SessionOptions, get_available_providers
+
 from tool.log import CUS_LOGGER
 
-class PredictBase(object):
+
+class PredictBase:
     def __init__(self, cpu=False):
         self.cpu = cpu
 

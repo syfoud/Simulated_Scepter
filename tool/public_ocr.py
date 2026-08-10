@@ -1,8 +1,10 @@
 import json
 from collections import defaultdict
 from functools import cmp_to_key
+
 import cv2 as cv
 import numpy as np
+
 
 def sort_text(text):
     def compare(item1, item2):
@@ -15,7 +17,7 @@ def sort_text(text):
     return text
 def load_actions(json_path):
     res = defaultdict(list)
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, encoding="utf-8") as f:
         for i in json.load(f):
             res[i["name"]].append(i)
     return res

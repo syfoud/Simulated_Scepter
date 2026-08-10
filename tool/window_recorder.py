@@ -3,15 +3,14 @@ import datetime
 import os
 import time
 
+# 导入必要的 Windows API 函数
+from ctypes import windll
+
 import cv2
 import numpy as np
-import win32con
 import win32gui
 import win32ui
 from PIL import ImageGrab
-
-# 导入必要的 Windows API 函数
-from ctypes import windll, wintypes, byref
 
 # 导入日志模块
 from tool.log import CUS_LOGGER
@@ -56,59 +55,59 @@ class WindowRecorder:
         self.map_alpha = map_alpha
         # SimulatedUniverse实例引用
         self.simul_instance = simul_instance
-        
+
     def capture_window_background(self, hwnd):
         """使用 PrintWindow API 后台截图指定窗口"""
         if not hwnd or not win32gui.IsWindow(hwnd):
             return None
-            
+
         # 获取窗口尺寸
         try:
             rect = win32gui.GetWindowRect(hwnd)
             width = rect[2] - rect[0]
             height = rect[3] - rect[1]
-            
+
             if width <= 0 or height <= 0:
                 return None
-                
+
             # 创建设备上下文和位图
             hwnd_dc = None
             mfc_dc = None
             save_dc = None
             save_bit_map = None
             old_bitmap = None
-            
+
             try:
                 # 获取窗口DC
                 hwnd_dc = win32gui.GetWindowDC(hwnd)
                 if not hwnd_dc:
                     return None
-                    
+
                 # 创建DC对象
                 mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
                 save_dc = mfc_dc.CreateCompatibleDC()
-                
+
                 # 创建位图
                 save_bit_map = win32ui.CreateBitmap()
                 save_bit_map.CreateCompatibleBitmap(mfc_dc, width, height)
                 old_bitmap = save_dc.SelectObject(save_bit_map)
-                
+
                 # 使用 PrintWindow API 后台截图
                 result = windll.user32.PrintWindow(hwnd, save_dc.GetSafeHdc(), 3)
-                
+
                 if result == 1:  # 成功
                     # 转换为 numpy 数组
                     bmp_info = save_bit_map.GetInfo()
                     bmp_str = save_bit_map.GetBitmapBits(True)
                     img = np.frombuffer(bmp_str, dtype=np.uint8)
                     img.shape = (bmp_info['bmHeight'], bmp_info['bmWidth'], 4)  # BGRA
-                    
+
                     # 转换为 BGR 格式
                     img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
                     return img
                 else:
                     return None
-                    
+
             finally:
                 # 确保所有资源都被正确释放 - 关键修复点
                 try:
@@ -116,31 +115,31 @@ class WindowRecorder:
                         save_dc.SelectObject(old_bitmap)
                 except Exception as e:
                     CUS_LOGGER.warning(f"恢复位图选择失败: {e}")
-                    
+
                 try:
                     if save_bit_map:
                         win32gui.DeleteObject(save_bit_map.GetHandle())
                 except Exception as e:
                     CUS_LOGGER.warning(f"删除位图对象失败: {e}")
-                    
+
                 try:
                     if save_dc:
                         save_dc.DeleteDC()
                 except Exception as e:
                     CUS_LOGGER.warning(f"删除保存DC失败: {e}")
-                    
+
                 try:
                     if mfc_dc:
                         mfc_dc.DeleteDC()
                 except Exception as e:
                     CUS_LOGGER.warning(f"删除MFC DC失败: {e}")
-                    
+
                 try:
                     if hwnd_dc:
                         win32gui.ReleaseDC(hwnd, hwnd_dc)
                 except Exception as e:
                     CUS_LOGGER.warning(f"释放窗口DC失败: {e}")
-                    
+
         except Exception as e:
             CUS_LOGGER.warning(f"后台截图窗口失败: {e}")
             # 发生异常时也要确保资源清理
@@ -170,7 +169,7 @@ class WindowRecorder:
             game_window = find_game_window(prefer_foreground=True)
             self.hwnd = game_window.hwnd if game_window else None
         CUS_LOGGER.info(f"找到窗口句柄: {self.hwnd or 0}")
-            
+
         if not self.hwnd:
             if self.window_class_name:
                 CUS_LOGGER.error(f"未找到类名为 '{self.window_class_name}' 且标题包含 '{self.window_title}' 的窗口")
@@ -178,11 +177,11 @@ class WindowRecorder:
             else:
                 CUS_LOGGER.error(f"未找到标题包含 '{self.window_title}' 的窗口")
                 raise ValueError(f"未找到标题包含 '{self.window_title}' 的窗口")
-        
+
         # 确保窗口可见且有效
         if not win32gui.IsWindowVisible(self.hwnd):
             CUS_LOGGER.warning("警告: 窗口不可见")
-            
+
         if not win32gui.IsWindow(self.hwnd):
             CUS_LOGGER.error("窗口句柄无效")
             raise ValueError("窗口句柄无效")
@@ -201,7 +200,7 @@ class WindowRecorder:
                 ctypes.windll.user32.SetProcessDPIAware()
             except Exception as e:
                 CUS_LOGGER.warning(f"无法设置DPI感知级别(备用方法): {e}")
-        
+
         # 获取窗口位置和尺寸
         try:
             # 云游戏只录制 Edge 客户区；本地客户端保持原窗口矩形逻辑。
@@ -212,7 +211,7 @@ class WindowRecorder:
             self.left, self.top, self.right, self.bottom = rect
             self.width = self.right - self.left
             self.height = self.bottom - self.top
-            
+
             CUS_LOGGER.info(
                 f"窗口类型: {self.window_kind}, 位置: "
                 f"({self.left}, {self.top}, {self.right}, {self.bottom}), "
@@ -227,7 +226,7 @@ class WindowRecorder:
         output_dir = os.path.dirname(self.output_file)
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
-            
+
         # 应用偏移后的实际录制尺寸
         self.capture_left = self.left + self.offsets[0]
         self.capture_top = self.top + self.offsets[1]
@@ -244,7 +243,7 @@ class WindowRecorder:
             actual_height -= 1
         if actual_width <= 0 or actual_height <= 0:
             raise ValueError(f"录像区域无效: {actual_width}x{actual_height}")
-        
+
         # 设置视频写入器
         CUS_LOGGER.info(f"初始化视频写入器，尺寸: {actual_width}x{actual_height}")
         self.out = cv2.VideoWriter(
@@ -253,7 +252,7 @@ class WindowRecorder:
             self.fps,
             (actual_width, actual_height)
         )
-        
+
         if not self.out.isOpened():
             CUS_LOGGER.error("无法初始化视频写入器")
             raise RuntimeError("无法初始化视频写入器")
@@ -277,10 +276,10 @@ class WindowRecorder:
                         self.capture_bottom,
                     )
                     img = ImageGrab.grab(bbox=bbox)
-                    
+
                     # 转换为OpenCV格式
                     img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-                    
+
                     # 检查是否需要叠加地图窗口
                     if self.overlay_map:
                         # 尝试查找地图窗口（"Map"窗口）
@@ -289,7 +288,7 @@ class WindowRecorder:
                             try:
                                 # 使用后台截图方式获取地图窗口图像
                                 map_img_cv = self.capture_window_background(map_hwnd)
-                                
+
                                 if map_img_cv is not None:
                                     # 进一步缩小地图图像尺寸
                                     map_scale = 0.3  # 缩放到原图的30%
@@ -319,7 +318,7 @@ class WindowRecorder:
                                                         font_scale,
                                                         (0, 0, 255),
                                                         font_thickness)
-                                    
+
                                     # 将调整后的地图图像叠加到主图像的左下角上方（带透明度）
                                     margin = 10
                                     # 计算时间戳区域的高度
@@ -353,7 +352,7 @@ class WindowRecorder:
                                         timestamp_top_y = timestamp_bottom_y - rect_height
                                         map_bottom_y = timestamp_top_y - margin  # 地图在时间戳上方，留出间距
                                         map_top_y = map_bottom_y - map_resized_height
-                                        
+
                                         # 确保地图在窗口范围内
                                         if map_top_y > margin:  # 如果地图放置在时间戳上方后仍在窗口内
                                             # 实现透明度叠加
@@ -370,7 +369,7 @@ class WindowRecorder:
                                             pass
                                     else:
                                         # 如果不需要时间戳，将地图放在左下角（带透明度）
-                                        roi = img_cv[img_cv.shape[0]-map_resized_height-margin:img_cv.shape[0]-margin, 
+                                        roi = img_cv[img_cv.shape[0]-map_resized_height-margin:img_cv.shape[0]-margin,
                                                     margin:margin+map_resized_width]
                                         # 将地图图像转换为相同数据类型
                                         map_img_resized = map_img_resized.astype(np.float32)
@@ -378,7 +377,7 @@ class WindowRecorder:
                                         # 使用加权叠加实现透明效果
                                         cv2.addWeighted(map_img_resized, self.map_alpha, roi, 1-self.map_alpha, 0, roi)
                                         # 转换回uint8并更新原图像
-                                        img_cv[img_cv.shape[0]-map_resized_height-margin:img_cv.shape[0]-margin, 
+                                        img_cv[img_cv.shape[0]-map_resized_height-margin:img_cv.shape[0]-margin,
                                               margin:margin+map_resized_width] = roi.astype(np.uint8)
                                 else:
                                     CUS_LOGGER.warning("后台获取地图窗口失败，跳过叠加")
@@ -443,7 +442,7 @@ class WindowRecorder:
 
                     # 写入视频文件
                     self.out.write(img_cv)
-                    
+
                     if self.is_show:
                         # 实时显示当前帧
                         cv2.imshow('Window Recorder', img_cv)
@@ -454,12 +453,12 @@ class WindowRecorder:
 
                     # 控制帧率
                     time.sleep(1 / self.fps)
-                    
+
                 except Exception as e:
                     CUS_LOGGER.warning(f"录制单帧时发生错误: {e}")
                     continue
 
-        except Exception as e:
+        except Exception:
             import traceback
             traceback.print_exc()
         finally:
@@ -471,14 +470,14 @@ class WindowRecorder:
 
     def stop_recording(self, delete_video=False):
         """停止录制
-        
+
         Args:
             delete_video (bool): 是否删除录制的视频文件，默认为 False
         """
         if not self.recording:
             return
         self.recording = False
-        
+
         # 等待录制线程完全退出，避免 FFmpeg DLL 资源竞争
         if self.recording_thread and self.recording_thread.is_alive():
             try:
@@ -490,11 +489,11 @@ class WindowRecorder:
                     CUS_LOGGER.debug("录制线程已正常结束")
             except Exception as e:
                 CUS_LOGGER.warning(f"等待录制线程结束时发生错误：{e}")
-        
+
         if self.out:
             self.out.release()
             self.out = None
-        
+
         # 如果需要删除视频文件
         if delete_video:
             try:
@@ -522,15 +521,15 @@ if __name__ == "__main__":
         # 创建带透明度的地图叠加录制器
         recorder = WindowRecorder(
             output_path=output_file,
-            fps=fps, 
+            fps=fps,
             window_title=window_title,
-            window_class_name="UnityWndClass", 
+            window_class_name="UnityWndClass",
             offsets=[10, 50, 10, 10],
             overlay_map=True,      # 启用地图叠加
             map_alpha=0.6,         # 60%透明度
             see_time=True          # 显示时间戳
         )
-        
+
         recorder.start_recording()
         CUS_LOGGER.info(f"正在录制窗口：{window_title}")
         CUS_LOGGER.info("录制将持续5秒，请在目标窗口中进行一些操作")

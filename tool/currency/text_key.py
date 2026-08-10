@@ -1,6 +1,3 @@
-import yaml
-import os
-import shutil
 
 class text_keys:
     def __init__(self):

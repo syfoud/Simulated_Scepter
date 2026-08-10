@@ -1,11 +1,10 @@
-import time
 
-from tool.onnxocr.onnx_paddleocr import ONNXPaddleOcr
-import numpy as np
 import cv2 as cv
-from tool.log import CUS_LOGGER
-from tool.public_ocr import filter_non_white, box_contain, sort_text, merge
+import numpy as np
 
+from tool.log import CUS_LOGGER
+from tool.onnxocr.onnx_paddleocr import ONNXPaddleOcr
+from tool.public_ocr import box_contain, filter_non_white, merge, sort_text
 
 # mode: bless1 bless2 strange
 
@@ -56,7 +55,7 @@ def get_global_my_ts(father=None):
 class My_TS:
     # 类变量，用于共享底层 OCR 引擎
     _ts_shared = None
-    
+
     def __init__(self, lang='ch', father=None):
         self.lang = lang
         self.father = father
@@ -65,7 +64,7 @@ class My_TS:
         self.nothing = 1
         self.text = ''
         self._ts = None
-    
+
     @property
     def ts(self):
         """懒加载 OCR 实例"""
@@ -109,7 +108,7 @@ class My_TS:
         """
         try:
             self.text=self.ocr_one_row(img).lower()
-        except:
+        except Exception:
             self.text=''
     def similar_list(self, text_list, img=None):
         """
@@ -213,6 +212,7 @@ class My_TS:
         results = self.ts.ocr(img)
         # log.debug(f"识别到文本：{results}")
         find_all_return = None
+        list_matches = []  # 列表模式：收集所有命中 (priority_index, box)
         for res in results:
             res = {'raw_text': res[1][0], 'box': np.array(res[0]), 'score': res[1][1]}
             self.text = res['raw_text']
@@ -222,21 +222,33 @@ class My_TS:
             found = False
             matched_text = text
             if isinstance(text, list):
-                for t in text:
+                for idx, t in enumerate(text):
                     if t in self.text:
+                        list_matches.append((idx, res['box'], t))
                         found = True
                         matched_text = t
                         break
             else:
                 found = text in self.text
-                
+
             if found:
                 CUS_LOGGER.debug(f"识别到文本：{matched_text}匹配文本：{self.text},位置：{[int(res['box'][0][0]), int(res['box'][1][0]), int(res['box'][0][1]), int(res['box'][2][1])]}")
+                if isinstance(text, list):
+                    continue  # 列表模式：收集完再按优先级选
                 if not find_all:
                     return res['box']
                 else:
                     find_all_return = res['box']
                     continue
+        # 列表模式：按 event_prior 优先级排序，选最高优先级的匹配
+        if isinstance(text, list) and list_matches:
+            list_matches.sort(key=lambda x: x[0])
+            best_idx, best_box, best_text = list_matches[0]
+            CUS_LOGGER.debug(f"事件列表匹配：共{len(list_matches)}个命中，按优先级选择「{best_text}」(优先级#{best_idx})")
+            if not find_all:
+                return best_box
+            else:
+                return best_box
         if find_all_return is not None:
             return find_all_return
         return None

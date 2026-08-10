@@ -1,12 +1,13 @@
-import cv2
-import numpy as np
 import os
 import re
 from datetime import datetime
-from route import PATHS
-from tool.utils.image_tool import find_image_in_folder
-from tool.log import CUS_LOGGER
 
+import cv2
+import numpy as np
+
+from route import PATHS
+from tool.log import CUS_LOGGER
+from tool.utils.image_tool import find_image_in_folder
 
 ROLL_COUNT_REGION = (1660, 707, 1700, 740)
 CHEAT_COUNT_REGION = (1325, 707, 1365, 740)
@@ -67,6 +68,15 @@ def _save_unmatched_roll_count(crop, unmatched_dir):
     return save_path if cv2.imwrite(save_path, crop) else None
 
 
+def _action_count_template_value(filename):
+    """Return the value from ``7.png`` or a variant such as ``7_dark.png``."""
+    stem, extension = os.path.splitext(filename)
+    if extension.lower() != ".png":
+        return None
+    match = re.fullmatch(r"(\d+)(?:_.+)?", stem)
+    return int(match.group(1)) if match else None
+
+
 def _match_action_count_in_region(or_image, region, count_name, threshold=0.9,
                                   template_dir=None, unmatched_dir=None):
     """Recognize one action count using the shared count-digit templates."""
@@ -83,14 +93,14 @@ def _match_action_count_in_region(or_image, region, count_name, threshold=0.9,
     best_score = -1.0
     if os.path.isdir(template_dir):
         for filename in sorted(os.listdir(template_dir)):
-            stem, extension = os.path.splitext(filename)
-            if extension.lower() != ".png" or not stem.isdigit():
+            template_value = _action_count_template_value(filename)
+            if template_value is None:
                 continue
             template = cv2.imread(os.path.join(template_dir, filename), cv2.IMREAD_COLOR)
             score = _roll_count_similarity(crop, template)
             if score > best_score:
                 best_score = score
-                best_value = int(stem)
+                best_value = template_value
 
     if best_value is not None and best_score >= threshold:
         return best_value

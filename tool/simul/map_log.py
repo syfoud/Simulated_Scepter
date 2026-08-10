@@ -1,5 +1,5 @@
 import time
-from logging import getLogger, FileHandler, Formatter, INFO
+from logging import INFO, FileHandler, Formatter, getLogger
 
 from tool.log import logs_path
 

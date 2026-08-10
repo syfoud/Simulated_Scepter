@@ -1,12 +1,13 @@
 import numpy as np
-from .imaug import transform, create_operators
+
 from .db_postprocess import DBPostProcess
+from .imaug import create_operators, transform
 from .predict_base import PredictBase
 
 
 class TextDetector(PredictBase):
     def __init__(self, args, cpu=False):
-        super(TextDetector, self).__init__(cpu)
+        super().__init__(cpu)
         self.args = args
         self.det_algorithm = args.det_algorithm
         pre_process_list = [{

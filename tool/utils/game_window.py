@@ -9,7 +9,6 @@ from dataclasses import dataclass
 import win32con
 import win32gui
 
-
 LOCAL_GAME_TITLE = "崩坏：星穹铁道"
 CLOUD_GAME_TITLE = "云·星穹铁道"
 LOCAL_GAME_CLASS = "UnityWndClass"

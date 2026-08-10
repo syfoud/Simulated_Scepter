@@ -3,20 +3,20 @@ import os
 import shutil
 import sys
 
-from PyQt5 import uic, QtGui, QtCore, QtWidgets
+from PyQt5 import QtCore, QtGui, QtWidgets, uic
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon, QFont, QFontDatabase
-from PyQt5.QtWidgets import QSystemTrayIcon, QMenu
+from PyQt5.QtGui import QFont, QFontDatabase, QIcon
+from PyQt5.QtWidgets import QMenu, QSystemTrayIcon
+
 from route import PATHS
 from tool import EXTRA
-
 from tool.scripts.createicon import create_qt_icon
 
 ZOOM_RATE = None
 
 
 def readQss(style):
-    with open(style, 'r') as f:
+    with open(style) as f:
         return f.read()
 
 
@@ -94,7 +94,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.MouseMove:
             # 将子控件的鼠标移动事件传递给主窗口处理
             self.update_cursor(event.pos())
-            
+
         return super().eventFilter(obj, event)
 
     def get_theme(self):
@@ -170,7 +170,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
             background-image: url({cus_path});
             background-repeat: no-repeat;
             background-position: center;
-            border: none;  
+            border: none;
             }}
         """
 
@@ -235,7 +235,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
     def init_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
         self.tray_icon.setIcon(QIcon(PATHS["logo"] + "\\圆角-FetDeathWing-256x-AllSize.ico"))
-        self.tray_icon.setToolTip(f"ω- u13.exe - 正在后台运行")
+        self.tray_icon.setToolTip("ω- u13.exe - 正在后台运行")
 
         tray_menu = QMenu()
         self.restore_action = tray_menu.addAction("一键启动")
@@ -281,7 +281,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent):
         # 更新光标样式，无论是否正在拖动窗口
         self.update_cursor(a0.pos())
-        
+
         # 处理窗口移动
         if self._startPos:
             self._endPos = a0.pos() - self._startPos
@@ -289,7 +289,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         # 处理窗口调整大小
         elif self.resize_mode and self.original_geometry:
             self.perform_resize(a0.globalPos())
-        
+
         # 确保事件继续传递给父类处理
         super().mouseMoveEvent(a0)
 
@@ -339,7 +339,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
             current_option = skin_dict[sender]
             self.change_style(current_option)
 
-                
+
     def getstylefile(self, num):
         skin_path_dict = {
             1: None,
@@ -357,7 +357,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
         path = skin_path_dict.get(num)
         return path
-        
+
     def skin_set(self) -> None:
         my_opt = self.opt["skin_type"]
         self.skin_dict = {
@@ -393,7 +393,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
             self.set_theme_common()
             self.set_theme_default()
             self.set_common_theme()
-            
+
     def font_set(self) -> None:
         """
         加载字体文件并设置应用程序默认字体
@@ -416,7 +416,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
                         if valid_font_count == 0 and family_names:
                             first_font_family = family_names[0]
                         valid_font_count += 1
-        
+
         if first_font_family:
             font = QFont(first_font_family, 8)
             QtWidgets.QApplication.setFont(font)
@@ -528,7 +528,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.setGeometry(geometry)
     def json_to_opt(self,file) -> None:
         with EXTRA.FILE_LOCK:
-            with open(file=file, mode="r", encoding="UTF-8") as file:
+            with open(file=file, encoding="UTF-8") as file:
                 data = json.load(file)
 
         self.opt = data

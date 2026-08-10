@@ -1,36 +1,41 @@
+import ctypes
 import json
+import math
 import os
+import random
+import sys
+import time
+import traceback
+from copy import deepcopy
 from datetime import datetime
+from math import cos, sin
 
 import cv2
 import cv2 as cv
 import numpy as np
-import time
-
+import pythoncom
 import win32api
-import win32print
+import win32com.client
 import win32con
-from copy import deepcopy
-import math
-import random
-import win32gui, win32com.client, pythoncom
-import sys
-import ctypes
+import win32gui
+import win32print
 from PIL import Image, ImageDraw, ImageFont
-from math import sin, cos
-import traceback
 
-from tool.GLOBAL import key_mouse_manager, factor, get_global_stop_flag, set_global_stop_flag
 from diver import merge_text
 from route import PATHS
-from tool.simul.config import config
+from tool.GLOBAL import (
+    factor,
+    get_global_stop_flag,
+    key_mouse_manager,
+    set_global_stop_flag,
+)
 from tool.log import CUS_LOGGER, log_emitter
 from tool.screenshot import Screen
+from tool.simul.config import config
 from tool.simul.ocr import get_global_my_ts
 from tool.simul.text_key import text_keys
 from tool.thread import ThreadWithException
 from tool.timer import timer
-from tool.utils.get_win_rect import get_window_rect
 from tool.utils.game_window import (
     BASE_HEIGHT,
     BASE_WIDTH,
@@ -40,11 +45,21 @@ from tool.utils.game_window import (
     is_supported_resolution,
     set_game_foreground,
 )
+from tool.utils.get_win_rect import get_window_rect
 from tool.utils.image_tool import find_image_by_name, find_image_in_folder
-from tool.utils.minimap_util import get_minimap, MINIMAP_RADIUS, mask_minimap_outside, deal_minimap, re_get_position, POSITION_SEARCH_SCALE, crop, POSITION_MINIMAP_SCALE
+from tool.utils.minimap_util import (
+    MINIMAP_RADIUS,
+    POSITION_MINIMAP_SCALE,
+    POSITION_SEARCH_SCALE,
+    crop,
+    deal_minimap,
+    get_minimap,
+    mask_minimap_outside,
+    re_get_position,
+)
 from tool.utils.mminimap import PositionPredict
 from tool.utils.ocr_num import match_skill_numbers_in_region
-from tool.utils.predict import predict, get_text_position
+from tool.utils.predict import get_text_position, predict
 
 
 def set_forground():
@@ -57,7 +72,7 @@ def set_forground():
         else:
             shell.SendKeys("")
         set_game_foreground()
-    except:
+    except Exception:
         pass
 
 
@@ -167,7 +182,8 @@ class UniverseUtils:
         while not get_global_stop_flag():
             try:
                 re=self.get_xy()
-                if re: break
+                if re:
+                    break
                 # 检查是否超时
                 if time.time() - start_time > timeout:
                     CUS_LOGGER.error(f"等待游戏窗口超时({timeout}秒)，请检查游戏是否启动")
@@ -232,13 +248,11 @@ class UniverseUtils:
         self.scy = self.yy / self.by
         dc = win32gui.GetWindowDC(hwnd)
         dpi_x = win32print.GetDeviceCaps(dc, win32con.LOGPIXELSX)
-        dpi_y = win32print.GetDeviceCaps(dc, win32con.LOGPIXELSY)
         win32gui.ReleaseDC(hwnd, dc)
         scale_x = dpi_x / 96
-        scale_y = dpi_y / 96
         try:
             self.scale = ctypes.windll.user32.GetDpiForWindow(hwnd) / 96.0
-        except:
+        except Exception:
             CUS_LOGGER.warning('DPI获取失败')
             self.scale = 1.0
         CUS_LOGGER.debug(
@@ -496,7 +510,7 @@ class UniverseUtils:
         else:
             try:
                 result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
-            except Exception as e:
+            except Exception:
                 CUS_LOGGER.error(f"{path}匹配失败，源图像{local_screen.shape}，目标图像{target.shape}")
                 raise
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
@@ -505,15 +519,15 @@ class UniverseUtils:
         self.tm = max_val
         if max_val > threshold:
             if self.last_info != path:
-                CUS_LOGGER.debug("匹配到图片记忆切片 %s 相似度 %f 阈值 %f" % (path, max_val, threshold))
+                CUS_LOGGER.debug(f"匹配到图片记忆切片 {path} 相似度 {max_val} 阈值 {threshold}")
             self.last_info = path
         return max_val > threshold
 
     def get_end_point(self, mask=0,device=0):
         self.get_screen()
         local_screen = self.get_local(0.4979, 0.6296, (715, 1399))
-        black = np.array([0, 0, 0])
         white = np.array([255, 255, 255])
+        black = np.array([0, 0, 0])
         bw_map = np.zeros(local_screen.shape[:2], dtype=np.uint8)
         b_map = deepcopy(bw_map)
         b_map[np.sum((local_screen - black) ** 2, axis=-1) <= 1600] = 255
@@ -529,7 +543,7 @@ class UniverseUtils:
                 #仅保留图像x轴310~910区域
                 bw_map[:, : cen - 350 // mask] = 0
                 bw_map[:, cen + 350 // mask :] = 0
-            except:
+            except Exception:
                 pass
         # region = cv.imread("resource/imgs/region.jpg", cv.IMREAD_GRAYSCALE)
         if device:
@@ -559,7 +573,7 @@ class UniverseUtils:
             dx = self.get_end_point(device=device)
             off = 0
             if dx is None:
-                CUS_LOGGER.debug(f'…找到那个新生的「我」…让他延续三千万世的徒劳。')
+                CUS_LOGGER.debug('…找到那个新生的「我」…让他延续三千万世的徒劳。')
                 for k in [60,120,60,60,30,30,-60,-60,-60,-60,-60,-60]:
                     key_mouse_manager.mouse_move(-k)
                     key_mouse_manager.wait()
@@ -634,16 +648,16 @@ class UniverseUtils:
             tag = f"blank_{non_black_pixels}_{timestamp}"
             save_debug_dir=os.path.join(save_debug_dir, f"{tag}")
             os.makedirs(save_debug_dir, exist_ok=True)
-            cv.imwrite(os.path.join(save_debug_dir, f"minimap.png"), local_screen)
-            cv.imwrite(os.path.join(save_debug_dir, f"bwmap.png"), bw_map)
-            cv.imwrite(os.path.join(save_debug_dir, f"greymap.png"), grey_map)
-            with open(os.path.join(save_debug_dir, f"params.txt"), "w", encoding="utf-8") as fp:
+            cv.imwrite(os.path.join(save_debug_dir, "minimap.png"), local_screen)
+            cv.imwrite(os.path.join(save_debug_dir, "bwmap.png"), bw_map)
+            cv.imwrite(os.path.join(save_debug_dir, "greymap.png"), grey_map)
+            with open(os.path.join(save_debug_dir, "params.txt"), "w", encoding="utf-8") as fp:
                 fp.write(f"non_black_pixels = {non_black_pixels}\n")
-                fp.write(f"threshold = 250\n")
-                fp.write(f"verdict = reference_lines_too_few (参考线太少，进入无地图寻路)\n")
-                fp.write(f"grey_threshold = np.array([55, 55, 55]), dist <= 4800\n")
-                fp.write(f"white_threshold = np.array([210, 210, 210]), dist <= 9000\n")
-                fp.write(f"dilate_kernel = 5x5, iterations=1\n")
+                fp.write("threshold = 250\n")
+                fp.write("verdict = reference_lines_too_few (参考线太少，进入无地图寻路)\n")
+                fp.write("grey_threshold = np.array([55, 55, 55]), dist <= 4800\n")
+                fp.write("white_threshold = np.array([210, 210, 210]), dist <= 9000\n")
+                fp.write("dilate_kernel = 5x5, iterations=1\n")
 
         return non_black_pixels
     @timer
@@ -655,8 +669,6 @@ class UniverseUtils:
         """
         if re_screen and self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False) or self.state!="run":
             CUS_LOGGER.warning("未找到大地图，可能在其它游戏界面")
-            return None
-        black = np.array([0, 0, 0])
         white = np.array([210, 210, 210])
         gray = np.array([55, 55, 55])
         # local_screen=screen[46:222,43:219]#[43,46,219,222]源范围  正确范围#[45,56,231,242]
@@ -726,7 +738,7 @@ class UniverseUtils:
         # cv.imshow("匹配结果", loc_tp)
         # cv.imshow("匹配目标", combined_img_with_rect)
         # cv.waitKey(0)
-        
+
         return ang
 
     def get_level(self):
@@ -807,7 +819,7 @@ class UniverseUtils:
                     world_y = new_loc[1] + (enemy_y - 93)*POSITION_MINIMAP_SCALE
                     new_loc = re_get_position((world_x, world_y), re=True)
                     enemy_coords.append((new_loc, (enemy_x, enemy_y)))
-                
+
                 # 按距离self.real_loc排序，最近的在前面
                 enemy_coords.sort(key=lambda coord: get_dis(coord[0], self.now_loc))
                 # 选择最近的敌人作为目标
@@ -899,14 +911,14 @@ class UniverseUtils:
                         point = (pt[0] + sp[1], pt[1] + sp[0])
                         all_points.append(point)
                     best_points = all_points
-            
+
         # 从最佳点位中选择最左边的一个（x 坐标最小）
         if best_val > threshold and len(best_points) > 0:
             best_points.sort(key=lambda p: p[0])
             nearest = best_points[0]
             target = (nearest, 1)
             CUS_LOGGER.debug(f"交互点最佳相似度{best_val}，位置{nearest},比例{best_scale},候选点位{len(best_points)}")
-            self.target_type = 2 
+            self.target_type = 2
             self.has_target=True
             self.update_direction_data(mode=2,target=target)
             return True
@@ -1025,7 +1037,7 @@ class UniverseUtils:
             }
             with open(os.path.join(backup_dir, "map_attrs_backup.json"), 'w') as f:
                 json.dump(backup_data, f)
-        except:
+        except Exception:
             pass
     # 初始化地图，刚进图时调用
     def init_map(self):
@@ -1102,7 +1114,7 @@ class UniverseUtils:
         save_path = PATHS["root"]+save_path
         try:
             os.mkdir(save_path)
-        except:
+        except Exception:
             pass
         filename = save_path+datetime.now().strftime("%Y%m%d_%H%M%S") + ".png"
         cv.imwrite(filename,sc)
@@ -1124,7 +1136,7 @@ class UniverseUtils:
             if 20<abs(self.rotation-d)<340 and mode !=1:
                 # cv.imshow("now", self.screen)
                 if self.debug:
-                    self.save_screen(not_now=True,save_path=f"/temp/angle/")
+                    self.save_screen(not_now=True,save_path="/temp/angle/")
                 CUS_LOGGER.error(f"角度误差过大视角{self.rotation}朝向{d}模式{mode}")
                 # raise BigAngError(f"角度误差过大视角{self.rotation}朝向{d}")
                 d = self.rotation
@@ -1250,7 +1262,7 @@ class UniverseUtils:
                                 world_y = new_loc[1] + (enemy_y - 93)*POSITION_MINIMAP_SCALE
                                 new_loc=re_get_position((world_x, world_y),re= True)
                                 enemy_coords.append((new_loc, (enemy_x, enemy_y)))
-                            
+
                             # 按距离self.now_loc排序，最近的在前面
                             enemy_coords.sort(key=lambda coord: get_dis(coord[0], self.now_loc))
                             # 选择最近的敌人作为目标
@@ -1262,7 +1274,7 @@ class UniverseUtils:
                             CUS_LOGGER.info(f"找到新的敌对目标点：{recent_loc}，共检测到{len(enemy_coords)}个敌人，按距离排序")
                         else:
                             self.set_path_state("未找到红色敌人！！！")
-                            self.save_screen(not_now= True,save_path=f"/temp/no_red1/")
+                            self.save_screen(not_now= True,save_path="/temp/no_red1/")
                             # self.save_screen(not_now=True)
                             has_not_found_red= True
                             # self.target_loc, type = self.get_recent_target()
@@ -1311,13 +1323,13 @@ class UniverseUtils:
                     dist1 = get_dis(last_locs[0], last_locs[1])
                     dist2 = get_dis(last_locs[1], last_locs[2])
                     dist3 = get_dis(last_locs[0], last_locs[2])
-                    is_stuck = (dist1 < STUCK_DISTANCE_THRESHOLD and 
-                               dist2 < STUCK_DISTANCE_THRESHOLD and 
+                    is_stuck = (dist1 < STUCK_DISTANCE_THRESHOLD and
+                               dist2 < STUCK_DISTANCE_THRESHOLD and
                                dist3 < STUCK_DISTANCE_THRESHOLD)
                 # 距离没有更近 或者 位置卡住：开始尝试绕过障碍
                 if is_stuck:
                     CUS_LOGGER.debug(f"自身坐标{self.now_loc}，目标坐标{self.target_loc}")
-                    CUS_LOGGER.debug(f"距离未改善，开始尝试绕过障碍")
+                    CUS_LOGGER.debug("距离未改善，开始尝试绕过障碍")
                     self.set_path_state("尝试绕过障碍")
                     ts = " da"
                     if go_direct > 0:
@@ -1364,7 +1376,7 @@ class UniverseUtils:
                 if has_not_found_red:
                     self.target.add((self.target_loc, 0))
                     self.target_type = 0
-                    CUS_LOGGER.info(f"寻路时未找到敌对目标点，强行攻击后把旧目标点视作路径")
+                    CUS_LOGGER.info("寻路时未找到敌对目标点，强行攻击后把旧目标点视作路径")
                 self.set_path_state("准备开战")
                 CUS_LOGGER.info("准备开战")
                 local_screen = get_minimap(self.screen, radius=MINIMAP_RADIUS, copy=True, rotation=True)
@@ -1422,7 +1434,7 @@ class UniverseUtils:
                     self.last_interact_time = time.time()
                     self.target.remove((self.target_loc, self.target_type))
                     CUS_LOGGER.info("靠近目标点，成功移除:" + str((self.target_loc, self.target_type)))
-                except:
+                except Exception:
                     pass
             self.set_path_state("结束寻路")
 
@@ -1448,7 +1460,7 @@ class UniverseUtils:
         """
         精确匹配获得精确坐标，该坐标并非代表点位在大地图上的像素坐标，而是经过变换缩放而获得的
         """
-        
+
         CUS_LOGGER.debug(f"获取新坐标,当前坐标{self.now_loc}是否刷新{fresh}")
         if fresh:
             self.get_screen()
@@ -1786,7 +1798,7 @@ class UniverseUtils:
                                 self.get_screen()
                                 if predict(self.screen, enemy=True, item=False)['enemy'] is not None:
                                     CUS_LOGGER.info("检测到待击杀目标")
-                                    self.save_screen(not_now=True,save_path=f"/temp/kill/")
+                                    self.save_screen(not_now=True,save_path="/temp/kill/")
                                     break
 
                     if self.quan:
@@ -1862,7 +1874,7 @@ class UniverseUtils:
                     return
                 self.get_screen()
                 if self.target_type==1:
-                    CUS_LOGGER.info(f"必须找到交互点，尝试寻找")
+                    CUS_LOGGER.info("必须找到交互点，尝试寻找")
                     if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
                         key_mouse_manager.press('f',force= True)
                         if self.nof(must_be='event'):
@@ -1872,7 +1884,7 @@ class UniverseUtils:
                     key_mouse_manager.keyUp(i)
                     key_mouse_manager.wait()
                     if self.good_f()[0] and not (self.ts.similar("黑塔") and time.time() - self.quit < 30):
-                        CUS_LOGGER.info(f"找到最佳交互点")
+                        CUS_LOGGER.info("找到最佳交互点")
                         key_mouse_manager.press('f',force= True)
                         self.get_screen()
                         if self.nof():
@@ -1975,7 +1987,7 @@ class UniverseUtils:
                 CUS_LOGGER.info("响应：「一道无足轻重的伤疤。」")
                 return
             if time.time()-init_time>run_wait_time:
-                CUS_LOGGER.warning(f"警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
+                CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
                 key_mouse_manager.keyUp("w")
                 self.mini_state+=2
@@ -2010,7 +2022,7 @@ class UniverseUtils:
                     return
                 self.get_screen()
                 if self.target_type==1:
-                    CUS_LOGGER.info(f"沿着他们的足迹……写下前所未有的结局。")
+                    CUS_LOGGER.info("沿着他们的足迹……写下前所未有的结局。")
                     if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
                         key_mouse_manager.press('f',force= True)
                         if self.nof(must_be='event'):
@@ -2155,7 +2167,7 @@ class UniverseUtils:
                 CUS_LOGGER.info("那些你誓言要拯救的人子…如今在你眼里，他们的性命恐怕与蝼蚁无异吧？")
                 return
             if time.time()-init_time>run_wait_time:
-                CUS_LOGGER.warning(f"警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
+                CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
                 key_mouse_manager.keyUp("w")
                 self.mini_state+=2
@@ -2189,7 +2201,7 @@ class UniverseUtils:
                     return
                 self.get_screen()
                 if self.target_type==2:
-                    CUS_LOGGER.info(f"可是，告诉我……若当真如此，我们又为何会步入相同的结局？")
+                    CUS_LOGGER.info("可是，告诉我……若当真如此，我们又为何会步入相同的结局？")
                     if self.good_f(run=False)[0]:
                         key_mouse_manager.press('f',force= True)
                         if self.nof(must_be='event'):
@@ -2290,7 +2302,7 @@ class UniverseUtils:
                 CUS_LOGGER.info("警告：进度无法更新,检测到其它界面,退出循环")
                 return
             if time.time()-init_time>run_wait_time:
-                CUS_LOGGER.warning(f"警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
+                CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 key_mouse_manager.keyUp("w")
                 self.mini_state+=2
                 if self.mini_state>=7:
@@ -2416,7 +2428,7 @@ class UniverseUtils:
                 CUS_LOGGER.info("你已无力为继了…半神。把火种，交给我。让你我…尽快结束痛苦。")
                 return
             if time.time()-init_time>run_wait_time:
-                CUS_LOGGER.warning(f"警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
+                CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
                 key_mouse_manager.keyUp("w")
                 self.mini_state+=2
@@ -2450,7 +2462,7 @@ class UniverseUtils:
                     return
                 self.get_screen()
                 if self.target_type==2:
-                    CUS_LOGGER.info(f"……直到，逆转「再创世」揭示的残酷未来。")
+                    CUS_LOGGER.info("……直到，逆转「再创世」揭示的残酷未来。")
                     if self.good_f(run=False)[0]:
                         key_mouse_manager.press('f',force= True)
                         key_mouse_manager.keyUp('w')
@@ -2490,8 +2502,6 @@ class UniverseUtils:
         self.is_target = 0
         self.moving_direct=False
         self.has_target=True
-        self.get_screen()
-        first = self.first_mini
         CUS_LOGGER.info(f"PhiLia093已经拥抱了她的命运……而{factor}，也会投身自己的本源——「毁灭」。")
         self.target_type = -1
         if not self.move_to_red_point():
@@ -2591,7 +2601,7 @@ class UniverseUtils:
                                 if predict(self.screen, enemy=True, item=False)['enemy'] is not None:
                                     CUS_LOGGER.info(f"或者，兑现命运的不止他们。只是{factor}已记不清了。")
                                     if self.debug:
-                                        self.save_screen(not_now=True,save_path=f"/temp/kill/")
+                                        self.save_screen(not_now=True,save_path="/temp/kill/")
                                     break
 
                     if self.quan:
@@ -2638,7 +2648,7 @@ class UniverseUtils:
                 CUS_LOGGER.info("哪怕是微不足道的注脚，也会在故事里留下自己的印记。")
                 return
             if time.time()-init_time>run_wait_time:
-                CUS_LOGGER.warning(f"警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
+                CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
                 key_mouse_manager.keyUp("w")
                 if self.mini_state>=7:
@@ -2758,7 +2768,7 @@ class UniverseUtils:
     def click_box(self, box):
         """
         点击给定坐标框的中心位置
-        
+
         Args:
             box: 坐标框，格式为[x1, x2, y1, y2]，其中x1,x2为横向坐标，y1,y2为纵向坐标
         """
@@ -2769,7 +2779,7 @@ class UniverseUtils:
     def click_position(self, position):
         """
         点击给定位置坐标
-        
+
         Args:
             position: 位置坐标，格式为[x, y]，其中x为横向坐标，y为纵向坐标
         """
@@ -2779,9 +2789,9 @@ class UniverseUtils:
         np.array颜色为（b,g,r)
         """
         if fixed:
-            CUS_LOGGER.info(f"「汝将肩负骄阳，直至灰白的黎明显著。」")
+            CUS_LOGGER.info("「汝将肩负骄阳，直至灰白的黎明显著。」")
         else:
-            CUS_LOGGER.info(f"『然而逐火是不断失却的旅途，在那一切当中，生命也当如尘埃般渺小。』")
+            CUS_LOGGER.info("『然而逐火是不断失却的旅途，在那一切当中，生命也当如尘埃般渺小。』")
         self.get_loc(False)
         self.get_screen()
         self.target_loc, self.target_type = self.get_recent_target()
@@ -2877,7 +2887,7 @@ class UniverseUtils:
                     else:
                         CUS_LOGGER.info(f"真是如出一辙啊，就像{factor}过去认识的许多个他们……既狡猾…又天真。")
                         if self.debug:
-                            self.save_screen(not_now=True,save_path=f"/temp/no_red2/")
+                            self.save_screen(not_now=True,save_path="/temp/no_red2/")
                         has_not_found_red = True
                         # self.target_loc, type = self.get_recent_target()
                     if has_not_found_red:
@@ -3048,7 +3058,7 @@ class UniverseUtils:
                     self.last_interact_time = time.time()
                     self.target.remove((self.target_loc, self.target_type))
                     CUS_LOGGER.debug("靠近目标点，成功移除敌人:" + str((self.target_loc, self.target_type)))
-                    
+
                     # 扫描地图红色点位，尝试添加回检测到的目标点
                     red = [47, 47, 232]
                     rd = np.where(
@@ -3065,7 +3075,7 @@ class UniverseUtils:
                             world_y = new_loc[1] + (enemy_y - 93)*POSITION_MINIMAP_SCALE
                             new_loc = re_get_position((world_x, world_y), re=True)
                             enemy_coords.append((new_loc, (enemy_x, enemy_y)))
-                        
+
                         # 按距离self.now_loc排序，最近的在前面
                         enemy_coords.sort(key=lambda coord: get_dis(coord[0], self.now_loc))
                         # 选择最近的敌人作为新目标
@@ -3083,7 +3093,7 @@ class UniverseUtils:
                     self.last_interact_time = time.time()
                     self.target.remove((self.target_loc, self.target_type))
                     CUS_LOGGER.debug("靠近目标点，成功移除:" + str((self.target_loc, self.target_type)))
-            except:
+            except Exception:
                 pass
         CUS_LOGGER.info("逐火…是不断失却的旅途……失去…还远远不足……")
 

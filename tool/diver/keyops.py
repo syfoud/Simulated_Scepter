@@ -1,7 +1,10 @@
-import pyautogui
-from tool.diver.config import config
-import time
 import threading
+import time
+
+import pyautogui
+
+from tool.diver.config import config
+
 
 def get_mapping(x):
     if x in config.origin_key:

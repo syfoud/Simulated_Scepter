@@ -1,6 +1,8 @@
-import yaml
 import os
 import shutil
+
+import yaml
+
 
 class text_keys:
     def __init__(self,fate=4):
@@ -40,21 +42,21 @@ class text_keys:
             if not os.path.exists(config_file):
                 if os.path.exists(example_file):
                     shutil.copy2(example_file, config_file)
-            
+
             if os.path.exists(config_file):
-                with open(config_file, "r", encoding="utf-8",errors='ignore') as f:
+                with open(config_file, encoding="utf-8",errors='ignore') as f:
                     config = yaml.safe_load(f)['prior']
-                with open(config_file, "r", encoding="utf-8",errors='ignore') as f:
+                with open(config_file, encoding="utf-8",errors='ignore') as f:
                     try:
                         self.secondary = yaml.safe_load(f)['config']['secondary_fate']
-                    except:
+                    except Exception:
                         pass
                 for i,j in enumerate(config):
                     if i>1:
                         self.blesses[i-2] = config[j]
                     elif i==0:
                         self.strange = config[j]
-        except:
+        except Exception:
             pass
         self.prior_bless += self.blesses[fate]
         self.skip = 1

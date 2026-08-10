@@ -1,10 +1,13 @@
 import ctypes
-from ctypes import Structure
-from ctypes.wintypes import DWORD,LONG,WORD
-from threading import Lock
-import numpy as np
-from tool.log import CUS_LOGGER
 import time
+from ctypes import Structure
+from ctypes.wintypes import DWORD, LONG, WORD
+from threading import Lock
+
+import numpy as np
+
+from tool.log import CUS_LOGGER
+
 
 class BITMAPINFOHEADER(Structure):
     _fields_ = [
@@ -24,7 +27,7 @@ class BITMAPINFO(Structure):
     _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", DWORD * 3)]
 
 lock = Lock()
-class Screen():
+class Screen:
     def __init__(self,w=1920,h=1080):
         self.gdi = ctypes.WinDLL("gdi32")
         self.srcdc  = ctypes.WinDLL("user32").GetWindowDC(0)

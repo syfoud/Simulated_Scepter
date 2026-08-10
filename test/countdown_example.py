@@ -8,13 +8,14 @@ sys.path.insert(0, _project_root)
 sys.path.insert(0, os.path.join(_project_root, 'test'))
 
 from test_countdown_optimizer import analyze_single_map
+from countdown_map_loader import default_map_paths
 
 # ============================================================
 # ↓↓↓ 修改以下参数 ↓↓↓
 # ============================================================
 
 # 方式A: 传入图像路径
-IMAGE_PATH = r"E:\COUDA\Auto_difficult_achievement\test\20260618_115131.png"
+IMAGE_PATH = default_map_paths()[0]
 
 # 方式B: 传入预构建图（与 IMAGE_PATH 互斥，设为 None 则用方式A）
 NODES = None        # [{'idx': 7, 'name': 'trade', 'cx': 100}, ...]
@@ -23,19 +24,20 @@ START_IDX = None    # 7
 INFECTABLE = None   # set()
 
 # 图像匹配参数
-MATCH_MODE = 3      # 地图图片格式: 1 或 2（节点类型/间距不同，对应 gray_image/node1 或 node2 模板）
-PLANE = 2         # 位面 1/2/3（None=自动检测）
+MATCH_MODE = 1      # 识别失败时会自动回退另一套节点模板
+PLANE = 1           # 位面 1/2/3
 
 # 资源 & 训练参数
-CHEAT = 3
-REROLL = 1
+CHEAT = 2
+REROLL = 3
 INITIAL_CD = 15         # 进入该地图时的初始 CD
 TARGET_CD = 20          # 目标 CD（计算胜率），不需要填 None
-OBSERVED_EFFECT = 2        # 1~6 观察到的效果（仅 locked/settled 时有效）
-EFFECT_STATE = "unlocked"    # "unlocked"=未锁定(可cheat/reroll) | "locked"=已锁定 | "settled"=已结算
+OBSERVED_EFFECT = None     # 1~6 观察到的效果（仅 locked/settled 时有效）
+EFFECT_STATE = "unlocked"    # unlocked=效果未出现(事前评估) | locked=已观察可决策 | settled=已结算
 # 效果编号: {1: '浇灌', 2: '为善', 3: '对症', 4: '慈怀', 5: '归心', 6: '可憎'}
-N_TRAIN = 15000        # MC 训练 rollouts
-N_SIM_TRIALS = 15000    # 评估模拟次数
+N_TRAIN = 10000         # 当前精确状态控制 rollouts
+N_EVAL = 10000          # 六种效果下所有候选动作的独立选择预算
+N_SIM_TRIALS = 10000    # 已选条件策略的最终事前评价预算
 
 # ============================================================
 # ↑↑↑ 修改以上参数 ↑↑↑
@@ -51,7 +53,7 @@ if __name__ == '__main__':
             observed_effect=OBSERVED_EFFECT,
             effect_state=EFFECT_STATE,
             target_cd=TARGET_CD,
-            n_train=N_TRAIN, n_sim_trials=N_SIM_TRIALS,
+            n_train=N_TRAIN, n_eval=N_EVAL, n_sim_trials=N_SIM_TRIALS,
             plane=PLANE,
         )
     else:
@@ -62,7 +64,7 @@ if __name__ == '__main__':
             observed_effect=OBSERVED_EFFECT,
             effect_state=EFFECT_STATE,
             target_cd=TARGET_CD,
-            n_train=N_TRAIN, n_sim_trials=N_SIM_TRIALS,
+            n_train=N_TRAIN, n_eval=N_EVAL, n_sim_trials=N_SIM_TRIALS,
             match_mode=MATCH_MODE,
             plane=PLANE,
         )

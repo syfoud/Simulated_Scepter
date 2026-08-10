@@ -1,4 +1,3 @@
-# coding:utf-8
 
 import os
 from pathlib import Path
@@ -46,9 +45,15 @@ def ensure_directory_exists(path):
     if not os.path.exists(path):
         # 如果路径不存在，则创建它
         os.makedirs(path)
-        print(f"路径不存在, 已创建: {path}")
+        try:
+            print(f"路径不存在, 已创建: {path}")
+        except UnicodeEncodeError:
+            print(f"Path created: {path}")
     else:
-        print(f"路径存在, 检测通过: {path}")
+        try:
+            print(f"路径存在, 检测通过: {path}")
+        except UnicodeEncodeError:
+            print(f"Path exists: {path}")
 
 
 def check_paths():

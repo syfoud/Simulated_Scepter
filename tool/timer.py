@@ -1,7 +1,7 @@
+import random
 import time
 from datetime import datetime, timedelta
 from functools import wraps
-import random
 
 from tool.log import CUS_LOGGER
 
@@ -18,14 +18,14 @@ def timer(function=None, *, show_args=False):
                 kwargs_str = ', '.join([f"{k}={repr(v)}" for k, v in kwargs.items()])
                 all_args = ', '.join(filter(None, [args_str, kwargs_str]))
                 print(f'[{call_id}] {func.__name__}({all_args})')
-            
+
             result = func(*args, **kwargs)
             t1 = time.time()
             if show_args:
                 print(f'[{call_id}] {func.__name__}: {str(round(t1 - t0, 10))}s -> {repr(result)}')
             else:
-                print('%s: %s s' % (func.__name__, str(round(t1 - t0, 10))))
-            
+                print(f'{func.__name__}: {str(round(t1 - t0, 10))} s')
+
             return result
         return function_timer
     if function is None:

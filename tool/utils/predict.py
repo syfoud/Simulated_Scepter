@@ -4,54 +4,128 @@ import numpy as np
 from tool.GLOBAL import factor
 from tool.log import CUS_LOGGER
 from tool.utils.image_tool import find_image_in_folder
-from tool.utils.minimap_util import image_size, subtract_blur, group_points, inrange, remove_border, draw_circle, \
-    create_circle
+from tool.utils.minimap_util import (
+    create_circle,
+    draw_circle,
+    group_points,
+    image_size,
+    inrange,
+    remove_border,
+    subtract_blur,
+)
 
-radius_enemy = (24, 25)
 radius_item = (5, 7)
+AIM_ENEMY_LUMA_MIN = 184
+AIM_ENEMY_RED_MIN = 200
+AIM_ENEMY_EDGE_MIN = 18
+AIM_ENEMY_PRIMARY_RADII = (29, 32)
+AIM_ENEMY_EDGE_RADII = (17, 20, 23, 26)
+AIM_ENEMY_PEAK_MIN = 52
+AIM_ENEMY_EDGE_PEAK_MIN = 36
+AIM_ENEMY_ROI_TOP = 95
+AIM_ENEMY_ROI_BOTTOM = 125
+AIM_ENEMY_ROI_LEFT = 255
+AIM_ENEMY_ROI_RIGHT = 285
+AIM_ENEMY_EDGE_CENTER_WIDTH = 40
 mask_interact = find_image_in_folder('gray_image/', 'MASK_MAP_INTERACT.png')
-circle_enemy = create_circle(*radius_enemy)
+circles_enemy = {
+    radius: create_circle(radius - 1, radius)
+    for radius in set(AIM_ENEMY_PRIMARY_RADII + AIM_ENEMY_EDGE_RADII)
+}
 circle_item = create_circle(*radius_item)
 event_mask = (find_image_in_folder("gray_image/",'MASK_MAP_INTERACT_BLACK') > 70)[:497]
+
+
+def _best_enemy_ring_response(feature, radii, center_x_range=None):
+    width, height = image_size(feature)
+    points = inrange(feature.copy(), lower=AIM_ENEMY_EDGE_MIN)
+    best_score = 0
+    best_center = None
+    best_response = np.zeros((height, width), dtype=np.uint8)
+
+    for radius in radii:
+        safe = points
+        if safe.shape[0]:
+            safe = safe[
+                (safe[:, 0] >= radius) & (safe[:, 0] < width - radius) &
+                (safe[:, 1] >= radius) & (safe[:, 1] < height - radius)
+            ]
+        draw = np.zeros((height, width), dtype=np.uint8)
+        draw_circle(draw, circles_enemy[radius], safe)
+        response = cv2.multiply(draw, 4)
+        response = subtract_blur(response, 3)
+
+        if center_x_range is not None:
+            response[:AIM_ENEMY_ROI_TOP, :] = 0
+            response[-AIM_ENEMY_ROI_BOTTOM:, :] = 0
+            x_min, x_max = center_x_range
+            response[:, :x_min] = 0
+            response[:, x_max:] = 0
+
+        _, score, _, center = cv2.minMaxLoc(response)
+        if score > best_score:
+            best_score = score
+            best_center = center
+            best_response = response
+
+    return best_response, best_score, best_center, points.shape[0]
+
+
 def predict_enemy(h, v):
-    min_radius, max_radius = radius_enemy
     width, height = image_size(v)
 
     # 获取白色圆形 `y`
     y = subtract_blur(h, 3, negative=False)
-    cv2.inRange(h, 168, 255, dst=h)
+    cv2.inRange(h, AIM_ENEMY_LUMA_MIN, 255, dst=h)
     cv2.bitwise_and(y, h, dst=y)
     # 获取红色光晕 `v`
-    cv2.inRange(v, 168, 255, dst=v)
+    cv2.inRange(v, AIM_ENEMY_RED_MIN, 255, dst=v)
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     cv2.dilate(v, kernel, dst=v)
-    # 去除噪声，只保留红色圆形
+    # Keep an unmasked copy for a partially clipped ring at either screen edge.
     cv2.bitwise_and(y, v, dst=y)
-    # cv2.imshow('predict_enemy', y)
-    # 去除游戏UI
-    cv2.bitwise_and(y, mask_interact, dst=y)
-    # 去除边缘上的点，否则 draw_circle() 会溢出
-    remove_border(y, max_radius)
+    edge_feature = y.copy()
+    edge_feature[:AIM_ENEMY_ROI_TOP, :] = 0
+    edge_feature[-AIM_ENEMY_ROI_BOTTOM:, :] = 0
 
-    # 获取所有像素
-    points = inrange(y, lower=18)
-    if points.shape[0] > 1000:
-        print(f'AimDetector.predict_enemy() 绘制点过多: {points.shape}')
-    # 绘制圆形
-    draw = np.zeros((height, width), dtype=np.uint8)
-    draw_circle(draw, circle_enemy, points)
-    draw_enemy = cv2.multiply(draw, 4)
-    draw_enemy = subtract_blur(draw_enemy, 3)
+    # Match both radii observed in the manually labelled screenshots.
+    primary_feature = cv2.bitwise_and(y, mask_interact)
+    primary_feature[:AIM_ENEMY_ROI_TOP, :] = 0
+    primary_feature[-AIM_ENEMY_ROI_BOTTOM:, :] = 0
+    primary_feature[:, :AIM_ENEMY_ROI_LEFT] = 0
+    primary_feature[:, -AIM_ENEMY_ROI_RIGHT:] = 0
+    draw_enemy, score, center, point_count = _best_enemy_ring_response(
+        primary_feature, AIM_ENEMY_PRIMARY_RADII
+    )
+    if point_count > 1000:
+        print(f'AimDetector.predict_enemy() 绘制点过多: {point_count}')
+    if score >= AIM_ENEMY_PEAK_MIN:
+        return draw_enemy, np.array([center])
 
-    # 寻找峰值
-    points = inrange(draw_enemy, lower=36)
-    points=group_points(points,10)
-    if points.shape[0] > 3:
-        print(f'AimDetector.predict_enemy() 峰值过多: {points.shape}')
-    points_enemy = points
-    # print(points)
-    return draw_enemy,points_enemy
+    # A target may be clipped beneath a side HUD. Only allow the circle center
+    # in the outermost 40 px and use a separately calibrated peak threshold.
+    edge_span = AIM_ENEMY_EDGE_CENTER_WIDTH + 2 * max(AIM_ENEMY_EDGE_RADII)
+    left_draw, left_score, left_center, _ = _best_enemy_ring_response(
+        edge_feature[:, :edge_span], AIM_ENEMY_EDGE_RADII,
+        center_x_range=(0, AIM_ENEMY_EDGE_CENTER_WIDTH + 1)
+    )
+    right_draw, right_score, right_center, _ = _best_enemy_ring_response(
+        edge_feature[:, -edge_span:], AIM_ENEMY_EDGE_RADII,
+        center_x_range=(edge_span - AIM_ENEMY_EDGE_CENTER_WIDTH, edge_span)
+    )
+    if right_score > left_score:
+        edge_draw, edge_score = right_draw, right_score
+        edge_center = (right_center[0] + width - edge_span, right_center[1])
+        edge_offset = width - edge_span
+    else:
+        edge_draw, edge_score, edge_center = left_draw, left_score, left_center
+        edge_offset = 0
+    if edge_score >= AIM_ENEMY_EDGE_PEAK_MIN:
+        full_edge_draw = np.zeros((height, width), dtype=np.uint8)
+        full_edge_draw[:, edge_offset:edge_offset + edge_span] = edge_draw
+        return full_edge_draw, np.array([edge_center])
+    return draw_enemy, np.array([])
 
 
 def predict_item(v):

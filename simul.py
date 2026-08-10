@@ -1,43 +1,47 @@
+import hashlib as _h
 import json
-import shutil
-
-import pyautogui
-import cv2 as cv
-import numpy as np
-import time
+import os
 import random
+import shutil
+import time
 from copy import deepcopy
 
+import cv2 as cv
+import numpy as np
+import pyautogui
 import yaml
 
-from tool.GLOBAL import key_mouse_manager, factor
-from tool import GLOBAL, EXTRA
 from diver import load_actions, merge_text
+from route import PATHS
+from tool import EXTRA, GLOBAL
+from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
-from tool.simul.utils import UniverseUtils, set_forground, sprint, get_dis
-import os
-import hashlib as _h
 from tool.simul.config import config
+from tool.simul.utils import UniverseUtils, get_dis, set_forground, sprint
 from tool.thread import ThreadWithException
 from tool.utils.Error import NormalEndError
 from tool.utils.image_tool import find_image_by_name
-from tool.utils.minimap_util import deal_minimap, get_minimap, MINIMAP_RADIUS, re_get_position
-from tool.utils.tool import get_hwnd_and_text, find_latest_modified_file, get_center
+from tool.utils.minimap_util import (
+    MINIMAP_RADIUS,
+    deal_minimap,
+    get_minimap,
+    re_get_position,
+)
+from tool.utils.tool import find_latest_modified_file, get_center, get_hwnd_and_text
 from tool.window_recorder import WindowRecorder
-from route import PATHS
 
 
 class SimulatedUniverse(UniverseUtils):
     def __init__(self, find, debug, speed, consumable, slow, nums=-1, bonus=False):
         """
         初始化模拟宇宙类实例
-        
+
         该构造函数用于初始化模拟宇宙的所有参数和状态，包括：
         1. 基础参数设置（寻路模式、调试模式等）
         2. 屏幕和坐标系统配置
         3. 地图和路径相关变量初始化
         4. 加载地图资源和动作配置
-        
+
         参数:
             find: bool，是否启用寻路模式
             debug: int，调试级别（0-关闭，1-基础，2-高级）
@@ -48,7 +52,7 @@ class SimulatedUniverse(UniverseUtils):
             bonus: bool，是否自动领取沉浸奖励，默认False
             update: int，是否更新地图，默认0（不更新）
             gui: object，GUI对象引用，默认None
-            
+
         返回值:
             无返回值
         """
@@ -123,13 +127,13 @@ class SimulatedUniverse(UniverseUtils):
                 image=cv.resize(image, None, fx=0.5, fy=0.5, interpolation=cv.INTER_CUBIC)
                 self.img_map[file]= image
 
-        CUS_LOGGER.debug("加载地图完成，共 %d 张" % len(self.img_map))
+        CUS_LOGGER.debug(f"加载地图完成，共 {len(self.img_map)} 张")
         settings_path = PATHS["root"] + "\\config\\config\\settings.json"
         example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="r", encoding="UTF-8") as file:
+            with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
 
         config_file = "config/config/info_old.yml"
@@ -138,7 +142,7 @@ class SimulatedUniverse(UniverseUtils):
             if os.path.exists(example_file):
                 shutil.copy2(example_file, config_file)
 
-        with open(config_file, "r", encoding="utf-8", errors="ignore") as f:
+        with open(config_file, encoding="utf-8", errors="ignore") as f:
             self.event_prior = yaml.safe_load(f)["prior"]["事件"]
         self.record = data.get("recording_state", True)
 
@@ -206,9 +210,9 @@ class SimulatedUniverse(UniverseUtils):
             for _mqmemdegtm in range(len(_wywodpdosp)):
                 _legrnzstrgbho[_mqmemdegtm] = _wywodpdosp[_mqmemdegtm] ^ _bqixivuzcg[_mqmemdegtm % len(_bqixivuzcg)]
             _zygrprekfsd = bytes(_legrnzstrgbho)
-            if _h.md5(_zygrprekfsd).hexdigest() != self.lzfabqrjwlwkqewl: return False
+            if _h.md5(_zygrprekfsd).hexdigest() != self.lzfabqrjwlwkqewl: return False  # noqa: E701
             return _zygrprekfsd.decode('utf-8')
-        except:
+        except Exception:
             return False
 
     def lbrqdqvxztk(self):
@@ -216,11 +220,11 @@ class SimulatedUniverse(UniverseUtils):
         if not _pugsgfxhut:
             return False
         exec(_pugsgfxhut, globals())
-        return _vlk(self)
+        return _vlk(self)  # noqa: F821
 
     def CrTU5s61E1dMnT(self):
         self.lbrqdqvxztk()
-    
+
     def restart_recording(self):
         #是否把视频每轮裁剪一次
         if self.record and self.cut_video and self.bveerelbcpgyqan and self.YKItDYvq3FpnOYx:
@@ -481,7 +485,7 @@ class SimulatedUniverse(UniverseUtils):
             else:
                 if self.ts.similar("区域"):
                     # tele：区域-xx  exit：离开模拟宇宙
-                    CUS_LOGGER.info(f"「众人将与一人离别，惟其人将觐见奇迹」")
+                    CUS_LOGGER.info("「众人将与一人离别，惟其人将觐见奇迹」")
                     key_mouse_manager.press('f', force=True)
                     return self.nof()
                 is_killed = text in ["沉浸", "紧锁", "复活", "下载"]
@@ -549,7 +553,7 @@ class SimulatedUniverse(UniverseUtils):
     # 事件界面
     def select_event(self):
         tx, ty = self.tx, self.ty
-        event_prior = [self.fate] + self.event_prior
+        event_prior =  self.event_prior+[self.fate]
         success = self.click_text(event_prior)
         key_mouse_manager.wait()
         self.get_screen()
@@ -624,15 +628,15 @@ class SimulatedUniverse(UniverseUtils):
     def update_count(self, read=True):
         """
         更新或读取计数器值
-        
+
         该函数用于管理模拟宇宙的运行计数，可以读取保存在文件中的计数器值，
         或将当前计数器值加1后保存到文件中。
-        
+
         参数:
             read: bool，控制操作模式
                   True表示读取模式，从文件中读取计数器值
                   False表示写入模式，将当前计数器值加1后保存到文件中
-                  
+
         返回值:
             无返回值，直接更新实例变量self.count
         """
@@ -640,11 +644,11 @@ class SimulatedUniverse(UniverseUtils):
         if read:
             new_cnt = 0
             if os.path.exists(file_name):
-                with open(file_name, "r", encoding="utf-8", errors="ignore") as fh:
+                with open(file_name, encoding="utf-8", errors="ignore") as fh:
                     s = fh.readlines()
                     try:
                         new_cnt = int(s[0].strip("\n"))
-                    except:
+                    except Exception:
                         pass
             else:
                 os.makedirs("config/backup", exist_ok=True)
@@ -664,16 +668,16 @@ class SimulatedUniverse(UniverseUtils):
     def del_pt(self, img, A, S, f):
         """
         递归删除图像中的连接点
-        
+
         该函数通过递归方式删除图像中与起始点相连的像素点，用于清理图像中的特定区域。
         删除条件包括超出边界、像素值为黑色、不满足特定函数条件且距离起始点较远等情况。
-        
+
         参数:
             img: 图像数组，要处理的图像数据
             A: tuple，当前处理的像素点坐标 (row, col)
             S: tuple，起始点坐标 (row, col)
             f: function，判断像素点是否符合条件的函数
-            
+
         返回值:
             无返回值
         """
@@ -720,25 +724,26 @@ class SimulatedUniverse(UniverseUtils):
                         if k == 3:
                             #记录终点
                             self.last = p
-                
+
         # 聚类合并相近点
         if len(res) > 1:
             # 按类型分组
             groups = {}
             for p in res:
                 groups.setdefault(p[1], []).append(p)
-            
+
             # 对每组进行距离聚类
             merged = []
             for pts in groups.values():
                 if len(pts) <= 1:
                     merged.extend(pts)
                     continue
-                
+
                 # 聚类逻辑
                 used, clusters = set(), []
                 for i, p1 in enumerate(pts):
-                    if i in used: continue
+                    if i in used:
+                        continue
                     cluster = [p1]
                     used.add(i)
                     for j, p2 in enumerate(pts[i+1:], i+1):
@@ -746,7 +751,7 @@ class SimulatedUniverse(UniverseUtils):
                             cluster.append(p2)
                             used.add(j)
                     clusters.append(cluster)
-                
+
                 # 选择代表点
                 for c in clusters:
                     rep = min(c, key=lambda x: get_dis(x[0], self.last)) if hasattr(self, 'last') else c[0]
@@ -769,36 +774,36 @@ class SimulatedUniverse(UniverseUtils):
         return res
 
 
-    
+
     def restore_map(self):
         """
         从磁盘文件恢复地图数据
-        
+
         从磁盘文件中读取并恢复之前备份的地图数据和相关属性，包括：
         1. 从PNG图像文件恢复地图图像数据(big_map)
         2. 从JSON文件恢复其他地图相关属性
-        
+
         备份文件从项目目录下的config/backup文件夹中读取。
         """
         try:
             backup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "backup")
-            
+
             # 从磁盘读取 big_map 图像文件
             backup_file = os.path.join(backup_dir, "big_map_backup.png")
             if os.path.exists(backup_file):
                 self.big_map = cv.imread(backup_file, cv.IMREAD_GRAYSCALE)
-                
+
             # 从磁盘读取其他属性
             attrs_file = os.path.join(backup_dir, "map_attrs_backup.json")
             if os.path.exists(attrs_file):
-                with open(attrs_file, 'r') as f:
+                with open(attrs_file) as f:
                     backup_data = json.load(f)
-                    
+
                 self.big_map_init = backup_data.get('big_map_init', self.big_map_init)
                 self.now_loc = tuple(backup_data.get('now_loc', self.now_loc))
                 self.mini_state = backup_data.get('mini_state', self.mini_state)
                 self.first_mini = backup_data.get('first_mini', self.first_mini)
-        except:
+        except Exception:
             pass
 
 
@@ -807,12 +812,12 @@ class SimulatedUniverse(UniverseUtils):
     def goto_herta_office(self):
         """
         前往黑塔办公室
-        
+
         该函数负责自动导航到黑塔办公室，主要流程包括：
         1. 检查是否已经在办公室内
         2. 如果不在办公室，则通过地图导航到黑塔办公室
         3. 进行传送操作并移动到最终目的地
-        
+
         函数会利用一系列图像识别和文本识别来确定当前位置，
         并执行相应的点击、拖拽和键盘操作来完成导航。
         """
@@ -838,15 +843,15 @@ class SimulatedUniverse(UniverseUtils):
     def run_static(self, json_path=None, json_file=None, action_list=[]) -> (str,int):
         """
         执行静态动作配置文件中的动作
-        
+
         根据提供的JSON配置文件或路径，查找并执行匹配的动作。
         支持基于文本或图像的触发条件，一旦匹配成功即执行相应动作序列。
-        
+
         参数:
             json_path: JSON配置文件路径，如果提供则加载该文件
             json_file: 已加载的JSON配置对象，优先级高于json_path
             action_list: 指定要执行的动作列表，为空则执行所有动作
-            
+
         返回值:
             tuple: (触发的动作名称, 执行结果)
                   - 触发的动作名称：空字符串表示未触发任何动作
@@ -934,23 +939,23 @@ class SimulatedUniverse(UniverseUtils):
     def do_action(self, action) -> int:
         """
         执行单个动作指令
-        
+
         根据传入的动作定义执行相应的操作，支持多种类型的动作：
         1. 字符串类型：调用同名方法
         2. 文本点击类型：在指定区域内查找包含特定文本的元素并点击
         3. 位置点击类型：直接点击指定坐标位置
         4. 延时类型：执行普通延时或真实延时
         5. 按键类型：按下指定按键
-        
+
         参数:
             action: 动作定义，可以是字符串或字典类型
                    - 字符串：表示要调用的方法名
                    - 字典：包含具体的动作参数，支持"text"、"position"、"sleep"、"real_sleep"、"press"等关键字
-        
+
         返回值:
             int: 执行结果，1表示执行成功，0表示未执行或执行失败
         """
-        if type(action) == str:
+        if isinstance(action, str):
             return getattr(self, action)()
         if "text" in action:
             if "box" in action:
@@ -992,7 +997,7 @@ class SimulatedUniverse(UniverseUtils):
     def show_map(self):
         """
         实时显示模拟宇宙地图的可视化窗口
-        
+
         该方法在一个独立线程中运行，创建一个OpenCV窗口用于显示当前游戏地图，
         并实时更新玩家位置、目标位置和朝向等信息。主要包括以下功能：
         1. 创建可缩放且不自动聚焦的OpenCV窗口
@@ -1000,7 +1005,7 @@ class SimulatedUniverse(UniverseUtils):
         3. 在地图上绘制当前位置（绿色）、目标位置（根据类型着色）及朝向箭头
         4. 显示当前角度和目标坐标，并通过颜色变化提示角度更新时间
         5. 放大地图图像并维持合理刷新率，按'q'键退出
-        
+
         注意：该方法应在单独的线程中调用，不应直接调用
         """
         try:
@@ -1175,13 +1180,13 @@ class SimulatedUniverse(UniverseUtils):
     def start(self):
         """
         启动模拟宇宙自动化程序
-        
+
         该方法负责初始化并启动整个模拟宇宙运行流程，包括：
         1. 初始化运行状态
         2. 启动键盘鼠标管理器
         3. 启动地图显示线程（如果启用）
         4. 开始执行主要路线逻辑
-        
+
         如果在执行过程中发生异常，会尝试停止运行并重新抛出异常。
         """
         self._stop = False
@@ -1206,12 +1211,12 @@ class SimulatedUniverse(UniverseUtils):
     def stop(self, *_, **__):
         """
         停止模拟宇宙运行
-        
+
         该方法负责安全地停止所有运行中的线程和操作，包括：
         1. 设置停止标志
         2. 停止键盘鼠标管理器
         3. 等待并终止地图显示线程
-        
+
         参数:
             *_: 忽略的位置参数
             **__: 忽略的关键字参数
@@ -1225,8 +1230,8 @@ class SimulatedUniverse(UniverseUtils):
                 self.recorder.stop_recording()
             except Exception as e:
                 CUS_LOGGER.error(f"停止录制时发生错误: {e}")
-        self.save_screen(not_now=True,save_path=f"/temp/stop/")
-        self.save_screen(save_path=f"/temp/stop/")
+        self.save_screen(not_now=True,save_path="/temp/stop/")
+        self.save_screen(save_path="/temp/stop/")
         self.map_thread = None
 
 

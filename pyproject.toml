@@ -1,6 +1,6 @@
 [project]
 name = "auto-difficult-achievement"
-version = "1.2.1"
+version = "1.2.2"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -32,4 +32,21 @@ default = true
 [dependency-groups]
 dev = [
     "pyinstaller==6.10",
+    "ruff>=0.12.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort (import ordering)
+    "UP",  # pyupgrade (modern Python)
+]
+ignore = [
+    "E501",  # line too long
+    "E402",  # module level import not at top
 ]

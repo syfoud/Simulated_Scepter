@@ -15,18 +15,16 @@
 This code is refered from:
 https://github.com/WenmuZhou/DBNet.pytorch/blob/master/post_processing/seg_detector_representer.py
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
-import numpy as np
 import cv2
-# import paddle
-from shapely.geometry import Polygon
+import numpy as np
 import pyclipper
 
+# import paddle
+from shapely.geometry import Polygon
 
-class DBPostProcess(object):
+
+class DBPostProcess:
     """
     The post process for Differentiable Binarization (DB).
     """
@@ -49,7 +47,7 @@ class DBPostProcess(object):
         self.box_type = box_type
         assert score_mode in [
             "slow", "fast"
-        ], "Score mode must be in [slow, fast] but got: {}".format(score_mode)
+        ], f"Score mode must be in [slow, fast] but got: {score_mode}"
 
         self.dilation_kernel = None if not use_dilation else np.array(
             [[1, 1], [1, 1]])
@@ -113,7 +111,7 @@ class DBPostProcess(object):
         outs = cv2.findContours((bitmap * 255).astype(np.uint8), cv2.RETR_LIST,
                                 cv2.CHAIN_APPROX_SIMPLE)
         if len(outs) == 3:
-            img, contours, _ = outs[0], outs[1], outs[2]
+            contours = outs[1]
         elif len(outs) == 2:
             contours, _ = outs[0], outs[1]
 
@@ -246,7 +244,7 @@ class DBPostProcess(object):
         return boxes_batch
 
 
-class DistillationDBPostProcess(object):
+class DistillationDBPostProcess:
     def __init__(self,
                  model_name=["student"],
                  key=None,

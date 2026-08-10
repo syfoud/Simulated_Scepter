@@ -1,10 +1,10 @@
-import queue
 import threading
 import time
+from collections import deque
+
 import pyautogui
 import win32api
 import win32con
-from collections import deque
 
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
@@ -45,7 +45,7 @@ class KeyMouseManager:
     def set_config(self, config):
         """
         设置配置对象
-        
+
         Args:
             config: 配置对象，包含键位映射等信息
         """
@@ -58,7 +58,7 @@ class KeyMouseManager:
     def set_screen_params(self, x1, y1, xx, yy, full=False):
         """
         设置屏幕参数，用于坐标转换
-        
+
         Args:
             x1: 屏幕右边界坐标
             y1: 屏幕下边界坐标
@@ -118,11 +118,11 @@ class KeyMouseManager:
             with self.queue_lock:
                 if self.operation_queue:
                     operation = self.operation_queue.popleft()
-            
+
             if operation == "stop":
                 # None作为停止信号
                 break
-            
+
             if operation != "stop" and operation is not None:
                 self.ending = False
                 self._execute_operation(operation)
@@ -135,10 +135,10 @@ class KeyMouseManager:
     def _get_mapping(self, key):
         """
         获取键位映射
-        
+
         Args:
             key: 原始键位
-            
+
         Returns:
             映射后的键位
         """
@@ -150,11 +150,11 @@ class KeyMouseManager:
     def _convert_coordinates(self, x, y):
         """
         转换坐标格式
-        
+
         Args:
             x: x坐标（可能是浮点数比例，也可能是游戏实际坐标）
             y: y坐标（可能是浮点数比例，也可能是有游戏实际坐标）
-            
+
         Returns:
             (actual_x, actual_y): 实际的屏幕坐标
         """
@@ -167,63 +167,62 @@ class KeyMouseManager:
         if self.full:
             actual_x += 9
             actual_y += 9
-            
+
         return actual_x, actual_y
 
     def _execute_operation(self, operation):
         """
         执行单个键鼠操作
-        
+
         Args:
             operation: 操作字典，包含操作类型和参数
         """
         op_type = operation['type']
-        force = operation.get('force', False)
         CUS_LOGGER = get_CUS_LOGGER()
         CUS_LOGGER.debug(f"执行操作{operation}，当前队列长度{len(self.operation_queue)}")
         if op_type == 'keyDown':
             key = self._get_mapping(operation['key'])
             pyautogui.keyDown(key)
-            
+
         elif op_type == 'keyUp':
             key = self._get_mapping(operation['key'])
             # 特殊处理shift键
-            if (self.config and hasattr(self.config, 'long_press_sprint') and 
+            if (self.config and hasattr(self.config, 'long_press_sprint') and
                 self.config.long_press_sprint and operation['key'] == 'w'):
                 pyautogui.keyUp(self._get_mapping('shift'))
             pyautogui.keyUp(key)
-            
+
         elif op_type == 'press':
             key = self._get_mapping(operation['key'])
             duration = operation.get('duration', 0)
-            
+
             # 检查是否需要跳过该按键
             if operation.get('allow_e', 1) == 0 and key == 'e':
                 return
-                
-            if (self.config and hasattr(self.config, 'slow') and 
+
+            if (self.config and hasattr(self.config, 'slow') and
                 self.config.slow and key == 'shift'):
                 return
-                
+
             pyautogui.keyDown(key)
             if duration > 0:
                 self._sleep(duration)
             pyautogui.keyUp(key)
-                
+
         elif op_type == 'click':
             x, y = operation['x'], operation['y']
             # 转换坐标
             actual_x, actual_y = self._convert_coordinates(x, y)
             win32api.SetCursorPos((actual_x, actual_y))
             pyautogui.click()
-            
+
         elif op_type == 'mouse_move':
             dx = operation['dx']
             fine = operation.get('fine', 1)
             # 仿照UniverseUtils.mouse_move实现
             self._direct_mouse_move(dx, fine)
 
-            
+
         elif op_type == 'scroll':
             x, y = operation['x'], operation['y']
             direct = operation['direct']
@@ -236,7 +235,7 @@ class KeyMouseManager:
                     pyautogui.scroll(120)
                 else:
                     pyautogui.scroll(-120)
-            
+
         elif op_type == 'drag':
             start_x, start_y = operation['start_x'], operation['start_y']
             end_x, end_y = operation['end_x'], operation['end_y']
@@ -248,7 +247,7 @@ class KeyMouseManager:
             self._sleep(0.2)
             pyautogui.dragTo(actual_end_x, actual_end_y, duration, button='left')
             # pyautogui.drag(actual_end_x - actual_start_x, actual_end_y - actual_start_y, duration)
-            
+
         elif op_type == 'sleep':
             duration = operation.get('duration', 0)
             self._sleep(duration)
@@ -256,7 +255,7 @@ class KeyMouseManager:
     def _direct_mouse_move(self, x, fine=1):
         """
         直接执行鼠标移动，不通过队列
-        
+
         Args:
             dx: x轴移动距离
             fine: 精细度控制参数
@@ -278,13 +277,13 @@ class KeyMouseManager:
     def _sleep(self, duration):
         """
         可中断的sleep方法，支持强制操作中断
-        
+
         Args:
             duration: 睡眠时间（秒）
         """
         if duration <= 0:
             return
-            
+
         # 记录睡眠开始时间和总时长
         self.sleep_start_time = time.time()
         self.sleep_duration = duration
@@ -299,7 +298,7 @@ class KeyMouseManager:
     def _handle_force_operation(self, operation):
         """
         处理强制操作，如果当前正在睡眠则中断并重新安排剩余时间
-        
+
         Args:
             operation: 强制操作
         """
@@ -309,7 +308,7 @@ class KeyMouseManager:
             # 计算剩余睡眠时间
             elapsed = time.time() - self.sleep_start_time
             remaining = self.sleep_duration - elapsed
-            
+
             # 如果还有剩余时间，将其作为sleep操作插入队首
             if remaining > 0.01:
                 CUS_LOGGER.debug(f"强制操作{operation}，剩余睡眠时间{remaining}秒")
@@ -321,7 +320,7 @@ class KeyMouseManager:
                     self.operation_queue.appendleft(sleep_operation)
                     self.operation_queue.appendleft(operation)
                     put=False
-            
+
             # 清除睡眠状态
             self.sleep_start_time = None
             self.sleep_duration = 0
@@ -349,7 +348,7 @@ class KeyMouseManager:
     def keyDown(self, key, force=False):
         """
         按下按键
-        
+
         Args:
             key: 要按下的键
             force: 是否为强制操作
@@ -368,7 +367,7 @@ class KeyMouseManager:
     def keyUp(self, key, force=False):
         """
         释放按键
-        
+
         Args:
             key: 要释放的键
             force: 是否为强制操作
@@ -387,7 +386,7 @@ class KeyMouseManager:
     def press(self, key, duration=0, allow_e=1, force=False):
         """
         按下并释放按键
-        
+
         Args:
             key: 要按下的键
             duration: 按下持续时间（秒）
@@ -410,7 +409,7 @@ class KeyMouseManager:
     def click(self, x, y, force=False):
         """
         点击指定位置
-        
+
         Args:
             x: 屏幕x坐标（支持浮点数比例坐标和实际坐标）
             y: 屏幕y坐标（支持浮点数比例坐标和实际坐标）
@@ -431,7 +430,7 @@ class KeyMouseManager:
     def mouse_move(self, dx, fine=1, force=False):
         """
         移动鼠标
-        
+
         Args:
             dx: x轴移动距离
             fine: 精细度控制参数
@@ -452,7 +451,7 @@ class KeyMouseManager:
     def scroll(self, direct=1, x=0.5, y=0.5, force=False):
         """
         滚动鼠标滚轮
-        
+
         Args:
             x: 滚动位置x坐标（支持浮点数比例坐标和实际坐标）
             y: 滚动位置y坐标（支持浮点数比例坐标和实际坐标）
@@ -475,7 +474,7 @@ class KeyMouseManager:
     def drag(self, start_x, start_y, end_x, end_y, duration=0.4, force=False):
         """
         拖拽操作
-        
+
         Args:
             start_x: 起始点x坐标（支持浮点数比例坐标和实际坐标）
             start_y: 起始点y坐标（支持浮点数比例坐标和实际坐标）
@@ -502,7 +501,7 @@ class KeyMouseManager:
     def sleep(self, duration, force=False):
         """
         可中断的sleep操作
-        
+
         Args:
             duration: 睡眠时间（秒）
             force: 是否为强制操作

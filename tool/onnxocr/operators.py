@@ -1,10 +1,11 @@
-import numpy as np
-import cv2
-import sys
 import math
+import sys
+
+import cv2
+import numpy as np
 
 
-class NormalizeImage(object):
+class NormalizeImage:
     """ normalize image such as substract mean, divide std
     """
 
@@ -31,9 +32,9 @@ class NormalizeImage(object):
         return data
 
 
-class DetResizeForTest(object):
+class DetResizeForTest:
     def __init__(self, **kwargs):
-        super(DetResizeForTest, self).__init__()
+        super().__init__()
         self.resize_type = 0
         self.keep_ratio = False
         if 'image_shape' in kwargs:
@@ -130,7 +131,7 @@ class DetResizeForTest(object):
             if int(resize_w) <= 0 or int(resize_h) <= 0:
                 return None, (None, None)
             img = cv2.resize(img, (int(resize_w), int(resize_h)))
-        except:
+        except Exception:
             print(img.shape, resize_w, resize_h)
             sys.exit(0)
         ratio_h = resize_h / float(h)
@@ -160,7 +161,7 @@ class DetResizeForTest(object):
 
         return img, [ratio_h, ratio_w]
 
-class ToCHWImage(object):
+class ToCHWImage:
     """ convert hwc image to chw image
     """
 
@@ -176,7 +177,7 @@ class ToCHWImage(object):
         return data
 
 
-class KeepKeys(object):
+class KeepKeys:
     def __init__(self, keep_keys, **kwargs):
         self.keep_keys = keep_keys
 

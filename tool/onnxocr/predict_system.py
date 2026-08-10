@@ -1,12 +1,13 @@
-import os
-import cv2
 import copy
-from . import predict_det
-from . import predict_rec
-from .utils import get_rotate_crop_image, get_minarea_rect_crop
+import os
+
+import cv2
+
+from . import predict_det, predict_rec
+from .utils import get_minarea_rect_crop, get_rotate_crop_image
 
 
-class TextSystem(object):
+class TextSystem:
     def __init__(self, args):
         self.text_detector = predict_det.TextDetector(args, cpu=args.cpu)
         self.text_recognizer = predict_rec.TextRecognizer(args, cpu=args.cpu)

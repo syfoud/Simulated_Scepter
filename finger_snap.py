@@ -1,22 +1,57 @@
 import os
+import shutil
+import time
+
+import yaml
 
 from iron_blood import IronBloodUniverse
-from tool.GLOBAL import key_mouse_manager,factor
+from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
-from tool.utils.Error import NoMatchError, NoBossError
-from tool.utils.analysis_map import match_multiple_targets, detect_corner_markers, compute_start_point_from_crop, \
-    max_weight_path, build_rightward_graph2, compute_all_max_steps, \
-    evaluate_best_single_replacement, display_matches
-from tool.utils.ocr_num import extract_number, match_numbers_in_region
-import time
+from tool.utils.analysis_map import (
+    build_rightward_graph2,
+    compute_all_max_steps,
+    compute_start_point_from_crop,
+    detect_corner_markers,
+    detect_infectable_nodes,
+    display_matches,
+    evaluate_best_single_replacement,
+    match_multiple_targets,
+    max_weight_path,
+)
+from tool.utils.Error import NoBossError, NoMatchError
+from tool.utils.image_tool import find_image_by_name
+from tool.utils.ocr_num import (
+    extract_number,
+    match_cheat_count_in_region,
+    match_numbers_in_region,
+    match_roll_count_in_region,
+)
+
 
 class FingerSnap(IronBloodUniverse):
     def __init__(self):
         super().__init__()
         self.countdown=15
         CUS_LOGGER.info("令她感伤的是，永恒的生命没能让她积累无穷的智慧，反倒是那些曾被她视作珍瑰的事物，开始变得模糊，一去不返。。。")
+        config_file = "config/config/event_info2.yml"
+        example_file = "config/config/info_example.yml"
+        if not os.path.exists(config_file):
+            if os.path.exists(example_file):
+                shutil.copy2(example_file, config_file)
 
+        with open(config_file, encoding="utf-8", errors="ignore") as f:
+            self.event_prior = yaml.safe_load(f)["event"]
+    def restart_recording(self):
+        if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
+            need_del=self.del_record_time and self.del_record_time>self.countdown
+            CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}")
+            self.recorder.stop_recording(need_del)
+            time.sleep(0.8)
+            self.recorder.start_recording(self.count)
+            self.update_state("re_start")
+        self.countdown = 15
+        self.fail_match_count=0
     def select_fate(self):
         self.click_text(text="丰饶", box=[824, 877, 784, 814])
     def end_of_university(self):
@@ -114,7 +149,7 @@ class FingerSnap(IronBloodUniverse):
             else:
                 CUS_LOGGER.error("未找到下一步路径点")
             if self.early_stop and self.gwypzmgzcndqlp:
-                if self.plane_floor!=3 and self.countdown==0:
+                if self.countdown==0:
                     self.need_end=True
             self.new_node=True
         else:
@@ -153,8 +188,8 @@ class FingerSnap(IronBloodUniverse):
         CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
         if len(matches)==0:
             CUS_LOGGER.warning("未匹配到任何地图图标却错误进入寻路阶段，可能是误识别")
-            self.save_screen(not_now=True,save_path=f"/temp/bigmaperror/")
-            self.save_screen(save_path=f"/temp/bigmaperror/")
+            self.save_screen(not_now=True,save_path="/temp/bigmaperror/")
+            self.save_screen(save_path="/temp/bigmaperror/")
             CUS_LOGGER.warning("刷新截图缓冲区后最后一次尝试匹配地图图标")
             matches = match_multiple_targets(image, mode)
             CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
@@ -166,6 +201,12 @@ class FingerSnap(IronBloodUniverse):
             CUS_LOGGER.debug(f'检测到 {len(corner_results)} 个角标')
             for cr in corner_results:
                 CUS_LOGGER.debug(f"  {cr['name']} sim={cr['similarity']:.3f} -> 节点{cr['node_idx']}({matches[cr['node_idx']]['name']}) dist={cr['node_dist']}")
+        # 检测青绿色可传染节点
+        infectable_indices = detect_infectable_nodes(self.screen, matches)
+        if infectable_indices:
+            CUS_LOGGER.debug(f'检测到 {len(infectable_indices)} 个可传染节点')
+            for idx in infectable_indices:
+                CUS_LOGGER.debug(f"  节点{idx}: {matches[idx]['name']} at {matches[idx]['location']}")
         if mode==2:
             start=compute_start_point_from_crop(image)
             if start is None:
@@ -180,7 +221,8 @@ class FingerSnap(IronBloodUniverse):
         for i, m in enumerate(matches):
             cm = m.get('corner_marker', None)
             cm_str = f' [角标:{cm["name"]}]' if cm else ''
-            CUS_LOGGER.debug(f"  {i}: {m['name']} at {m['location']}, 相似度: {m.get('similarity')}{cm_str}")
+            inf_str = ' [可传染]' if m.get('infectable', False) else ''
+            CUS_LOGGER.debug(f"  {i}: {m['name']} at {m['location']}, 相似度: {m.get('similarity')}{cm_str}{inf_str}")
         boss_head_x = [m['location'][0] for m in matches if m['name'] in ('boss', 'head')]
         if boss_head_x:
             rightmost = max(boss_head_x)
@@ -272,3 +314,40 @@ class FingerSnap(IronBloodUniverse):
             display_matches(image, matches, path=path, highlight_idx=highlight, save_path=True,
                          font_size_override=14, alt_path=alt_path)
         self.replace_idx = None
+    def calculated_roll(self):
+        if self.nodes is None or self.plane_floor==-1:
+            self.click_target(find_image_by_name("inmap"), 0.9, flag=False, click=True)
+            key_mouse_manager.wait()
+            return
+        roll_count = match_roll_count_in_region(self.screen)
+        if roll_count is not None:
+            CUS_LOGGER.debug(f"当前重投次数: {roll_count}")
+        cheat_count = match_cheat_count_in_region(self.screen)
+        if cheat_count is not None:
+            CUS_LOGGER.debug(f"当前作弊次数: {cheat_count}")
+        if not self.check("fast_roll", 0.1281,0.9074, threshold=0.9):
+            self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
+        if self.plane_floor in [2,3]:
+            text = self.ts.find_with_box(box=[1339, 1576, 429, 464], forward=True, re_screen=False)
+            text = merge_text(text) if len(text) else ""
+            CUS_LOGGER.info(f"拿去吧…我背负的一切。(当前效果{text})")
+            if "毁灭" in text:
+                cheating =not self.check("zero", 0.3046,0.3324, threshold=0.95)
+                redo=not self.check("zero", 0.1297,0.3315, threshold=0.95)
+                CUS_LOGGER.debug(f"决策可用动作{cheating},{redo}")
+                if cheating or redo:
+                    best_path, best_weight, best_end_idx, self.replace_idx, delta, discounted_delta = evaluate_best_single_replacement(
+                        self.nodes, self.edges, self.start_nodes['idx'], t=0.3 if self.plane_floor == 3 else 0.2)
+                    CUS_LOGGER.debug(f"期权最佳代替节点{self.replace_idx},计算替换后最佳路径{best_path}，当前节点{self.start_nodes}")
+                    if len(best_path)>1:
+                        if best_path[1]['idx'] == self.replace_idx:
+                            CUS_LOGGER.debug(f"期权最佳代替节点{self.replace_idx},替换后最佳路径{best_path}")
+                            if cheating:
+                                self.click_text(text="作弊", box=[1261, 1321, 761, 792])
+                                return
+                            elif redo:
+                                self.click_text(text="重投", box=[1599, 1657, 760, 795])
+                                return
+        self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
+        self.init_map(self.new_node)
+        self.mini_state = 1

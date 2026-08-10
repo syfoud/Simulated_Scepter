@@ -1,12 +1,12 @@
 name: 功能建议
 description: 为这个项目提出一个功能想法
-title: "[Feature] "
+title: "[Feature] 在此简述你建议的功能（不要留空）"
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        感谢你花时间为这个项目提出功能建议！
+        > :warning: **标题请勿留空或用默认文案！** 请用一两句话描述功能，例如 "[Feature] 添加定时停止功能"。
 
   - type: dropdown
     id: type

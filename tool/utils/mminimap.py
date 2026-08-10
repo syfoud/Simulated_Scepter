@@ -5,11 +5,37 @@ from scipy import signal
 from tool.GLOBAL import factor
 from tool.log import CUS_LOGGER
 from tool.utils.image_tool import find_image_in_folder
-from tool.utils.minimap_util import MINIMAP_RADIUS, get_minimap, rgb2yuv, RotationRemapData, peak_confidence, convolve, \
-    DIRECTION_RADIUS, DIRECTION_ARROW_COLOR, area_pad, color_similarity_2d, get_bbox, area_limit, image_size, \
-    DIRECTION_ROTATION_SCALE, crop, DIRECTION_SEARCH_SCALE, subtract_blur, POSITION_SEARCH_SCALE, cubic_find_maximum, \
-    ArrowRotateMap, ArrowRotateMapAll, POSITION_FEATURE_PAD, POSITION_MOVE_PATCH, area_offset, POSITION_SEARCH_RADIUS, image_center_crop, \
-    PositionPredictState, deal_minimap, re_get_position
+from tool.utils.minimap_util import (
+    DIRECTION_ARROW_COLOR,
+    DIRECTION_RADIUS,
+    DIRECTION_ROTATION_SCALE,
+    DIRECTION_SEARCH_SCALE,
+    MINIMAP_RADIUS,
+    POSITION_FEATURE_PAD,
+    POSITION_MOVE_PATCH,
+    POSITION_SEARCH_RADIUS,
+    POSITION_SEARCH_SCALE,
+    ArrowRotateMap,
+    ArrowRotateMapAll,
+    PositionPredictState,
+    RotationRemapData,
+    area_limit,
+    area_offset,
+    area_pad,
+    color_similarity_2d,
+    convolve,
+    crop,
+    cubic_find_maximum,
+    deal_minimap,
+    get_bbox,
+    get_minimap,
+    image_center_crop,
+    image_size,
+    peak_confidence,
+    re_get_position,
+    rgb2yuv,
+    subtract_blur,
+)
 
 
 def update_rotation(or_image=None, minimap=None):
@@ -35,9 +61,9 @@ def update_rotation(or_image=None, minimap=None):
         'height': 35,
         'wlen': d * scale,
     }
-    l = np.bincount(signal.find_peaks(gradx.ravel(), **para)[0] % (d * scale), minlength=d * scale)
+    hist_l = np.bincount(signal.find_peaks(gradx.ravel(), **para)[0] % (d * scale), minlength=d * scale)
     r = np.bincount(signal.find_peaks(-gradx.ravel(), **para)[0] % (d * scale), minlength=d * scale)
-    l, r = np.maximum(l - r, 0), np.maximum(r - l, 0)
+    hist_l, r = np.maximum(hist_l - r, 0), np.maximum(r - hist_l, 0)
 
     conv0 = []
     kernel = 2 * scale
@@ -50,7 +76,7 @@ def update_rotation(or_image=None, minimap=None):
         return sum(roll_r(shift + i) * (ker - abs(i)) // ker for i in range(-ker + 1, ker))
 
     for offset in range(-kernel + 1, kernel):
-        result = l * convolve_r(ker=3 * kernel, shift=-d * scale // 4 + offset)
+        result = hist_l * convolve_r(ker=3 * kernel, shift=-d * scale // 4 + offset)
         conv0 += [result]
 
     conv0 = np.maximum(conv0, 1)
@@ -279,7 +305,6 @@ class PositionPredict:
         best_state = _predict_precise_position(best_state)
 
         position_similarity = round(best_state.precise_sim, 3)
-        position_similarity_local = round(best_state.local_sim, 3)
         if update:
             self.position = tuple(np.round(best_state.global_loca, 1))
             self.scale=round(best_scale, 3)
