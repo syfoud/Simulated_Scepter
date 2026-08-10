@@ -437,7 +437,7 @@ border:none</string>
               </layout>
              </item>
              <item>
-              <layout class="QVBoxLayout" name="Lay_Tab1_Right" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0">
+              <layout class="QVBoxLayout" name="Lay_Tab1_Right" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0">
                <property name="spacing">
                 <number>6</number>
                </property>
@@ -735,6 +735,13 @@ border:none</string>
                 <widget class="QPushButton" name="finger_snap_btn">
                  <property name="text">
                   <string>弹指一挥（实验性框架）</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="finger_snap_bless_btn">
+                 <property name="text">
+                  <string>弹指一挥（刷阮梅法）</string>
                  </property>
                 </widget>
                </item>

@@ -26,8 +26,8 @@ from PyQt5.QtCore import pyqtSignal, Qt, pyqtSlot
 from simul import SimulatedUniverse
 from diver import DivergentUniverse
 from iron_blood import IronBloodUniverse
-#from finger_snap import FingerSnap
-from finger_snap_bless import FingerSnapBless as FingerSnap
+from finger_snap import FingerSnap
+from finger_snap_bless import FingerSnapBless
 
 import faulthandler
 
@@ -134,6 +134,7 @@ class MainWindow(QMainWindowLog):
         self.run_diver_btn.clicked.connect(self.run_diver)
         self.iron_blood_btn.clicked.connect(self.run_iron_blood)
         self.finger_snap_btn.clicked.connect(self.run_finger_snap)
+        self.finger_snap_bless_btn.clicked.connect(self.run_finger_snap_bless)
         self.currency_war_btn.clicked.connect(self.run_currency_war)
         self.calibrate_btn.clicked.connect(self.calibrate)
         self.test_btn.clicked.connect(self.test)
@@ -530,6 +531,21 @@ class MainWindow(QMainWindowLog):
     def run_finger_snap(self):
         def task():
             su = FingerSnap()
+            self.current_task = su
+            su.start()
+
+        try:
+            self.start_task(task)
+        except RuntimeError as r:
+            QMessageBox.warning(self, "警告", str(r))
+        except Exception as e:
+            QMessageBox.critical(self, "错误", str(e))
+
+    def run_finger_snap_bless(self):
+        """弹指一挥（刷阮梅法）——跑我们自己的 FingerSnapBless，跟原作者
+        的实验性框架（FingerSnap）完全独立，互不影响。"""
+        def task():
+            su = FingerSnapBless()
             self.current_task = su
             su.start()
 

@@ -1,48 +1,3 @@
-"""
-基于官方 finger_snap.py 的丰饶倒计时优化覆盖类。
-
-背景（游戏机制，来自用户描述/截图，未完整跑测验证）：
-    - 倒计时初始值 15
-    - 每走一步：非慈怀区域 -3，慈怀区域 +1（含 boss/head）
-    - 每个节点走完有一次骰子机会（丰饶）：
-        浇灌：自动为所有已慈怀区域各加1个相邻慈怀区域
-        慈怀：手动选1个（可达且未慈怀的）区域加慈怀
-        对症：本次移动后，自动为落点全部相邻区域加慈怀（延迟生效，
-              不需要选择，但影响"下一步该往哪走"）
-        归心：自动为1个随机未慈怀区域加慈怀
-        为善：按当前已慈怀区域数量直接加倒计时+宇宙碎片
-        可憎：进战斗时按倒计时数值造成伤害，跟区域无关
-      浇灌/归心/为善/可憎没有"放弃"选项，投到即生效，不需要操作。
-    - 命途增益：第一、二位面开局各自动送2个随机慈怀区域。
-
-第二位面策略（成就要求：进入第三位面时倒计时>=75，常规打法达不到，
-需要"前面几步铺满慈怀区域，后面靠为善持续吃倒计时"）：
-    1. 第1次骰子（进位面后休整点那次）判断前，打开地图总览
-       （骰子界面右下角图标），检测"洞"（被真实格子包围的镂空区域），
-       超过2个直接重开；同一次顺便检查命途增益开局送的2个初始慈怀
-       区域是不是都挤在地图前半场，都在前半场也直接重开；再检查最长
-       路径前3步有没有奖励关卡，没有直接重开，有的话把奖励所在的
-       步数标记下来，走完标记的最后那一步（对应奖励的交互也已经
-       完成）之后，如果没有触发阮2停止，直接重开
-    2. 第1次骰子固定强制"对症"；第2~4次固定强制"浇灌"；4次之后打开
-       地图检查是否已铺满（当前可达范围内还有没有未慈怀候选），没
-       铺满就继续强制浇灌，最多到第5次封顶（不管满没满，第5次后都
-       切到为善阶段）；作弊/重投用完了还没换到想要的骰面，直接重开
-    3. 阮2检测：不管是奖励类型还是事件类型的节点，只要走到"事件画面
-       已经出现"这一刻（select_event 被调用），就检查一次事件名有没有
-       "阮"字，命中就交互前停止程序等待手动处理；不对移动/靠近交互点
-       的过程做持续OCR轮询
-    4. 全程走"斜着走"的单跳路线（不允许跳格），寻路目标是奖励最多、
-       同分再看事件最多；这套逻辑通过给节点固定正权重(1) + 奖励/事件
-       加成实现，配合"从不允许跳格的邻接图"自然走满步数
-    5. 铺满阶段结束后，后续每一次骰子都强制换成"为善"，直到位面结束；
-       作弊/重投用完还没换到就直接重开
-
-以下几处是根据你提供的信息估算、没有精确标定的，实测时需要重点核对：
-    - 六边形网格间距常量 _HEX_DIRS（用于"洞"检测和对症落点相邻性判断）
-    - 地图总览图标的点击坐标 _FLOOR2_MAP_ICON_XY
-    - "洞"的判定阈值（被包围方向数 >= 4）
-"""
 
 import os
 import time
@@ -66,15 +21,6 @@ from tool.utils.image_tool import find_image_by_name
 
 def detect_infectable_nodes(color_image, matches, pad=6, cyan_ratio_threshold=0.20,
                              b_min=120, g_min=95):
-    """检测节点周围是否有青绿色光晕（判断该节点当前是否已处于"慈怀"状态）。
-    直接从 test/test_infectable_path.py 搬过来的同一份逻辑，就地给 matches
-    里每个节点加上 'infectable' 属性，不改变判定阈值。
-
-    pad 从原来的20改成6：图标模板只有38x53px，而对角线方向相邻格子间距
-    只有约57px，pad=20会让采样框的一半宽度接近40px，很容易越界采到
-    相邻格子（甚至角色头像）的高亮像素，导致误判成"已慈怀"。这个问题
-    是根据实际截图像素分析确认的，pad=6是估的，可能还需要根据实测继续调。
-    """
     if color_image is None or not matches:
         for m in matches:
             m['infectable'] = False
@@ -115,12 +61,8 @@ class FingerSnapBless(FingerSnap):
 
     def __init__(self):
         super().__init__()
-        # 对症：本次移动后自动给落点全部相邻区域加慈怀，是延迟生效、
-        # 不需要选择的效果，但会影响"下一步该往哪走"的决策，用这个标志位
-        # 记录"已经拿到对症、下一次移动要改变落点选择逻辑"，用完即清空。
         self._pending_duizheng = False
 
-        # 第二位面专属状态
         self._floor2_step = 0                  # 已走的步数
         self._floor2_survey_done = False        # 是否已经做过开局地图总览判断
         self._floor2_phase = "bless"            # "bless"强制浇灌阶段 / "weishan"强制为善阶段
@@ -137,11 +79,6 @@ class FingerSnapBless(FingerSnap):
     # ------------------------------------------------------------------
 
     def try_analysis_map(self, mode=1):
-        # 跟 finger_snap.FingerSnap.try_analysis_map 基本一致，加了两处：
-        # 1) 拿到 matches 后插入 detect_infectable_nodes，标记顺着
-        #    node['orig'] 带进 self.nodes / self.path
-        # 2) 按位面给节点定制寻路权重（第一位面=倒计时优先，第二位面=
-        #    奖励/事件优先+鼓励走满步数）
         image = self.screen
         matches = match_multiple_targets(image, mode)
         CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
@@ -196,19 +133,12 @@ class FingerSnapBless(FingerSnap):
                 max_gap=110, max_overlap=50, max_dy=130
             )
         else:
-            # 默认阈值(90/40/120)在实测中出现过"最近的候选节点纵向间距
-            # 120.5，只比阈值多0.5就连不上边"导致起点孤立、无限卡死的
-            # 情况——找不到路径又没法通过重试解决（角色位置不变，读数
-            # 每次都一样），会一直卡在原地出不去。放宽到跟mode3同一档
-            # (110/50/130)，减少这种"差一点点连不上"导致卡死的情况。
             self.nodes, self.edges, start_idx = build_rightward_graph2(
                 matches, start=start,
                 max_gap=110, max_overlap=50, max_dy=130
             )
 
         if self.plane_floor == 1:
-            # 第一位面目标是尽量保住倒计时——把节点权重换成"踩这一步
-            # 对倒计时的实际影响"：已慈怀 +1，普通节点 -3（含boss/head）。
             for n in self.nodes:
                 if n['name'] == 'start':
                     continue
@@ -217,13 +147,6 @@ class FingerSnapBless(FingerSnap):
                 else:
                     n['weight'] = -3.0
         elif self.plane_floor == 2:
-            # 第二位面目标是"前3步奖励尽量多、同分事件最多，且走到终点时
-            # 走满步数（斜着走单跳，不允许跳格）"。奖励权重大幅拉高，
-            # 让DP优先冲奖励；基础权重(1)保证同等奖励数量下继续偏好更
-            # 长路径；额外给"距离起点3跳以内"的奖励节点加一层大额加成，
-            # 明确让算法把奖励往前3步堆，而不是只看整条路径奖励总数——
-            # 两条路都能到终点、总奖励数一样时，前面有奖励的那条权重会
-            # 更高，会被优先选中。
             depth = {start_idx: 0}
             queue = [start_idx]
             while queue:
@@ -275,9 +198,6 @@ class FingerSnapBless(FingerSnap):
     # ------------------------------------------------------------------
 
     def initing_map(self):
-        # 跟 finger_snap.FingerSnap.initing_map 基本一致：
-        # 第一位面走原逻辑；第二位面重置专属状态后正常进入；
-        # 第三位面进去之后直接停止（倒计时够不够由游戏自己判定成就）。
         if not self.debug:
             CUS_LOGGER.error("本功能为实验性功能，当前仅供开发人员测试，现已终止程序")
             self.stop()
@@ -370,13 +290,6 @@ class FingerSnapBless(FingerSnap):
         return dists[len(dists) // 2]
 
     def _detect_holes(self, surround_threshold=5, tol_ratio=0.22):
-        """粗略统计地图里"洞"（被真实格子包围的镂空位置）的数量。
-        surround_threshold=5（6个方向里至少5个被真实格子占据）是为了把
-        "地图天然边界"（顶行/底行/最左最右列，缺的方向朝外而非被包围）
-        排除掉，只留下真正意义上"四面被包围"的洞；用真实识图数据验证过，
-        阈值=4时会把边界也误判进来，阈值=5能过滤掉，但没有覆盖足够多
-        地图形状测试，可能还需要调。
-        """
         points = [(n['cx'], n['cy']) for n in self.nodes if n['name'] != 'start']
         if len(points) < 4:
             return 0
@@ -415,7 +328,6 @@ class FingerSnapBless(FingerSnap):
         return hole_count
 
     def _is_floor2_covered(self):
-        """当前可达范围内是否已经没有未慈怀的候选节点了（"铺满"判定）。"""
         reachable = self._reachable_from_start()
         if not reachable:
             return True
@@ -427,9 +339,6 @@ class FingerSnapBless(FingerSnap):
         return True
 
     def _floor2_front_half_blessed_only(self):
-        """命途增益开局送的初始慈怀区域是不是都挤在地图前半场（离起点近
-        的一侧）——用所有节点x坐标的中点当"前后半场"分界，是拍的，没有
-        实测校准过具体应该怎么划分。"""
         real_nodes = [n for n in self.nodes if n["name"] != "start"]
         if not real_nodes:
             return False
@@ -441,10 +350,6 @@ class FingerSnapBless(FingerSnap):
         return all(x < mid for x in blessed_x)
 
     def _floor2_mark_reward_steps_in_first3(self):
-        """路线（self.path，已经是按第二位面权重表算出来的最长路径）
-        刚确定的时候调用：标记前3步里哪几步是奖励关卡（步数从1开始，
-        对应 self._floor2_step 的计数方式）。没有奖励就返回空列表。
-        """
         if not self.path:
             return []
         return [
@@ -453,10 +358,6 @@ class FingerSnapBless(FingerSnap):
         ]
 
     def _floor2_check_holes_and_blessed(self):
-        """检查"洞"和"初始2个慈怀区域是否都在前半场"，决定要不要直接重开。
-        这两项都不依赖准确的起点坐标（洞检测只看节点间距，前半场检测
-        只看所有节点自己的坐标分布），可以放心在"完整地图"总览界面上做。
-        """
         holes = self._detect_holes()
         CUS_LOGGER.info(f"[Floor2勘察] 检测到洞数量约为 {holes}")
         if holes > 2:
@@ -469,14 +370,6 @@ class FingerSnapBless(FingerSnap):
             return
 
     def _floor2_check_reward_in_first3(self):
-        """检查最长路径前3步有没有奖励，决定要不要直接重开；有奖励的话
-        把奖励所在的步数标记下来。这一项依赖 self.path，也就依赖准确的
-        起点定位——"完整地图"总览界面上角色定位不一定准（跟正常移动
-        界面绝对坐标不一样，实测过 compute_start_point_from_crop 在那个
-        界面上可能定位错，导致起点在图里孤立、路径整个算错），所以这项
-        检查必须在关闭地图、回到正常移动界面之后单独做一次识图再判断，
-        不能沿用"完整地图"界面识别出来的 self.path。
-        """
         start_edge_count = len(self.edges.get(self.start_nodes["idx"], [])) if self.start_nodes else -1
         path_desc = [f"{n['name']}({n['cx']:.0f},{n['cy']:.0f})" for n in (self.path or [])]
         CUS_LOGGER.info(
@@ -496,19 +389,8 @@ class FingerSnapBless(FingerSnap):
             f"走完第{self._floor2_reward_check_step}步后检查是否遇到阮2"
         )
 
-    # ------------------------------------------------------------------
-    # 骰子结算
-    # ------------------------------------------------------------------
 
     def cheat(self):
-        # 基类的 cheat() 是"拖动+固定坐标点击+确认"，完全不管弹出来的
-        # 列表里具体是什么效果，点的是固定位置——这是 actions/insect.json
-        # 里"作弊界面"触发条件绑定的方法，框架检测到作弊选择界面时会
-        # 自动调用它，所以必须重写这个方法本身，而不是在 calculated_roll
-        # 里处理，否则框架的自动触发会抢先用糊涂版本把次数浪费掉。
-        # 点击方式是直接对效果名文字调用 click_text（不指定box，走全屏
-        # 文字搜索+点击那条路径），没验证过点在文字上是否真的等于"选中
-        # 该行"，也没验证滚动方向/滚动量是否合适。
         if self.plane_floor != 2:
             key_mouse_manager.drag(0.5, 0.4, 0.5, 0.8)
             key_mouse_manager.click(571, 622)
@@ -529,13 +411,6 @@ class FingerSnapBless(FingerSnap):
         self.click_text("确认", box=[1168, 1223, 811, 841], allow_fail=True)
 
     def _open_full_map(self):
-        """骰子界面右下角有个图标（跟 calculated_roll 基类里
-        find_image_by_name("inmap") 用的是同一个）点开能看到完整地图，
-        按esc关闭（已确认）。点击本身是成功的，但地图展开有个过渡动画，
-        点完立刻截图分析会截到动画中间的过渡帧、什么都匹配不到，所以
-        这里多等一段时间再返回。这个等待时长是拍的，没有精确测过动画
-        实际多长。
-        """
         self.click_target(find_image_by_name("inmap"), 0.9, flag=False, click=True)
         key_mouse_manager.wait()
         time.sleep(1.5)
@@ -546,17 +421,6 @@ class FingerSnapBless(FingerSnap):
         key_mouse_manager.wait()
 
     def _floor2_pre_roll_check(self):
-        """第一次骰子判断前：打开完整地图，检测洞+初始2个慈怀区域是否都
-        在前半场，决定要不要直接重开。这两项都不依赖起点定位准不准，
-        可以放心用这个总览界面。
-        "最长路径前3步有没有奖励"这项不在这里做——骰子界面本身是叠在
-        3D场景上的浮层，按esc关掉总览之后露出来的还是3D场景+骰子界面，
-        根本看不到六边形地图，没法在这个时间点重新识图算路径。这项挪到
-        了 select_go 第一次真正开始寻路移动的时候（那时候才是正常能看到
-        地图、起点定位可靠的视角）。
-        返回True表示识图成功、判断已经做出；False表示识图失败，
-        下次骰子再重新尝试一次。
-        """
         self._open_full_map()
         ok = False
         try:
@@ -616,10 +480,6 @@ class FingerSnapBless(FingerSnap):
         CUS_LOGGER.debug(f"[Floor2骰面] 阶段={self._floor2_phase} 当前效果={text}")
 
         if text and text == self._floor2_last_confirmed_text:
-            # 跟上一次刚确认过的骰面文本一模一样——大概率是上次点"确认效果"
-            # 没有真正生效、画面没跳转，框架的触发系统又检测到同一块文字重新
-            # 调用了一次。这种情况下只重新点一下确认，不重新判断目标/不重复
-            # 计数，避免同一次骰子被算成两次导致目标错误变化。
             CUS_LOGGER.warning(f"[Floor2骰面] 检测到跟上次相同的骰面文本({text})，怀疑确认没生效，重新点一次确认")
             self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
             self.init_map()
@@ -701,10 +561,6 @@ class FingerSnapBless(FingerSnap):
             CUS_LOGGER.warning(f"[奖励记录] 写入失败: {e}")
 
     def select_event(self):
-        # 阮2检测放在这里——不管是奖励类型还是事件类型的节点，只要走到
-        # 了这个"事件画面已经出现"的时刻（select_event 被调用），就检查
-        # 一次事件名有没有"阮"字，命中就交互前停止；不做移动过程中的
-        # 持续OCR轮询（那套已经去掉，改回单点检查）。
         if self.plane_floor == 2 and self.new_node:
             event_name = self.ts.find_with_box(box=[191, 750, 963, 998], forward=True, re_screen=False)
             text = merge_text(event_name) if len(event_name) else ""
@@ -733,13 +589,6 @@ class FingerSnapBless(FingerSnap):
             return
 
         if "慈怀" in text:
-            # "选择生效目标"界面会给候选区域套一层蓝色高亮，跟判断"已慈怀"
-            # 用的青绿色阈值撞色（已用对比截图实测确认），所以不在这个界面
-            # 上识图。改成跟第二位面一样：打开完整地图（inmap图标）在干净
-            # 视图上识别+选目标，算出目标相对起点的偏移量，ESC关闭后回到
-            # "选择生效目标"界面，重新定位一次起点，起点+偏移量＝目标在
-            # 这个界面上的真实点击坐标——两个地图内容相同但绝对坐标不同，
-            # 不能直接搬一边算出来的坐标去点另一边。
             self._open_full_map()
             try:
                 self.try_analysis_map(mode=2)
@@ -855,9 +704,6 @@ class FingerSnapBless(FingerSnap):
                 neighbors.append(n)
         return neighbors
 
-    # ------------------------------------------------------------------
-    # 移动
-    # ------------------------------------------------------------------
 
     def select_go(self):
         if (
@@ -866,9 +712,6 @@ class FingerSnapBless(FingerSnap):
             and not self._floor2_reward_check_done
             and self._floor2_step >= self._floor2_reward_check_step + 1
         ):
-            # 多等一步再判断：标记的奖励关卡那一步走完之后，还得再往下走
-            # 一格，此时上一格的事件互动必然已经处理完（不可能带着还没
-            # 结束的互动往下走），不用再纠结互动到底是不是真的走完了。
             self._floor2_reward_check_done = True
             CUS_LOGGER.info(
                 f"[Floor2] 前3步标记的奖励关卡（第{self._floor2_reward_steps}步）"
@@ -929,10 +772,6 @@ class FingerSnapBless(FingerSnap):
                     self.get_screen()
 
             if self.plane_floor == 2 and not self._floor2_reward_survey_done:
-                # "前3步有没有奖励"这项检查放在这里做，而不是骰子判断前的
-                # 地图总览界面——这里是正常寻路一直在用的视角，起点定位
-                # 可靠；如果路径明显退化（起点孤立），当成识图偶发失败，
-                # 不计入判断，等下一次 select_go 调用再试。
                 if self.path and len(self.path) > 1:
                     self._floor2_reward_survey_done = True
                     self._floor2_check_reward_in_first3()
