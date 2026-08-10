@@ -1,3 +1,8 @@
+"""
+丰饶倒计时优化覆盖类，独立于 finger_snap.py（不继承它）。
+第二位面：开局勘察(洞/前半场慈怀/前3步奖励) -> 铺满阶段(浇灌/对症) ->
+为善阶段；阮2检测在 select_event 里做单点检查；倒计时>=70自动停止。
+"""
 
 import os
 import time
@@ -5,8 +10,8 @@ import time
 import cv2
 import numpy as np
 
-from finger_snap import FingerSnap
-from tool.GLOBAL import key_mouse_manager
+from iron_blood import IronBloodUniverse
+from tool.GLOBAL import key_mouse_manager, factor
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
 from tool.utils.Error import NoMatchError, NoBossError
@@ -15,12 +20,16 @@ from tool.utils.analysis_map import (
     max_weight_path, build_rightward_graph2, compute_all_max_steps,
     evaluate_best_single_replacement,
 )
-from tool.utils.ocr_num import extract_number, match_numbers_in_region
+from tool.utils.ocr_num import (
+    extract_number, match_numbers_in_region,
+    match_roll_count_in_region, match_cheat_count_in_region,
+)
 from tool.utils.image_tool import find_image_by_name
 
 
 def detect_infectable_nodes(color_image, matches, pad=6, cyan_ratio_threshold=0.20,
                              b_min=120, g_min=95):
+    """检测节点周围是否有青绿色光晕（判断该节点当前是否已处于"慈怀"状态）。"""
     if color_image is None or not matches:
         for m in matches:
             m['infectable'] = False
@@ -57,12 +66,14 @@ def detect_infectable_nodes(color_image, matches, pad=6, cyan_ratio_threshold=0.
     return infectable_nodes
 
 
-class FingerSnapBless(FingerSnap):
+class FingerSnapBless(IronBloodUniverse):
 
     def __init__(self):
         super().__init__()
+        self.countdown = 15
         self._pending_duizheng = False
 
+        # 第二位面专属状态
         self._floor2_step = 0                  # 已走的步数
         self._floor2_survey_done = False        # 是否已经做过开局地图总览判断
         self._floor2_phase = "bless"            # "bless"强制浇灌阶段 / "weishan"强制为善阶段
@@ -73,6 +84,65 @@ class FingerSnapBless(FingerSnap):
         self._floor2_reward_check_step = None  # 上面这些步数里最大的一个，走完它之后检查有没有遇到阮2
         self._floor2_reward_check_done = False  # 上面这个检查是否已经做过
         self._floor2_reward_survey_done = False  # "前3步有没有奖励"这项勘察本身是否已经做过（在select_go里做）
+
+    # ------------------------------------------------------------------
+    # 从 finger_snap.py 原样搬过来的几个方法（不是靠继承拿到的）
+    # ------------------------------------------------------------------
+
+    def select_fate(self):
+        self.click_text(text="丰饶", box=[824, 877, 784, 814])
+
+    def restart_recording(self):
+        if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
+            need_del = self.del_record_time and self.del_record_time > self.countdown
+            CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}")
+            self.recorder.stop_recording(need_del)
+            time.sleep(0.8)
+            self.recorder.start_recording(self.count)
+            self.update_state("re_start")
+        self.countdown = 15
+        self.fail_match_count = 0
+
+    def end_of_university(self):
+        self.update_count(False)
+        self.my_cnt += 1
+        tm = int((time.time() - self.init_time) / 60)
+        remain_round = self.nums - self.my_cnt
+        if remain_round > 0:
+            remain = int(remain_round * (time.time() - self.init_time) / self.my_cnt / 60)
+        else:
+            remain = 0
+            remain_round = "∞"
+            CUS_LOGGER.info(f'当仁不让。{factor}将肩负世界，直至此身焚灭。')
+        CUS_LOGGER.info(
+            f"世界演算模拟完成！本轮已迭代次数：{self.my_cnt},总计已迭代次数:{self.count} 剩余:{remain_round}次, 已执行：{tm // 60}小时{tm % 60}分钟  平均{tm // self.my_cnt}分钟一次" + (
+                f"预计剩余{remain // 60}小时{remain % 60}分钟" if remain != 0 else ""))
+        if self.check_bonus == 0 and self.my_cnt >= self.nums > 0:
+            self.end = 1
+        self.update_floor(1)
+        self.update_state("end")
+        elapsed = int(time.time() - self.run_start_time)
+        record_file = "config/backup/countdown.txt"
+        try:
+            os.makedirs("config/backup", exist_ok=True)
+            with open(record_file, "a", encoding="utf-8") as file:
+                file.write(f"轮回次数:{self.count}, 倒计时:{self.countdown}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
+        except Exception as e:
+            CUS_LOGGER.error(f"写入倒计时记录文件失败{e}")
+        self.run_start_time = time.time()  # 开始下一局计时
+        self.need_end = False
+        self.init_map()
+        if self.countdown >= 80:
+            if self.count > 10000:
+                CUS_LOGGER.info("寰宇或为您的意志撼动，但「毁灭」的道路，注定无法手捧鲜花……")
+            elif self.count > 1000:
+                CUS_LOGGER.info("…不必考量本心，不必渴求胜利，只须知道，铁血战士——让人感到愤怒！")
+            elif self.count > 100:
+                CUS_LOGGER.info("无所谓，旅途本就会改变一个人。")
+            self.stop()
+            CUS_LOGGER.info("恭喜，您获得了弹指一挥！")
+        else:
+            CUS_LOGGER.info(f'{factor}再度踏上轮回……')
 
     # ------------------------------------------------------------------
     # 地图识图 + 权重
@@ -139,6 +209,8 @@ class FingerSnapBless(FingerSnap):
             )
 
         if self.plane_floor == 1:
+            # 第一位面目标是尽量保住倒计时——把节点权重换成"踩这一步
+            # 对倒计时的实际影响"：已慈怀 +1，普通节点 -3（含boss/head）。
             for n in self.nodes:
                 if n['name'] == 'start':
                     continue
@@ -263,10 +335,7 @@ class FingerSnapBless(FingerSnap):
         return reachable
 
     def _estimate_hex_spacing(self, points, default=115.0):
-        """从当前实际识别到的节点坐标动态估算六边形网格间距（取节点间
-        最近邻距离的中位数）。正六边形网格里6个方向的相邻距离理论上相等，
-        所以这一个数就够用来推算全部6个方向的偏移，不用管游戏实际分辨率。
-        """
+        """从当前实际识别到的节点坐标动态估算六边形网格间距（取节点间"""
         if len(points) < 3:
             return default
         dists = []
@@ -286,6 +355,7 @@ class FingerSnapBless(FingerSnap):
         return dists[len(dists) // 2]
 
     def _detect_holes(self, surround_threshold=5, tol_ratio=0.22):
+        """粗略统计地图里"洞"（被真实格子包围的镂空位置）的数量。"""
         points = [(n['cx'], n['cy']) for n in self.nodes if n['name'] != 'start']
         if len(points) < 4:
             return 0
@@ -324,6 +394,7 @@ class FingerSnapBless(FingerSnap):
         return hole_count
 
     def _is_floor2_covered(self):
+        """当前可达范围内是否已经没有未慈怀的候选节点了（"铺满"判定）。"""
         reachable = self._reachable_from_start()
         if not reachable:
             return True
@@ -335,6 +406,7 @@ class FingerSnapBless(FingerSnap):
         return True
 
     def _floor2_front_half_blessed_only(self):
+        """命途增益开局送的初始慈怀区域是不是都挤在地图前半场（离起点近"""
         real_nodes = [n for n in self.nodes if n["name"] != "start"]
         if not real_nodes:
             return False
@@ -346,6 +418,7 @@ class FingerSnapBless(FingerSnap):
         return all(x < mid for x in blessed_x)
 
     def _floor2_mark_reward_steps_in_first3(self):
+        """路线（self.path，已经是按第二位面权重表算出来的最长路径）"""
         if not self.path:
             return []
         return [
@@ -354,6 +427,7 @@ class FingerSnapBless(FingerSnap):
         ]
 
     def _floor2_check_holes_and_blessed(self):
+        """检查"洞"和"初始2个慈怀区域是否都在前半场"，决定要不要直接重开。"""
         holes = self._detect_holes()
         CUS_LOGGER.info(f"[Floor2勘察] 检测到洞数量约为 {holes}")
         if holes > 2:
@@ -366,6 +440,7 @@ class FingerSnapBless(FingerSnap):
             return
 
     def _floor2_check_reward_in_first3(self):
+        """检查最长路径前3步有没有奖励，决定要不要直接重开；有奖励的话"""
         start_edge_count = len(self.edges.get(self.start_nodes["idx"], [])) if self.start_nodes else -1
         path_desc = [f"{n['name']}({n['cx']:.0f},{n['cy']:.0f})" for n in (self.path or [])]
         CUS_LOGGER.info(
@@ -385,6 +460,9 @@ class FingerSnapBless(FingerSnap):
             f"走完第{self._floor2_reward_check_step}步后检查是否遇到阮2"
         )
 
+    # ------------------------------------------------------------------
+    # 骰子结算
+    # ------------------------------------------------------------------
 
     def cheat(self):
         if self.plane_floor != 2:
@@ -407,6 +485,7 @@ class FingerSnapBless(FingerSnap):
         self.click_text("确认", box=[1168, 1223, 811, 841], allow_fail=True)
 
     def _open_full_map(self):
+        """骰子界面右下角有个图标（跟 calculated_roll 基类里"""
         self.click_target(find_image_by_name("inmap"), 0.9, flag=False, click=True)
         key_mouse_manager.wait()
         time.sleep(1.5)
@@ -417,6 +496,7 @@ class FingerSnapBless(FingerSnap):
         key_mouse_manager.wait()
 
     def _floor2_pre_roll_check(self):
+        """第一次骰子判断前：打开完整地图，检测洞+初始2个慈怀区域是否都"""
         self._open_full_map()
         ok = False
         try:
@@ -429,8 +509,7 @@ class FingerSnapBless(FingerSnap):
         return ok
 
     def _floor2_is_covered_via_map(self):
-        """铺满阶段第4/5次骰子后，判断是否已铺满：打开地图拿一份完整、
-        最新的数据再判断，而不是复用可能只反映局部视野的旧数据。"""
+        """铺满阶段第4/5次骰子后，判断是否已铺满：打开地图拿一份完整、"""
         self._open_full_map()
         covered = False
         try:
@@ -442,15 +521,51 @@ class FingerSnapBless(FingerSnap):
         return covered
 
     def _floor2_bless_target(self):
-        """铺满阶段用作弊强制指定骰面时该找哪个效果：不管第几次，都指定
-        "浇灌"。第1次骰子虽然"浇灌"和"对症"两个都能接受（不强制换），
-        但如果两个都没中、非要靠作弊硬指定不可的话，还是固定选浇灌——
-        对症只是"自然骰到就接受"，不是需要主动追求的目标。"""
+        """铺满阶段用作弊强制指定骰面时该找哪个效果：不管第几次，都指定"""
         return "浇灌"
+
+    def _calculated_roll_floor1(self):
+        """从 finger_snap.py 的 calculated_roll 原样搬过来，第一位面用"""
+        if self.nodes is None or self.plane_floor == -1:
+            self.click_target(find_image_by_name("inmap"), 0.9, flag=False, click=True)
+            key_mouse_manager.wait()
+            return
+        roll_count = match_roll_count_in_region(self.screen)
+        if roll_count is not None:
+            CUS_LOGGER.debug(f"当前重投次数: {roll_count}")
+        cheat_count = match_cheat_count_in_region(self.screen)
+        if cheat_count is not None:
+            CUS_LOGGER.debug(f"当前作弊次数: {cheat_count}")
+        if not self.check("fast_roll", 0.1281, 0.9074, threshold=0.9):
+            self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
+        if self.plane_floor in [2, 3]:
+            text = self.ts.find_with_box(box=[1339, 1576, 429, 464], forward=True, re_screen=False)
+            text = merge_text(text) if len(text) else ""
+            CUS_LOGGER.info(f"拿去吧…我背负的一切。(当前效果{text})")
+            if "毁灭" in text:
+                cheating = not self.check("zero", 0.3046, 0.3324, threshold=0.95)
+                redo = not self.check("zero", 0.1297, 0.3315, threshold=0.95)
+                CUS_LOGGER.debug(f"决策可用动作{cheating},{redo}")
+                if cheating or redo:
+                    best_path, best_weight, best_end_idx, self.replace_idx, delta, discounted_delta = evaluate_best_single_replacement(
+                        self.nodes, self.edges, self.start_nodes['idx'], t=0.3 if self.plane_floor == 3 else 0.2)
+                    CUS_LOGGER.debug(f"期权最佳代替节点{self.replace_idx},计算替换后最佳路径{best_path}，当前节点{self.start_nodes}")
+                    if len(best_path) > 1:
+                        if best_path[1]['idx'] == self.replace_idx:
+                            CUS_LOGGER.debug(f"期权最佳代替节点{self.replace_idx},替换后最佳路径{best_path}")
+                            if cheating:
+                                self.click_text(text="作弊", box=[1261, 1321, 761, 792])
+                                return
+                            elif redo:
+                                self.click_text(text="重投", box=[1599, 1657, 760, 795])
+                                return
+        self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
+        self.init_map(self.new_node)
+        self.mini_state = 1
 
     def calculated_roll(self):
         if self.plane_floor != 2:
-            super().calculated_roll()
+            self._calculated_roll_floor1()
             return
 
         if self.need_end:
@@ -537,16 +652,11 @@ class FingerSnapBless(FingerSnap):
     # ------------------------------------------------------------------
     # 事件识别（阮2）
     # ------------------------------------------------------------------
-    # 阮2检测只在 select_event 里做单点检查（事件画面出现时读一次），
-    # 不再对移动/靠近交互点的过程做持续OCR轮询，所以这里不再覆写
-    # get_event_only_minimap，直接用基类原版。
 
     _REWARD_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "floor2_reward_events.txt")
 
     def _log_reward_event(self, node_type, text):
-        """把奖励格子遇到的事件名追加写到脚本同目录下的txt文件里，
-        文件不存在就创建，存在就追加。写入失败只打警告，不影响主流程。
-        """
+        """把奖励格子遇到的事件名追加写到脚本同目录下的txt文件里，"""
         try:
             with open(self._REWARD_LOG_PATH, "a", encoding="utf-8") as f:
                 f.write(
@@ -687,9 +797,7 @@ class FingerSnapBless(FingerSnap):
             self.click_text(text="确定", box=[1584, 1687, 961, 994], allow_fail=True)
 
     def _spatial_neighbors(self, node, radius=160.0):
-        """粗略估算某节点在地图上的"相邻"节点，用于对症效果的落点评估。
-        用中心点距离近似，半径没有实测校准过。
-        """
+        """粗略估算某节点在地图上的"相邻"节点，用于对症效果的落点评估。"""
         cx, cy = node['cx'], node['cy']
         neighbors = []
         for n in self.nodes:
@@ -700,6 +808,9 @@ class FingerSnapBless(FingerSnap):
                 neighbors.append(n)
         return neighbors
 
+    # ------------------------------------------------------------------
+    # 移动
+    # ------------------------------------------------------------------
 
     def select_go(self):
         if (
