@@ -211,6 +211,9 @@ class FingerSnapBless(IronBloodUniverse):
         if self.plane_floor == 1:
             # 第一位面目标是尽量保住倒计时——把节点权重换成"踩这一步
             # 对倒计时的实际影响"：已慈怀 +1，普通节点 -3（含boss/head）。
+            # 额外加一个很小的奖励优先加成(+0.1)，只用来在倒计时权重
+            # 打平时优先选经过奖励的那条路，不会盖过-3/+1这个主要判断
+            # （4分的差距，0.1的加成不可能反转真正的倒计时取舍）。
             for n in self.nodes:
                 if n['name'] == 'start':
                     continue
@@ -218,6 +221,10 @@ class FingerSnapBless(IronBloodUniverse):
                     n['weight'] = 1.0
                 else:
                     n['weight'] = -3.0
+                if n['name'] in ('reward', 'reward2'):
+                    n['weight'] += 0.1
+                if n['name'] in ('event'):
+                    n['weight'] += 0.01
         elif self.plane_floor == 2:
             depth = {start_idx: 0}
             queue = [start_idx]
