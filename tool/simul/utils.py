@@ -1215,6 +1215,10 @@ class UniverseUtils:
             go_time=random.uniform(0.5, 0.75)
             retry_time = 0
             has_not_found_red=False
+            skill_num = match_skill_numbers_in_region(self.get_screen())
+            if skill_num is not None:
+                self.skill_num = skill_num
+            fixed = self.skill_num == 0
             if self.bai_e:
                 add_round=7
             elif self.quan:
@@ -1222,6 +1226,9 @@ class UniverseUtils:
             else:
                 add_round=0
             threshold_distance = [13,21 + add_round,11,7]
+            if fixed:
+                threshold_distance[2] = 8
+                threshold_distance[3] = 5
             # 基于距离的位置卡住检测
             last_locs = []
             STUCK_DISTANCE_THRESHOLD = 2.0  # 卡住判定的距离阈值
@@ -2833,6 +2840,9 @@ class UniverseUtils:
         else:
             add_round=0
         threshold_distance = [13, 19 + add_round, 11, 7]
+        if fixed:
+            threshold_distance[2] = 8
+            threshold_distance[3] = 5
         # 基于距离的位置卡住检测
         last_locs = []
         STUCK_DISTANCE_THRESHOLD = 2.0  # 卡住判定的距离阈值
