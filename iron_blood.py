@@ -137,7 +137,7 @@ class IronBloodUniverse(SimulatedUniverse):
                 now_lunhuirizhi = datetime.datetime.now()
                 timestamp_lunhuirizhi = now_lunhuirizhi.strftime("%Y年%m月%d日%H点%M分%S秒")
                 file.write(f"{timestamp_lunhuirizhi}, 轮回次数:{self.count}, 击杀数:{self.kill_count}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
-                # file.write(f"轮回次数:{self.count}, 击杀数:{self.kill_count}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
+                # file.write(f"轮回次数:{self.count}, 击杀数:{self.kill_count:02d}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
         except Exception as e:
             CUS_LOGGER.error(f"写入击杀记录文件失败{e}")
         self.run_start_time = time.time()  # 开始下一局计时
