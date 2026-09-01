@@ -8,6 +8,7 @@ import time
 import cv2 as cv
 import yaml
 
+import tool.GLOBAL as GLOBAL
 from route import PATHS
 from simul import SimulatedUniverse
 from tool import EXTRA
@@ -218,7 +219,9 @@ class IronBloodUniverse(SimulatedUniverse):
                 cm = (start_node.get('orig') or {}).get('corner_marker')
                 if cm and cm.get('name') in ('pig1', 'pig2'):
                     CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
-                    key_mouse_manager.press("2")
+                    # 当前角色为银狼时，禁用角色遇猪切人
+                    if not self.opt.get("silver_wolf_lv999_tech", False):
+                        key_mouse_manager.press("2")
                     self.quan = 0
                     self.bai_e = 0
             #上次交互时间
@@ -804,6 +807,9 @@ class IronBloodUniverse(SimulatedUniverse):
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count=0
+        # 进入位面时如果不立即重开，则对变量赋值，准备在进入探索态时使用银狼的秘技
+        if self.need_end != True and self.opt.get("silver_wolf_lv999_tech", False):
+            GLOBAL.SilverWorf_e = 1
         key_mouse_manager.wait()
         return
     def initing_map2(self):
