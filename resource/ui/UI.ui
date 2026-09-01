@@ -1158,6 +1158,13 @@ border:none</string>
                   </widget>
                  </item>
                  <item>
+                  <widget class="QCheckBox" name="silver_wolf_lv999_tech">
+                   <property name="text">
+                    <string>启用银狼LV.999秘技适配</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
                   <widget class="QPushButton" name="Aboutupdatelock">
                    <property name="text">
                     <string>关于高级用户功能解锁</string>
