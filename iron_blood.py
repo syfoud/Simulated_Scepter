@@ -40,6 +40,7 @@ from tool.utils.ocr_num import (
 )
 from tool.utils.tool import find_latest_modified_file
 from tool.window_recorder import WindowRecorder
+import datetime
 
 
 class IronBloodUniverse(SimulatedUniverse):
@@ -133,7 +134,10 @@ class IronBloodUniverse(SimulatedUniverse):
                 self.kill_count+=1
             os.makedirs("config/backup", exist_ok=True)
             with open(record_file, "a", encoding="utf-8") as file:
-                file.write(f"轮回次数:{self.count}, 击杀数:{self.kill_count}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
+                now_lunhuirizhi = datetime.datetime.now()
+                timestamp_lunhuirizhi = now_lunhuirizhi.strftime("%Y年%m月%d日%H点%M分%S秒")
+                file.write(f"{timestamp_lunhuirizhi}, 轮回次数:{self.count}, 击杀数:{self.kill_count}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
+                # file.write(f"轮回次数:{self.count}, 击杀数:{self.kill_count}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
         except Exception as e:
             CUS_LOGGER.error(f"写入击杀记录文件失败{e}")
         self.run_start_time = time.time()  # 开始下一局计时
@@ -1126,7 +1130,8 @@ class IronBloodUniverse(SimulatedUniverse):
         event_name = self.ts.find_with_box(box=[897, 1023, 500, 540], forward=True, re_screen=False)
         if len(event_name)==0:
             self.save_screen(not_now=True,save_path="/temp/event/")
-            self.stop()
+            # self.stop()
+            CUS_LOGGER.warning("未识别到突发事件文本，可能是战斗变虫群的突发事件，已截图保存")
         try:
             db_file = "config/backup/emergency.db"
             os.makedirs("config/backup", exist_ok=True)
