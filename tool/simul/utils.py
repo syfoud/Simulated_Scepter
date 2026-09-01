@@ -362,6 +362,9 @@ class UniverseUtils:
                         (box[0]+box[1])//2,
                         (box[2]+box[3])//2
                     )
+                if text == "放弃":
+                    time.sleep(0.1)
+                    key_mouse_manager.click(1147, 676)
                 if after_delay:
                     time.sleep(after_delay)
                 return True
@@ -374,6 +377,9 @@ class UniverseUtils:
                         1 - (pt[0][0] + pt[1][0]) / 2 / self.xx,
                         1 - (pt[0][1] + pt[2][1]) / 2 / self.yy
                 )
+            if text == "放弃":
+                time.sleep(0.1)
+                key_mouse_manager.click(1147, 676)
             if after_delay:
                 time.sleep(after_delay)
             return True
