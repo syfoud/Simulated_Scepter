@@ -26,3 +26,6 @@ def get_global_stop_flag() -> bool:
     """获取全局停止标志"""
     global _global_stop_flag
     return _global_stop_flag
+
+# 增加变量“是否在下次进入探索态时使用银狼的秘技”
+SilverWorf_e = 0
