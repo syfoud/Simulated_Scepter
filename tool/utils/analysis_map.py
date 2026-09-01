@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 
 import cv2
@@ -147,6 +148,15 @@ def match_multiple_targets(processed_image, mode=1, threshold=0.5, color_image=N
 
     return results
 
+# 增加函数，用于读取配置文件中的战斗格权重，默认值为1.2
+def get_battle_weight(default=1.2):
+    settings_path = os.path.join(PATHS["root"], "config", "config", "settings.json")
+    try:
+        with open(settings_path, "r", encoding="UTF-8") as f:
+            data = json.load(f)
+        return float(data.get("battle_weight", default))
+    except Exception:
+        return float(default)
 
 def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, max_dy=120.0):
     """构建一个只能向右走（右 / 右上 / 右下）的有向图并返回节点与边。
@@ -163,11 +173,13 @@ def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, m
         start_idx: 选定的起点索引
     """
     # 事件遇战15/41，奖励遇战三只小猪1/6，无视极低概率阮梅与不可重复的超验之境，事件虫群6/9可进战
+    battle_weight = get_battle_weight(1.2)
     weight_map = {
         'event': 0.36, 'wait': 0, 'trade': 0, 'trade2': 0, 'adventure': 0,
-        'reward': 0.16,'reward2': 0.16, 'battle': 1.2, 'elite': 1, 'bugevent': 0.66,
+        'reward': 0.16,'reward2': 0.16, 'battle': battle_weight, 'elite': 1, 'bugevent': 0.66,
         'bugbattle': 1, 'head': 1, 'boss': 1, 'blank': 0
     }
+    CUS_LOGGER.debug(f"当前战斗格权重为：{weight_map['battle']}")
     if not matches:
         return [], {}, None
     nodes = []
