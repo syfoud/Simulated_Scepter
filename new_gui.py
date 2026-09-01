@@ -305,7 +305,7 @@ class MainWindow(QMainWindowLog):
         data["max_run_time"] = int(self.Iron_blood_max_run_input.text())
         data["first_plane"] = int(self.Iron_blood_first_plane_input.text())
         data["second_plane"] = int(self.Iron_blood_second_plane_input.text())
-        data["first_plane_min_weight"] = int(self.Iron_blood_first_plane_min_weight_input.text())
+        data["first_plane_min_weight"] = float(self.Iron_blood_first_plane_min_weight_input.text())
         data["max_interact_time"] = int(self.Iron_blood_interact_time_input.text())
         data["debug"] = self.debug_checkox2.isChecked()
 
