@@ -1230,6 +1230,20 @@ border:none</string>
                 </layout>
                </item>
                <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_battle_weight">
+                 <item>
+                  <widget class="QLabel" name="label_battle_weight">
+                   <property name="text">
+                    <string>战斗格权重（默认1.2）</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="Iron_blood_battle_weight_input"/>
+                 </item>
+                </layout>
+               </item>
+               <item>
                 <layout class="QHBoxLayout" name="horizontalLayout_min_weight">
                  <item>
                   <widget class="QLabel" name="label_min_weight">
