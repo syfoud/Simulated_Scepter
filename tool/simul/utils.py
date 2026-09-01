@@ -60,6 +60,7 @@ from tool.utils.minimap_util import (
 from tool.utils.mminimap import PositionPredict
 from tool.utils.ocr_num import match_skill_numbers_in_region
 from tool.utils.predict import get_text_position, predict
+import tool.GLOBAL as GLOBAL
 
 
 def set_forground():
@@ -1526,6 +1527,13 @@ class UniverseUtils:
         return ans, max_sim
 
     def update_state(self,state):
+        # 进入战斗状态时对变量赋值，准备在下次进入探索态时使用银狼的秘技
+        if state == "battle" and json.load(open(os.path.join(PATHS["root"], "config", "config", "settings.json"), encoding="UTF-8")).get("silver_wolf_lv999_tech", False):
+            GLOBAL.SilverWorf_e = 1
+        # 如果在战斗结束后进入探索态，施放银狼的秘技并清零变量
+        elif state == "run" and GLOBAL.SilverWorf_e == 1:
+            key_mouse_manager.press("e")
+            GLOBAL.SilverWorf_e = 0
         log_emitter.find_path_state_signal.emit(state)
         if self.state is not None and self.state!=state:
             self.last_state=self.state
