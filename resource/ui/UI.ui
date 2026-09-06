@@ -734,7 +734,7 @@ border:none</string>
                <item>
                 <widget class="QPushButton" name="any_fate_btn">
                  <property name="text">
-                  <string>其它寰宇命途演算</string>
+                  <string>一般寰宇命途演算（毁灭原动力）</string>
                  </property>
                 </widget>
                </item>
