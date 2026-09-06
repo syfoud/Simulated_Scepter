@@ -127,6 +127,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.special_interaction_failures = {}
         self.native_special_map_root = None
         self.loaded_map_root = None
+        self.already_switch_2_role = False # 是否已切换为2号位角色
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
     def restart_recording(self):
@@ -189,6 +190,10 @@ class AnyFateUniverse(SimulatedUniverse):
         res,state = self.run_static()
         if self.state=="run":
             CUS_LOGGER.info("那朵微弱的火苗，启程之初便已种进他的心里。")
+            # 如果已切换为2号位角色，则切回1号位角色
+            if self.already_switch_2_role:
+                key_mouse_manager.press("1")
+                self.already_switch_2_role = False
             #检查黄泉
             if not self.quan and self.check("huangquan", 0.0578,0.7083):
                 key_mouse_manager.press("1")
@@ -202,7 +207,10 @@ class AnyFateUniverse(SimulatedUniverse):
                 cm = (start_node.get('orig') or {}).get('corner_marker')
                 if cm and cm.get('name') in ('pig1', 'pig2'):
                     CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
-                    key_mouse_manager.press("2")
+                    # 根据用户设置决定是否遇猪切换2号位角色
+                    if self.opt.get("pig_switch_2_role", False):
+                        key_mouse_manager.press("2")
+                        self.already_switch_2_role = True
                     self.quan = 0
                     self.bai_e = 0
             #上次交互时间
