@@ -1,12 +1,12 @@
 import enum
-import re
 import os
+import re
 import cv2 as cv
 
+from route import PATHS
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
-from route import PATHS
 
 
 class SilverWolfState(enum.IntEnum):
@@ -24,7 +24,7 @@ AREA_KEYWORDS = ("战斗", "精英", "事件", "冒险", "奖励", "休整", "�
 class SilverWolfManager:
     """银狼秘技管理器，封装所有银狼相关逻辑"""
 
-    def __init__(self, parent: 'AnyFateUniverse'):
+    def __init__(self, parent):
         self.parent = parent
         self.state = SilverWolfState.IDLE
 
