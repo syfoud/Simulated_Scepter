@@ -24,7 +24,7 @@ AREA_KEYWORDS = ("战斗", "精英", "事件", "冒险", "奖励", "休整", "�
 class SilverWolfManager:
     """银狼秘技管理器，封装所有银狼相关逻辑"""
 
-    def __init__(self, parent: 'IronBloodUniverse'):
+    def __init__(self, parent: 'AnyFateUniverse'):
         self.parent = parent
         self.state = SilverWolfState.IDLE
 
