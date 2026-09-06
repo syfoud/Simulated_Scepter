@@ -732,6 +732,13 @@ border:none</string>
                 </widget>
                </item>
                <item>
+                <widget class="QPushButton" name="any_fate_btn">
+                 <property name="text">
+                  <string>一般寰宇命途演算（毁灭原动力）</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
                 <widget class="QPushButton" name="finger_snap_btn">
                  <property name="text">
                   <string>弹指一挥（灰度测试）</string>
@@ -1523,6 +1530,41 @@ border:none</string>
                     <item row="20" column="1"><widget class="QLineEdit" name="Finger_snap_record_keep_count_input"/></item>
                     <item row="21" column="0" colspan="2">
                      <widget class="QPushButton" name="Finger_snap_save_btn"><property name="text"><string>保存弹指一挥设置</string></property></widget>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QWidget" name="Any_fate_group">
+                 <layout class="QVBoxLayout" name="verticalLayout_any_fate_group">
+                  <property name="spacing">
+                   <number>5</number>
+                  </property>
+                  <item>
+                   <widget class="Line" name="line_any_fate">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="label_any_fate_header">
+                    <property name="text">
+                     <string>寰宇蝗灾命途演算倾向</string>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignCenter</set>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <layout class="QFormLayout" name="formLayout_any_fate">
+                    <item row="0" column="0"><widget class="QLabel" name="Any_fate_label"><property name="text"><string>命途</string></property></widget></item>
+                    <item row="0" column="1"><widget class="QComboBox" name="Any_fate_combo"/></item>
+                    <item row="1" column="0" colspan="2">
+                     <widget class="QPushButton" name="Any_fate_save_btn"><property name="text"><string>保存寰宇蝗灾命途演算倾向</string></property></widget>
                     </item>
                    </layout>
                   </item>

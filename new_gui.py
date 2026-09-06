@@ -40,6 +40,7 @@ from PyQt5.QtWidgets import (
 )
 
 from align_angle import main as align_angle_main
+from any_fate import AnyFateUniverse
 from currencywar import CurrencyWar
 from diver import DivergentUniverse
 from finger_snap import FingerSnap
@@ -150,6 +151,7 @@ class MainWindow(QMainWindowLog):
         self.run_simul_btn.clicked.connect(self.run_simul)
         self.run_diver_btn.clicked.connect(self.run_diver)
         self.iron_blood_btn.clicked.connect(self.run_iron_blood)
+        self.any_fate_btn.clicked.connect(self.run_any_fate)
         self.finger_snap_btn.clicked.connect(self.run_finger_snap)
         self.currency_war_btn.clicked.connect(self.run_currency_war)
         self.calibrate_btn.clicked.connect(self.calibrate)
@@ -200,6 +202,7 @@ class MainWindow(QMainWindowLog):
         self.config_save_btn.clicked.connect(self.save_config)
         self.Currency_save_btn.clicked.connect(self.save_currency_config)
         self.Iron_blood_save_btn.clicked.connect(self.save_iron_config)
+        self.Any_fate_save_btn.clicked.connect(self.save_any_fate_config)
         self.Finger_snap_save_btn.clicked.connect(self.save_finger_snap_config)
         self.Aboutupdatelock.clicked.connect(self.show_unlock_dialog)
 
@@ -222,6 +225,12 @@ class MainWindow(QMainWindowLog):
         self.Iron_blood_first_plane_min_weight_input.setText(str(data.get("first_plane_min_weight", 6)))
         self.Iron_blood_interact_time_input.setText(str(data.get("max_interact_time", 40)))
         self.debug_checkox2.setChecked(data.get("debug", True))
+
+        # 初始化寰宇蝗灾命途演算倾向配置界面
+        self.Any_fate_combo.addItems([
+            "存护", "记忆", "虚无", "丰饶", "巡猎", "毁灭", "欢愉", "繁育", "智识"
+        ])
+        self.Any_fate_combo.setCurrentText(data.get("any_fate", "巡猎"))
 
         finger_snap = load_finger_snap_settings()
         for field in MC_SETTING_FIELDS:
@@ -579,6 +588,19 @@ class MainWindow(QMainWindowLog):
         except Exception as e:
             QMessageBox.critical(self, "错误", str(e))
 
+    def run_any_fate(self):
+        def task():
+            su = AnyFateUniverse()
+            self.current_task = su
+            su.start()
+
+        try:
+            self.start_task(task)
+        except RuntimeError as r:
+            QMessageBox.warning(self, "警告", str(r))
+        except Exception as e:
+            QMessageBox.critical(self, "错误", str(e))
+
     def run_finger_snap(self):
         can_run = (
             self.opt.get("debug", True)
@@ -686,6 +708,20 @@ class MainWindow(QMainWindowLog):
     def save_iron_config(self):
         self.save_ui_settings()
         QMessageBox.information(self, "提示", "配置已保存")
+    def save_any_fate_config(self):
+        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
+        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        if not os.path.exists(settings_path) and os.path.exists(example_path):
+            shutil.copy2(example_path, settings_path)
+        with EXTRA.FILE_LOCK:
+            with open(settings_path, encoding="UTF-8") as file:
+                data = json.load(file)
+        data["any_fate"] = self.Any_fate_combo.currentText()
+        with EXTRA.FILE_LOCK:
+            with open(settings_path, mode="w", encoding="UTF-8") as file:
+                json.dump(data, file, ensure_ascii=False, indent=4)
+        self.opt = data
+        QMessageBox.information(self, "提示", "寰宇蝗灾命途演算倾向已保存")
     def save_finger_snap_config(self):
         try:
             values = {

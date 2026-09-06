@@ -13,6 +13,7 @@
     "debug": false,
     "max_interact_time": 40,
     "early_stop": false,
+    "any_fate": "巡猎",
     "finger_snap_model": {
         "control_rollouts": 10000,
         "evaluation_rollouts": 10000,

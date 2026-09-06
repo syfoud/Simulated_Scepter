@@ -4,7 +4,7 @@ import time
 
 import yaml
 
-from iron_blood import IronBloodUniverse
+from any_fate import AnyFateUniverse
 from tool.countdown_config import (
     EARLY_STOP_FIELDS, MC_SETTING_FIELDS, load_finger_snap_settings,
 )
@@ -26,6 +26,8 @@ from tool.countdown_evaluator import (
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
+from tool.simul.config import config
+from tool.simul.text_key import text_keys
 from tool.utils.analysis_map import (
     build_rightward_graph2,
     compute_start_point_from_crop,
@@ -44,9 +46,12 @@ from tool.utils.ocr_num import (
 )
 
 
-class FingerSnap(IronBloodUniverse):
+class FingerSnap(AnyFateUniverse):
     def __init__(self):
         super().__init__()
+        self.fate = "丰饶"
+        self.my_fate = config.fates.index(self.fate)
+        self.tk = text_keys(self.my_fate)
         self.countdown=15
         model_settings = load_finger_snap_settings()
         mode = model_settings["decision_mode"]
@@ -62,7 +67,7 @@ class FingerSnap(IronBloodUniverse):
         self._pending_cheat_effect = None
         self._target_decided = False
         CUS_LOGGER.info("令她感伤的是，永恒的生命没能让她积累无穷的智慧，反倒是那些曾被她视作珍瑰的事物，开始变得模糊，一去不返。。。")
-        config_file = "config/config/event_info2.yml"
+        config_file = "config/config/event_info3.yml"
         example_file = "config/config/info_example.yml"
         if not os.path.exists(config_file) and os.path.exists(example_file):
             shutil.copy2(example_file, config_file)
