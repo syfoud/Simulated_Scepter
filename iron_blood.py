@@ -109,6 +109,7 @@ class IronBloodUniverse(SimulatedUniverse):
         self.node_count=0
         self.fail_match_count = 0
         self.ruanmei2 = False  # 本轮是否遭遇过「阮·梅（其二）」
+        self.chaoyan_seen = False  # 本轮是否进过「超验之镜」（不可重复）
         self.special_interaction_failures = {}
         self.native_special_map_root = None
         self.loaded_map_root = None
@@ -125,6 +126,7 @@ class IronBloodUniverse(SimulatedUniverse):
         self.kill_count = 0
         self.fail_match_count=0
         self.node_count=0
+        self.chaoyan_seen = False  # 新轮回重置「超验之镜」已进过标记
     def end_of_university(self):
         super().end_of_university()
         elapsed = int(time.time() - self.run_start_time)
@@ -688,11 +690,13 @@ class IronBloodUniverse(SimulatedUniverse):
         if mode == 3:
             self.nodes, self.edges, start_idx = build_rightward_graph(
                 matches, start=start,
-                max_gap=110, max_overlap=50, max_dy=130
+                max_gap=110, max_overlap=50, max_dy=130,
+                plane=self.plane_floor, chaoyan_seen=self.chaoyan_seen
             )
         else:
             self.nodes, self.edges, start_idx = build_rightward_graph(
-                matches, start=start
+                matches, start=start,
+                plane=self.plane_floor, chaoyan_seen=self.chaoyan_seen
             )
         CUS_LOGGER.debug('构建图后的节点 (索引，类型，相似度，中心 x, 中心 y):')
         for n in self.nodes:
@@ -1103,6 +1107,8 @@ class IronBloodUniverse(SimulatedUniverse):
             event_name = self.ts.find_with_box(box=[185, 750, 953, 1008], forward=True, re_screen=False)
             if any(isinstance(ev, dict) and "阮·梅" in ev.get("raw_text", "") and "其二" in ev.get("raw_text", "") for ev in event_name):
                 self.ruanmei2 = True#本轮遭遇「阮·梅（其二）」，本轮视频将保留
+            if any(isinstance(ev, dict) and "超验" in ev.get("raw_text", "") for ev in event_name):
+                self.chaoyan_seen = True#本轮进过「超验之镜」（事件/奖励共用，不可重复），后续遇战权重降级
             if self.area!="" and self.area!="休整" and len(event_name)!=0:
                 try:
                     db_file = "config/backup/node_log.db"

@@ -148,7 +148,8 @@ def match_multiple_targets(processed_image, mode=1, threshold=0.5, color_image=N
     return results
 
 
-def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, max_dy=120.0):
+def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, max_dy=120.0,
+                          plane=1, chaoyan_seen=False):
     """构建一个只能向右走（右 / 右上 / 右下）的有向图并返回节点与边。
 
     Args:
@@ -157,15 +158,28 @@ def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, m
         max_gap: 最大允许的水平空隙（像素）
         max_overlap: 最大允许的水平重叠（像素）
         max_dy: 最大允许的垂直偏移（像素）
+        plane: 当前位面(1/2/3)，事件遇战概率随位面不同
+        chaoyan_seen: 本轮是否已进过「超验之镜」（事件/奖励共用、不可重复），影响事件与奖励遇战权重
     Returns:
         nodes: 节点字典列表，包含键：idx,name,cx,cy,w,h,weight,orig
         edges: 字典 idx -> 子节点 idx 列表
         start_idx: 选定的起点索引
     """
-    # 事件遇战15/41，奖励遇战三只小猪1/6，无视极低概率阮梅与不可重复的超验之境，事件虫群6/9可进战
+    # 遇战(入战)概率按位面区分，来源于节点日志频率加权统计：
+    #   事件：位面1 33.17%->0.33，位面2 36.81%->0.37（位面3无事件节点，沿用0.36兜底）
+    #     「天才俱乐部#55余清涂」进战率仅为其出现概率的一半，已按 ×0.5 计入；
+    #     「超验之镜」事件版与奖励版共用、首次后失效，已进过则事件侧扣除其进战贡献
+    #     （位面1 0.33->0.31，位面2 0.37->0.34）。
+    #   事件虫群：每卫戌等级固定「2战斗+1非战斗」，进战率恒为 2/3≈0.66，不随位面变化。
+    # 奖励遇战概率：超验之镜未进过时「三只小猪+超验之镜」均可入战(约0.4)，
+    #   已进过则超验之镜不可重复、仅三只小猪可入战(约0.2)。
+    event_weight = ({1: 0.31, 2: 0.34, 3: 0.36} if chaoyan_seen
+                    else {1: 0.33, 2: 0.36, 3: 0.36}).get(plane, 0.36)
+    reward_weight = 0.2 if chaoyan_seen else 0.4
     weight_map = {
-        'event': 0.36, 'wait': 0, 'trade': 0, 'trade2': 0, 'adventure': 0,
-        'reward': 0.16,'reward2': 0.16, 'battle': 1.2, 'elite': 1, 'bugevent': 0.66,
+        'event': event_weight, 'wait': 0, 'trade': 0, 'trade2': 0, 'adventure': 0,
+        'reward': reward_weight, 'reward2': reward_weight, 'battle': 1.2, 'elite': 1,
+        'bugevent': 0.66,
         'bugbattle': 1, 'head': 1, 'boss': 1, 'blank': 0
     }
     if not matches:
