@@ -33,7 +33,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
 
     @patch("currency.find_image_by_name", return_value="image")
     @patch("currency.time.time", return_value=100)
-    def test_dispatch_preserves_result_order_and_history(self, _time, _image):
+    def test_dispatch_contract(self, _time, _image):
         for trigger in self.triggers:
             for last_result in (None, 0, 1):
                 with self.subTest(trigger=trigger, last_result=last_result):
@@ -75,7 +75,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
 
     @patch("currency.find_image_by_name", return_value="image")
     @patch("currency.time.time", return_value=100)
-    def test_cooldown_does_not_execute_or_record_again(self, _time, _image):
+    def test_cooldown_noop(self, _time, _image):
         for trigger in self.triggers:
             with self.subTest(trigger=trigger):
                 currency = self.make_currency({**trigger, "interval": 10})
@@ -90,7 +90,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
                 self.assertEqual(currency.action_time, 95)
 
     @patch("currency.find_image_by_name", return_value="image")
-    def test_unmatched_trigger_or_state_does_not_run(self, _image):
+    def test_unmatched_trigger(self, _image):
         for trigger in self.triggers:
             for wrong_state in (False, True):
                 with self.subTest(trigger=trigger, wrong_state=wrong_state):
@@ -108,7 +108,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
                     currency._on_static_action_completed.assert_not_called()
                     self.assertEqual(currency.action_history, [])
 
-    def test_group_filter_and_first_match_are_preserved(self):
+    def test_group_filter(self):
         currency = self.make_currency(self.triggers[0])
         currency.default_json["selected"] = [
             {"name": "selected", "trigger": self.triggers[0], "actions": ["selected"]},
@@ -120,7 +120,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         currency.do_action.assert_called_once_with("selected")
         currency._on_static_action_completed.assert_called_once_with("selected")
 
-    def test_failed_action_does_not_record_completion(self):
+    def test_failed_action(self):
         currency = self.make_currency(self.triggers[0])
         currency.do_action.side_effect = RuntimeError("input failed")
 

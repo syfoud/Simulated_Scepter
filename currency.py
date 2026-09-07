@@ -565,12 +565,18 @@ class SimulatedCurrency(CurrencyUtils):
                     continue
 
                 name = action["name"]
-                CUS_LOGGER.info(f"{factor}触发并执行指令{name},条件：{trigger.get('text') or trigger['photo']}")
+                CUS_LOGGER.debug(
+                    "%s触发并执行指令%s，条件：%s",
+                    factor, name, trigger.get("text") or trigger["photo"],
+                )
                 interval = trigger.get("interval")
                 if interval and self.action_history and self.action_history[-1] == name:
                     elapsed = time.time() - self.action_time
                     if elapsed < interval:
-                        CUS_LOGGER.warning(f"触发时间限制，距离上次触发{elapsed}秒，默认配置间隔为{interval}")
+                        CUS_LOGGER.debug(
+                            "触发时间限制，距离上次触发%s秒，默认配置间隔为%s",
+                            elapsed, interval,
+                        )
                         return name, 1
 
                 result = None
@@ -581,7 +587,9 @@ class SimulatedCurrency(CurrencyUtils):
                 self.action_history = self.action_history[-10:]
                 self.action_time = time.time()
                 # 文字触发返回命中标志，图片触发保留最后一个动作的结果。
-                return name, 1 if text_trigger else (0 if result is None else result)
+                if text_trigger:
+                    return name, 1
+                return name, 0 if result is None else result
         return "", 0
 
     def _on_static_action_completed(self, action_name: str) -> None:
