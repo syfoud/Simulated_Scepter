@@ -828,7 +828,8 @@ class AnyFateUniverse(SimulatedUniverse):
         text = merge_text(text) if len(text) else ""
         CUS_LOGGER.debug(f"当前效果{text}")
         # 无命途专属效果可处理，放弃
-        self.click_text(text="放弃", box=[1221, 1276, 967, 998])
+        if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
+            key_mouse_manager.click(1147, 676) # 点击“确认”
         if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996], click=False, allow_fail=True):
             CUS_LOGGER.info("是带着无法被改变的过往，背负它走向未来的决心。")
             return
