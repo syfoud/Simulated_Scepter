@@ -515,23 +515,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.update_state ("startbattle")
         return 1
 
-    def run_static (self, json_path = None, json_file = None, action_list = []) -> (str, int):
-        """
-        执行静态动作配置文件中的动作
-
-        根据提供的JSON配置文件或路径，查找并执行匹配的动作。
-        支持基于文本或图像的触发条件，一旦匹配成功即执行相应动作序列。
-
-        参数:
-            json_path: JSON配置文件路径，如果提供则加载该文件
-            json_file: 已加载的JSON配置对象，优先级高于json_path
-            action_list: 指定要执行的动作列表，为空则执行所有动作
-
-        返回值:
-            tuple: (触发的动作名称, 执行结果)
-                  - 触发的动作名称：空字符串表示未触发任何动作
-                  - 执行结果：0表示未触发，1表示触发成功，其他值表示部分成功
-        """
+    def run_static(self, json_path=None, json_file=None, action_list=None) -> tuple[str, int]:
+        """执行首个匹配的动作组，返回动作名和执行结果。"""
         if json_file is None:
             if json_path is None:
                 json_file = self.default_json
@@ -548,72 +533,56 @@ class SimulatedCurrency(CurrencyUtils):
                 self.update_state ("black")
         if np.mean (self.get_screen ()) > 12 and self.state == "black":
             self.update_state (self.last_state)
-        for j in action_list if len (action_list) else json_file:
-            for i in json_file[j]:
-                trigger = i["trigger"]
-                condition = trigger.get("condition", None)
-                #获取指定范围的文字
-                if trigger.get("text", None):
+        for group in action_list or json_file:
+            for action in json_file[group]:
+                trigger = action["trigger"]
+                condition = trigger.get("condition")
+                text_trigger = bool(trigger.get("text"))
+                if text_trigger:
                     text = self.ts.find_with_box(trigger["box"], redundancy=trigger.get("redundancy", 30))
-                    #强制跳过或者检查是否存在子串
-                    if (condition==self.state if condition is not None else True) and (len(text) and trigger["text"] in merge_text(text)):
-                        CUS_LOGGER.info(f"{factor}触发并执行指令{i['name']},条件：{trigger['text']}")
-                        if trigger.get("interval", None) and len(self.action_history) and self.action_history[-1] == i['name']:
-                            tm=time.time()-self.action_time
-                            if tm<trigger["interval"]:
-                                CUS_LOGGER.warning(f"触发时间限制，距离上次触发{tm}秒，默认配置间隔为{trigger["interval"]}")
-                                return i['name'], 1
-                        for j in i["actions"]:
-                            self.do_action(j)
-                        self._on_static_action_completed(i["name"])
-                        self.action_history.append(i["name"])
-                        #记录最近10个动作
-                        self.action_history = self.action_history[-10:]
-                        self.action_time=time.time()
-                        #返回触发的名字
-                        return i['name'],1
-                elif trigger.get("photo", None):
-                    resu=0
-                    if condition==self.state if condition is not None else True:
-                        if "pos" in trigger:
-                            if self.check(trigger["photo"], trigger["pos"]["x"], trigger["pos"]["y"], mask=trigger.get("mask", None), threshold=trigger.get("threshold", None),use_binary=trigger.get("binary", False)):
-                                CUS_LOGGER.info(f"{factor}触发并执行图像记忆切片指令,{i['name']}条件：{trigger['photo']}")
-                                if trigger.get("interval", None) and len(self.action_history) and self.action_history[
-                                    -1] == i['name']:
-                                    tm = time.time() - self.action_time
-                                    if tm < trigger["interval"]:
-                                        CUS_LOGGER.warning(f"触发时间限制，距离上次触发{tm}秒，默认配置间隔为{trigger["interval"]}")
-                                        return i['name'], 1
-                                for j in i["actions"]:
-                                    re=self.do_action(j)
-                                resu=re if re is not None else resu
-                                self._on_static_action_completed(i["name"])
-                                self.action_history.append(i["name"])
-                                #记录最近10个动作
-                                self.action_history = self.action_history[-10:]
-                                self.action_time = time.time()
-                                #返回触发的名字
-                                return i['name'],resu
-                        else:
-                            if self.click_target(find_image_by_name(trigger["photo"]), threshold=trigger.get("threshold", 0.9), flag=False,click=False):
-                                CUS_LOGGER.info(f"{factor}触发并执行世界全局图像记忆切片指令, {i['name']}条件:{trigger['photo']}")
-                                if trigger.get("interval", None) and len(self.action_history) and self.action_history[
-                                    -1] == i['name']:
-                                    tm = time.time() - self.action_time
-                                    if tm < trigger["interval"]:
-                                        CUS_LOGGER.warning( f"触发时间限制，距离上次触发{tm}秒，默认配置间隔为{trigger["interval"]}")
-                                        return i['name'], 1
-                                for j in i["actions"]:
-                                    re=self.do_action(j)
-                                resu=re if re is not None else resu
-                                self._on_static_action_completed(i["name"])
-                                self.action_history.append(i["name"])
-                                #记录最近10个动作
-                                self.action_history = self.action_history[-10:]
-                                self.action_time = time.time()
-                                #返回触发的名字
-                                return i['name'],resu
-        return '',0
+                    matched = (
+                        (condition is None or condition == self.state)
+                        and text
+                        and trigger["text"] in merge_text(text)
+                    )
+                elif trigger.get("photo"):
+                    if condition is not None and condition != self.state:
+                        continue
+                    if "pos" in trigger:
+                        matched = self.check(
+                            trigger["photo"], trigger["pos"]["x"], trigger["pos"]["y"],
+                            mask=trigger.get("mask"), threshold=trigger.get("threshold"),
+                            use_binary=trigger.get("binary", False),
+                        )
+                    else:
+                        matched = self.click_target(
+                            find_image_by_name(trigger["photo"]),
+                            threshold=trigger.get("threshold", 0.9), flag=False, click=False,
+                        )
+                else:
+                    continue
+                if not matched:
+                    continue
+
+                name = action["name"]
+                CUS_LOGGER.info(f"{factor}触发并执行指令{name},条件：{trigger.get('text') or trigger['photo']}")
+                interval = trigger.get("interval")
+                if interval and self.action_history and self.action_history[-1] == name:
+                    elapsed = time.time() - self.action_time
+                    if elapsed < interval:
+                        CUS_LOGGER.warning(f"触发时间限制，距离上次触发{elapsed}秒，默认配置间隔为{interval}")
+                        return name, 1
+
+                result = None
+                for step in action["actions"]:
+                    result = self.do_action(step)
+                self._on_static_action_completed(name)
+                self.action_history.append(name)
+                self.action_history = self.action_history[-10:]
+                self.action_time = time.time()
+                # 文字触发返回命中标志，图片触发保留最后一个动作的结果。
+                return name, 1 if text_trigger else (0 if result is None else result)
+        return "", 0
 
     def _on_static_action_completed(self, action_name: str) -> None:
         if action_name == RUN_START_ACTION:
