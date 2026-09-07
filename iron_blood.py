@@ -170,7 +170,8 @@ class IronBloodUniverse(AnyFateUniverse):
                 self.click_text(text="确认目标", box=[1635, 1735, 968, 996])
             else:
                 CUS_LOGGER.info("所以你才变成了这副模样：残缺的神像…悲哀的薪柴。")
-                self.click_text(text="放弃", box=[1221, 1276, 967, 998])
+                if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
+                    key_mouse_manager.click(1147, 676) # 点击“确认”
         elif "战争" in text:
             try:
                 self.try_analysis_map(mode=2)
@@ -196,10 +197,12 @@ class IronBloodUniverse(AnyFateUniverse):
             else:
                 #战争崇拜无猪可改，放弃
                 CUS_LOGGER.info("「放心，我会替你照顾。」")
-                self.click_text(text="放弃", box=[1221, 1276, 967, 998])
+                if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
+                    key_mouse_manager.click(1147, 676) # 点击“确认”
         elif "毁灭" in text:
             #其它节点一律放弃
-            self.click_text(text="放弃", box=[1221, 1276, 967, 998])
+            if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
+                key_mouse_manager.click(1147, 676) # 点击“确认”
 
     def select_go(self):
         num = extract_number(match_numbers_in_region(self.screen))
