@@ -1272,6 +1272,13 @@ border:none</string>
                   </widget>
                  </item>
                  <item>
+                  <widget class="QCheckBox" name="pig_switch_2_role">
+                   <property name="text">
+                    <string>遇到祝福扑满临时切换2号位角色</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
                   <widget class="QPushButton" name="Aboutupdatelock">
                    <property name="text">
                     <string>关于高级用户功能解锁</string>

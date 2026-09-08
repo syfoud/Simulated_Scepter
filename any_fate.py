@@ -127,6 +127,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.special_interaction_failures = {}
         self.native_special_map_root = None
         self.loaded_map_root = None
+        self.current_role = 1  # 当前控制角色序号
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
     def restart_recording(self):
@@ -189,7 +190,11 @@ class AnyFateUniverse(SimulatedUniverse):
         res,state = self.run_static()
         if self.state=="run":
             CUS_LOGGER.info("那朵微弱的火苗，启程之初便已种进他的心里。")
-            #检查黄泉
+            # 如果当前不是1号位角色，则切回1号位角色
+            if self.current_role != 1:
+                key_mouse_manager.press("1")
+                self.current_role = 1
+            # 检查黄泉、白厄、银狼
             if not self.quan and self.check("huangquan", 0.0578,0.7083):
                 self.quan = 1
             elif not self.bai_e and self.check("bai_e", 0.0625,0.7092):
