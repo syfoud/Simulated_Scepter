@@ -191,10 +191,8 @@ class AnyFateUniverse(SimulatedUniverse):
             CUS_LOGGER.info("那朵微弱的火苗，启程之初便已种进他的心里。")
             #检查黄泉
             if not self.quan and self.check("huangquan", 0.0578,0.7083):
-                key_mouse_manager.press("1")
                 self.quan = 1
-            if not self.bai_e and self.check("bai_e", 0.0625,0.7092):
-                key_mouse_manager.press("1")
+            elif not self.bai_e and self.check("bai_e", 0.0625,0.7092):
                 self.bai_e = 1
             elif not self.silverwolf and self.check("silverwolf", 0.0609,0.7037):
                 key_mouse_manager.press('e')
@@ -205,9 +203,12 @@ class AnyFateUniverse(SimulatedUniverse):
                 cm = (start_node.get('orig') or {}).get('corner_marker')
                 if cm and cm.get('name') in ('pig1', 'pig2'):
                     CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
-                    key_mouse_manager.press("2")
-                    self.quan = 0
-                    self.bai_e = 0
+                    # 根据用户设置决定是否遇猪切换2号位角色
+                    if self.opt.get("pig_switch_2_role", False):
+                        key_mouse_manager.press("2")
+                        self.current_role = 2
+                        self.quan = 0
+                        self.bai_e = 0
                         self.silverwolf = 0
             #上次交互时间
             self.last_interact_time = bk_lst_changed
