@@ -196,6 +196,9 @@ class AnyFateUniverse(SimulatedUniverse):
             if not self.bai_e and self.check("bai_e", 0.0625,0.7092):
                 key_mouse_manager.press("1")
                 self.bai_e = 1
+            elif not self.silverwolf and self.check("silverwolf", 0.0609,0.7037):
+                key_mouse_manager.press('e')
+                self.silverwolf = 2
             # 当前节点为祝福猪节点时切2号位并重置黄泉/白厄状态
             start_node = getattr(self, 'start_nodes', None)
             if start_node is not None:
@@ -205,6 +208,7 @@ class AnyFateUniverse(SimulatedUniverse):
                     key_mouse_manager.press("2")
                     self.quan = 0
                     self.bai_e = 0
+                        self.silverwolf = 0
             #上次交互时间
             self.last_interact_time = bk_lst_changed
             # 刚进图，初始化一些数据
@@ -752,6 +756,9 @@ class AnyFateUniverse(SimulatedUniverse):
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count=0
+        # 进入位面时如果不立即重开，则准备使用银狼的秘技
+        if not self.need_end:
+            self.silverwolf = 3
         key_mouse_manager.wait()
         return
 
