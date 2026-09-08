@@ -87,7 +87,7 @@ class DivergentUniverse(UniverseUtils):
         self.da_hei_ta_effecting = False # 秘技生效中,进战清除
 
         self.bai_e = 0  # 是否启用白厄
-
+        self.silverwolf = 0  # 歪比巴卜：是否启用银狼
         self.event_text = ''
 
         self.long_range = '1' # 默认角色 选用1号位
