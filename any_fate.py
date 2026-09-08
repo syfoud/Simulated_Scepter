@@ -183,11 +183,14 @@ class AnyFateUniverse(SimulatedUniverse):
             except Exception as e:
                 CUS_LOGGER.error(f"写入任意命途计数失败 {e}")
 
-    # 如果当前不是1号位角色，则切回1号位角色
-    def current_role_to_1(self):
-        if self.current_role != 1:
-            key_mouse_manager.press("1")
-            self.current_role = 1
+    # 切换指定位置的角色
+    def current_role(self, num):
+        if self.current_role != num:
+            key_mouse_manager.press(f"{num}")
+            self.current_role = num
+            return True
+        else:
+            return False
     
     def normal(self):
         bk_lst_changed = self.last_interact_time
@@ -214,9 +217,9 @@ class AnyFateUniverse(SimulatedUniverse):
                         self.quan = 0
                         self.bai_e = 0
                 else:
-                    self.current_role_to_1()
+                    self.current_role(num=1)
             else:
-                self.current_role_to_1()
+                self.current_role(num=1)
             #上次交互时间
             self.last_interact_time = bk_lst_changed
             # 刚进图，初始化一些数据
