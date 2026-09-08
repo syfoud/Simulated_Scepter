@@ -212,8 +212,7 @@ class AnyFateUniverse(SimulatedUniverse):
                     CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
                     # 根据用户设置决定是否遇猪切换2号位角色
                     if self.opt.get("pig_switch_2_role", False):
-                        key_mouse_manager.press("2")
-                        self.current_role = 2
+                        self.current_role(num=2)
                         self.quan = 0
                         self.bai_e = 0
                 else:
