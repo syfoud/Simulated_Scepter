@@ -1272,6 +1272,13 @@ border:none</string>
                   </widget>
                  </item>
                  <item>
+                  <widget class="QCheckBox" name="pig_switch_2_role">
+                   <property name="text">
+                    <string>遇到祝福扑满临时切换2号位角色</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
                   <widget class="QPushButton" name="Aboutupdatelock">
                    <property name="text">
                     <string>关于高级用户功能解锁</string>
@@ -1354,6 +1361,20 @@ border:none</string>
                  </item>
                  <item>
                   <widget class="QLineEdit" name="Iron_blood_first_plane_min_weight_input"/>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_third_plane_pause">
+                 <item>
+                  <widget class="QLabel" name="label_third_plane_pause">
+                   <property name="text">
+                    <string>进入第三面时暂停 至少需求数（默认0不启用）</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="Iron_blood_third_plane_pause_input"/>
                  </item>
                 </layout>
                </item>

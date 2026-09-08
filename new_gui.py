@@ -217,12 +217,14 @@ class MainWindow(QMainWindowLog):
         self.recording_checkBox2.setChecked(data.get("recording_iron_blood", True))
         self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
         self.early_stop_checkbox.setChecked(data.get("early_stop", False))
+        self.pig_switch_2_role.setChecked(data.get("pig_switch_2_role", False))
         self.recording_time_input.setText(str(data.get("del_record_time", 31)))
         self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
         self.Iron_blood_max_run_input.setText(str(int(data.get("max_run_time", 0))))
         self.Iron_blood_first_plane_input.setText(str(data.get("first_plane", 14)))
         self.Iron_blood_second_plane_input.setText(str(data.get("second_plane", 31)))
         self.Iron_blood_first_plane_min_weight_input.setText(str(data.get("first_plane_min_weight", 6)))
+        self.Iron_blood_third_plane_pause_input.setText(str(data.get("third_plane_pause_count", 0)))
         self.Iron_blood_interact_time_input.setText(str(data.get("max_interact_time", 40)))
         self.debug_checkox2.setChecked(data.get("debug", True))
 
@@ -324,12 +326,14 @@ class MainWindow(QMainWindowLog):
         data["recording_iron_blood"] = self.recording_checkBox2.isChecked()
         data["record_add_label"] = self.recording_label_checkbox.isChecked()
         data["early_stop"] = self.early_stop_checkbox.isChecked()
+        data["pig_switch_2_role"] = self.pig_switch_2_role.isChecked()
         data["del_record_time"] = int(self.recording_time_input.text())
         data["record_event_map"] = self.record_event_map_checkbox.isChecked()
         data["max_run_time"] = int(self.Iron_blood_max_run_input.text())
         data["first_plane"] = int(self.Iron_blood_first_plane_input.text())
         data["second_plane"] = int(self.Iron_blood_second_plane_input.text())
         data["first_plane_min_weight"] = float(self.Iron_blood_first_plane_min_weight_input.text())
+        data["third_plane_pause_count"] = int(self.Iron_blood_third_plane_pause_input.text())
         data["max_interact_time"] = int(self.Iron_blood_interact_time_input.text())
         data["debug"] = self.debug_checkox2.isChecked()
 
@@ -440,6 +444,7 @@ class MainWindow(QMainWindowLog):
         self.Iron_blood_first_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_second_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_first_plane_min_weight_input.setEnabled(early_stop_enabled)
+        self.Iron_blood_third_plane_pause_input.setEnabled(early_stop_enabled)
 
     def connect_dependency_signals(self):
         self.debug_checkox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
