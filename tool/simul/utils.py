@@ -124,8 +124,6 @@ class UniverseUtils:
         self.f_time = 0
         self.slow = 0
         self.allow_e = 1
-        self.quan = 0
-        self.bai_e=0
         self.img_map = dict()
         self.should_update_map=True
         self.big_map = None
@@ -141,9 +139,10 @@ class UniverseUtils:
         self.target_loc = None
         #地图集合
         self.img_set = []
-        #是否拥有黄泉
+        #是否拥有黄泉、白厄、银狼
         self.quan = 0
         self.bai_e = 0
+        self.silverwolf = 0 # 银狼定义，0禁用、1准备、2已用、3刚进位面
         self.skill_num=5
         #上次交互时间
         self.quit = 0
@@ -1527,6 +1526,22 @@ class UniverseUtils:
 
     def update_state(self,state):
         log_emitter.find_path_state_signal.emit(state)
+
+        # 进入战斗状态，准备在下次进入探索态时使用银狼的秘技
+        if state == "battle" and self.silverwolf == 2:
+            self.silverwolf = 1
+        # 进入探索态，视情况施放银狼的秘技
+        elif state == "run" :
+            if self.silverwolf == 1:
+                key_mouse_manager.press('e')
+                self.silverwolf = 2
+            elif self.silverwolf == 3: # 刚进入位面，需判断银狼是否在队
+                if self.check("silverwolf", 0.0609, 0.7037):
+                    key_mouse_manager.press('e')
+                    self.silverwolf = 2
+                else:
+                    self.silverwolf = 0
+        
         if self.state is not None and self.state!=state:
             self.last_state=self.state
             self.state = state
