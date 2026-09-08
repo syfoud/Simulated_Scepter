@@ -298,6 +298,8 @@ class FingerSnap(AnyFateUniverse):
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count = 0
+        # 进入位面时，准备使用银狼的秘技
+        self.silverwolf = 3
         key_mouse_manager.wait()
     def try_analysis_map(self, mode=1, target_selection=False):
         # if self.debug:
