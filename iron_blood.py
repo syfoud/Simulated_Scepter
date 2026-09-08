@@ -289,7 +289,7 @@ class IronBloodUniverse(AnyFateUniverse):
                         self.nodes, self.edges, self.start_nodes['idx'], t=0.3 if self.plane_floor == 3 else 0.2)
                     CUS_LOGGER.debug(f"期权最佳代替节点{self.replace_idx},计算替换后最佳路径{best_path}，当前节点{self.start_nodes}")
                     if len(best_path)>1:
-                        if best_path[1]['idx'] == self.replace_idx:
+                        if best_path[1]['idx'] == self.replace_idx or self.plane_floor == 3:
                             CUS_LOGGER.debug(f"期权最佳代替节点{self.replace_idx},替换后最佳路径{best_path}")
                             if cheating:
                                 self.click_text(text="作弊", box=[1261, 1321, 761, 792])
