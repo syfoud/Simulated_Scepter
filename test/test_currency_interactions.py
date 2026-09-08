@@ -29,14 +29,21 @@ class CurrencyInteractionTests(unittest.TestCase):
         self, manager, _sleep
     ):
         currency = self.make_currency()
-        currency.click_text = Mock(return_value=True)
+        currency.click_text = Mock(side_effect=lambda **kwargs: kwargs["text"] == "投资环境")
         currency.recognize_options = Mock(return_value=["", "唯一环境", ""])
 
         self.assertTrue(currency._select_blue_ocean_extra_environment())
 
-        manager.click.assert_called_once_with(957, 394)
-        self.assertEqual(manager.wait.call_count, 2)
-        self.assertEqual(currency.click_text.call_count, 2)
+        self.assertEqual(
+            manager.mock_calls,
+            [call.click(957, 394), call.wait(), call.click(1080, 982), call.wait()],
+        )
+        currency.click_text.assert_called_once_with(
+            text="投资环境",
+            box=currency.ENVIRONMENT_TITLE_BOX,
+            click=False,
+            allow_fail=True,
+        )
 
     @patch("currency.time.sleep")
     @patch("currency.key_mouse_manager")

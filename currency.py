@@ -276,9 +276,7 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.wait()
         time.sleep(0.4)
 
-        if not self._confirm_environment_selection():
-            CUS_LOGGER.warning("投资环境确认按钮未就绪，本轮不推进状态")
-            return 0
+        self._confirm_environment_selection()
 
         if "蓝海" in selected_text and not self._select_blue_ocean_extra_environment():
             CUS_LOGGER.warning("蓝海额外投资环境未完成，本轮不推进状态")
@@ -289,19 +287,11 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info ("投资环境选择完成")
         return 1
 
-    def _confirm_environment_selection(self, max_attempts=5):
-        for attempt in range(max_attempts):
-            if self.click_text(
-                text="确认",
-                box=self.ENVIRONMENT_CONFIRM_BOX,
-                click=True,
-                allow_fail=True,
-            ):
-                key_mouse_manager.wait()
-                return True
-            if attempt + 1 < max_attempts:
-                time.sleep(0.5)
-        return False
+    def _confirm_environment_selection(self):
+        # 普通环境与蓝海额外环境的确认按钮位置相同。
+        box = self.ENVIRONMENT_CONFIRM_BOX
+        key_mouse_manager.click((box[0] + box[1]) // 2, (box[2] + box[3]) // 2)
+        key_mouse_manager.wait()
 
     def _select_blue_ocean_extra_environment(self, max_attempts=6):
         CUS_LOGGER.info("蓝海生效，等待选择唯一的额外投资环境")
@@ -334,9 +324,9 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.click(*centers[selected_idx])
             key_mouse_manager.wait()
             time.sleep(0.4)
-            if self._confirm_environment_selection():
-                CUS_LOGGER.info("蓝海额外投资环境选择完成")
-                return True
+            self._confirm_environment_selection()
+            CUS_LOGGER.info("蓝海额外投资环境选择完成")
+            return True
 
         return False
 

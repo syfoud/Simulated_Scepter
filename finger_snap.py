@@ -150,8 +150,12 @@ class FingerSnap(AnyFateUniverse):
         record_file = "config/backup/countdown.txt"
         try:
             os.makedirs("config/backup", exist_ok=True)
+            start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
+            total_min = elapsed // 60
+            total_sec = elapsed % 60
+            line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒,倒计时:{self.countdown:02d}"
             with open(record_file, "a", encoding="utf-8") as file:
-                file.write(f"轮回次数:{self.count}, 倒计时:{self.countdown}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
+                file.write(line + "\n")
         except Exception as e:
             CUS_LOGGER.error(f"写入倒计时记录文件失败{e}")
         self.run_start_time = time.time()  # 开始下一局计时

@@ -66,10 +66,12 @@ class IronBloodUniverse(AnyFateUniverse):
             if self.plane_floor==3:
                 self.kill_count+=1
             os.makedirs("config/backup", exist_ok=True)
+            start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
+            total_min = elapsed // 60
+            total_sec = elapsed % 60
+            line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒,击杀数:{self.kill_count:02d}"
             with open(record_file, "a", encoding="utf-8") as file:
-                now_lunhuirizhi = datetime.datetime.now()
-                timestamp_lunhuirizhi = now_lunhuirizhi.strftime("%Y年%m月%d日%H点%M分%S秒")
-                file.write(f"{timestamp_lunhuirizhi}, 轮回次数:{self.count}, 击杀数:{self.kill_count:02d}, 用时:{elapsed // 60}分{elapsed % 60}秒\n")
+                file.write(line + "\n")
         except Exception as e:
             CUS_LOGGER.error(f"写入击杀记录文件失败{e}")
         self.run_start_time = time.time()  # 开始下一局计时
