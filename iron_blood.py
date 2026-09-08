@@ -173,6 +173,7 @@ class IronBloodUniverse(AnyFateUniverse):
             else:
                 CUS_LOGGER.info("所以你才变成了这副模样：残缺的神像…悲哀的薪柴。")
                 if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
+                    key_mouse_manager.wait()
                     key_mouse_manager.click(1147, 676) # 点击“确认”
         elif "战争" in text:
             try:
@@ -200,10 +201,12 @@ class IronBloodUniverse(AnyFateUniverse):
                 #战争崇拜无猪可改，放弃
                 CUS_LOGGER.info("「放心，我会替你照顾。」")
                 if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
+                    key_mouse_manager.wait()
                     key_mouse_manager.click(1147, 676) # 点击“确认”
         elif "毁灭" in text:
             #其它节点一律放弃
             if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
+                key_mouse_manager.wait()
                 key_mouse_manager.click(1147, 676) # 点击“确认”
 
     def select_go(self):
