@@ -33,6 +33,7 @@ class IronBloodUniverse(AnyFateUniverse):
         self.first_plane_count = self.opt.get("first_plane", 14)
         self.second_plane_count = self.opt.get("second_plane", 31)
         self.first_plane_min_weight = self.opt.get("first_plane_min_weight", 6)
+        self.third_plane_pause_count = self.opt.get("third_plane_pause_count", 0)
         self.fate = "毁灭"
         self.my_fate = config.fates.index(self.fate)
         self.tk = text_keys(self.my_fate)
@@ -136,6 +137,11 @@ class IronBloodUniverse(AnyFateUniverse):
             self.plane_floor=2
         elif self.click_text(text="消褪",box=[10, 220, 0, 112],click=False,warning=False):
             self.plane_floor=3
+            # 达到第三面暂停需求数时停止程序
+            if self.third_plane_pause_count > 0 and self.third_plane_pause_count <= (self.kill_count+1):
+                CUS_LOGGER.info(f"当前击杀数：{self.kill_count+1}，已达到第三面暂停需求数：{self.third_plane_pause_count}，停止程序")
+                self.stop()
+                return
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return

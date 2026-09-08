@@ -1365,6 +1365,20 @@ border:none</string>
                 </layout>
                </item>
                <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_third_plane_pause">
+                 <item>
+                  <widget class="QLabel" name="label_third_plane_pause">
+                   <property name="text">
+                    <string>进入第三面时暂停 至少需求数（默认0不启用）</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="Iron_blood_third_plane_pause_input"/>
+                 </item>
+                </layout>
+               </item>
+               <item>
                 <layout class="QHBoxLayout" name="horizontalLayout_interact_time">
                  <item>
                   <widget class="QLabel" name="label_interact_time">
