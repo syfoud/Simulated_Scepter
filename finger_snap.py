@@ -199,9 +199,7 @@ class FingerSnap(AnyFateUniverse):
             advice = self.countdown_agent.recommend_target()
             if advice is None:
                 CUS_LOGGER.debug("慈怀已无可感染节点，放弃本次目标选择。")
-                if self.click_text(text="放弃", box=[1221, 1276, 967, 998]):
-                    key_mouse_manager.wait()
-                    key_mouse_manager.click(1147, 676) # 点击“确认”
+                self.abandon_confirm(confirm=True)
                 # 若放弃点击没有生效，下次触发仍应重新识图，不永久锁死。
                 self._target_decided = False
                 return
@@ -532,9 +530,7 @@ class FingerSnap(AnyFateUniverse):
             if advice.context.phase == PHASE_EFFECT:
                 self.click_text(text="确认效果", box=[1584, 1687, 961, 994], allow_fail=True)
             elif advice.context.phase == PHASE_TARGET:
-                if self.click_text(text="放弃", box=[1221, 1276, 967, 998], allow_fail=True):
-                    key_mouse_manager.wait()
-                    key_mouse_manager.click(1147, 676) # 点击“确认”
+                self.abandon_confirm(confirm=True, allow_fail=True)
             else:
                 return False
             key_mouse_manager.wait()
