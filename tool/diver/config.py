@@ -81,6 +81,7 @@ class Config:
 
             elif i in ['1', '2', '3', '4']:
                 self.skill_char.append(i)
+        self.skill_char.append("银狼LV.999") # 增加银狼名字
         CUS_LOGGER.info(f"载入特殊秘技计算因子:{self.skill_char}")
 
 
