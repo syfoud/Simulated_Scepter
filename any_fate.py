@@ -218,7 +218,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 # 根据图像识别结果，判断是否施放银狼秘技
                 if self.current_role == 1 and self.check("silverwolf", 0.0609,0.7037) and (not self.check("bean", 0.1536,0.7056)):
                     key_mouse_manager.press('e')
-                    CUS_LOGGER.info("已施放银狼秘技")
+                    CUS_LOGGER.debug("已施放银狼秘技")
                 ocr_text = self.ts.find_with_box(box=[55, 164, 12, 40],forward=True,re_screen=False)
                 self.area=merge_text(ocr_text) if len(ocr_text) else ""
                 CUS_LOGGER.debug(f"当前区域{self.area}")
