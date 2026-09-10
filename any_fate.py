@@ -183,6 +183,15 @@ class AnyFateUniverse(SimulatedUniverse):
             except Exception as e:
                 CUS_LOGGER.error(f"写入任意命途计数失败 {e}")
 
+    # 切换指定位置的角色
+    def switch_current_role(self, num):
+        if self.current_role != num:
+            key_mouse_manager.press(f"{num}")
+            self.current_role = num
+            return True
+        else:
+            return False
+    
     def normal(self):
         bk_lst_changed = self.last_interact_time
         self.last_interact_time = time.time()
@@ -190,10 +199,6 @@ class AnyFateUniverse(SimulatedUniverse):
         res,state = self.run_static()
         if self.state=="run":
             CUS_LOGGER.info("那朵微弱的火苗，启程之初便已种进他的心里。")
-            # 如果当前不是1号位角色，则切回1号位角色
-            if self.current_role != 1:
-                key_mouse_manager.press("1")
-                self.current_role = 1
             # 检查黄泉和白厄
             if not self.quan and self.check("huangquan", 0.0578,0.7083):
                 self.quan = 1
@@ -207,10 +212,13 @@ class AnyFateUniverse(SimulatedUniverse):
                     CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
                     # 根据用户设置决定是否遇猪切换2号位角色
                     if self.opt.get("pig_switch_2_role", False):
-                        key_mouse_manager.press("2")
-                        self.current_role = 2
+                        self.switch_current_role(num=2)
                         self.quan = 0
                         self.bai_e = 0
+                else:
+                    self.switch_current_role(num=1)
+            else:
+                self.switch_current_role(num=1)
             #上次交互时间
             self.last_interact_time = bk_lst_changed
             # 刚进图，初始化一些数据
