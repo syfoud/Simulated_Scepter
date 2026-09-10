@@ -1086,18 +1086,35 @@ class AnyFateUniverse(SimulatedUniverse):
 
     # 放弃骰子效果
     def abandon_confirm(self, confirm=False, allow_fail=False):
-        if self.click_text(text="放弃", box=[1221, 1276, 967, 998], allow_fail=allow_fail):
-            if confirm:
-                key_mouse_manager.wait()
-                appeared = self.wait_flag(
-                    lambda: not self.click_text(
-                        text="确认",
-                        box=[1158, 1220, 650, 690],
-                        click=False,
-                        warning=False,
-                        allow_fail=True,
-                    ),
-                    timeout=1.2,
-                )
-                if appeared:
-                    key_mouse_manager.click(1147, 676)
+        # 停止后不再向键鼠队列加入任何新操作。
+        if self._stop:
+            return False
+        if not self.click_text(
+            text="放弃",
+            box=[1221, 1276, 967, 998],
+            allow_fail=allow_fail,
+        ):
+            return False
+        if not confirm:
+            return True
+        # 确保“放弃”已实际点击，再开始等待确认弹窗的视觉证据。
+        key_mouse_manager.wait()
+        if self._stop:
+            return False
+        appeared = self.wait_flag(
+            lambda: not self.click_text(
+                text="确认",
+                box=[1158, 1220, 650, 690],
+                click=False,
+                warning=False,
+                allow_fail=True,
+            ),
+            timeout=1.2,
+        )
+        # 超时、停止或未出现确认弹窗时，均不点击固定坐标
+        if self._stop or not appeared:
+            return False
+        key_mouse_manager.click(1147, 676)
+        # 此方法的调用点存在后续识图，统一在这里建立同步边界
+        key_mouse_manager.wait()
+        return True
