@@ -261,7 +261,7 @@ class IronBloodUniverse(AnyFateUniverse):
                     CUS_LOGGER.debug(f"当前极限值{self.kill_count + self.max_limited}无法达到第二位面推荐值{self.second_plane_count},终止本次演算")
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
-            self.new_node=True
+        self.new_node=True
 
     def calculated_roll(self):
         if self.nodes is None or self.plane_floor==-1:
@@ -298,5 +298,5 @@ class IronBloodUniverse(AnyFateUniverse):
                                 self.click_text(text="重投", box=[1599, 1657, 760, 795])
                                 return
         self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
-        self.init_map(self.new_node)
+        self.init_map()
         self.mini_state = 1

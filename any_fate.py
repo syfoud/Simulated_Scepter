@@ -920,16 +920,17 @@ class AnyFateUniverse(SimulatedUniverse):
         if not self.check("fast_roll", 0.1281,0.9074, threshold=0.9):
             self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
         self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
-        self.init_map(self.new_node)
+        self.init_map()
         self.mini_state = 1
 
-    def init_map(self,add=False):
+    def init_map(self):
         super().init_map()
         self.special_interaction_failures.clear()
         self.native_special_map_root = None
         self.loaded_map_root = None
-        if add:
+        if self.new_node:
             self.node_count+=1
+            self.new_node=False
 
     def strange_shop(self):
         img = self.get_small_interaction_img(x=0.5000, y=0.7333, mask="mask_strange", fresh=True)
@@ -1008,7 +1009,6 @@ class AnyFateUniverse(SimulatedUniverse):
                     conn.close()
                 except Exception as e:
                     CUS_LOGGER.error(f"写入节点日志失败: {e}")
-            self.new_node=False
 
     def emergency(self):
         event_name = self.ts.find_with_box(box=[897, 1023, 500, 540], forward=True, re_screen=False)
