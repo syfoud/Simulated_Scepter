@@ -285,13 +285,20 @@ class UniverseUtils:
 
     # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
     def wait_flag(self, f, timeout=3.0):
-        tm=time.time()
-        while time.time()-tm<timeout:
+        tm = time.time()
+        while time.time() - tm < timeout:
+            # 收到停止指令时立即结束等待，不再继续识图或点击
+            if self._stop:
+                return 0
             if not f():
                 return 1
             time.sleep(0.05)
+            # 休眠期间也可能收到停止指令
+            if self._stop:
+                return 0
             self.get_screen()
         return 0
+        
     @timer
     def fresh_state(self):
         self.get_screen()

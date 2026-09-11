@@ -846,7 +846,7 @@ class AnyFateUniverse(SimulatedUniverse):
         text = merge_text(text) if len(text) else ""
         CUS_LOGGER.debug(f"当前效果{text}")
         # 无命途专属效果可处理，放弃
-        self.click_text(text="放弃", box=[1221, 1276, 967, 998])
+        self.abandon_confirm(confirm=True)
         if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996], click=False, allow_fail=True):
             CUS_LOGGER.info("是带着无法被改变的过往，背负它走向未来的决心。")
             return
@@ -1083,3 +1083,38 @@ class AnyFateUniverse(SimulatedUniverse):
         conn.close()
 
         return new_count
+
+    # 放弃骰子效果
+    def abandon_confirm(self, confirm=False, allow_fail=False):
+        # 停止后不再向键鼠队列加入任何新操作。
+        if self._stop:
+            return False
+        if not self.click_text(
+            text="放弃",
+            box=[1221, 1276, 967, 998],
+            allow_fail=allow_fail,
+        ):
+            return False
+        if not confirm:
+            return True
+        # 确保“放弃”已实际点击，再开始等待确认弹窗的视觉证据。
+        key_mouse_manager.wait()
+        if self._stop:
+            return False
+        appeared = self.wait_flag(
+            lambda: not self.click_text(
+                text="确认",
+                box=[1158, 1220, 650, 690],
+                click=False,
+                warning=False,
+                allow_fail=True,
+            ),
+            timeout=1.2,
+        )
+        # 超时、停止或未出现确认弹窗时，均不点击固定坐标
+        if self._stop or not appeared:
+            return False
+        key_mouse_manager.click(1147, 676)
+        # 此方法的调用点存在后续识图，统一在这里建立同步边界
+        key_mouse_manager.wait()
+        return True
