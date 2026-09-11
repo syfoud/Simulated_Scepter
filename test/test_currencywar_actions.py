@@ -31,6 +31,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
                     "box": [1400, 1595, 572, 599],
                     "interval": 2,
                     "redundancy": 30,
+                    "once": True,
                 },
                 "actions": [
                     {"position": [684, 398]},
@@ -39,6 +40,40 @@ class CurrencyWarActionsTest(unittest.TestCase):
                 ],
             },
         )
+
+    def test_standalone_popup_events_trigger_once(self):
+        once_names = {
+            action["name"]
+            for action in self.actions
+            if action["trigger"].get("once")
+        }
+
+        self.assertEqual(
+            once_names,
+            {"盛会之星", "领航员", "啊哈大悦", "命运圣杯祈愿试炼", "独家代言"},
+        )
+
+    def test_item_detail_confirms_selection_before_escape(self):
+        names = [action.get("name") for action in self.actions]
+        confirm = next(
+            action
+            for action in self.actions
+            if action.get("name") == "物品详情确认选择"
+        )
+        detail = next(
+            action
+            for action in self.actions
+            if action.get("name") == "物品详情弹层"
+        )
+
+        self.assertEqual(confirm["trigger"]["text"], "确认选择")
+        self.assertEqual(
+            confirm["actions"],
+            [{"text": "确认选择", "box": [700, 1250, 880, 1050]}],
+        )
+        self.assertEqual(detail["trigger"]["text"], "装备")
+        self.assertEqual(detail["actions"], [{"press": "esc"}])
+        self.assertLess(names.index("物品详情确认选择"), names.index("物品详情弹层"))
 
     def test_run_history_actions_keep_expected_names(self):
         action_names = {action.get("name") for action in self.actions}
