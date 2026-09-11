@@ -50,7 +50,17 @@ class LiveNavIO(NavIO):
     def capture(self):
         from divine_treasure_entry import capture_game
 
-        image, self.hwnd, self.rect = capture_game()
+        try:
+            image, self.hwnd, self.rect = capture_game()
+        except RuntimeError:
+            # 游戏被抢走焦点时先自己拉回来（项目主类同款 set_game_foreground），
+            # 否则只会退出，用户看到的是"窗口被切走后再也不动"。
+            from tool.utils.game_window import set_game_foreground
+
+            if set_game_foreground() is None:
+                raise
+            time.sleep(0.3)
+            image, self.hwnd, self.rect = capture_game()
         if not self._armed and self.rect:
             self._arm(self.rect)          # 必须在截图之后：键鼠坐标依赖真实窗口矩形
         return image
