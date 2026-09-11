@@ -11,6 +11,7 @@ from tool.log import CUS_LOGGER
 
 MOVE_SECONDS_PER_PRESS = 0.8    # 一次 forward 的按键时长
 HUD_OCR_EVERY = 3               # 战斗标签 OCR 每 3 轮一次，避免拖慢动作周期
+FIXED_MARKER_STRIKES = 4        # 同一坐标连续不变的轮数上限，超过判为固定 UI
 
 
 class LiveOcr:
@@ -40,6 +41,8 @@ class LiveNavIO(NavIO):
         self.hud_ocr_every = hud_ocr_every
         self._round = 0
         self._last_hud = False
+        self._last_marker = None
+        self._same_marker = 0
         self.hwnd = None
         self.rect = None
         self._armed = False
@@ -119,11 +122,34 @@ class LiveNavIO(NavIO):
         self._round += 1
         if self._round % self.hud_ocr_every == 1:
             self._last_hud = battle_hud_visible(image, ocr=lambda img, box: self.ocr.read(img, box))
+        marker = enemy_marker(image)
         return NavObservation(
-            enemy_marker=enemy_marker(image),
+            enemy_marker=self._stable_marker(marker),
             battle_hud=self._last_hud,
             door=detect_door(image),
         )
+
+    def _stable_marker(self, marker):
+        """过滤"永远不动"的固定 UI：真实的怪物标记会随视角移动。
+
+        实机教训：转视角 12 次坐标仍是 (1247,45)，说明命中的是 HUD 固定元素，
+        据此靠近/攻击只能靠蒙。同一坐标连续 FIXED_MARKER_STRIKES 轮不变即放弃。
+        """
+        if marker is None:
+            self._same_marker = 0
+            self._last_marker = None
+            return None
+        if self._last_marker is not None and max(
+            abs(marker[0] - self._last_marker[0]), abs(marker[1] - self._last_marker[1])
+        ) <= 2:
+            self._same_marker += 1
+        else:
+            self._same_marker = 0
+        self._last_marker = marker
+        if self._same_marker >= FIXED_MARKER_STRIKES:
+            CUS_LOGGER.debug(f"标记 {marker} 连续 {self._same_marker} 轮未随视角移动，按固定 UI 忽略")
+            return None
+        return marker
 
 def _save(output, index, image, note):
     if output is None or image is None:
