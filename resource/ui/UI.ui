@@ -1367,9 +1367,16 @@ border:none</string>
                <item>
                 <layout class="QHBoxLayout" name="horizontalLayout_third_plane_pause">
                  <item>
+                  <widget class="QCheckBox" name="Iron_blood_third_plane_pause_checkbox">
+                   <property name="text">
+                    <string>进入第三面时暂停</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
                   <widget class="QLabel" name="label_third_plane_pause">
                    <property name="text">
-                    <string>进入第三面时暂停 至少需求数（默认0不启用）</string>
+                    <string>至少需求数</string>
                    </property>
                   </widget>
                  </item>
