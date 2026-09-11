@@ -48,12 +48,20 @@ class IronBloodUniverse(AnyFateUniverse):
 
     def restart_recording(self):
         if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
-            need_del=self.del_record_time and self.del_record_time>self.kill_count
-            CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.kill_count}")
+            # 增加演算时间过长保留录制配置
+            minutes = self.elapsed_time / 60
+            if self.kill_count == 0:
+                minutes_divide_kill = 0
+            else:
+                minutes_divide_kill = minutes/self.kill_count
+            need_del=(self.del_record_time and self.del_record_time>self.kill_count
+                      and not (self.opt.get("recording_keep_long_run_enabled", False) and minutes_divide_kill >= self.opt.get("recording_keep_long_run_threshold", 1)))
+            CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}")
             self.recorder.stop_recording(need_del, battle_count=self.kill_count)
             time.sleep(0.8)
             self.recorder.start_recording(self.count + 1)
             self.update_state("re_start")
+        self.elapsed_time = 0  # 重置演算持续时间
         self.kill_count = 0
         self.fail_match_count=0
         self.node_count=0
@@ -61,15 +69,15 @@ class IronBloodUniverse(AnyFateUniverse):
 
     def end_of_university(self):
         SimulatedUniverse.end_of_university(self)
-        elapsed = int(time.time() - self.run_start_time)
+        self.elapsed_time = int(time.time() - self.run_start_time)
         record_file = "config/backup/kill_record.txt"
         try:
             if self.plane_floor==3:
                 self.kill_count+=1
             os.makedirs("config/backup", exist_ok=True)
             start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
-            total_min = elapsed // 60
-            total_sec = elapsed % 60
+            total_min = self.elapsed_time // 60
+            total_sec = self.elapsed_time % 60
             line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒,击杀数:{self.kill_count:02d}"
             with open(record_file, "a", encoding="utf-8") as file:
                 file.write(line + "\n")
