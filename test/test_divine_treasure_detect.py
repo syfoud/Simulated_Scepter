@@ -7,6 +7,7 @@ import cv2
 import numpy as np
 
 from tool.divine_treasure.detect import (
+    battle_labels_in,
     battle_hud_visible,
     detect_door,
     detect_enemy_circle,
@@ -79,6 +80,19 @@ class DoorColorTests(unittest.TestCase):
         if image is None:
             self.skipTest("外部样本不可用")
         self.assertIsNotNone(detect_door(image), "背对门时也应能在画面中找到门")
+
+
+class BattleLabelTests(unittest.TestCase):
+    def test_project_labels_are_recognized(self):
+        for text in ("行动中", "自动战斗", "战斗中"):
+            self.assertTrue(battle_labels_in(text), text)
+
+    def test_world_text_is_not_a_battle_label(self):
+        self.assertFalse(battle_labels_in("第一位面-战斗 火与危险事物"))
+
+    def test_ocr_label_wins_over_color(self):
+        image = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.assertTrue(battle_hud_visible(image, ocr=lambda _img, _box: "行动中"))
 
 
 class BattleHudTests(unittest.TestCase):
