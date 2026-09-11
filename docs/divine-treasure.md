@@ -1,6 +1,6 @@
 # 神赐珍宝逐段验证
 
-开发目录：`E:/srironblood/Simulated_Scepter-divine-treasure`，分支：`divine-treasure`。
+开发目录：`E:/srironblood/Simulated_Scepter-divine-treasure`，分支：`divine-treasure`。入场入口留在仓库根目录（`ROOT` 依赖其位置）；面具流程与图鉴采集在 `tool/divine_treasure/` 子包内。
 
 ## 已确认入场
 
@@ -38,7 +38,7 @@
 把游戏停在 ex 截图所示图鉴位置，保证两行十个雪鸮分支全部可见，执行：
 
 ```powershell
-& 'E:\srironblood\Simulated_Scepter\.venv\Scripts\python.exe' 'E:\srironblood\Simulated_Scepter-divine-treasure\collect_snow_masks.py' --run
+& 'E:\srironblood\Simulated_Scepter\.venv\Scripts\python.exe' 'E:\srironblood\Simulated_Scepter-divine-treasure\tool\divine_treasure\collect_snow_masks.py' --run
 ```
 
 逐项打开详情，每项名称与效果连续两帧一致后保存截图及 OCR；至多十次选择，不滚动或离开图鉴。完整或部分结果仅保存在 `logs/divine-gallery-*/snow-mask-effects.md`，不会自动更新手录的 `docs/snow-mask-effects.md`。用户反馈采集未正确记录，工具仍属实验性质，输出需人工对照截图校对。

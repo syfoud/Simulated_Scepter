@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / "tool" / "divine_treasure"))  # 面具/图鉴模块所在目录，worker 子进程也依赖
 STATES = ("home", "mode", "regular", "ranked", "practice", "masks")
 
 

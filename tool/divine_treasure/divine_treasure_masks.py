@@ -2,10 +2,16 @@
 
 import json
 import re
+import sys
 import time
 
 import cv2
 
+from pathlib import Path
+# 直接运行本脚本时保证能导入仓库根目录的入口模块。
+REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
 from divine_treasure_entry import capture_game, click_game, read_rows, save_evidence
 
 SNOW_NAMES = ("雪鸮面具", "雪鹄面具", "雪鸡面具", "雪号面具")
