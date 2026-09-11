@@ -446,12 +446,14 @@ class MainWindow(QMainWindowLog):
         self.Iron_blood_first_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_second_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_first_plane_min_weight_input.setEnabled(early_stop_enabled)
-        self.Iron_blood_third_plane_pause_input.setEnabled(early_stop_enabled)
+        self.Iron_blood_third_plane_pause_checkbox.setEnabled(early_stop_enabled)
+        self.Iron_blood_third_plane_pause_input.setEnabled(early_stop_enabled and self.Iron_blood_third_plane_pause_checkbox.isChecked())
 
     def connect_dependency_signals(self):
         self.debug_checkox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.recording_checkBox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.early_stop_checkbox.stateChanged.connect(lambda: self.update_dependent_controls_state())
+        self.Iron_blood_third_plane_pause_checkbox.stateChanged.connect(lambda: self.update_dependent_controls_state())
 
     def closeEvent(self, event):
         """
