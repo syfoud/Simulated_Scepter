@@ -1,8 +1,9 @@
-"""差分宇宙神赐珍宝子包。"""
+"""差分宇宙神赐珍宝子包：面具流程与图鉴采集（入场入口仍在仓库根目录）。"""
 
 import sys
 from pathlib import Path
 
 ROOT = str(Path(__file__).resolve().parents[2])
 if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)  # 直接运行包内脚本时也能导入仓库根目录的入口模块
+    # 包内脚本被直接运行（如 --worker 子进程）时，也要能导入根目录的入口模块。
+    sys.path.insert(0, ROOT)
