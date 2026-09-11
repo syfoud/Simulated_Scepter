@@ -6,11 +6,10 @@ from tool.divine_treasure.navigation import NavObservation, run_battle_region
 
 
 class FakeIO:
-    def __init__(self, frames, clock=None):
+    def __init__(self, frames):
         self.frames = list(frames)
         self.actions = []
         self.t = 0.0
-        self.clock = clock
 
     def capture(self):
         return self.frames.pop(0) if self.frames else {}
@@ -28,9 +27,7 @@ class FakeIO:
         self.actions.append(("interact",))
 
     def now(self):
-        if self.clock is None:
-            return self.t
-        return self.clock()
+        return self.t
 
     def sleep(self, seconds):
         return None
@@ -53,47 +50,55 @@ def replay(*observations):
 
 
 class BattleRegionTests(unittest.TestCase):
-    def test_far_enemy_is_approached_from_a_distance(self):
-        io = FakeIO([{"enemy": (1400, 500)}])
-        result = run_battle_region(io, detector_for(NavObservation(enemy=(1400, 500))), budget=0.02)
-        self.assertEqual("timeout", result.status)
+    def test_marker_off_center_is_approached_by_turning(self):
+        io = FakeIO([{"marker": (1400, 60)}])
+        run_battle_region(io, detector_for(NavObservation(enemy_marker=(1400, 60))), budget=0.02)
         self.assertIn(("turn", 1), io.actions)
 
-    def test_aligned_enemy_triggers_forward_and_attack(self):
-        io = FakeIO([{"enemy": (960, 500)}])
-        run_battle_region(io, detector_for(NavObservation(enemy=(960, 500))), budget=0.001)
+    def test_centered_marker_triggers_forward_and_attack(self):
+        io = FakeIO([{"marker": (960, 60)}])
+        run_battle_region(io, detector_for(NavObservation(enemy_marker=(960, 60))), budget=0.02)
         self.assertIn(("attack",), io.actions)
-        self.assertTrue(any(action[0] == "forward" for action in io.actions))
+        self.assertTrue(any(a[0] == "forward" for a in io.actions))
 
-    def test_missing_enemy_gives_up_instead_of_hanging(self):
+    def test_battle_hud_appearing_means_combat_started(self):
         io = FakeIO([])
-        result = run_battle_region(io, detector_for(NavObservation()), budget=0.001)
-        self.assertEqual("timeout", result.status)
-        self.assertLess(result.ticks, 400)
-
-    def test_battle_hud_switches_to_waiting(self):
-        io = FakeIO([{"battle_hud": True}])
-        result = run_battle_region(io, detector_for(NavObservation(battle_hud=True)), budget=0.001)
-        self.assertEqual("in_battle", result.last_state)
-
-    def test_battle_end_then_door_is_interacted(self):
-        frames = [{"battle_hud": True}, {"stage_icon": True, "door": (960, 600)}]
-        io = FakeIO(frames)
         result = run_battle_region(
-            io, replay(NavObservation(battle_hud=True), NavObservation(door=(960, 600))), budget=5.0)
+            io, replay(NavObservation(enemy_marker=(960, 60)),
+                       NavObservation(enemy_marker=(960, 60)),   # 先对准攻击一次
+                       NavObservation(battle_hud=True),          # 界面跳变 = 已进战斗
+                       NavObservation(), NavObservation(door=(800, 500))),
+            budget=5.0)
+        self.assertEqual("done", result.status)
+        self.assertIn(("attack",), io.actions)
+
+    def test_blessing_then_door_completes_region(self):
+        io = FakeIO([])
+        result = run_battle_region(
+            io,
+            replay(NavObservation(enemy_marker=(960, 60)), NavObservation(battle_hud=True),
+                   NavObservation(blessing=True), NavObservation(),   # 选完祝福回到大世界
+                   NavObservation(), NavObservation(door=(800, 500))),
+            budget=10.0)
         self.assertEqual("done", result.status)
         self.assertIn(("interact",), io.actions)
 
     def test_cleared_region_goes_straight_to_the_door(self):
-        io = FakeIO([{"door": (960, 600)}])
-        result = run_battle_region(
-            io, detector_for(NavObservation(enemy_visible=True, door=(960, 600))), budget=5.0)
+        io = FakeIO([{"door": (800, 500)}])
+        result = run_battle_region(io, detector_for(NavObservation(door=(800, 500))), budget=10.0)
         self.assertEqual("done", result.status)
         self.assertIn(("interact",), io.actions)
 
+    def test_missing_enemy_gives_up_instead_of_hanging(self):
+        io = FakeIO([])
+        result = run_battle_region(io, detector_for(NavObservation()), budget=1e9)
+        self.assertEqual("timeout", result.status)
+        self.assertLess(result.ticks, 20)
+
     def test_tick_budget_bounds_every_loop(self):
         io = FakeIO([])
-        result = run_battle_region(io, detector_for(NavObservation()), budget=1e9, max_ticks=7)
+        result = run_battle_region(io, detector_for(NavObservation(battle_hud=True)),
+                                   budget=1e9, max_ticks=7)
         self.assertLessEqual(result.ticks, 7)
 
 
