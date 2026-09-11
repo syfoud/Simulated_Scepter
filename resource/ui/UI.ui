@@ -1302,6 +1302,27 @@ border:none</string>
                 </layout>
                </item>
                <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_recording_keep_long_run">
+                 <item>
+                  <widget class="QCheckBox" name="recording_keep_long_run_checkbox">
+                   <property name="text">
+                    <string>演算时间异常过长时也保留录制</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLabel" name="label_recording_keep_long_run">
+                   <property name="text">
+                    <string>(分钟数÷战斗数)至少需求值</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="recording_keep_long_run_input"/>
+                 </item>
+                </layout>
+               </item>
+               <item>
                 <widget class="QCheckBox" name="recording_label_checkbox">
                  <property name="text">
                   <string>进行视频录制时是否添加其它信息标签</string>
