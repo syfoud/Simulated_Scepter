@@ -32,6 +32,10 @@ DOOR_MIN_AREA = 4000
 DOOR_MIN_HEIGHT = 0.18
 DOOR_MIN_FILL = 0.35
 
+# 贴近判据：怪物身上的红点（暗红低亮），与红发（亮红 V>120）用亮度上限区分
+CLOSE_LOW, CLOSE_HIGH = (0, 190, 30), (18, 255, 125)
+CLOSE_MIN_AREA = 25
+
 
 def _components(mask, min_area, max_area=None):
     count, _, stats, centers = cv2.connectedComponentsWithStats(mask, 8)
@@ -117,6 +121,21 @@ def detect_door(image):
         if best is None or area > best[0]:
             best = (area, (int(cx), int(cy)))
     return None if best is None else best[1]
+
+
+def enemy_close_marker(image, band=(0.18, 0.55)):
+    """怪物身上是否出现红点（进入攻击距离的信号）。
+
+    实测：红点暗红低亮（H≈5-16, S≈255, V≈48-86），红发是亮红（V>120），
+    因此用 V 上限区分；再限制在画面中部带，避开角色头发。
+    """
+    hsv = cv2.cvtColor(cv2.GaussianBlur(image, (5, 5), 0), cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, np.array(CLOSE_LOW), np.array(CLOSE_HIGH))
+    height = image.shape[0]
+    y0, y1 = int(height * band[0]), int(height * band[1])
+    region = np.zeros_like(mask)
+    region[y0:y1, :] = mask[y0:y1, :]
+    return any(area >= CLOSE_MIN_AREA for _, _, area, _ in _components(region, CLOSE_MIN_AREA))
 
 
 def detect_enemy_circle(image, band=(0.15, 0.45)):

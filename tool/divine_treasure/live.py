@@ -5,7 +5,12 @@ from pathlib import Path
 
 import cv2
 
-from tool.divine_treasure.detect import battle_hud_visible, detect_door, enemy_marker
+from tool.divine_treasure.detect import (
+    battle_hud_visible,
+    detect_door,
+    enemy_close_marker,
+    enemy_marker,
+)
 from tool.divine_treasure.navigation import NavIO, NavObservation, run_battle_region
 from tool.log import CUS_LOGGER
 
@@ -95,8 +100,16 @@ class LiveNavIO(NavIO):
 
         return keyops
 
+    def _game_focused(self):
+        """动作前确认游戏仍在前台，避免把击键发给别的窗口。"""
+        import win32gui
+
+        from tool.utils.game_window import is_usable_game_window
+
+        return is_usable_game_window(win32gui.GetForegroundWindow())
+
     def forward(self, seconds):
-        if self.readonly:
+        if self.readonly or not self._game_focused():
             return
         keys = self._keys()
         keys.keyDown("w")
@@ -112,14 +125,14 @@ class LiveNavIO(NavIO):
         key_mouse_manager.mouse_move(40 * direction)   # 一次只转一点，下一轮再看画面
 
     def attack(self):
-        if self.readonly:
+        if self.readonly or not self._game_focused():
             return
         from tool.GLOBAL import key_mouse_manager
 
         key_mouse_manager.click(0.5, 0.5)              # 屏幕中央平A
 
     def interact(self):
-        if self.readonly:
+        if self.readonly or not self._game_focused():
             return
         keys = self._keys()
         for _ in range(3):
@@ -128,13 +141,13 @@ class LiveNavIO(NavIO):
             time.sleep(0.12)
 
     def detect(self, image):
-        """一帧观察：敌标记随时可查，战斗标签按节流跑 OCR，门用颜色定位。"""
+        """一帧观察：Z 图标表示附近有怪，红点表示已到攻击距离。"""
         self._round += 1
         if self._round % self.hud_ocr_every == 1:
             self._last_hud = battle_hud_visible(image, ocr=lambda img, box: self.ocr.read(img, box))
-        marker = enemy_marker(image)
         return NavObservation(
-            enemy_marker=self._stable_marker(marker),
+            enemy_marker=enemy_marker(image),
+            enemy_close=enemy_close_marker(image),
             battle_hud=self._last_hud,
             door=detect_door(image),
         )

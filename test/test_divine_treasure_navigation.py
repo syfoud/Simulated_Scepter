@@ -6,7 +6,7 @@ from tool.divine_treasure.navigation import NavObservation, run_battle_region
 
 
 class FakeIO:
-    def __init__(self, frames, step=0.0):
+    def __init__(self, frames=(), step=0.0):
         self.frames = list(frames)
         self.actions = []
         self.t = 0.0
@@ -19,9 +19,6 @@ class FakeIO:
     def forward(self, seconds):
         self.actions.append(("forward", seconds))
 
-    def turn(self, direction):
-        self.actions.append(("turn", direction))
-
     def attack(self):
         self.actions.append(("attack",))
 
@@ -32,7 +29,7 @@ class FakeIO:
         return self.t
 
     def sleep(self, seconds):
-        return None
+        self.actions.append(("sleep", seconds))
 
 
 def detector_for(obs):
@@ -51,68 +48,66 @@ def replay(*observations):
     return detect
 
 
-CENTER_MARKER = NavObservation(enemy_marker=(960, 60))
-WORLD = NavObservation()
+MARKER = NavObservation(enemy_marker=(816, 59))          # 顶部 Z 图标：附近有怪
+CLOSE = NavObservation(enemy_marker=(816, 59), enemy_close=True)  # 红点：已到攻击距离
+WORLD = NavObservation()                                  # 大世界，无敌无门
 
 
 class BattleRegionTests(unittest.TestCase):
-    def test_far_enemy_is_searched_for_by_walking_forward(self):
-        # 主人实测：离得远时顶部没有敌标记，必须边走边找，不能原地转圈。
-        io = FakeIO([])
-        run_battle_region(io, detector_for(WORLD), cleared=False, budget=0.001)
-        self.assertTrue(any(a[0] == "forward" for a in io.actions), "找不到标记时应先往前走")
-
-    def test_marker_off_center_is_approached_by_turning(self):
-        io = FakeIO([])
-        run_battle_region(io, detector_for(NavObservation(enemy_marker=(1400, 60))),
-                          cleared=False, budget=0.02)
-        self.assertTrue(any(a[0] == "turn" and a[1] > 0 for a in io.actions), "标记偏右应右转")
-
-    def test_centered_marker_triggers_forward_and_attack(self):
-        io = FakeIO([])
-        run_battle_region(io, detector_for(CENTER_MARKER), cleared=False, budget=0.02)
-        self.assertIn(("attack",), io.actions)
+    def test_no_marker_keeps_walking_forward(self):
+        # 主人实测：角色初始朝向怪物，没看到 Z 图标就一直往前走。
+        io = FakeIO(step=0.5)
+        result = run_battle_region(io, detector_for(WORLD), budget=3.0)
+        self.assertEqual("timeout", result.status)
         self.assertTrue(any(a[0] == "forward" for a in io.actions))
+        self.assertNotIn(("attack",), io.actions)
 
-    def test_battle_hud_appearing_means_combat_started(self):
-        io = FakeIO([])
-        result = run_battle_region(
-            io, replay(CENTER_MARKER, CENTER_MARKER, NavObservation(battle_hud=True),
-                       WORLD, NavObservation(door=(800, 500))),
-            cleared=False, budget=10.0)
-        self.assertEqual("done", result.status)
+    def test_marker_without_close_marker_keeps_stepping(self):
+        io = FakeIO(step=0.5)
+        run_battle_region(io, detector_for(MARKER), budget=3.0)
+        self.assertTrue(any(a[0] == "forward" for a in io.actions))
+        self.assertNotIn(("attack",), io.actions)   # 没红点不空挥
+
+    def test_close_marker_triggers_attack(self):
+        io = FakeIO(step=0.5)
+        run_battle_region(io, detector_for(CLOSE), budget=3.0)
         self.assertIn(("attack",), io.actions)
-        self.assertIn(("interact",), io.actions)
 
-    def test_blessing_then_door_completes_region(self):
-        io = FakeIO([])
+    def test_attack_settle_two_seconds(self):
+        io = FakeIO(step=0.5)
+        run_battle_region(io, detector_for(CLOSE), budget=3.0)
+        self.assertIn(("sleep", 2.0), io.actions)   # 等普攻后摇
+
+    def test_hit_is_confirmed_when_marker_disappears(self):
+        io = FakeIO(step=0.5)
         result = run_battle_region(
-            io,
-            replay(CENTER_MARKER, CENTER_MARKER, NavObservation(battle_hud=True),
-                   NavObservation(blessing=True), WORLD, WORLD, NavObservation(door=(800, 500))),
-            cleared=False, budget=10.0)
+            io, replay(CLOSE, WORLD, WORLD, NavObservation(door=(800, 500))), budget=100.0)
         self.assertEqual("done", result.status)
         self.assertIn(("interact",), io.actions)
+
+    def test_empty_swing_steps_closer_and_retries(self):
+        # 平A后 2 秒 Z 图标仍在 = 空挥 → 碎步靠近再试
+        io = FakeIO(step=0.5)
+        run_battle_region(io, replay(CLOSE, CLOSE, CLOSE, CLOSE), budget=100.0)
+        attacks = [a for a in io.actions if a[0] == "attack"]
+        self.assertGreaterEqual(len(attacks), 2)
+
+    def test_endless_empty_swings_give_up(self):
+        io = FakeIO(step=0.2)
+        result = run_battle_region(io, detector_for(CLOSE), budget=1e9)
+        self.assertEqual("timeout", result.status)   # 到上限就放弃，不无限空挥
 
     def test_cleared_region_goes_straight_to_the_door(self):
-        io = FakeIO([])
+        io = FakeIO(step=0.5)
         result = run_battle_region(io, detector_for(NavObservation(door=(800, 500))),
                                    cleared=True, budget=10.0)
         self.assertEqual("done", result.status)
         self.assertIn(("interact",), io.actions)
         self.assertNotIn(("attack",), io.actions)
 
-    def test_uncleared_region_without_enemy_gives_up(self):
-        # 搜索上限用尽即主动放弃，不等 budget/max_ticks 兜底。
-        io = FakeIO([], step=0.5)          # 每轮 0.5 秒，让预算先到期
-        result = run_battle_region(io, detector_for(WORLD), cleared=False, budget=6.0)
-        self.assertEqual("timeout", result.status)
-        self.assertLess(result.ticks, 200)   # 由预算兜底退出，不会无限跑
-
     def test_tick_budget_bounds_every_loop(self):
-        io = FakeIO([])
-        result = run_battle_region(io, detector_for(NavObservation(battle_hud=True)),
-                                   cleared=True, budget=1e9, max_ticks=7)
+        io = FakeIO()
+        result = run_battle_region(io, detector_for(WORLD), budget=1e9, max_ticks=7)
         self.assertLessEqual(result.ticks, 7)
 
 
