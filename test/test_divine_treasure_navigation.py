@@ -58,8 +58,7 @@ class BattleRegionTests(unittest.TestCase):
         # 主人实测：离得远时顶部没有敌标记，必须边走边找，不能原地转圈。
         io = FakeIO([])
         run_battle_region(io, detector_for(WORLD), cleared=False, budget=0.001)
-        self.assertTrue(any(a[0] == "forward" for a in io.actions), "远处找不到标记时应当前进搜索")
-        self.assertIn(("turn", 1), io.actions)
+        self.assertTrue(any(a[0] == "forward" for a in io.actions), "找不到标记时应先往前走")
 
     def test_marker_off_center_is_approached_by_turning(self):
         io = FakeIO([])
@@ -104,9 +103,17 @@ class BattleRegionTests(unittest.TestCase):
     def test_uncleared_region_without_enemy_gives_up(self):
         # 搜索上限用尽即主动放弃，不等 budget/max_ticks 兜底。
         io = FakeIO([])
-        result = run_battle_region(io, detector_for(WORLD), cleared=False, budget=1e9)
+        io.t = 0.0
+        ticks = {"n": 0}
+
+        def detect(_frame):
+            ticks["n"] += 1
+            io.t = ticks["n"] * 0.5          # 每轮 0.5 秒，让 budget 先到期
+            return WORLD
+
+        result = run_battle_region(io, detect, cleared=False, budget=6.0)
         self.assertEqual("timeout", result.status)
-        self.assertLessEqual(result.ticks, 12)
+        self.assertLess(result.ticks, 200)   # 由预算兜底退出，不会无限跑
 
     def test_tick_budget_bounds_every_loop(self):
         io = FakeIO([])

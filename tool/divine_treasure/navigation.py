@@ -50,8 +50,8 @@ class NavIO:
         time.sleep(seconds)
 
 
-SEARCH_TURNS = 3          # 找不到敌标记时的原地搜索上限
-SEARCH_STEPS = 1          # 原地搜索无果后的前进次数上限（远处不渲染敌标记）
+SEARCH_STEPS = 12         # 找不到敌标记时连续前进的次数上限（怪都在前方，远处不渲染标记）
+FULL_TURN_TURNS = 6       # 前进若干次仍无果时，原地转一圈重新确认
 FACE_TOLERANCE = 120      # 已对准的横向容差（1920 基准像素）
 APPROACH_SECONDS = 0.6    # 每次靠近的时长
 SEARCH_SECONDS = 0.7      # 每次搜索前进的时长
@@ -74,19 +74,20 @@ def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_tick
     engaged = cleared          # 是否已经打过本区域的战斗
     state = "find_door" if cleared else "find_enemy"
 
-    def scan() -> None:
-        """原地左右搜索；转过上限后改为前进，以便走到有标记的距离。"""
+    def scan() -> bool:
+        """找不到敌标记时以"往前走"为主（怪都在前方，远处不渲染标记）；
+        连续前进若干次仍无果才原地转一圈重新确认。"""
         nonlocal turn_count, step_count
-        if turn_count < SEARCH_TURNS:
+        if step_count >= SEARCH_STEPS and turn_count < FULL_TURN_TURNS:
             io.turn(1 if turn_count % 2 == 0 else -1)
             turn_count += 1
             return True
-        if step_count < SEARCH_STEPS:
-            io.forward(SEARCH_SECONDS)
-            step_count += 1
+        if step_count >= SEARCH_STEPS:
+            step_count = 0
             turn_count = 0
-            return True
-        return False
+        io.forward(SEARCH_SECONDS)
+        step_count += 1
+        return True
 
     while ticks < max_ticks and io.now() < deadline:
         ticks += 1
@@ -97,9 +98,8 @@ def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_tick
         if state == "find_enemy":
             if obs.enemy_marker is not None:
                 state = "approach"
-            elif not scan():
-                CUS_LOGGER.info("搜索范围内未发现敌人，放弃本区域")
-                return RegionResult("timeout", ticks, state)
+            else:
+                scan()
         elif state == "approach":
             if obs.battle_hud:
                 engaged = True
