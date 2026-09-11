@@ -20,6 +20,11 @@ BATTLE_HUD_ORANGE_MIN = 0.05   # 低于此为菜单/卡牌页（实测祝福页 
 BATTLE_HUD_ORANGE_MAX = 0.80   # 大世界 0.80+（土黄地面），战斗界面约 0.27
 ORANGE_LOW, ORANGE_HIGH = (0, 80, 80), (25, 255, 255)
 
+# 祝福/卡牌页实测：顶部中带暗色占比 0.794（大世界仅 0.075-0.107）
+BLESSING_TOP_BAND = (0.20, 0.80, 0.00, 0.22)
+BLESSING_TOP_DARK_MIN = 0.50
+BLESSING_DARK_MAX = 70
+
 # 粉色随意门实测（battle-sample1 门口帧 vs 实机误检帧）：
 #   真门：两块 76000/39000 px 的竖直大块（高 590/470，屏高占比 0.55/0.44）
 #   误检：粉紫霓虹招牌只有 5000/1400 px（高 155/55）——量级完全不同
@@ -97,6 +102,20 @@ def battle_hud_visible(image, ocr=None):
     mask = cv2.inRange(hsv, np.array(ORANGE_LOW), np.array(ORANGE_HIGH))
     ratio = float(mask.mean()) / 255.0
     return BATTLE_HUD_ORANGE_MIN <= ratio < BATTLE_HUD_ORANGE_MAX
+
+
+def blessing_page(image):
+    """是否处于祝福/卡牌选择页：全屏压暗，顶部中带几乎全黑。
+
+    实测祝福页 top_dark=0.794，大世界只有 0.075-0.107，因此用 0.5 阈值区分。
+    """
+    height, width = image.shape[:2]
+    x0, x1 = int(width * BLESSING_TOP_BAND[0]), int(width * BLESSING_TOP_BAND[1])
+    y0, y1 = int(height * BLESSING_TOP_BAND[2]), int(height * BLESSING_TOP_BAND[3])
+    band = image[y0:y1, x0:x1]
+    hsv = cv2.cvtColor(band, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, np.array((0, 0, 0)), np.array((179, 255, BLESSING_DARK_MAX)))
+    return float(mask.mean()) / 255.0 >= BLESSING_TOP_DARK_MIN
 
 
 def detect_door(image):

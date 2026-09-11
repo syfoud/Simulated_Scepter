@@ -38,6 +38,9 @@ class NavIO:
     def attack(self):
         raise NotImplementedError
 
+    def click_ratio(self, x, y):
+        raise NotImplementedError
+
     def interact(self):
         raise NotImplementedError
 
@@ -53,6 +56,8 @@ SEEK_SECONDS = 1.0            # 找怪阶段一次前进的时长
 COMBAT_STEP_SECONDS = 0.4     # 靠近怪物的单次碎步
 ATTACK_SETTLE = 2.0           # 平A后等待后摇，再看 Z 图标是否消失
 MAX_ATTACK_ROUNDS = 8         # 连续"碎步+平A"次数上限，防止原地空挥
+MAX_BLESSING_ROUNDS = 10      # 连续祝福页处理上限（战斗后可连续多轮）
+BLESSING_CONFIRM_CLICK = (0.87, 0.90)   # 祝福页右下确认按钮（比例坐标）
 DEFAULT_BUDGET = 300.0
 
 
@@ -69,6 +74,7 @@ def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_tick
     deadline = io.now() + budget
     ticks = 0
     attack_rounds = 0
+    blessing_rounds = 0
     state = "find_door" if cleared else "find_enemy"
 
     while ticks < max_ticks and io.now() < deadline:
@@ -123,8 +129,15 @@ def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_tick
         elif state == "blessing":
             if not obs.blessing:
                 state = "find_door"           # 祝福页关闭后继续找门
+            elif blessing_rounds >= MAX_BLESSING_ROUNDS:
+                CUS_LOGGER.warning("祝福页处理到上限，直接找门")
+                state = "find_door"
             else:
-                io.sleep(0.5)                 # 祝福点击流程由上层界面逻辑处理
+                blessing_rounds += 1
+                io.sleep(0.3)
+                io.click_ratio(0.5, 0.45)     # 选中间那张祝福卡
+                io.sleep(0.3)
+                io.click_ratio(*BLESSING_CONFIRM_CLICK)
         elif state == "find_door":
             if obs.door is None:
                 io.forward(COMBAT_STEP_SECONDS)
