@@ -161,9 +161,14 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "masks", "opening", "gallery", "battle"),
+                        default=default_stage,
                         help="entry stops at masks; masks/opening retry until a preferred opening or the time limit")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--cleared", action="store_true",
+                        help="battle: 该区域已清怪，直接找门")
+    parser.add_argument("--readonly", action="store_true",
+                        help="battle: 只截图判定，不发送任何输入")
     args = parser.parse_args()
     if args.samples and args.stage not in ("entry", "masks"):
         parser.error("--samples supports entry or masks only")
@@ -178,11 +183,14 @@ def main(default_stage="entry"):
         time.sleep(5)
         worker = subprocess.Popen(
             [sys.executable, str(ROOT / "divine_treasure_entry.py"), "--worker", "--stage", args.stage,
-             "--output", str(output)],
+             "--output", str(output)]
+            + (["--cleared"] if args.cleared else [])
+            + (["--readonly"] if args.readonly else []),
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         try:
-            limit = 150 if args.stage == "entry" else 240
+            # battle 要跑完一场战斗并找门，单独给足时间；其余阶段维持原上限
+            limit = 150 if args.stage == "entry" else (600 if args.stage == "battle" else 240)
             deadline = time.monotonic() + limit
             while worker.poll() is None:
                 if win32api.GetAsyncKeyState(win32con.VK_F8) & 0x8000:
@@ -234,6 +242,22 @@ def main(default_stage="entry"):
             print(f"Sample {number}: {result['state']}, protocol={result['protocol']}, {'PASS' if passed else 'FAIL'}", flush=True)
         print(f"Offline evidence: {output}", flush=True)
         return 0 if all(summary) else 1
+    if args.stage == "battle":
+        from tool.divine_treasure.live import run_battle_probe
+
+        output.mkdir(parents=True, exist_ok=True)
+        rounds = 12 if args.readonly else 300
+        limit = 60 if args.readonly else 600
+        print(
+            f"战斗探针开始：cleared={args.cleared} readonly={args.readonly} 上限{limit}秒。F8 可停。",
+            flush=True,
+        )
+        status = run_battle_probe(
+            output, cleared=args.cleared, readonly=args.readonly,
+            budget=limit, max_rounds=rounds,
+        )
+        print(f"战斗探针结束：{status}\n证据目录：{output}", flush=True)
+        return 0 if status in ("done", "stopped") else 1
     try:
         if args.stage in ("entry", "opening"):
             enter_universe(ocr, output / "entry")
