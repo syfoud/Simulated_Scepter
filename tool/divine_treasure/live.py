@@ -54,14 +54,28 @@ class LiveNavIO(NavIO):
 
     def _arm(self, rect):
         """与 DivergentUniverse.__init__ 相同的键鼠初始化，否则操作只会烂在队列里。"""
+        import pyautogui
+
         from tool.GLOBAL import key_mouse_manager
         from tool.diver.config import config as diver_config
 
+        pyautogui.FAILSAFE = False
         key_mouse_manager.set_config(diver_config)
         key_mouse_manager.set_screen_params(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1], False)
         key_mouse_manager.start()
         self._armed = True
-        CUS_LOGGER.info(f"键鼠管理器已启动（窗口 {rect}）")
+        self._center = ((rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2)
+        CUS_LOGGER.info(f"键鼠管理器已启动（窗口 {rect}，中心 {self._center}）")
+
+    def _recenter(self):
+        """把光标放回窗口中心。
+
+        mouse_event 的相对移动会被屏幕边界截断：项目每次 click 前都会 SetCursorPos，
+        而转向只做相对移动，不归位就会出现"转很多次视角不动"。
+        """
+        import win32api
+
+        win32api.SetCursorPos(self._center)
 
     def _keys(self):
         import tool.diver.keyops as keyops
@@ -81,6 +95,7 @@ class LiveNavIO(NavIO):
             return
         from tool.GLOBAL import key_mouse_manager
 
+        self._recenter()                               # 先归位，避免相对移动被屏幕边界截断
         key_mouse_manager.mouse_move(40 * direction)   # 一次只转一点，下一轮再看画面
 
     def attack(self):
