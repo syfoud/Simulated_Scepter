@@ -67,6 +67,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.default_json_path = "actions/currencywar.json"
         self.default_json = load_actions(self.default_json_path)
         self.action_history = []
+        #已触发且触发条件仍成立的事件，条件消失后重新武装（见 run_static 的 once 触发）
+        self.latched_events = set()
         #策略最大刷新次数
         self.max_refresh = 1
         #运行次数
@@ -134,9 +136,35 @@ class SimulatedCurrency(CurrencyUtils):
 
     def loop (self):
         CUS_LOGGER.info ("开始OCR识别，等待触发文字")
+        silent_time = time.time ()
+        shot_saved = False
         while not self._stop:
             self.ts.forward (self.get_screen())
-            self.run_static ()
+            name, _ = self.run_static ()
+            if name:
+                silent_time = time.time ()
+                shot_saved = False
+                continue
+            # 无人命中超过10秒时记录整屏文字并留一张截图；战斗中长时间无触发属正常，跳过
+            if time.time () - silent_time > 10:
+                silent_time = time.time ()
+                # 战斗判定复用 tool/simul/utils.py：模板是右下角的“行动中”文字（check 内坐标取反）
+                if self.check("auto_2", 0.0583, 0.0769):
+                    continue
+                screen_text = " ".join(
+                    res["raw_text"]
+                    for res in self.ts.find_with_box([0, 1920, 0, 1080], redundancy=0)
+                )
+                CUS_LOGGER.warning("连续10秒无任何触发，当前屏幕文字：%s", screen_text)
+                if not shot_saved:
+                    shot_saved = True
+                    shot = os.path.join(
+                        PATHS["root"],
+                        "logs",
+                        f"unknown_screen_{time.strftime('%Y%m%d_%H%M%S')}.png",
+                    )
+                    cv2.imwrite(shot, np.array(self.screen))
+                    CUS_LOGGER.warning("已保存无触发界面截图：%s", shot)
 
     def goto_currency (self):
         """
@@ -552,9 +580,16 @@ class SimulatedCurrency(CurrencyUtils):
                 else:
                     continue
                 if not matched:
+                    #触发条件已消失，允许该事件下次重新触发
+                    self.latched_events.discard(action["name"])
                     continue
 
                 name = action["name"]
+                #once 事件在触发条件持续成立期间只执行一次，避免同一弹窗被重复处理
+                if trigger.get("once"):
+                    if name in self.latched_events:
+                        continue
+                    self.latched_events.add(name)
                 CUS_LOGGER.debug(
                     "%s触发并执行指令%s，条件：%s",
                     factor, name, trigger.get("text") or trigger["photo"],

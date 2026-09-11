@@ -243,7 +243,8 @@
             "text": "请选择强化角色",
             "box": [1415, 1565, 495, 522],
             "interval": 2,
-            "redundancy": 30
+            "redundancy": 30,
+            "once": true
         },
         "actions":
         [
@@ -261,7 +262,8 @@
             "text": "请选择强化角色",
             "box": [1415, 1565, 529, 556],
             "interval": 2,
-            "redundancy": 30
+            "redundancy": 30,
+            "once": true
         },
         "actions":
         [
@@ -279,7 +281,8 @@
             "text": "查看详情",
             "box": [625, 717, 329, 356],
             "interval": 2,
-            "redundancy": 30
+            "redundancy": 30,
+            "once": true
         },
         "actions":
         [   
@@ -294,7 +297,8 @@
             "text": "请选择一个祈愿试炼",
             "box": [1400, 1595, 572, 599],
             "interval": 2,
-            "redundancy": 30
+            "redundancy": 30,
+            "once": true
         },
         "actions":
         [
@@ -310,12 +314,41 @@
         ]
     },
     {
+        "name": "物品详情确认选择",
+        "trigger":{
+            "text": "确认选择",
+            "box": [700, 1250, 880, 1050],
+            "interval": 3
+        },
+        "actions":[
+            {
+                "text": "确认选择",
+                "box": [700, 1250, 880, 1050]
+            }
+        ]
+    },
+    {
+        "name": "物品详情弹层",
+        "trigger":{
+            "text": "装备",
+            "box": [750, 900, 150, 270],
+            "interval": 3,
+            "redundancy": 40
+        },
+        "actions":[
+            {
+                "press": "esc"
+            }
+        ]
+    },
+    {
         "name": "独家代言",
         "trigger":{
             "text": "查看详情",
             "box": [625, 1008, 329, 356],
             "interval": 2,
-            "redundancy": 30
+            "redundancy": 30,
+            "once": true
         },
         "actions":
         [
