@@ -51,8 +51,8 @@ class NavIO:
 
 
 SEARCH_STEPS = 12         # 搜索前进的步数上限（仅用于统计）
-SEARCH_TURN_EACH = 2      # 每个搜索步前左右各转一次
-FACE_TOLERANCE = 120      # 已对准的横向容差（1920 基准像素）
+SEARCH_TURN_STEP = 0.23   # 原地扫视每步约 30°
+FACE_TOLERANCE = 120      # 已对准的横向容差（1920 基准像素）；转向用偏移/ScreenWidth 比例
 APPROACH_SECONDS = 0.6    # 每次靠近的时长
 SEARCH_SECONDS = 0.7      # 每次搜索前进的时长
 DEFAULT_BUDGET = 90.0
@@ -75,19 +75,22 @@ def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_tick
     state = "find_door" if cleared else "find_enemy"
 
     def scan() -> None:
-        """丢失标记时的搜索：左右各转一次再往前走一步。
+        """丢失标记时的搜索：原地左右扫视（每步约 30°），扫满一圈再走近一点。
 
-        实机教训：转向后标记会移出视野，若只前进就会越走越偏（转 90° 后一路撞墙），
-        因此搜索必须一边转一边走，而不是连续前进。
+        实机教训：转向后标记会移出视野；若此时直走就会越走越偏（转 90° 后一路撞墙），
+        所以搜索先原地扫视，确认没有目标才小幅前进。
         """
         nonlocal turn_count, step_count
-        if turn_count < 2:
-            io.turn(1 if turn_count == 0 else -1)
+        if step_count < SEARCH_STEPS:
+            io.turn(0.23 if turn_count % 2 == 0 else -0.23)
             turn_count += 1
+            if turn_count >= 2:
+                turn_count = 0
+                step_count += 1
             return
         io.forward(SEARCH_SECONDS)
+        step_count = 0
         turn_count = 0
-        step_count += 1
 
     while ticks < max_ticks and io.now() < deadline:
         ticks += 1
@@ -109,7 +112,7 @@ def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_tick
             else:
                 offset = obs.enemy_marker[0] - 960
                 if abs(offset) > FACE_TOLERANCE:
-                    io.turn(1 if offset > 0 else -1)
+                    io.turn(offset / 960)   # 比例转向：偏得越多转得越多，避免一步过冲
                 else:
                     io.forward(approach_seconds)
                     io.attack()

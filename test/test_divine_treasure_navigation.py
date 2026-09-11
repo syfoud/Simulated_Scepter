@@ -6,12 +6,14 @@ from tool.divine_treasure.navigation import NavObservation, run_battle_region
 
 
 class FakeIO:
-    def __init__(self, frames):
+    def __init__(self, frames, step=0.0):
         self.frames = list(frames)
         self.actions = []
         self.t = 0.0
+        self.step = step
 
     def capture(self):
+        self.t += self.step
         return self.frames.pop(0) if self.frames else {}
 
     def forward(self, seconds):
@@ -64,7 +66,7 @@ class BattleRegionTests(unittest.TestCase):
         io = FakeIO([])
         run_battle_region(io, detector_for(NavObservation(enemy_marker=(1400, 60))),
                           cleared=False, budget=0.02)
-        self.assertIn(("turn", 1), io.actions)
+        self.assertTrue(any(a[0] == "turn" and a[1] > 0 for a in io.actions), "标记偏右应右转")
 
     def test_centered_marker_triggers_forward_and_attack(self):
         io = FakeIO([])
@@ -102,16 +104,8 @@ class BattleRegionTests(unittest.TestCase):
 
     def test_uncleared_region_without_enemy_gives_up(self):
         # 搜索上限用尽即主动放弃，不等 budget/max_ticks 兜底。
-        io = FakeIO([])
-        io.t = 0.0
-        ticks = {"n": 0}
-
-        def detect(_frame):
-            ticks["n"] += 1
-            io.t = ticks["n"] * 0.5          # 每轮 0.5 秒，让 budget 先到期
-            return WORLD
-
-        result = run_battle_region(io, detect, cleared=False, budget=6.0)
+        io = FakeIO([], step=0.5)          # 每轮 0.5 秒，让预算先到期
+        result = run_battle_region(io, detector_for(WORLD), cleared=False, budget=6.0)
         self.assertEqual("timeout", result.status)
         self.assertLess(result.ticks, 200)   # 由预算兜底退出，不会无限跑
 
