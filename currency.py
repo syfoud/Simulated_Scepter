@@ -145,9 +145,12 @@ class SimulatedCurrency(CurrencyUtils):
                 silent_time = time.time ()
                 shot_saved = False
                 continue
-            # 无人命中超过10秒，说明当前界面在配置里没有对应事件，记录整屏文字并留一张截图
+            # 无人命中超过10秒时记录整屏文字并留一张截图；战斗中长时间无触发属正常，跳过
             if time.time () - silent_time > 10:
                 silent_time = time.time ()
+                # 战斗界面判定与 tool/simul/utils.py 一致：自动战斗图标位于左上角
+                if self.check("auto_2", 0.0583, 0.0769):
+                    continue
                 screen_text = " ".join(
                     res["raw_text"]
                     for res in self.ts.find_with_box([0, 1920, 0, 1080], redundancy=0)

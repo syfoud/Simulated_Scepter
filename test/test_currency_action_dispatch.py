@@ -150,6 +150,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         currency = object.__new__(SimulatedCurrency)
         currency._stop = False
         currency.get_screen = Mock(return_value=object())
+        currency.check = Mock(return_value=False)
         currency.screen = "frame"
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -179,6 +180,32 @@ class CurrencyActionDispatchTests(unittest.TestCase):
             "已保存无触发界面截图：%s",
         )
         imwrite.assert_called_once()
+
+    @patch("currency.cv2.imwrite")
+    @patch("currency.CUS_LOGGER")
+    @patch("currency.time.time", side_effect=[0, 5, 11, 15, 17])
+    def test_loop_skips_report_while_in_battle(self, _time, logger, imwrite):
+        """回归：战斗中长时间无触发属正常，不做记录也不存图。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency._stop = False
+        currency.get_screen = Mock(return_value=object())
+        currency.check = Mock(return_value=True)
+        currency.ts = Mock()
+        runs = []
+
+        def run_static():
+            runs.append(1)
+            if len(runs) == 3:
+                currency._stop = True
+            return "", 0
+
+        currency.run_static = Mock(side_effect=run_static)
+
+        currency.loop()
+
+        currency.check.assert_called_once_with("auto_2", 0.0583, 0.0769)
+        logger.warning.assert_not_called()
+        imwrite.assert_not_called()
 
     def test_group_filter(self):
         currency = self.make_currency(self.triggers[0])
