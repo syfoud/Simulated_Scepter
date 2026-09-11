@@ -1,5 +1,7 @@
 """战斗区域画面判据：全部取自实机样本与仓库既有实现。"""
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -18,10 +20,17 @@ BATTLE_HUD_ORANGE_MIN = 0.05   # 低于此为菜单/卡牌页（实测祝福页 
 BATTLE_HUD_ORANGE_MAX = 0.80   # 大世界 0.80+（土黄地面），战斗界面约 0.27
 ORANGE_LOW, ORANGE_HIGH = (0, 80, 80), (25, 255, 255)
 
-# 粉色随意门：门框为大块粉红，填充度高（窗帘等碎片填充度低）
+# 粉色随意门实测（battle-sample1 门口帧 vs 实机误检帧）：
+#   真门：两块 76000/39000 px 的竖直大块（高 590/470，屏高占比 0.55/0.44）
+#   误检：粉紫霓虹招牌只有 5000/1400 px（高 155/55）——量级完全不同
 DOOR_LOW, DOOR_HIGH = (150, 60, 110), (178, 255, 255)
 DOOR_SCAN_X = (0.15, 0.80)
 DOOR_SCAN_Y = (0.20, 0.95)
+# 网格搜索（7 个场景：3 真门 + 4 误检）得到的共同解，留裕度取值：
+#   真门最小块 20153px / 高占比 0.22 / 填充 0.58；误检最大 4955px / 0.14 / 0.49
+DOOR_MIN_AREA = 4000
+DOOR_MIN_HEIGHT = 0.18
+DOOR_MIN_FILL = 0.35
 
 
 def _components(mask, min_area, max_area=None):
@@ -45,6 +54,8 @@ def enemy_marker(image, template_path=None):
     因此它只适合"贴近后确认"，搜索阶段要靠前进把距离拉近。
     """
     path = template_path or ENEMY_TEMPLATE
+    if not Path(path).is_file():          # 模板是本地未跟踪资源，缺失时降级为"无标记"
+        return None
     data = np.fromfile(path, dtype=np.uint8)
     template = cv2.imdecode(data, cv2.IMREAD_COLOR) if data.size else None
     if template is None:
@@ -85,7 +96,11 @@ def battle_hud_visible(image, ocr=None):
 
 
 def detect_door(image):
-    """粉色随意门中心 (x, y)；门未入画返回 None。交互文字只在门口出现，故必须靠颜色找门。"""
+    """粉色随意门中心 (x, y)；门未入画返回 None。
+
+    交互文字只在站到门口时才出现，因此必须靠颜色找门；
+    但粉紫霓虹招牌同样是粉色，所以要求"大块 + 高"才认门。
+    """
     hsv = cv2.cvtColor(cv2.GaussianBlur(image, (7, 7), 0), cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, np.array(DOOR_LOW), np.array(DOOR_HIGH))
     height, width = image.shape[:2]
@@ -94,8 +109,10 @@ def detect_door(image):
     y0, y1 = int(height * DOOR_SCAN_Y[0]), int(height * DOOR_SCAN_Y[1])
     region[y0:y1, x0:x1] = mask[y0:y1, x0:x1]
     best = None
-    for w, h, area, (cx, cy) in _components(region, 4000):
-        if area / float(w * h) < 0.30:
+    for w, h, area, (cx, cy) in _components(region, DOOR_MIN_AREA):
+        if area / float(w * h) < DOOR_MIN_FILL:
+            continue
+        if h < height * DOOR_MIN_HEIGHT:
             continue
         if best is None or area > best[0]:
             best = (area, (int(cx), int(cy)))

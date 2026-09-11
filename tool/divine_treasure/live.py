@@ -112,8 +112,16 @@ def run_battle_probe(output, cleared=False, readonly=False, budget=240.0, max_ro
     while rounds < max_rounds and time.monotonic() < deadline:
         rounds += 1
         started = time.monotonic()
-        image = io.capture()
-        obs = io.detect(image)
+        try:
+            image = io.capture()
+            obs = io.detect(image)
+        except InterruptedError:
+            CUS_LOGGER.warning("收到 F8，探针停止")
+            return "stopped"
+        except Exception as error:
+            CUS_LOGGER.error(f"第{rounds}轮截图/判定失败：{type(error).__name__}: {error}")
+            time.sleep(0.5)
+            continue
         last_obs = obs
         elapsed = time.monotonic() - started
         CUS_LOGGER.info(
