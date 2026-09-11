@@ -1,15 +1,11 @@
 """战斗区域实机驱动：真实截图/键鼠 + 有界探针。"""
 
 import time
+from pathlib import Path
 
 import cv2
-import numpy as np
 
-from tool.divine_treasure.detect import (
-    battle_hud_visible,
-    detect_door,
-    enemy_marker,
-)
+from tool.divine_treasure.detect import battle_hud_visible, detect_door, enemy_marker
 from tool.divine_treasure.navigation import NavIO, NavObservation, run_battle_region
 from tool.log import CUS_LOGGER
 
@@ -26,6 +22,7 @@ class LiveOcr:
     def _get_engine(self):
         if self._engine is None:
             from tool.diver.ocr import My_TS
+
             self._engine = My_TS()
         return self._engine
 
@@ -35,7 +32,7 @@ class LiveOcr:
 
 
 class LiveNavIO(NavIO):
-    """实机输入：keyops 管键、key_mouse_manager 管鼠标。readonly 时只观察不输入。"""
+    """实机输入。readonly 只观察；其余动作与主类同源（keyops 管键、key_mouse_manager 管鼠标）。"""
 
     def __init__(self, readonly=False, ocr=None, hud_ocr_every=HUD_OCR_EVERY):
         self.readonly = readonly
@@ -45,14 +42,30 @@ class LiveNavIO(NavIO):
         self._last_hud = False
         self.hwnd = None
         self.rect = None
+        self._armed = False
 
     def capture(self):
         from divine_treasure_entry import capture_game
+
         image, self.hwnd, self.rect = capture_game()
+        if not self._armed and self.rect:
+            self._arm(self.rect)          # 必须在截图之后：键鼠坐标依赖真实窗口矩形
         return image
+
+    def _arm(self, rect):
+        """与 DivergentUniverse.__init__ 相同的键鼠初始化，否则操作只会烂在队列里。"""
+        from tool.GLOBAL import key_mouse_manager
+        from tool.diver.config import config as diver_config
+
+        key_mouse_manager.set_config(diver_config)
+        key_mouse_manager.set_screen_params(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1], False)
+        key_mouse_manager.start()
+        self._armed = True
+        CUS_LOGGER.info(f"键鼠管理器已启动（窗口 {rect}）")
 
     def _keys(self):
         import tool.diver.keyops as keyops
+
         return keyops
 
     def forward(self, seconds):
@@ -67,20 +80,23 @@ class LiveNavIO(NavIO):
         if self.readonly:
             return
         from tool.GLOBAL import key_mouse_manager
+
         key_mouse_manager.mouse_move(40 * direction)   # 一次只转一点，下一轮再看画面
 
     def attack(self):
         if self.readonly:
             return
         from tool.GLOBAL import key_mouse_manager
+
         key_mouse_manager.click(0.5, 0.5)              # 屏幕中央平A
 
     def interact(self):
         if self.readonly:
             return
+        keys = self._keys()
         for _ in range(3):
-            self._keys().keyDown("f")
-            self._keys().keyUp("f")
+            keys.keyDown("f")
+            keys.keyUp("f")
             time.sleep(0.12)
 
     def detect(self, image):
@@ -94,58 +110,54 @@ class LiveNavIO(NavIO):
             door=detect_door(image),
         )
 
-
 def _save(output, index, image, note):
-    if output is None:
+    if output is None or image is None:
         return
     output.mkdir(parents=True, exist_ok=True)
     cv2.imencode(".png", image)[1].tofile(str(output / f"{index:03d}-{note}.png"))
 
 
-def run_battle_probe(output, cleared=False, readonly=False, budget=240.0, max_rounds=200):
-    """有界实机探针：跑一个战斗区域就停，全程留证据。返回状态字符串。"""
+def run_battle_probe(output, cleared=False, readonly=False, budget=240.0, max_rounds=200,
+                     max_capture_failures=20):
+    """有界实机探针：动作交给状态机，每轮留截图与判定日志。"""
     io = LiveNavIO(readonly=readonly)
-    rounds = 0
-    deadline = time.monotonic() + budget
-    last_state = "?"
-    last_obs = None
-    while rounds < max_rounds and time.monotonic() < deadline:
-        rounds += 1
-        started = time.monotonic()
+    counter = {"round": 0, "failures": 0, "frame": None}
+
+    def on_round(tick, obs):
+        counter["round"] = tick
+        CUS_LOGGER.info(f"第{tick}轮 marker={obs.enemy_marker} battle={obs.battle_hud} door={obs.door}")
+        _save(output, tick, counter["frame"], "frame")
+
+    def capture():
         try:
-            image = io.capture()
-            obs = io.detect(image)
+            frame = io.capture()
         except InterruptedError:
-            CUS_LOGGER.warning("收到 F8，探针停止")
-            return "stopped"
-        except Exception as error:
-            CUS_LOGGER.error(f"第{rounds}轮截图/判定失败：{type(error).__name__}: {error}")
+            raise
+        except Exception as error:            # 失焦/几何变化：累计到上限就退出，不空转
+            counter["failures"] += 1
+            failures = counter["failures"]
+            CUS_LOGGER.warning(f"截图失败 {failures}/{max_capture_failures}：{error}")
+            if failures >= max_capture_failures:
+                raise InterruptedError("游戏窗口长时间不可用") from error
             time.sleep(0.5)
-            continue
-        last_obs = obs
-        elapsed = time.monotonic() - started
-        CUS_LOGGER.info(
-            f"第{rounds}轮 marker={obs.enemy_marker} battle={obs.battle_hud} door={obs.door} 耗时{elapsed:.2f}s"
-        )
-        _save(output, rounds, image, "frame")
-        decision = _decide(obs, cleared, last_state)
-        last_state = decision
-        if decision == "done":
-            return "done"
-        if readonly:
-            time.sleep(0.5)
-        else:
-            time.sleep(0.2)
-    CUS_LOGGER.warning(f"探针结束：rounds={rounds} state={last_state} obs={last_obs}")
-    return "stopped"
+            return None
+        counter["failures"] = 0
+        counter["frame"] = frame
+        return frame
 
+    def detect(image):
+        if image is None:                     # 截图失败的一轮：不触发任何动作
+            return NavObservation()
+        return io.detect(image)
 
-def _decide(obs, cleared, last_state):
-    """探针内的轻量决策记录：只用于日志与判定"是否已到达门口"。"""
-    if last_state == "find_door" and obs.door is not None:
-        return "at_door"
-    if obs.battle_hud:
-        return "in_battle"
-    if obs.enemy_marker is not None and not cleared:
-        return "approach"
-    return "find_door" if cleared else "find_enemy"
+    try:
+        result = run_battle_region(io, detect, cleared=cleared, budget=budget,
+                                   max_ticks=max_rounds, on_round=on_round)
+    except InterruptedError as error:
+        CUS_LOGGER.warning(f"探针停止：{error}")
+        return "stopped"
+    except Exception as error:
+        CUS_LOGGER.error(f"探针异常退出：{type(error).__name__}: {error}")
+        return "stopped"
+    CUS_LOGGER.info(f"探针结束：status={result.status} state={result.last_state} ticks={result.ticks}")
+    return result.status

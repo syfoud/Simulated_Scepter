@@ -59,7 +59,7 @@ DEFAULT_BUDGET = 90.0
 
 
 def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_ticks=600,
-                      approach_seconds=APPROACH_SECONDS):
+                      approach_seconds=APPROACH_SECONDS, on_round=None):
     """推进一个战斗区域。
 
     cleared=False：本区域还没打过 → 找怪、靠近、平A，以"战斗界面跳变"确认进战斗；
@@ -91,6 +91,8 @@ def run_battle_region(io, detect, cleared=False, budget=DEFAULT_BUDGET, max_tick
     while ticks < max_ticks and io.now() < deadline:
         ticks += 1
         obs = detect(io.capture())
+        if on_round is not None:
+            on_round(ticks, obs)
 
         if state == "find_enemy":
             if obs.enemy_marker is not None:
