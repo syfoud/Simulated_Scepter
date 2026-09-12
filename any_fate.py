@@ -206,21 +206,6 @@ class AnyFateUniverse(SimulatedUniverse):
                 self.quan = 1
             elif not self.bai_e and self.check("bai_e", 0.0625,0.7092):
                 self.bai_e = 1
-            # 当前节点为祝福猪节点时切2号位并重置黄泉/白厄状态
-            start_node = getattr(self, 'start_nodes', None)
-            if start_node is not None:
-                cm = (start_node.get('orig') or {}).get('corner_marker')
-                if cm and cm.get('name') in ('pig1', 'pig2'):
-                    CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
-                    # 根据用户设置决定是否遇猪切换2号位角色
-                    if self.opt.get("pig_switch_2_role", False):
-                        self.switch_current_role(num=2)
-                        self.quan = 0
-                        self.bai_e = 0
-                else:
-                    self.switch_current_role(num=1)
-            else:
-                self.switch_current_role(num=1)
             #上次交互时间
             self.last_interact_time = bk_lst_changed
             # 刚进图，初始化一些数据
@@ -228,8 +213,23 @@ class AnyFateUniverse(SimulatedUniverse):
                 ocr_text = self.ts.find_with_box(box=[55, 164, 12, 40],forward=True,re_screen=False)
                 self.area=merge_text(ocr_text) if len(ocr_text) else ""
                 CUS_LOGGER.debug(f"当前区域{self.area}")
+                # 当前节点为祝福猪节点时切2号位并重置黄泉/白厄状态
+                start_node = getattr(self, 'start_nodes', None)
+                if "精英" not in self.area and start_node is not None:
+                    cm = (start_node.get('orig') or {}).get('corner_marker')
+                    if cm and cm.get('name') in ('pig1', 'pig2'):
+                        CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
+                        # 根据用户设置决定是否遇猪切换2号位角色
+                        if self.opt.get("pig_switch_2_role", False):
+                            self.switch_current_role(num=2)
+                            self.quan = 0
+                            self.bai_e = 0
+                    else:
+                        self.switch_current_role(num=1)
+                else:
+                    self.switch_current_role(num=1)
                 # 根据图像识别结果，判断是否施放银狼秘技
-                if self.area != "黑塔的办公" and self.current_role == 1 and self.check("silverwolf", 0.0609,0.7037) and (not self.check("bean", 0.1536,0.7056)):
+                if "黑塔的办公" not in self.area and self.current_role == 1 and self.check("silverwolf", 0.0609,0.7037) and (not self.check("bean", 0.1536,0.7056)):
                     key_mouse_manager.press('e')
                     CUS_LOGGER.debug("已施放银狼秘技")
                     time.sleep(0.8)
