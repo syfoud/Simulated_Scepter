@@ -58,6 +58,7 @@ class IronBloodUniverse(AnyFateUniverse):
         self.fail_match_count=0
         self.node_count=0
         self.chaoyan_seen = False  # 新轮回重置「超验之镜」已进过标记
+        self.now_area=[]
 
     def end_of_university(self):
         SimulatedUniverse.end_of_university(self)
@@ -145,7 +146,7 @@ class IronBloodUniverse(AnyFateUniverse):
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return
-        self.try_analysis_map(1)
+        self.try_analysis_map(1,1)
         if self.early_stop and self.gwypzmgzcndqlp:
             CUS_LOGGER.debug(f"当前一面最低期望{self.first_plane_min_weight}，识别到开局期望{self.expectation_weight}")
             if self.plane_floor==1 and self.expectation_weight < self.first_plane_min_weight:
@@ -153,10 +154,26 @@ class IronBloodUniverse(AnyFateUniverse):
                 self.need_end=True
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
-            self.node_count=0
+            self.node_count = 0
+            self.new_node = True
         key_mouse_manager.wait()
         return
-
+    def initing_map2(self):
+        key_mouse_manager.keyUp("w")
+        if self.click_text(text="振翅",box=[385, 449, 548, 583],click=False,warning=False):
+            self.plane_floor=1
+        elif self.click_text(text="浪潮",box=[385, 449, 548, 583],click=False,warning=False):
+            self.plane_floor=2
+        elif self.click_text(text="消褪",box=[385, 449, 548, 583],click=False,warning=False):
+            self.plane_floor=3
+        else:
+            CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
+            return
+        CUS_LOGGER.debug(f"当前地图位面{self.plane_floor}")
+        self.try_analysis_map(3,1)
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        return
     def select_doing(self):
         text = self.ts.find_with_box(box=[557, 747, 447, 474], forward=True, re_screen=False)
         text = merge_text(text) if len(text) else ""
@@ -166,7 +183,7 @@ class IronBloodUniverse(AnyFateUniverse):
             return
         if "肉体" in text:
             try:
-                self.try_analysis_map(mode=2)
+                self.try_analysis_map(mode=2,path_mode=1)
             except NoMatchError:
                 return
             except NoBossError:
@@ -181,7 +198,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 self.abandon_confirm(confirm=True)
         elif "战争" in text:
             try:
-                self.try_analysis_map(mode=2)
+                self.try_analysis_map(mode=2,path_mode=1)
             except NoMatchError:
                 return
             except NoBossError:
@@ -240,7 +257,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 CUS_LOGGER.info("「下一世，真理定会解明，死生……将有序流转。」")
                 key_mouse_manager.wait()
                 return
-            self.try_analysis_map(mode=2)
+            self.try_analysis_map(mode=2,path_mode=1)
             if self.next_node is not None:
                 self.start_nodes=self.next_node
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
@@ -261,7 +278,7 @@ class IronBloodUniverse(AnyFateUniverse):
                     CUS_LOGGER.debug(f"当前极限值{self.kill_count + self.max_limited}无法达到第二位面推荐值{self.second_plane_count},终止本次演算")
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
-            self.new_node=True
+        self.new_node=True
 
     def calculated_roll(self):
         if self.nodes is None or self.plane_floor==-1:
@@ -298,5 +315,5 @@ class IronBloodUniverse(AnyFateUniverse):
                                 self.click_text(text="重投", box=[1599, 1657, 760, 795])
                                 return
         self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
-        self.init_map(self.new_node)
+        self.init_map()
         self.mini_state = 1
