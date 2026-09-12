@@ -223,7 +223,8 @@ def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, m
         start_idx = leftmost['idx']
 
     return nodes, edges, start_idx
-def build_rightward_graph2(matches, start=None, max_gap=90.0, max_overlap=40.0, max_dy=120.0):
+def build_rightward_graph2(matches, start=None, max_gap=90.0, max_overlap=40.0, max_dy=120.0,
+                          plane=1, chaoyan_seen=False):
     """构建一个只能向右走（右 / 右上 / 右下）的有向图并返回节点与边。
 
     Args:

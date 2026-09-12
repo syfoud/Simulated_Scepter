@@ -24,7 +24,7 @@ from tool.utils.analysis_map import (
     display_matches,
     evaluate_best_single_replacement,
     match_multiple_targets,
-    max_weight_path,
+    max_weight_path, build_rightward_graph2,
 )
 from tool.utils.Error import NoBossError, NoMatchError
 from tool.utils.image_tool import find_image_by_name
@@ -117,7 +117,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.recorder = WindowRecorder('logs/video/', fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", True), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", True) and self._show_map, simul_instance=self)
         self.del_record_time=self.opt.get("del_record_time", 31)
         self.max_interact_time=self.opt.get("max_interact_time", 40)
-        self.area=""
+        self.area="战斗"
         self.now_map=-1
         self.new_node = True
         self.node_count=0
@@ -128,6 +128,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.native_special_map_root = None
         self.loaded_map_root = None
         self.current_role = 1  # 当前控制角色序号
+        self.now_area=[]
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
     def restart_recording(self):
@@ -139,6 +140,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.fail_match_count=0
         self.node_count=0
         self.chaoyan_seen = False  # 新轮回重置「超验之镜」已进过标记
+        self.now_area=[]
 
     def end_of_university(self):
         super().end_of_university()
@@ -235,43 +237,11 @@ class AnyFateUniverse(SimulatedUniverse):
                         and self.loaded_map_root not in (None, battle_map_root)):
                     self.init_map()
                 if "战斗" in self.area:
-                    if not self.big_map_init:
-                        key_mouse_manager.clean()
-                        key_mouse_manager.keyUp("w")
-                        key_mouse_manager.wait()
-                        if self._stop:
-                            return 1
-                        self.find,self.need_record,state=self.map_data_load()
-                        CUS_LOGGER.info(f"{factor}将燃烧…会燃尽。成为这一世的盗火行者。杀死神明和伙伴，夺走火种。")
-                        if self._stop or not state:
-                            return 1
-                    if self.need_record:
-                        self.recording_map()
-                    elif self.find:
-                        # 有先验寻路
-                        self.get_path_with_big_map()
-                    else:
-                        # 无先验寻路
-                        self.get_path_only_minimap()
+                    if self.navigate_battle():
+                        return 1
                 elif "精英" in self.area or "首领" in self.area:
-                    if not self.big_map_init:
-                        key_mouse_manager.clean()
-                        key_mouse_manager.keyUp("w")
-                        key_mouse_manager.wait()
-                        if self._stop:
-                            return 1
-                        self.find, self.need_record,state = self.map_data_load()
-                        CUS_LOGGER.info("面对「纷争」的半神……你绝无可能以和平的姿态取走这枚火种。")
-                        if self._stop or not state:
-                            return 1
-                    if self.need_record:
-                        self.recording_map()
-                    elif self.find:
-                        # 有先验寻路
-                        self.get_path_with_big_map(True)
-                    else:
-                        # 无先验寻路
-                        self.get_path_only_minimap(True)
+                    if self.navigate_battle(True):
+                        return 1
                 elif "事件" in self.area or "奖励" in self.area:
                     if self.record_special_map_or_navigate(self.get_event_only_minimap):
                         return 1
@@ -283,6 +253,21 @@ class AnyFateUniverse(SimulatedUniverse):
                         return 1
                 elif "冒险" in self.area:
                     self.get_adventure()
+                elif "空白" in self.area:
+                    # 空白节点可能是任意类型，先查小地图标志再决定寻路方式
+                    if self.check_minimap_icon("mini_event"):
+                        if self.record_special_map_or_navigate(self.get_event_only_minimap):
+                            return 1
+                    elif self.check_minimap_icon("mini_shop", 0.925):
+                        if self.record_special_map_or_navigate(self.get_shop_only_minimap):
+                            return 1
+                    elif self.check_minimap_icon("mini_rest"):
+                        if self.record_special_map_or_navigate(self.get_rest_only_minimap):
+                            return 1
+                    else:
+                        # 无事件/交易/休整标志，按战斗类型寻路兜底
+                        if self.navigate_battle():
+                            return 1
                 else:
                     #背景有光污染，字都认不出来
                     key_mouse_manager.mouse_move(1)
@@ -328,14 +313,67 @@ class AnyFateUniverse(SimulatedUniverse):
         else:
             return 0
 
+    def check_minimap_icon(self, icon_name, threshold=0.85):
+        """检查小地图上是否存在指定图标标志。"""
+        local_screen = get_minimap(self.screen, radius=MINIMAP_RADIUS, copy=True, rotation=True, center_radius=90)
+        icon = find_image_by_name(icon_name)
+        best_val = -1
+        for scale in [1.00, 1.05, 1.10, 1.15, 1.20, 1.25]:
+            mini_icon = cv.resize(icon, None, fx=scale, fy=scale, interpolation=cv.INTER_CUBIC)
+            result = cv.matchTemplate(local_screen, mini_icon, cv.TM_CCORR_NORMED)
+            _, max_val, _, _ = cv.minMaxLoc(result)
+            if max_val > best_val:
+                best_val = max_val
+        return best_val > threshold
+
+    def navigate_battle(self, fixed=False):
+        """战斗/精英/首领节点的通用寻路：加载地图并按目标点移动。
+
+        Args:
+            fixed: 是否为固定目标（精英/首领）节点。
+
+        Returns:
+            True 表示已停止或加载失败，调用方应直接返回；False 表示寻路完成。
+        """
+        if not self.big_map_init:
+            key_mouse_manager.clean()
+            key_mouse_manager.keyUp("w")
+            key_mouse_manager.wait()
+            if self._stop:
+                return True
+            self.find, self.need_record, state = self.map_data_load()
+            if fixed:
+                CUS_LOGGER.info("面对「纷争」的半神……你绝无可能以和平的姿态取走这枚火种。")
+            else:
+                CUS_LOGGER.info(f"{factor}将燃烧…会燃尽。成为这一世的盗火行者。杀死神明和伙伴，夺走火种。")
+            if self._stop or not state:
+                return True
+        if self.need_record:
+            self.recording_map()
+        elif self.find:
+            self.get_path_with_big_map(fixed)
+        else:
+            self.get_path_only_minimap(fixed)
+        return False
+
     def get_record_map_context(self):
         """根据当前区域返回其专属录图目录和地图模板集合。"""
-        if "事件" in self.area or "奖励" in self.area or "空白" in self.area:
+        if "事件" in self.area or "奖励" in self.area:
             map_kind = "event"
         elif "休整" in self.area:
             map_kind = "rest"
         elif "交易" in self.area:
             map_kind = "trade"
+        elif "空白" in self.area:
+            # 空白节点可能是任意类型，按实际匹配到的小地图标志决定
+            if self.check_minimap_icon("mini_event"):
+                map_kind = "event"
+            elif self.check_minimap_icon("mini_shop", 0.925):
+                map_kind = "trade"
+            elif self.check_minimap_icon("mini_rest"):
+                map_kind = "rest"
+            else:
+                return None
         else:
             return None
         return self.record_map_contexts.get(map_kind)
@@ -606,7 +644,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.click_text(text="击败该首领",box=[1108, 1385, 267, 290])
         self.click_text(text="确认选择",box=[1633, 1733, 961, 990])
 
-    def try_analysis_map(self,mode=1):
+    def try_analysis_map(self,mode=1,path_mode=2):
         image = self.screen
         matches = match_multiple_targets(image, mode)
         CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
@@ -650,14 +688,15 @@ class AnyFateUniverse(SimulatedUniverse):
                 CUS_LOGGER.debug(f"  {i}: {m['name']} at {m['location']}, 相似度: {m.get('similarity')}")
         else:
             raise NoBossError
+        fuc = build_rightward_graph if path_mode == 1 else build_rightward_graph2
         if mode == 3:
-            self.nodes, self.edges, start_idx = build_rightward_graph(
+            self.nodes, self.edges, start_idx = fuc(
                 matches, start=start,
                 max_gap=110, max_overlap=50, max_dy=130,
                 plane=self.plane_floor, chaoyan_seen=self.chaoyan_seen
             )
         else:
-            self.nodes, self.edges, start_idx = build_rightward_graph(
+            self.nodes, self.edges, start_idx = fuc(
                 matches, start=start,
                 plane=self.plane_floor, chaoyan_seen=self.chaoyan_seen
             )
@@ -770,6 +809,7 @@ class AnyFateUniverse(SimulatedUniverse):
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count=0
+            self.new_node = True
         key_mouse_manager.wait()
         return
 
@@ -904,7 +944,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 CUS_LOGGER.error("未找到下一步路径点")
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
-            self.new_node=True
+        self.new_node=True
 
     def calculated_roll(self):
         if self.nodes is None or self.plane_floor==-1:
@@ -920,16 +960,20 @@ class AnyFateUniverse(SimulatedUniverse):
         if not self.check("fast_roll", 0.1281,0.9074, threshold=0.9):
             self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
         self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
-        self.init_map(self.new_node)
+        self.init_map()
         self.mini_state = 1
 
-    def init_map(self,add=False):
+    def init_map(self):
         super().init_map()
         self.special_interaction_failures.clear()
         self.native_special_map_root = None
         self.loaded_map_root = None
-        if add:
+        CUS_LOGGER.debug(f"是否新节点: {self.new_node}")
+        if self.new_node:
             self.node_count+=1
+            self.now_area.append(self.area)
+            CUS_LOGGER.debug(f"已走过: {self.now_area}")
+            self.new_node=False
 
     def strange_shop(self):
         img = self.get_small_interaction_img(x=0.5000, y=0.7333, mask="mask_strange", fresh=True)
@@ -1008,7 +1052,6 @@ class AnyFateUniverse(SimulatedUniverse):
                     conn.close()
                 except Exception as e:
                     CUS_LOGGER.error(f"写入节点日志失败: {e}")
-            self.new_node=False
 
     def emergency(self):
         event_name = self.ts.find_with_box(box=[897, 1023, 500, 540], forward=True, re_screen=False)

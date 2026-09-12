@@ -91,6 +91,7 @@ class FingerSnap(AnyFateUniverse):
         self.fail_match_count=0
         self.node_count = 0
         self._ruanmei_er2_seen = False
+        self.now_area=[]
     def select_fate(self):
         self.click_text(text="丰饶", box=[824, 877, 784, 814])
     def update_count(self, read=True):
@@ -275,10 +276,9 @@ class FingerSnap(AnyFateUniverse):
                     CUS_LOGGER.debug(f"上次地图编号{self.now_map}, 累计访问次数: {visit_count}")
             else:
                 CUS_LOGGER.error("未找到下一步路径点")
-            self.new_node=True
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
-            self.new_node=True
+        self.new_node=True
     def initing_map(self):
         if not self.debug:
             CUS_LOGGER.error("本功能为实验性功能，当前仅供开发人员测试，现已终止程序")
@@ -298,6 +298,7 @@ class FingerSnap(AnyFateUniverse):
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count = 0
+            self.new_node = True
         key_mouse_manager.wait()
     def try_analysis_map(self, mode=1, target_selection=False):
         # if self.debug:
@@ -436,7 +437,7 @@ class FingerSnap(AnyFateUniverse):
                 CUS_LOGGER.debug(
                     f"作弊效果“{EFFECT_NAMES[pending_effect]}”已回显，直接确认，不重复决策")
                 self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
-                self.init_map(self.new_node)
+                self.init_map()
                 self.mini_state = 1
                 return
             CUS_LOGGER.warning(
@@ -447,7 +448,7 @@ class FingerSnap(AnyFateUniverse):
             CUS_LOGGER.warning("无法确认骰子效果，本次不消耗资源并按无效果继续")
             self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
             self.countdown_agent.apply_effect_action(EFFECT_NOTHING, "keep")
-            self.init_map(self.new_node)
+            self.init_map()
             self.mini_state = 1
             return
 
@@ -487,7 +488,7 @@ class FingerSnap(AnyFateUniverse):
 
         self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
         self.countdown_agent.apply_effect_action(observed, action)
-        self.init_map(self.new_node)
+        self.init_map()
         self.mini_state = 1
 
     def cheat(self):
