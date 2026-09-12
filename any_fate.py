@@ -24,7 +24,7 @@ from tool.utils.analysis_map import (
     display_matches,
     evaluate_best_single_replacement,
     match_multiple_targets,
-    max_weight_path,
+    max_weight_path, build_rightward_graph2,
 )
 from tool.utils.Error import NoBossError, NoMatchError
 from tool.utils.image_tool import find_image_by_name
@@ -235,43 +235,11 @@ class AnyFateUniverse(SimulatedUniverse):
                         and self.loaded_map_root not in (None, battle_map_root)):
                     self.init_map()
                 if "战斗" in self.area:
-                    if not self.big_map_init:
-                        key_mouse_manager.clean()
-                        key_mouse_manager.keyUp("w")
-                        key_mouse_manager.wait()
-                        if self._stop:
-                            return 1
-                        self.find,self.need_record,state=self.map_data_load()
-                        CUS_LOGGER.info(f"{factor}将燃烧…会燃尽。成为这一世的盗火行者。杀死神明和伙伴，夺走火种。")
-                        if self._stop or not state:
-                            return 1
-                    if self.need_record:
-                        self.recording_map()
-                    elif self.find:
-                        # 有先验寻路
-                        self.get_path_with_big_map()
-                    else:
-                        # 无先验寻路
-                        self.get_path_only_minimap()
+                    if self.navigate_battle():
+                        return 1
                 elif "精英" in self.area or "首领" in self.area:
-                    if not self.big_map_init:
-                        key_mouse_manager.clean()
-                        key_mouse_manager.keyUp("w")
-                        key_mouse_manager.wait()
-                        if self._stop:
-                            return 1
-                        self.find, self.need_record,state = self.map_data_load()
-                        CUS_LOGGER.info("面对「纷争」的半神……你绝无可能以和平的姿态取走这枚火种。")
-                        if self._stop or not state:
-                            return 1
-                    if self.need_record:
-                        self.recording_map()
-                    elif self.find:
-                        # 有先验寻路
-                        self.get_path_with_big_map(True)
-                    else:
-                        # 无先验寻路
-                        self.get_path_only_minimap(True)
+                    if self.navigate_battle(True):
+                        return 1
                 elif "事件" in self.area or "奖励" in self.area:
                     if self.record_special_map_or_navigate(self.get_event_only_minimap):
                         return 1
@@ -283,6 +251,21 @@ class AnyFateUniverse(SimulatedUniverse):
                         return 1
                 elif "冒险" in self.area:
                     self.get_adventure()
+                elif "空白" in self.area:
+                    # 空白节点可能是任意类型，先查小地图标志再决定寻路方式
+                    if self.check_minimap_icon("mini_event"):
+                        if self.record_special_map_or_navigate(self.get_event_only_minimap):
+                            return 1
+                    elif self.check_minimap_icon("mini_shop", 0.925):
+                        if self.record_special_map_or_navigate(self.get_shop_only_minimap):
+                            return 1
+                    elif self.check_minimap_icon("mini_rest"):
+                        if self.record_special_map_or_navigate(self.get_rest_only_minimap):
+                            return 1
+                    else:
+                        # 无事件/交易/休整标志，按战斗类型寻路兜底
+                        if self.navigate_battle():
+                            return 1
                 else:
                     #背景有光污染，字都认不出来
                     key_mouse_manager.mouse_move(1)
@@ -328,14 +311,67 @@ class AnyFateUniverse(SimulatedUniverse):
         else:
             return 0
 
+    def check_minimap_icon(self, icon_name, threshold=0.85):
+        """检查小地图上是否存在指定图标标志。"""
+        local_screen = get_minimap(self.screen, radius=MINIMAP_RADIUS, copy=True, rotation=True, center_radius=90)
+        icon = find_image_by_name(icon_name)
+        best_val = -1
+        for scale in [1.00, 1.05, 1.10, 1.15, 1.20, 1.25]:
+            mini_icon = cv.resize(icon, None, fx=scale, fy=scale, interpolation=cv.INTER_CUBIC)
+            result = cv.matchTemplate(local_screen, mini_icon, cv.TM_CCORR_NORMED)
+            _, max_val, _, _ = cv.minMaxLoc(result)
+            if max_val > best_val:
+                best_val = max_val
+        return best_val > threshold
+
+    def navigate_battle(self, fixed=False):
+        """战斗/精英/首领节点的通用寻路：加载地图并按目标点移动。
+
+        Args:
+            fixed: 是否为固定目标（精英/首领）节点。
+
+        Returns:
+            True 表示已停止或加载失败，调用方应直接返回；False 表示寻路完成。
+        """
+        if not self.big_map_init:
+            key_mouse_manager.clean()
+            key_mouse_manager.keyUp("w")
+            key_mouse_manager.wait()
+            if self._stop:
+                return True
+            self.find, self.need_record, state = self.map_data_load()
+            if fixed:
+                CUS_LOGGER.info("面对「纷争」的半神……你绝无可能以和平的姿态取走这枚火种。")
+            else:
+                CUS_LOGGER.info(f"{factor}将燃烧…会燃尽。成为这一世的盗火行者。杀死神明和伙伴，夺走火种。")
+            if self._stop or not state:
+                return True
+        if self.need_record:
+            self.recording_map()
+        elif self.find:
+            self.get_path_with_big_map(fixed)
+        else:
+            self.get_path_only_minimap(fixed)
+        return False
+
     def get_record_map_context(self):
         """根据当前区域返回其专属录图目录和地图模板集合。"""
-        if "事件" in self.area or "奖励" in self.area or "空白" in self.area:
+        if "事件" in self.area or "奖励" in self.area:
             map_kind = "event"
         elif "休整" in self.area:
             map_kind = "rest"
         elif "交易" in self.area:
             map_kind = "trade"
+        elif "空白" in self.area:
+            # 空白节点可能是任意类型，按实际匹配到的小地图标志决定
+            if self.check_minimap_icon("mini_event"):
+                map_kind = "event"
+            elif self.check_minimap_icon("mini_shop", 0.925):
+                map_kind = "trade"
+            elif self.check_minimap_icon("mini_rest"):
+                map_kind = "rest"
+            else:
+                return None
         else:
             return None
         return self.record_map_contexts.get(map_kind)
