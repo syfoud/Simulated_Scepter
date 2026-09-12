@@ -176,6 +176,7 @@ def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, m
     event_weight = ({1: 0.31, 2: 0.34, 3: 0.36} if chaoyan_seen
                     else {1: 0.33, 2: 0.36, 3: 0.36}).get(plane, 0.36)
     reward_weight = 0.2 if chaoyan_seen else 0.4
+    # battle_weight 注释，仅用于占位
     weight_map = {
         'event': event_weight, 'wait': 0, 'trade': 0, 'trade2': 0, 'adventure': 0,
         'reward': reward_weight, 'reward2': reward_weight, 'battle': 1.2, 'elite': 1,
