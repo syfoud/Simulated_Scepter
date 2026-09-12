@@ -1251,6 +1251,27 @@ border:none</string>
                   </widget>
                  </item>
                  <item>
+                   <layout class="QHBoxLayout" name="horizontalLayout_recording_keep_long_run">
+                   <item>
+                     <widget class="QCheckBox" name="recording_keep_long_run_checkbox">
+                     <property name="text">
+                       <string>演算时间异常过长时也保留录制</string>
+                     </property>
+                     </widget>
+                   </item>
+                   <item>
+                     <widget class="QLabel" name="label_recording_keep_long_run">
+                     <property name="text">
+                       <string>(分钟数÷战斗数)至少需求值</string>
+                     </property>
+                     </widget>
+                   </item>
+                   <item>
+                     <widget class="QLineEdit" name="recording_keep_long_run_input"/>
+                   </item>
+                   </layout>
+                 </item>
+                 <item>
                   <widget class="QLabel" name="label_27">
                    <property name="text">
                     <string>高级用户功能</string>
@@ -1298,27 +1319,6 @@ border:none</string>
                  </item>
                  <item>
                   <widget class="QLineEdit" name="recording_time_input"/>
-                 </item>
-                </layout>
-               </item>
-               <item>
-                <layout class="QHBoxLayout" name="horizontalLayout_recording_keep_long_run">
-                 <item>
-                  <widget class="QCheckBox" name="recording_keep_long_run_checkbox">
-                   <property name="text">
-                    <string>演算时间异常过长时也保留录制</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLabel" name="label_recording_keep_long_run">
-                   <property name="text">
-                    <string>(分钟数÷战斗数)至少需求值</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLineEdit" name="recording_keep_long_run_input"/>
                  </item>
                 </layout>
                </item>
