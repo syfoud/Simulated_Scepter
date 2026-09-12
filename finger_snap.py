@@ -91,6 +91,7 @@ class FingerSnap(AnyFateUniverse):
         self.fail_match_count=0
         self.node_count = 0
         self._ruanmei_er2_seen = False
+        self.now_area=[]
     def select_fate(self):
         self.click_text(text="丰饶", box=[824, 877, 784, 814])
     def update_count(self, read=True):
@@ -297,6 +298,7 @@ class FingerSnap(AnyFateUniverse):
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count = 0
+            self.new_node = True
         key_mouse_manager.wait()
     def try_analysis_map(self, mode=1, target_selection=False):
         # if self.debug:

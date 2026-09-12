@@ -117,7 +117,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.recorder = WindowRecorder('logs/video/', fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", True), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", True) and self._show_map, simul_instance=self)
         self.del_record_time=self.opt.get("del_record_time", 31)
         self.max_interact_time=self.opt.get("max_interact_time", 40)
-        self.area=""
+        self.area="战斗"
         self.now_map=-1
         self.new_node = True
         self.node_count=0
@@ -128,6 +128,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.native_special_map_root = None
         self.loaded_map_root = None
         self.current_role = 1  # 当前控制角色序号
+        self.now_area=[]
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
     def restart_recording(self):
@@ -139,6 +140,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.fail_match_count=0
         self.node_count=0
         self.chaoyan_seen = False  # 新轮回重置「超验之镜」已进过标记
+        self.now_area=[]
 
     def end_of_university(self):
         super().end_of_university()
@@ -642,7 +644,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.click_text(text="击败该首领",box=[1108, 1385, 267, 290])
         self.click_text(text="确认选择",box=[1633, 1733, 961, 990])
 
-    def try_analysis_map(self,mode=1):
+    def try_analysis_map(self,mode=1,path_mode=2):
         image = self.screen
         matches = match_multiple_targets(image, mode)
         CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
@@ -686,14 +688,15 @@ class AnyFateUniverse(SimulatedUniverse):
                 CUS_LOGGER.debug(f"  {i}: {m['name']} at {m['location']}, 相似度: {m.get('similarity')}")
         else:
             raise NoBossError
+        fuc = build_rightward_graph if path_mode == 1 else build_rightward_graph2
         if mode == 3:
-            self.nodes, self.edges, start_idx = build_rightward_graph(
+            self.nodes, self.edges, start_idx = fuc(
                 matches, start=start,
                 max_gap=110, max_overlap=50, max_dy=130,
                 plane=self.plane_floor, chaoyan_seen=self.chaoyan_seen
             )
         else:
-            self.nodes, self.edges, start_idx = build_rightward_graph(
+            self.nodes, self.edges, start_idx = fuc(
                 matches, start=start,
                 plane=self.plane_floor, chaoyan_seen=self.chaoyan_seen
             )
@@ -806,6 +809,7 @@ class AnyFateUniverse(SimulatedUniverse):
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count=0
+            self.new_node = True
         key_mouse_manager.wait()
         return
 
@@ -940,7 +944,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 CUS_LOGGER.error("未找到下一步路径点")
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
-            self.new_node=True
+        self.new_node=True
 
     def calculated_roll(self):
         if self.nodes is None or self.plane_floor==-1:
@@ -964,8 +968,11 @@ class AnyFateUniverse(SimulatedUniverse):
         self.special_interaction_failures.clear()
         self.native_special_map_root = None
         self.loaded_map_root = None
+        CUS_LOGGER.debug(f"是否新节点: {self.new_node}")
         if self.new_node:
             self.node_count+=1
+            self.now_area.append(self.area)
+            CUS_LOGGER.debug(f"已走过: {self.now_area}")
             self.new_node=False
 
     def strange_shop(self):
