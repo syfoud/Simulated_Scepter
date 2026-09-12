@@ -112,6 +112,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.next_node = None
         self.max_limited = None
         self.run_start_time = time.time()
+        self.elapsed_time = 0 # 本轮演算持续时间
         self.need_end=False
         self.record = self.opt.get("recording_iron_blood", True)
         self.recorder = WindowRecorder('logs/video/', fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", True), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", True) and self._show_map, simul_instance=self)
