@@ -187,30 +187,89 @@ def match_numbers_in_region(or_image, threshold=0.9):
     number_str = ''.join([m['name'] for m in sorted_matches])
     return number_str
 
-
-def match_skill_numbers_in_region(or_image, threshold=0.9):
-    """
-    在指定区域匹配数字模板
-
-    Args:
-        or_image: 输入图像数组
-        threshold: 匹配阈值
-    Returns:
-        str: 匹配结果列表，已按从左到右排序
-    """
+def match_skill_numbers_in_region(or_image, threshold=0.75):
+    # 识别秘技点数量，支持 0~11。单数字直接识别，两位数按左右两个数字拼接。
     or_image = or_image[823:870, 1675:1713].copy()
     gray = cv2.cvtColor(or_image, cv2.COLOR_BGR2GRAY)
-    mask = cv2.inRange(gray, 200, 255)
-    white_region = cv2.bitwise_and(gray, gray, mask=mask)
-    best_match = None
-    best_score = -1
+    mask = cv2.inRange(gray, 180, 255)
+    # 按列投影寻找数字区域
+    column_has_pixels = np.any(mask > 0, axis=0)
+    regions = []
+    start = None
+    gap = 0
+    for x, has_pixels in enumerate(column_has_pixels):
+        if has_pixels:
+            if start is None:
+                start = x
+            gap = 0
+        elif start is not None:
+            gap += 1
+            # 允许数字内部最多出现两个空列
+            if gap > 2:
+                end = x - gap
+                if end >= start:
+                    region = mask[:, start:end + 1]
+                    points = cv2.findNonZero(region)
+                    if points is not None:
+                        rx, ry, rw, rh = cv2.boundingRect(points)
+                        if rw >= 2 and rh >= 8:
+                            regions.append((start + rx, ry, rw, rh))
+                start = None
+                gap = 0
 
-    for template_name in ["0", "1", "2", "3", "4", "5", "6", "7", "8"]:
-        template = find_image_in_folder("gray_image/num", template_name)
-        res = cv2.matchTemplate(white_region, template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, _ = cv2.minMaxLoc(res)
-        if max_val > best_score:
-            best_score = max_val
-            best_match = int(template_name)
+    # 处理最后一个数字
+    if start is not None:
+        end = len(column_has_pixels) - 1
+        region = mask[:, start:end + 1]
+        points = cv2.findNonZero(region)
+        if points is not None:
+            rx, ry, rw, rh = cv2.boundingRect(points)
+            if rw >= 2 and rh >= 8:
+                regions.append((start + rx, ry, rw, rh))
+    if not regions:
+        return None
 
-    return best_match if best_score >= threshold else None
+    # 从左到右排序
+    regions.sort(key=lambda item: item[0])
+    matched_digits = []
+    for x, y, w, h in regions:
+        digit_mask = mask[y:y + h, x:x + w]
+        best_digit = None
+        best_score = -1.0
+        for template_name in map(str, range(10)):
+            template = find_image_in_folder("gray_image/num",template_name)
+            if template is None:
+                continue
+            if len(template.shape) == 3:
+                template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+            else:
+                template_gray = template
+            template_mask = cv2.inRange(template_gray, 180, 255)
+            points = cv2.findNonZero(template_mask)
+            if points is None:
+                continue
+
+            tx, ty, tw, th = cv2.boundingRect(points)
+            template_digit = template_mask[ty:ty + th, tx:tx + tw]
+            # 调整当前数字到模板主体尺寸
+            resized_digit = cv2.resize(digit_mask, (tw, th), interpolation=cv2.INTER_NEAREST)
+            digit_binary = resized_digit > 0
+            template_binary = template_digit > 0
+            intersection = np.logical_and(digit_binary,template_binary).sum()
+            union = np.logical_or(digit_binary, template_binary).sum()
+            score = intersection / union if union else 0.0
+            if score > best_score:
+                best_score = score
+                best_digit = int(template_name)
+
+        if best_digit is None or best_score < threshold:
+            return None
+
+        matched_digits.append(str(best_digit))
+
+    # 秘技点只可能是 0~11
+    result = int("".join(matched_digits))
+    if 0 <= result <= 11:
+        return result
+
+    return None
