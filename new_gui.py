@@ -218,6 +218,11 @@ class MainWindow(QMainWindowLog):
         self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
         self.early_stop_checkbox.setChecked(data.get("early_stop", False))
         self.pig_switch_2_role.setChecked(data.get("pig_switch_2_role", False))
+        self.silver_wolf_enable.setChecked(data.get("silver_wolf_enable", False))
+        silver_wolf_switch = data.get("silver_wolf_switch", "三号位")
+        switch_idx = self.silver_wolf_switch_combo.findText(silver_wolf_switch)
+        if switch_idx >= 0:
+            self.silver_wolf_switch_combo.setCurrentIndex(switch_idx)
         self.recording_time_input.setText(str(data.get("del_record_time", 31)))
         self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
         self.Iron_blood_max_run_input.setText(str(int(data.get("max_run_time", 0))))
@@ -331,6 +336,8 @@ class MainWindow(QMainWindowLog):
         data["record_add_label"] = self.recording_label_checkbox.isChecked()
         data["early_stop"] = self.early_stop_checkbox.isChecked()
         data["pig_switch_2_role"] = self.pig_switch_2_role.isChecked()
+        data["silver_wolf_enable"] = self.silver_wolf_enable.isChecked()
+        data["silver_wolf_switch"] = self.silver_wolf_switch_combo.currentText()
         data["del_record_time"] = int(self.recording_time_input.text())
         data["record_event_map"] = self.record_event_map_checkbox.isChecked()
         data["max_run_time"] = int(self.Iron_blood_max_run_input.text())
@@ -450,11 +457,26 @@ class MainWindow(QMainWindowLog):
         self.Iron_blood_second_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_first_plane_min_weight_input.setEnabled(early_stop_enabled)
         self.Iron_blood_third_plane_pause_input.setEnabled(early_stop_enabled)
+        self.silver_wolf_switch_combo.setEnabled(self.silver_wolf_enable.isChecked())
 
     def connect_dependency_signals(self):
         self.debug_checkox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.recording_checkBox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.early_stop_checkbox.stateChanged.connect(lambda: self.update_dependent_controls_state())
+        self.silver_wolf_enable.stateChanged.connect(
+            lambda: self._on_companion_toggled(self.silver_wolf_enable))
+        self.pig_switch_2_role.stateChanged.connect(
+            lambda: self._on_companion_toggled(self.pig_switch_2_role))
+
+    def _on_companion_toggled(self, source):
+        """银狼秘技与遇猪切人互斥：勾选一项自动取消另一项。"""
+        other = (self.pig_switch_2_role if source is self.silver_wolf_enable
+                 else self.silver_wolf_enable)
+        if source.isChecked() and other.isChecked():
+            other.blockSignals(True)
+            other.setChecked(False)
+            other.blockSignals(False)
+        self.update_dependent_controls_state()
 
     def eventFilter(self, obj, event):
         """

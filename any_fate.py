@@ -40,6 +40,7 @@ from tool.utils.ocr_num import (
 )
 from tool.utils.tool import find_latest_modified_file
 from tool.window_recorder import WindowRecorder
+from tool.silver_wolf_manager import SilverWolfManager
 
 
 class AnyFateUniverse(SimulatedUniverse):
@@ -129,6 +130,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.native_special_map_root = None
         self.loaded_map_root = None
         self.current_role = 1  # 当前控制角色序号
+        self.silver_wolf_manager = SilverWolfManager(self)
         self.now_area=[]
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
@@ -216,18 +218,17 @@ class AnyFateUniverse(SimulatedUniverse):
                 CUS_LOGGER.debug(f"当前区域{self.area}")
                 # 当前节点为祝福猪节点时切2号位并重置黄泉/白厄状态
                 start_node = getattr(self, 'start_nodes', None)
+                is_pig = False
                 if "精英" not in self.area and start_node is not None:
                     cm = (start_node.get('orig') or {}).get('corner_marker')
                     if cm and cm.get('name') in ('pig1', 'pig2'):
-                        CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
-                        # 根据用户设置决定是否遇猪切换2号位角色
-                        if self.opt.get("pig_switch_2_role", False):
-                            self.switch_current_role(num=2)
-                            self.quan = 0
-                            self.bai_e = 0
-                    else:
-                        self.switch_current_role(num=1)
-                else:
+                        is_pig = True
+                if is_pig and self.opt.get("pig_switch_2_role", False):
+                    CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
+                    self.switch_current_role(num=2)
+                    self.quan = 0
+                    self.bai_e = 0
+                elif not self.silver_wolf_manager.activate():
                     self.switch_current_role(num=1)
                 if "黑塔的办公" not in self.area:
                     # 根据图像识别结果，判断是否施放银狼秘技
@@ -949,6 +950,7 @@ class AnyFateUniverse(SimulatedUniverse):
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
         self.new_node=True
+        self.silver_wolf_manager.reset_lock()
 
     def calculated_roll(self):
         if self.nodes is None or self.plane_floor==-1:
