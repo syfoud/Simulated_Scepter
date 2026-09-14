@@ -113,6 +113,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.max_limited = None
         self.run_start_time = time.time()
         self.elapsed_time = 0 # 本轮演算持续时间
+        self.attack_time = 0 # 上次空打一拳时间
         self.need_end=False
         self.record = self.opt.get("recording_iron_blood", True)
         self.recorder = WindowRecorder('logs/video/', fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", True), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", True) and self._show_map, simul_instance=self)
@@ -235,6 +236,11 @@ class AnyFateUniverse(SimulatedUniverse):
                         key_mouse_manager.press('e')
                         CUS_LOGGER.debug("已施放银狼秘技")
                         key_mouse_manager.sleep(0.6)
+                    # 攻击附近潜在的可破坏物，5秒内不重复攻击
+                    if time.time() - self.attack_time >= 5:
+                        key_mouse_manager.click(0.5, 0.5)
+                        CUS_LOGGER.debug("尝试空打一拳")
+                        self.attack_time = time.time()
                 key_mouse_manager.wait()
                 battle_map_root = os.path.join(PATHS["image"], "nmaps")
                 if (("战斗" in self.area or "精英" in self.area or "首领" in self.area)
