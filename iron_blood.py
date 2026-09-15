@@ -34,6 +34,7 @@ class IronBloodUniverse(AnyFateUniverse):
         self.second_plane_count = self.opt.get("second_plane", 31)
         self.first_plane_min_weight = self.opt.get("first_plane_min_weight", 6)
         self.third_plane_pause_count = self.opt.get("third_plane_pause_count", 0)
+        self.boss_before_pause_count = self.opt.get("boss_before_pause_count", 39)
         self.fate = "毁灭"
         self.my_fate = config.fates.index(self.fate)
         self.tk = text_keys(self.my_fate)
@@ -268,6 +269,12 @@ class IronBloodUniverse(AnyFateUniverse):
                 return
             self.try_analysis_map(mode=2,path_mode=1)
             if self.next_node is not None:
+                # 进入最终首领格前暂停
+                if self.next_node["name"] == "boss" and self.boss_before_pause_count > 0 and self.boss_before_pause_count <= self.kill_count:
+                    CUS_LOGGER.debug(f"当前击杀数：{self.kill_count}，即将进入最终首领格，停止程序")
+                    CUS_LOGGER.info("恭喜，您即将获得铁血战士！")
+                    self.stop()
+                    return
                 self.start_nodes=self.next_node
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
                 key_mouse_manager.click(x,y)

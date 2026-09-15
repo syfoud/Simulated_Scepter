@@ -1393,6 +1393,20 @@ border:none</string>
                 </layout>
                </item>
                <item>
+                <layout class="QHBoxLayout" name="horizontalLayout_boss_before_pause">
+                 <item>
+                  <widget class="QLabel" name="label_boss_before_pause">
+                   <property name="text">
+                    <string>进入最终首领格前暂停 至少需求数（0不启用，默认39）</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QLineEdit" name="Iron_blood_boss_before_pause_input"/>
+                 </item>
+                </layout>
+               </item>
+               <item>
                 <layout class="QHBoxLayout" name="horizontalLayout_interact_time">
                  <item>
                   <widget class="QLabel" name="label_interact_time">
