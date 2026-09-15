@@ -2642,7 +2642,7 @@ class UniverseUtils:
                         skill_num = match_skill_numbers_in_region(self.get_screen())
                         if skill_num is not None:
                             self.skill_num = skill_num
-                        if self.skill_num == 0:
+                        if self.skill_num <= 1:
                             fixed = True
                         self.use_e(face=True,fixed=fixed)
                         self.stop_move = 1
@@ -3044,7 +3044,7 @@ class UniverseUtils:
                 skill_num = match_skill_numbers_in_region(self.get_screen())
                 if skill_num is not None:
                     self.skill_num = skill_num
-                if self.skill_num == 0:
+                if self.skill_num <= 1:
                     fixed = True
                 self.use_e(fixed=fixed)
                 if not self.get_loc():
