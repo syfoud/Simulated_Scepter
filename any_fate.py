@@ -40,6 +40,7 @@ from tool.utils.ocr_num import (
 )
 from tool.utils.tool import find_latest_modified_file
 from tool.window_recorder import WindowRecorder
+from tool.utils.ocr_num import match_skill_numbers_in_region
 
 
 class AnyFateUniverse(SimulatedUniverse):
@@ -220,6 +221,7 @@ class AnyFateUniverse(SimulatedUniverse):
                     cm = (start_node.get('orig') or {}).get('corner_marker')
                     if cm and cm.get('name') in ('pig1', 'pig2'):
                         CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
+                        pig = True
                         # 根据用户设置决定是否遇猪切换2号位角色
                         if self.opt.get("pig_switch_2_role", False):
                             self.switch_current_role(num=2)
@@ -227,14 +229,27 @@ class AnyFateUniverse(SimulatedUniverse):
                             self.bai_e = 0
                     else:
                         self.switch_current_role(num=1)
+                        pig = False
                 else:
                     self.switch_current_role(num=1)
+                    pig = False
                 if "黑塔的办公" not in self.area:
-                    # 根据图像识别结果，判断是否施放银狼秘技
-                    if self.current_role == 1 and self.check("silverwolf", 0.0609,0.7037) and (not self.check("bean", 0.1536,0.7056)):
-                        key_mouse_manager.press('e')
-                        CUS_LOGGER.debug("已施放银狼秘技")
-                        key_mouse_manager.sleep(0.6)
+                    # 判断是否施放银狼秘技
+                    if self.current_role == 1 and self.check("silverwolf", 0.0609,0.7037):
+                        bean = self.check("bean", 0.1536,0.7056)
+                        skill_num = match_skill_numbers_in_region(self.get_screen())
+                        CUS_LOGGER.debug(f"当前秘技点数量：{skill_num}")
+                        self.skill_num = skill_num if (skill_num is not None) else 5
+                        # 秘技未施放时，秘技点超过1，或者秘技点为1且当前区域无小怪，则施放银狼秘技
+                        if not bean and (self.skill_num >= 2 or (self.skill_num == 1 and ("战斗" not in self.area or pig))):
+                            key_mouse_manager.press('e')
+                            CUS_LOGGER.debug("已施放银狼秘技")
+                            key_mouse_manager.sleep(0.6)
+                        # 秘技已施放时，秘技点为1且当前区域有小怪，则解除银狼秘技
+                        elif bean and (self.skill_num == 1 and ("战斗" in self.area and not pig)):
+                            key_mouse_manager.press('e')
+                            CUS_LOGGER.debug("已解除银狼秘技")
+                            key_mouse_manager.sleep(0.6)
                 key_mouse_manager.wait()
                 battle_map_root = os.path.join(PATHS["image"], "nmaps")
                 if (("战斗" in self.area or "精英" in self.area or "首领" in self.area)
