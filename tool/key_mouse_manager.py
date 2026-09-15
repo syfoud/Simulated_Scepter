@@ -9,12 +9,10 @@ import win32con
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
-
 # 延迟导入，避免循环导入
 def get_CUS_LOGGER():
     from tool.log import CUS_LOGGER
     return CUS_LOGGER
-
 
 class KeyMouseManager:
     """
@@ -99,6 +97,7 @@ class KeyMouseManager:
                 self.operation_queue.clear()  # 清空队列中的所有操作
                 self.operation_queue.append("stop")
             self.worker_thread.join()
+
     def clean(self):
         """
         清除当前键鼠管理器线程所有操作
@@ -108,6 +107,7 @@ class KeyMouseManager:
         if self.worker_thread and self.worker_thread.is_alive():
             with self.queue_lock:
                 self.operation_queue.clear()  # 清空队列中的所有操作
+
     def _worker(self):
         """
         工作线程，处理队列中的操作
@@ -222,7 +222,6 @@ class KeyMouseManager:
             # 仿照UniverseUtils.mouse_move实现
             self._direct_mouse_move(dx, fine)
 
-
         elif op_type == 'scroll':
             x, y = operation['x'], operation['y']
             direct = operation['direct']
@@ -260,7 +259,6 @@ class KeyMouseManager:
             dx: x轴移动距离
             fine: 精细度控制参数
         """
-
         if x > 30 // fine:
             y = 30 // fine
         elif x < -30 // fine:
@@ -337,6 +335,8 @@ class KeyMouseManager:
         """
         while True:
             # 如果队列为空或者只有"stop"信号，则返回
+            if not self.running:
+                return
             if not len(self.operation_queue) and self.ending:
                 return
             with self.queue_lock:

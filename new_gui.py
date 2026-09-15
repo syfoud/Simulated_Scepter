@@ -109,6 +109,12 @@ class MainWindow(QMainWindowLog):
 
         if self.current_task and hasattr(self.current_task, 'stop'):
             self.current_task.stop()
+            if self.task_thread:
+                self.task_thread.join(timeout=3)
+            if self.task_thread and self.task_thread.is_alive():
+                self.Label_RunningState.setText("任务序列线程状态: 停止中")
+                set_global_stop_flag(False)
+                return False
             self.task_thread = None
             self.current_task = None
             # 更新任务状态标签为"未运行"

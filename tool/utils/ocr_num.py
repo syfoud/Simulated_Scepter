@@ -12,7 +12,6 @@ from tool.utils.image_tool import find_image_in_folder
 ROLL_COUNT_REGION = (1660, 707, 1700, 740)
 CHEAT_COUNT_REGION = (1325, 707, 1365, 740)
 
-
 def _normalize_roll_count_image(image):
     """Extract and center the light-colored roll-count glyph for matching."""
     if image is None or image.size == 0:
@@ -43,7 +42,6 @@ def _normalize_roll_count_image(image):
     ] = resized
     return normalized
 
-
 def _roll_count_similarity(first, second):
     first_mask = _normalize_roll_count_image(first)
     second_mask = _normalize_roll_count_image(second)
@@ -51,7 +49,6 @@ def _roll_count_similarity(first, second):
         return -1.0
     result = cv2.matchTemplate(first_mask, second_mask, cv2.TM_CCOEFF_NORMED)
     return float(result[0, 0])
-
 
 def _save_unmatched_roll_count(crop, unmatched_dir):
     """Save a new unmatched sample, while avoiding near-identical duplicates."""
@@ -67,7 +64,6 @@ def _save_unmatched_roll_count(crop, unmatched_dir):
     save_path = os.path.join(unmatched_dir, filename)
     return save_path if cv2.imwrite(save_path, crop) else None
 
-
 def _action_count_template_value(filename):
     """Return the value from ``7.png`` or a variant such as ``7_dark.png``."""
     stem, extension = os.path.splitext(filename)
@@ -75,7 +71,6 @@ def _action_count_template_value(filename):
         return None
     match = re.fullmatch(r"(\d+)(?:_.+)?", stem)
     return int(match.group(1)) if match else None
-
 
 def _match_action_count_in_region(or_image, region, count_name, threshold=0.9,
                                   template_dir=None, unmatched_dir=None):
@@ -114,7 +109,6 @@ def _match_action_count_in_region(or_image, region, count_name, threshold=0.9,
         CUS_LOGGER.warning(f"未识别{count_name}次数，且样本保存失败")
     return None
 
-
 def match_roll_count_in_region(or_image, threshold=0.9, template_dir=None,
                                unmatched_dir=None):
     """Recognize the reroll count in [1660, 707, 1700, 740]."""
@@ -126,7 +120,6 @@ def match_roll_count_in_region(or_image, threshold=0.9, template_dir=None,
         template_dir,
         unmatched_dir,
     )
-
 
 def match_cheat_count_in_region(or_image, threshold=0.9, template_dir=None,
                                 unmatched_dir=None):
@@ -140,12 +133,10 @@ def match_cheat_count_in_region(or_image, threshold=0.9, template_dir=None,
         unmatched_dir,
     )
 
-
 def extract_number(s):
     """从字符串中提取 + 开头、% 结尾的中间数字"""
     match = re.search(r'\+(\d+)%', s)
     return match.group(1) if match else None
-
 
 def match_numbers_in_region(or_image, threshold=0.9):
     """
@@ -270,6 +261,7 @@ def match_skill_numbers_in_region(or_image, threshold=0.75):
     # 秘技点只可能是 0~11
     result = int("".join(matched_digits))
     if 0 <= result <= 11:
+        CUS_LOGGER.info (f"识别到当前秘技点数量: {result}点")
         return result
 
     return None
