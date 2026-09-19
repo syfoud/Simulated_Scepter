@@ -41,6 +41,7 @@ from tool.utils.ocr_num import (
 from tool.utils.tool import find_latest_modified_file
 from tool.window_recorder import WindowRecorder
 from tool.utils.ocr_num import match_skill_numbers_in_region
+from tool.silver_wolf_manager import SilverWolfManager
 
 
 class AnyFateUniverse(SimulatedUniverse):
@@ -132,6 +133,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.native_special_map_root = None
         self.loaded_map_root = None
         self.current_role = 1  # 当前控制角色序号
+        self.silver_wolf_manager = SilverWolfManager(self)
         self.now_area=[]
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
@@ -150,6 +152,7 @@ class AnyFateUniverse(SimulatedUniverse):
         super().end_of_university()
         self.run_start_time = time.time()  # 开始下一局计时
         self.need_end=False
+        self.silver_wolf_manager.silver_wolf_slot = None
         self.init_map()
         CUS_LOGGER.info(f'{factor}再度踏上轮回……')
 
@@ -197,7 +200,33 @@ class AnyFateUniverse(SimulatedUniverse):
             return True
         else:
             return False
-    
+
+    def is_pig_node(self):
+        """当前节点是否为祝福扑满。"""
+        start_node = getattr(self, 'start_nodes', None)
+        if start_node is None:
+            return False
+        corner_marker = (start_node.get('orig') or {}).get('corner_marker')
+        return bool(corner_marker) and corner_marker.get('name') in ('pig1', 'pig2')
+
+    def switch_to_configured_role(self):
+        """按 silver_wolf_switch 配置切换到指定角色位。"""
+        switch_text = self.opt.get("silver_wolf_switch", "一号位")
+        target = {"一号位": 1, "二号位": 2, "三号位": 3, "四号位": 4}.get(switch_text, 1)
+        CUS_LOGGER.debug(f"按设置切至{switch_text}（键位 {target}）")
+        self.switch_current_role(target)
+        self.quan = 0
+        self.bai_e = 0
+
+    def use_e(self, face=False, fixed=False):
+        """使用秘技；二号位银狼秘技开启时，改用普通攻击以保留秘技点。"""
+        if not fixed and self.silver_wolf_manager.should_skip_skill():
+            CUS_LOGGER.debug("银狼秘技：为保留秘技点，本次改为普通攻击")
+            key_mouse_manager.click(0.5, 0.5)
+            key_mouse_manager.wait()
+            return
+        super().use_e(face=face, fixed=fixed)
+
     def normal(self):
         bk_lst_changed = self.last_interact_time
         self.last_interact_time = time.time()
@@ -217,24 +246,17 @@ class AnyFateUniverse(SimulatedUniverse):
                 ocr_text = self.ts.find_with_box(box=[55, 164, 12, 40],forward=True,re_screen=False)
                 self.area=merge_text(ocr_text) if len(ocr_text) else ""
                 CUS_LOGGER.debug(f"当前区域{self.area}")
-                # 当前节点为祝福猪节点时切2号位并重置黄泉/白厄状态
-                start_node = getattr(self, 'start_nodes', None)
-                if "精英" not in self.area and start_node is not None:
-                    cm = (start_node.get('orig') or {}).get('corner_marker')
-                    if cm and cm.get('name') in ('pig1', 'pig2'):
-                        CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
-                        pig = True
-                        # 根据用户设置决定是否遇猪切换2号位角色
-                        if self.opt.get("pig_switch_2_role", False):
-                            self.switch_current_role(num=2)
-                            self.quan = 0
-                            self.bai_e = 0
-                    else:
+                # 当前节点为祝福扑满且非精英区域时，根据开关决定切人策略
+                pig = self.is_pig_node() and "精英" not in self.area
+                if pig:
+                    CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
+                if self.opt.get("silver_wolf_enable", False):
+                    if not self.silver_wolf_manager.activate():
                         self.switch_current_role(num=1)
-                        pig = False
+                elif pig and self.opt.get("pig_switch_2_role", False):
+                    self.switch_to_configured_role()
                 else:
                     self.switch_current_role(num=1)
-                    pig = False
                 if "黑塔的办公" not in self.area:
                     key_mouse_manager.clean()
                     # 歪比巴卜：空打一拳
@@ -243,10 +265,10 @@ class AnyFateUniverse(SimulatedUniverse):
                         CUS_LOGGER.debug("尝试空打一拳")
                         self.attack_time = time.time()
                         key_mouse_manager.sleep(0.6)
-                    # 判断是否施放银狼秘技
-                    if self.current_role == 1 and self.check("silverwolf", 0.0609,0.7037):
-                        bean = self.check("bean", 0.1536,0.7056)
-                        skill_num = match_skill_numbers_in_region(self.get_screen())
+                    # 一号位银狼逻辑（历史保留，仅替换识别接口）
+                    if self.current_role == 1 and self.silver_wolf_manager.is_silver_wolf_at(1):
+                        bean = self.silver_wolf_manager.has_bean_icon(1)
+                        skill_num = match_skill_numbers_in_region(self.screen)
                         self.skill_num = skill_num if (skill_num is not None) else 5
                         # 秘技未施放时，秘技点超过1，或者秘技点为1且当前区域无小怪，则施放银狼秘技
                         if not bean and (self.skill_num >= 2 or (self.skill_num == 1 and ("战斗" not in self.area or pig))):
@@ -258,6 +280,14 @@ class AnyFateUniverse(SimulatedUniverse):
                             key_mouse_manager.press('e')
                             CUS_LOGGER.debug("已解除银狼秘技")
                             key_mouse_manager.sleep(0.6)
+                    # 二号位及以上银狼逻辑：复用 activate 缓存的角色位与同一张截图
+                    elif (self.silver_wolf_manager.silver_wolf_slot in (2, 3, 4)
+                          and self.current_role == self.silver_wolf_manager.silver_wolf_slot):
+                        slot = self.silver_wolf_manager.silver_wolf_slot
+                        bean = self.silver_wolf_manager.has_bean_icon(slot)
+                        if not bean and self.skill_num >= 1:
+                            key_mouse_manager.press('e')
+                            CUS_LOGGER.debug("已施放银狼秘技")
                 key_mouse_manager.wait()
                 battle_map_root = os.path.join(PATHS["image"], "nmaps")
                 if (("战斗" in self.area or "精英" in self.area or "首领" in self.area)

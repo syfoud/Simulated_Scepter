@@ -1293,7 +1293,37 @@ border:none</string>
                      <item>
                       <widget class="QCheckBox" name="pig_switch_2_role">
                        <property name="text">
-                        <string>遇到祝福扑满临时切换2号位角色</string>
+                        <string>自定义遇猪切人</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <layout class="QHBoxLayout" name="horizontalLayout_silver_wolf_switch">
+                       <item>
+                        <widget class="QLabel" name="label_silver_wolf_switch">
+                         <property name="text">
+                          <string>切换至</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <widget class="QComboBox" name="silver_wolf_switch_combo">
+                         <property name="toolTip">
+                          <string>若开启二号位银狼，战斗扑满信标区域无秘技点时也会切换至所选位置抓扑满</string>
+                         </property>
+                         <item><property name="text"><string>一号位</string></property></item>
+                         <item><property name="text"><string>二号位</string></property></item>
+                        </widget>
+                       </item>
+                      </layout>
+                     </item>
+                     <item>
+                      <widget class="QCheckBox" name="silver_wolf_enable">
+                       <property name="text">
+                        <string>二号位银狼秘技</string>
+                       </property>
+                       <property name="toolTip">
+                        <string>位于首领、精英、事件、奖励、事件虫群与携带祝福扑满的战斗区域时，切换至二号位并启用秘技</string>
                        </property>
                       </widget>
                      </item>
