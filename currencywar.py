@@ -18,7 +18,7 @@ class CurrencyWar (SimulatedCurrency):
         with EXTRA.FILE_LOCK:
             with open(settings_path, encoding="UTF-8") as file:
                 self.opt = json.load(file)
-        CUS_LOGGER.info ("开始自动刷取叽米")
+        CUS_LOGGER.info ("开始自动刷取未解锁投资策略")
         super().__init__(
             find=True,                # 是否寻路，货币战争可能不需要，但必须传
             debug=self.opt.get("debug", True),

@@ -1,1 +1,3 @@
 exit_after_plane: 1
+exit_if_no_prior: false
+prior_exit_plane: null

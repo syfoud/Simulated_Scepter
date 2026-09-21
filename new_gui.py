@@ -1,6 +1,8 @@
+import ast
 import ctypes
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -19,6 +21,7 @@ from tool.currency.settings import (
     load_currency_settings,
     save_currency_settings,
 )
+from tool.currency.text_key import DEFAULT_CURRENCY_PRIORITY
 from tool.GLOBAL import set_global_stop_flag
 from tool.log import log_emitter
 from tool.thread import ThreadWithException
@@ -27,13 +30,16 @@ from tool.utils.image_tool import find_image_by_name, load_all_images_from_direc
 load_all_images_from_directory()
 import faulthandler
 
-from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QEvent, QTimer
+from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QEvent, QTimer
 from PyQt5.QtWidgets import (
     QApplication,
+    QAbstractItemView,
     QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QTextBrowser,
@@ -52,6 +58,358 @@ from tool.diver.config import config as config_diver
 from tool.simul.config import config as config_simul
 
 HOTKEY_DEBOUNCE_SECONDS = 1.0
+
+class Priority0ListWidget(QListWidget):
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+
+        viewport = self.viewport()
+        assert viewport is not None
+
+        width = viewport.width()
+        self.setGridSize(QSize(width, 32))
+
+        if self.count():
+            item = self.item(0)
+            assert item is not None
+            item.setSizeHint(QSize(width, 32))
+
+class CurrencyPriorityDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle("自定义投资环境优先级")
+        self.setWindowFlags(
+            self.windowFlags() & ~Qt.WindowContextHelpButtonHint
+        )
+        self.resize(1050, 850)
+
+        self.text_key_path = os.path.join(
+            PATHS["root"],
+            "tool",
+            "currency",
+            "text_key.py",
+        )
+
+        self.priority_lists = []
+
+        main_layout = QVBoxLayout(self)
+
+        sections = [
+            ("必选环境", "prior_envir"),
+        ]
+
+        for title, key in sections:
+            label = QLabel(title)
+            label.setAlignment(Qt.AlignCenter)
+            main_layout.addWidget(label)
+
+            list_widget = self.create_priority_list()
+            list_widget.priority_key = key
+            self.priority_lists.append(list_widget)
+            main_layout.addWidget(list_widget)
+
+        priority_0_label = QLabel("优先级0")
+        priority_0_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(priority_0_label)
+
+        priority_0_list = self.create_priority_0_list()
+        main_layout.addWidget(priority_0_list)
+
+        sections = [
+            ("优先级1环境", "envir_1"),
+            ("优先级2环境", "envir_2"),
+            ("优先级3环境", "envir_3"),
+            ("优先级4环境", "envir_4"),
+        ]
+
+        for title, key in sections:
+            label = QLabel(title)
+            label.setAlignment(Qt.AlignCenter)
+            main_layout.addWidget(label)
+
+            list_widget = self.create_priority_list()
+            list_widget.priority_key = key
+            self.priority_lists.append(list_widget)
+            main_layout.addWidget(list_widget)
+
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+
+        self.restore_default_button = QPushButton("恢复默认")
+        self.save_button = QPushButton("保存")
+
+        button_layout.addWidget(self.restore_default_button)
+        button_layout.addWidget(self.save_button)
+
+        button_layout.addStretch()
+        main_layout.addLayout(button_layout)
+
+        self.restore_default_button.clicked.connect(
+            self.restore_default
+        )
+        self.save_button.clicked.connect(
+            self.save_current
+        )
+
+        self.load_current()
+
+    @staticmethod
+    def create_priority_list():
+        list_widget = QListWidget()
+
+        list_widget.setViewMode(QListWidget.IconMode)
+        list_widget.setFlow(QListWidget.LeftToRight)
+        list_widget.setWrapping(True)
+        list_widget.setResizeMode(QListWidget.Adjust)
+
+        list_widget.setDragEnabled(True)
+        list_widget.setAcceptDrops(True)
+        list_widget.setDropIndicatorShown(True)
+        list_widget.setDragDropMode(QAbstractItemView.DragDrop)
+        list_widget.setDefaultDropAction(Qt.MoveAction)
+
+        list_widget.setSelectionMode(
+            QAbstractItemView.SingleSelection
+        )
+        list_widget.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        list_widget.setSpacing(5)
+        list_widget.setGridSize(QSize(175, 38))
+
+        list_widget.setMinimumHeight(75)
+        list_widget.setMaximumHeight(150)
+
+        return list_widget
+
+    @staticmethod
+    def create_priority_0_list():
+        list_widget = Priority0ListWidget()
+
+        list_widget.setViewMode(QListWidget.IconMode)
+        list_widget.setFlow(QListWidget.LeftToRight)
+        list_widget.setWrapping(False)
+        list_widget.setResizeMode(QListWidget.Adjust)
+
+        list_widget.setDragEnabled(False)
+        list_widget.setAcceptDrops(False)
+        list_widget.setDropIndicatorShown(False)
+        list_widget.setMovement(QListWidget.Static)
+
+        list_widget.setSelectionMode(
+            QAbstractItemView.NoSelection
+        )
+        list_widget.setEditTriggers(
+            QAbstractItemView.NoEditTriggers
+        )
+
+        list_widget.setSpacing(0)
+        list_widget.setGridSize(QSize(175, 32))
+        list_widget.setFixedHeight(42)
+
+        item = QListWidgetItem("水梦梦天下第一可爱！")
+        item.setSizeHint(QSize(0, 32))
+        item.setTextAlignment(Qt.AlignCenter)
+        item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
+
+        list_widget.addItem(item)
+
+        return list_widget
+
+    def load_current(self):
+        try:
+            data = self.read_text_key_priority()
+        except (OSError, SyntaxError, ValueError):
+            data = DEFAULT_CURRENCY_PRIORITY
+
+        self.populate_lists(data)
+
+    def populate_lists(self, data):
+        for list_widget in self.priority_lists:
+            list_widget.clear()
+
+            for text in data.get(list_widget.priority_key, []):
+                item = QListWidgetItem(text)
+                item.setSizeHint(QSize(165, 32))
+                list_widget.addItem(item)
+
+    def collect_current(self):
+        data = {}
+
+        for list_widget in self.priority_lists:
+            data[list_widget.priority_key] = [
+                list_widget.item(index).text()
+                for index in range(list_widget.count())
+            ]
+
+        return data
+
+    def read_text_key_priority(self):
+        with open(
+            self.text_key_path,
+            encoding="UTF-8",
+        ) as file:
+            source = file.read()
+
+        tree = ast.parse(source)
+
+        data = {}
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Attribute)
+                    and target.attr == "prior_envir"
+                ):
+                    data["prior_envir"] = ast.literal_eval(
+                        node.value
+                    )
+
+                elif isinstance(target, ast.Subscript):
+                    if not (
+                        isinstance(target.value, ast.Attribute)
+                        and target.value.attr == "envir"
+                    ):
+                        continue
+
+                    try:
+                        index = ast.literal_eval(target.slice)
+                    except (ValueError, TypeError):
+                        continue
+
+                    if index in range(1, 5):
+                        data[f"envir_{index}"] = ast.literal_eval(
+                            node.value
+                        )
+
+        required_keys = {
+            "prior_envir",
+            "envir_1",
+            "envir_2",
+            "envir_3",
+            "envir_4",
+        }
+
+        if not required_keys.issubset(data):
+            raise ValueError("无法读取完整的投资环境优先级配置")
+
+        return data
+
+    def write_text_key_priority(self, data):
+        with open(
+            self.text_key_path,
+            encoding="UTF-8",
+        ) as file:
+            source = file.read()
+
+        lines = source.splitlines(keepends=True)
+        newline = "\r\n" if "\r\n" in source else "\n"
+
+        replaced = {
+            "prior_envir": False,
+            "envir_1": False,
+            "envir_2": False,
+            "envir_3": False,
+            "envir_4": False,
+        }
+
+        for index, line in enumerate(lines):
+            indent_match = re.match(r"^\s*", line)
+            assert indent_match is not None
+            indent = indent_match.group(0)
+
+            if re.match(
+                r"^\s*self\.prior_envir\s*=.*$",
+                line,
+            ):
+                lines[index] = (
+                    f"{indent}self.prior_envir = "
+                    f"{repr(data['prior_envir'])}{newline}"
+                )
+                replaced["prior_envir"] = True
+                continue
+
+            for priority in range(1, 5):
+                key = f"envir_{priority}"
+
+                if re.match(
+                    rf"^\s*self\.envir\s*\[\s*{priority}\s*\]\s*=.*$",
+                    line,
+                ):
+                    lines[index] = (
+                        f"{indent}self.envir [{priority}] = "
+                        f"{repr(data[key])}{newline}"
+                    )
+                    replaced[key] = True
+                    break
+
+        if not all(replaced.values()):
+            raise ValueError("无法定位 text_key.py 中的投资环境配置")
+
+        with EXTRA.FILE_LOCK:
+            with open(
+                self.text_key_path,
+                "w",
+                encoding="UTF-8",
+                newline="",
+            ) as file:
+                file.writelines(lines)
+
+    @staticmethod
+    def reload_currency_text_keys():
+        import importlib
+        import currency
+        import tool.currency.text_key as text_key_module
+
+        text_key_module = importlib.reload(text_key_module)
+        currency.text_keys = text_key_module.text_keys
+
+    def save_current(self):
+        data = self.collect_current()
+
+        try:
+            self.write_text_key_priority(data)
+            self.reload_currency_text_keys()
+        except (OSError, ValueError, SyntaxError) as error:
+            QMessageBox.critical(
+                self,
+                "错误",
+                f"投资环境优先级保存失败：{error}",
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "提示",
+            "投资环境优先级已保存",
+        )
+
+    def restore_default(self):
+        self.populate_lists(DEFAULT_CURRENCY_PRIORITY)
+
+        try:
+            self.write_text_key_priority(
+                DEFAULT_CURRENCY_PRIORITY
+            )
+            self.reload_currency_text_keys()
+        except (OSError, ValueError, SyntaxError) as error:
+            QMessageBox.critical(
+                self,
+                "错误",
+                f"恢复默认失败：{error}",
+            )
+            return
+
+        QMessageBox.information(
+            self,
+            "提示",
+            "投资环境优先级已恢复默认",
+        )
 
 
 class MainWindow(QMainWindowLog):
@@ -227,16 +585,42 @@ class MainWindow(QMainWindowLog):
 
         # 初始化货币战争配置界面
         currency_settings = load_currency_settings()
+
         for exit_plane in EXIT_PLANES:
-            self.Currency_exit_plane_combo.addItem(f"第 {exit_plane} 位面", exit_plane)
+            self.Currency_exit_plane_combo.addItem(
+                f"第 {exit_plane} 位面",
+                exit_plane,
+            )
+
         exit_plane_index = self.Currency_exit_plane_combo.findData(
             currency_settings["exit_after_plane"]
         )
         self.Currency_exit_plane_combo.setCurrentIndex(exit_plane_index)
 
+        self.Currency_exit_if_no_prior_checkbox.setChecked(
+            currency_settings["exit_if_no_prior"]
+        )
+
+        self.Currency_prior_exit_plane_combo.addItem("不调整", None)
+        for exit_plane in EXIT_PLANES:
+            self.Currency_prior_exit_plane_combo.addItem(
+                f"第 {exit_plane} 位面",
+                exit_plane,
+            )
+
+        prior_exit_plane = currency_settings["prior_exit_plane"]
+        if prior_exit_plane is None:
+            self.Currency_prior_exit_plane_combo.setCurrentIndex(0)
+        else:
+            prior_exit_plane_index = self.Currency_prior_exit_plane_combo.findData(
+                prior_exit_plane
+            )
+            self.Currency_prior_exit_plane_combo.setCurrentIndex(prior_exit_plane_index)
+
         # 连接配置保存按钮
         self.config_save_btn.clicked.connect(self.save_config)
         self.Currency_save_btn.clicked.connect(self.save_currency_config)
+        self.Currency_priority_settings_btn.clicked.connect(self.open_currency_priority_settings)
         self.Iron_blood_save_btn.clicked.connect(self.save_iron_config)
         self.Iron_blood_manual_settings_btn.clicked.connect(lambda: self.advanced_settings_stack.setCurrentWidget(self.iron_blood_manual_page))
         self.Iron_blood_manual_back_btn.clicked.connect(lambda: self.advanced_settings_stack.setCurrentWidget(self.advanced_settings_main_page))
@@ -313,6 +697,7 @@ class MainWindow(QMainWindowLog):
         # 由 eventFilter 在编辑动作生效前拦截；提示状态持久化在 settings.json
         self._battle_weight_warning_shown = data.get("battle_weight_warning_shown", False)
 
+        assert self.restore_action is not None
         self.restore_action.triggered.connect(self.run_iron_blood)
 
 
@@ -550,8 +935,9 @@ class MainWindow(QMainWindowLog):
                     "3、其他因素：\n"
                     "        在没有骰子替换战斗的前提下，这个模型基本没有问题。但是，某个位置的期望还应该叠加上这条路径上自然产生的替换战斗的差分的期望。本模型尚未考虑该因素。\n\n"
                     "        若尝试修改此项，需同时修改下方的“第一面最低期望权重”以匹配。计算方法：新权重 = 原权重 + 一面平均战斗格数量 × 战斗格权重变化量。可以尝试多种组合，比较轮回结果的进二面+三面概率，选择适合自己的最佳组合。")
-        msg.setStandardButtons(QMessageBox.Ok)
-        msg.button(QMessageBox.Ok).setText("我已知悉")
+        ok_button = msg.button(QMessageBox.Ok)
+        if ok_button is not None:
+            ok_button.setText("我已知悉")
         msg.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
         msg.setEscapeButton(None)
         msg.exec_()
@@ -654,9 +1040,9 @@ class MainWindow(QMainWindowLog):
             if self.PrintPhoto.isChecked():
                 su.click_target(find_image_by_name(print_text), 0.9, True, use_binary=False)
             elif self.PrintText.isChecked():
-                su.click_text(print_text,click=0,find_all=True)
+                su.click_text(print_text,click=False,find_all=True)
             else:
-                su.click_text(print_text,click=1)
+                su.click_text(print_text,click=True)
 
         try:
             self.start_task(task)
@@ -825,16 +1211,31 @@ class MainWindow(QMainWindowLog):
     def save_currency_config(self):
         try:
             save_currency_settings(
-                {"exit_after_plane": self.Currency_exit_plane_combo.currentData()}
+                {
+                    "exit_after_plane":
+                        self.Currency_exit_plane_combo.currentData(),
+                    "exit_if_no_prior":
+                        self.Currency_exit_if_no_prior_checkbox.isChecked(),
+                    "prior_exit_plane":
+                        self.Currency_prior_exit_plane_combo.currentData(),
+                }
             )
         except OSError as error:
-            QMessageBox.critical(self, "错误", f"货币战争配置保存失败：{error}")
+            QMessageBox.critical(
+                self,
+                "错误",
+                f"货币战争配置保存失败：{error}",
+            )
             return
         QMessageBox.information(self, "提示", "货币战争配置已保存")
 
+    def open_currency_priority_settings(self):
+        dialog = CurrencyPriorityDialog(self)
+        dialog.exec_()
+
     def open_iron_blood_record_stats(self):
         os.startfile(PATHS["root"] + "\\resource\\html\\iron_blood-record_stats.html")
-    
+
     def save_iron_config(self):
         self.save_ui_settings()
         QMessageBox.information(self, "提示", "配置已保存")

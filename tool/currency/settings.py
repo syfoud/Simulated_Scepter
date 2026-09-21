@@ -8,6 +8,9 @@ from tool import EXTRA
 
 EXIT_PLANES = (1, 2, 3)
 DEFAULT_EXIT_PLANE = 1
+DEFAULT_EXIT_IF_NO_PRIOR = False
+DEFAULT_PRIOR_EXIT_PLANE = None
+
 CONFIG_PATH = Path(PATHS["root"]) / "config" / "config" / "currency_config.yml"
 EXAMPLE_PATH = CONFIG_PATH.with_name("currency_config_example.yml")
 
@@ -21,7 +24,32 @@ def normalize_currency_settings(values=None):
         exit_plane = DEFAULT_EXIT_PLANE
     if exit_plane not in EXIT_PLANES:
         exit_plane = DEFAULT_EXIT_PLANE
-    return {"exit_after_plane": exit_plane}
+
+    exit_if_no_prior = values.get(
+        "exit_if_no_prior",
+        DEFAULT_EXIT_IF_NO_PRIOR,
+    )
+    if not isinstance(exit_if_no_prior, bool):
+        exit_if_no_prior = DEFAULT_EXIT_IF_NO_PRIOR
+
+    prior_exit_plane = values.get(
+        "prior_exit_plane",
+        DEFAULT_PRIOR_EXIT_PLANE,
+    )
+    if prior_exit_plane is not None:
+        try:
+            prior_exit_plane = int(prior_exit_plane)
+        except (TypeError, ValueError):
+            prior_exit_plane = DEFAULT_PRIOR_EXIT_PLANE
+
+        if prior_exit_plane not in EXIT_PLANES:
+            prior_exit_plane = DEFAULT_PRIOR_EXIT_PLANE
+
+    return {
+        "exit_after_plane": exit_plane,
+        "exit_if_no_prior": exit_if_no_prior,
+        "prior_exit_plane": prior_exit_plane,
+    }
 
 
 def load_currency_settings(path=CONFIG_PATH):

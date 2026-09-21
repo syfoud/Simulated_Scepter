@@ -1115,18 +1115,11 @@ border:none</string>
             <number>0</number>
            </property>
            <item>
-            <widget class="QLabel" name="Currency_settings_label">
-             <property name="text">
-              <string>货币战争设置</string>
-             </property>
-            </widget>
-           </item>
-           <item>
             <layout class="QHBoxLayout" name="horizontalLayout_currency_exit_plane">
              <item>
               <widget class="QLabel" name="Currency_exit_plane_label">
                <property name="text">
-                <string>退出位面：</string>
+                <string>退出位面（在设定位面完成投资策略选择后立即退出）</string>
                </property>
               </widget>
              </item>
@@ -1168,6 +1161,78 @@ border:none</string>
             </layout>
            </item>
            <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_currency_prior_exit_plane">
+             <item>
+              <widget class="QLabel" name="Currency_prior_exit_plane_label">
+               <property name="text">
+                <string>刷出必选投资环境时将退出位面调整为：</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QComboBox" name="Currency_prior_exit_plane_combo">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                 <horstretch>0</horstretch>
+                 <verstretch>0</verstretch>
+                </sizepolicy>
+               </property>
+               <property name="minimumSize">
+                <size>
+                 <width>180</width>
+                 <height>0</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>240</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_currency_prior_exit_plane">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QCheckBox" name="Currency_exit_if_no_prior_checkbox">
+             <property name="text">
+              <string>未刷出必选投资环境时立即退出</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="Currency_priority_settings_btn">
+              <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+              </sizepolicy>
+              </property>
+              <property name="maximumSize">
+              <size>
+                <width>240</width>
+                <height>16777215</height>
+              </size>
+              </property>
+              <property name="text">
+              <string>自定义投资环境优先级</string>
+              </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QPushButton" name="Currency_save_btn">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -1182,7 +1247,28 @@ border:none</string>
               </size>
              </property>
              <property name="text">
-              <string>保存</string>
+              <string>保存货币战争设置</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="Currency_settings_label">
+             <property name="text">
+              <string>TIPS:</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="Currency_settings_label">
+             <property name="text">
+              <string>金币和星徽大使叽米仅能在第二、三位面刷出；环保大使叽米仅能在第二位面刷出；</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="Currency_settings_label">
+             <property name="text">
+              <string>检测到必选环境会直接选择，跳过刷新；若未刷出必选环境，则刷新</string>
              </property>
             </widget>
            </item>
