@@ -20,7 +20,7 @@ from tool.currency.run_history import (
     get_newly_unlocked_investment,
 )
 from tool.currency.settings import load_currency_settings
-from tool.currency.text_key import text_keys
+from tool.currency.text_key import DEFAULT_CURRENCY_PRIORITY, text_keys
 from tool.currency.utils import CurrencyUtils, set_forground
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
@@ -73,7 +73,17 @@ class SimulatedCurrency(CurrencyUtils):
         self.max_refresh = 1
         #运行次数
         self.count = 0
-        self.tk = text_keys ()
+        self.tk = text_keys()
+
+        priority = load_currency_settings().get("priority")
+
+        if priority is None:
+            priority = DEFAULT_CURRENCY_PRIORITY
+
+        self.tk.prior_envir = priority["prior_envir"][:]
+
+        for index in range(1, 5):
+            self.tk.envir[index] = priority[f"envir_{index}"][:]
 
         self.ENVIR_BOXES = [[266, 610, 375, 413], [780, 1134, 375, 414], [1314, 1645, 373, 413]]
         self.BLESS_BOXES = [[298, 608, 472, 513], [783, 1095, 472, 513], [1298, 1605, 472, 513]]
@@ -316,22 +326,6 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.warning("蓝海额外投资环境未完成，本轮不推进状态")
             return 0
 
-        self.prior_environment_found = matched
-
-        if matched and self.prior_exit_plane is not None:
-            self.exit_plane = self.prior_exit_plane
-            CUS_LOGGER.info(
-                f"刷出必选投资环境，退出位面调整为第{self.exit_plane}面"
-            )
-        else:
-            self.exit_plane = self.set_exit_plane
-            if matched:
-                CUS_LOGGER.info("本局刷出必选投资环境，但退出位面设置为不调整")
-            else:
-                CUS_LOGGER.info(
-                    f"未刷出必选投资环境，使用默认退出位面：第{self.exit_plane}面"
-                )
-
         self.investment_tracker.reset()
         self.update_state("1-1")
         CUS_LOGGER.info ("投资环境选择完成")
@@ -351,12 +345,12 @@ class SimulatedCurrency(CurrencyUtils):
                 if self.prior_exit_plane is not None:
                     self.exit_plane = self.prior_exit_plane
                     CUS_LOGGER.info(
-                        f"额外投资环境刷出必选环境，退出位面调整为第{self.exit_plane}面"
+                        f"检测到必选环境，退出位面调整为第{self.exit_plane}面"
                     )
                 else:
                     self.exit_plane = self.set_exit_plane
                     CUS_LOGGER.info(
-                        "额外投资环境刷出必选环境，但退出位面设置为不调整"
+                        "检测到必选环境，但退出位面设置为不调整"
                     )
 
         if any("银金彩" in text for text in texts):
@@ -607,12 +601,26 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.drag(
                 0.6396, 0.1551, 0.4617, 0.6310
             )
+            time.sleep(1)
             self.update_state("startbattle")
             return 1
 
         CUS_LOGGER.info("未刷出必选投资环境，准备提前退出")
 
-        while not self._stop:
+        max_attempts = 15 # 需要实机测试
+        timeout = 6 # 需要实机测试
+
+        deadline = time.monotonic() + timeout
+
+        for attempt in range(max_attempts):
+            if time.monotonic() >= deadline:
+                CUS_LOGGER.warning("提前退出检测超时或超次数，返回主循环")
+                return 1
+
+            if self._stop:
+                CUS_LOGGER.info("检测到停止标志，提前退出检测终止")
+                return 1
+
             self.ts.forward(self.get_screen())
 
             if self.click_text(
@@ -623,10 +631,14 @@ class SimulatedCurrency(CurrencyUtils):
             ):
                 CUS_LOGGER.debug("检测到退出页面，停止按 ESC")
                 break
-            else:
-                CUS_LOGGER.debug("未检测到退出页面，尝试按 ESC")
+
+            CUS_LOGGER.debug(
+                f"未检测到退出页面，第 {attempt + 1}/{max_attempts} 次按 ESC"
+            )
 
             key_mouse_manager.press("esc")
+            key_mouse_manager.wait()
+            time.sleep(0.1)
 
         return 1
 

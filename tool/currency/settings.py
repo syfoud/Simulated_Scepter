@@ -45,10 +45,16 @@ def normalize_currency_settings(values=None):
         if prior_exit_plane not in EXIT_PLANES:
             prior_exit_plane = DEFAULT_PRIOR_EXIT_PLANE
 
+    priority = values.get("priority")
+
+    if not isinstance(priority, dict):
+        priority = None
+
     return {
         "exit_after_plane": exit_plane,
         "exit_if_no_prior": exit_if_no_prior,
         "prior_exit_plane": prior_exit_plane,
+        "priority": priority,
     }
 
 

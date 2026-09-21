@@ -1,8 +1,6 @@
-import ast
 import ctypes
 import json
 import os
-import re
 import shutil
 import sys
 import time
@@ -59,6 +57,148 @@ from tool.simul.config import config as config_simul
 
 HOTKEY_DEBOUNCE_SECONDS = 1.0
 
+class CurrencyPriorityListWidget(QListWidget):
+    def __init__(self):
+        super().__init__()
+        self.drop_indicator = None
+        self.drop_row = None
+
+    def dragMoveEvent(self, event):
+        source = event.source()
+        source_item = None
+
+        if isinstance(source, CurrencyPriorityListWidget):
+            source_item = source.currentItem()
+
+        target_item = self.itemAt(event.pos())
+
+        # 鼠标位于被拖动的 item 上时
+        if target_item is source_item and target_item is not None:
+            rect = self.visualItemRect(target_item)
+            row = self.row(target_item)
+
+            if event.pos().x() < rect.center().x():
+                self.drop_indicator = (
+                    rect.left(),
+                    rect.top(),
+                    rect.bottom(),
+                )
+                self.drop_row = row
+            else:
+                self.drop_indicator = (
+                    rect.right(),
+                    rect.top(),
+                    rect.bottom(),
+                )
+                self.drop_row = row + 1
+
+        # 鼠标位于其他 item 上时
+        elif target_item is not None:
+            rect = self.visualItemRect(target_item)
+            row = self.row(target_item)
+
+            if event.pos().x() < rect.center().x():
+                self.drop_indicator = (
+                    rect.left(),
+                    rect.top(),
+                    rect.bottom(),
+                )
+                self.drop_row = row
+            else:
+                self.drop_indicator = (
+                    rect.right(),
+                    rect.top(),
+                    rect.bottom(),
+                )
+                self.drop_row = row + 1
+
+        # 鼠标位于列表空白区域
+        elif self.count():
+            last_item = self.item(self.count() - 1)
+            rect = self.visualItemRect(last_item)
+
+            self.drop_indicator = (
+                rect.right(),
+                rect.top(),
+                rect.bottom(),
+            )
+            self.drop_row = self.count()
+
+        else:
+            self.drop_indicator = None
+            self.drop_row = 0
+
+        self.viewport().update()
+
+        event.setDropAction(Qt.CopyAction)
+        event.accept()
+
+    def dragLeaveEvent(self, event):
+        self.drop_indicator = None
+        self.drop_row = None
+        self.viewport().update()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        source = event.source()
+
+        if not isinstance(source, CurrencyPriorityListWidget):
+            event.ignore()
+            return
+
+        source_item = source.currentItem()
+
+        if source_item is None or self.drop_row is None:
+            event.ignore()
+            return
+
+        source_row = source.row(source_item)
+        target_row = self.drop_row
+
+        # 如果来自同一个列表，需要修正删除原 item 后的索引
+        if source is self and source_row < target_row:
+            target_row -= 1
+
+        # 已经在目标位置，不做任何操作
+        if source is self and source_row == target_row:
+            self.drop_indicator = None
+            self.drop_row = None
+            self.viewport().update()
+
+            event.setDropAction(Qt.CopyAction)
+            event.accept()
+            return
+
+        # 完全由我们自己移动 item
+        item = source.takeItem(source_row)
+
+        if item is not None:
+            target_row = max(0, min(target_row, self.count()))
+            self.insertItem(target_row, item)
+            self.setCurrentItem(item)
+
+        self.drop_indicator = None
+        self.drop_row = None
+        self.viewport().update()
+
+        # 防止 Qt 再次执行 MoveAction
+        event.setDropAction(Qt.CopyAction)
+        event.accept()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        if self.drop_indicator is None:
+            return
+
+        x, top, bottom = self.drop_indicator
+
+        from PyQt5.QtGui import QPainter, QPen
+
+        painter = QPainter(self.viewport())
+        painter.setPen(QPen(Qt.black, 2))
+        painter.drawLine(x, top, x, bottom)
+
 class Priority0ListWidget(QListWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -83,13 +223,6 @@ class CurrencyPriorityDialog(QDialog):
             self.windowFlags() & ~Qt.WindowContextHelpButtonHint
         )
         self.resize(1050, 850)
-
-        self.text_key_path = os.path.join(
-            PATHS["root"],
-            "tool",
-            "currency",
-            "text_key.py",
-        )
 
         self.priority_lists = []
 
@@ -156,7 +289,7 @@ class CurrencyPriorityDialog(QDialog):
 
     @staticmethod
     def create_priority_list():
-        list_widget = QListWidget()
+        list_widget = CurrencyPriorityListWidget()
 
         list_widget.setViewMode(QListWidget.IconMode)
         list_widget.setFlow(QListWidget.LeftToRight)
@@ -165,7 +298,7 @@ class CurrencyPriorityDialog(QDialog):
 
         list_widget.setDragEnabled(True)
         list_widget.setAcceptDrops(True)
-        list_widget.setDropIndicatorShown(True)
+        list_widget.setDropIndicatorShown(False)
         list_widget.setDragDropMode(QAbstractItemView.DragDrop)
         list_widget.setDefaultDropAction(Qt.MoveAction)
 
@@ -219,12 +352,13 @@ class CurrencyPriorityDialog(QDialog):
         return list_widget
 
     def load_current(self):
-        try:
-            data = self.read_text_key_priority()
-        except (OSError, SyntaxError, ValueError):
-            data = DEFAULT_CURRENCY_PRIORITY
+        currency_settings = load_currency_settings()
+        priority = currency_settings.get("priority")
 
-        self.populate_lists(data)
+        if priority is None:
+            priority = DEFAULT_CURRENCY_PRIORITY
+
+        self.populate_lists(priority)
 
     def populate_lists(self, data):
         for list_widget in self.priority_lists:
@@ -246,136 +380,14 @@ class CurrencyPriorityDialog(QDialog):
 
         return data
 
-    def read_text_key_priority(self):
-        with open(
-            self.text_key_path,
-            encoding="UTF-8",
-        ) as file:
-            source = file.read()
-
-        tree = ast.parse(source)
-
-        data = {}
-
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
-                continue
-
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Attribute)
-                    and target.attr == "prior_envir"
-                ):
-                    data["prior_envir"] = ast.literal_eval(
-                        node.value
-                    )
-
-                elif isinstance(target, ast.Subscript):
-                    if not (
-                        isinstance(target.value, ast.Attribute)
-                        and target.value.attr == "envir"
-                    ):
-                        continue
-
-                    try:
-                        index = ast.literal_eval(target.slice)
-                    except (ValueError, TypeError):
-                        continue
-
-                    if index in range(1, 5):
-                        data[f"envir_{index}"] = ast.literal_eval(
-                            node.value
-                        )
-
-        required_keys = {
-            "prior_envir",
-            "envir_1",
-            "envir_2",
-            "envir_3",
-            "envir_4",
-        }
-
-        if not required_keys.issubset(data):
-            raise ValueError("无法读取完整的投资环境优先级配置")
-
-        return data
-
-    def write_text_key_priority(self, data):
-        with open(
-            self.text_key_path,
-            encoding="UTF-8",
-        ) as file:
-            source = file.read()
-
-        lines = source.splitlines(keepends=True)
-        newline = "\r\n" if "\r\n" in source else "\n"
-
-        replaced = {
-            "prior_envir": False,
-            "envir_1": False,
-            "envir_2": False,
-            "envir_3": False,
-            "envir_4": False,
-        }
-
-        for index, line in enumerate(lines):
-            indent_match = re.match(r"^\s*", line)
-            assert indent_match is not None
-            indent = indent_match.group(0)
-
-            if re.match(
-                r"^\s*self\.prior_envir\s*=.*$",
-                line,
-            ):
-                lines[index] = (
-                    f"{indent}self.prior_envir = "
-                    f"{repr(data['prior_envir'])}{newline}"
-                )
-                replaced["prior_envir"] = True
-                continue
-
-            for priority in range(1, 5):
-                key = f"envir_{priority}"
-
-                if re.match(
-                    rf"^\s*self\.envir\s*\[\s*{priority}\s*\]\s*=.*$",
-                    line,
-                ):
-                    lines[index] = (
-                        f"{indent}self.envir [{priority}] = "
-                        f"{repr(data[key])}{newline}"
-                    )
-                    replaced[key] = True
-                    break
-
-        if not all(replaced.values()):
-            raise ValueError("无法定位 text_key.py 中的投资环境配置")
-
-        with EXTRA.FILE_LOCK:
-            with open(
-                self.text_key_path,
-                "w",
-                encoding="UTF-8",
-                newline="",
-            ) as file:
-                file.writelines(lines)
-
-    @staticmethod
-    def reload_currency_text_keys():
-        import importlib
-        import currency
-        import tool.currency.text_key as text_key_module
-
-        text_key_module = importlib.reload(text_key_module)
-        currency.text_keys = text_key_module.text_keys
-
     def save_current(self):
         data = self.collect_current()
 
         try:
-            self.write_text_key_priority(data)
-            self.reload_currency_text_keys()
-        except (OSError, ValueError, SyntaxError) as error:
+            currency_settings = load_currency_settings()
+            currency_settings["priority"] = data
+            save_currency_settings(currency_settings)
+        except OSError as error:
             QMessageBox.critical(
                 self,
                 "错误",
@@ -393,11 +405,10 @@ class CurrencyPriorityDialog(QDialog):
         self.populate_lists(DEFAULT_CURRENCY_PRIORITY)
 
         try:
-            self.write_text_key_priority(
-                DEFAULT_CURRENCY_PRIORITY
-            )
-            self.reload_currency_text_keys()
-        except (OSError, ValueError, SyntaxError) as error:
+            currency_settings = load_currency_settings()
+            currency_settings["priority"] = DEFAULT_CURRENCY_PRIORITY
+            save_currency_settings(currency_settings)
+        except OSError as error:
             QMessageBox.critical(
                 self,
                 "错误",
