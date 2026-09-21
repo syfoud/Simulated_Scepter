@@ -251,11 +251,46 @@ app = QApplication.instance() or QApplication(sys.argv)
 logging.setLoggerClass(CusLogger)
 CUS_LOGGER = logging.getLogger('my customize logger')
 
-# 禁用 PyQt5 的 DEBUG 日志
-logging.getLogger('PyQt5').setLevel(logging.WARNING)
-logging.getLogger('PyQt5.uic').setLevel(logging.WARNING)
+# 后续 Logger 恢复使用 Python 默认 Logger，
+# 避免 PyQt5 的层级 Logger 被错误创建为 CusLogger。
+logging.setLoggerClass(logging.Logger)
 
+# --------- PyQt5 日志处理 ---------
 
+pyqt_logger = logging.getLogger('PyQt5')
+pyqt_logger.setLevel(logging.DEBUG)
+
+# 防止 PyQt5 日志继续传播到 root logger，避免以后再次重复。
+pyqt_logger.propagate = False
+
+# PyQt5 日志：每条只写入一次普通日志文件。
+pyqt_file_handler = FileHandler(
+    filename=logs_path / f"log_{current_time_str}.txt",
+    mode="a",
+    encoding="utf-8"
+)
+pyqt_file_handler.setFormatter(
+    Formatter(
+        "%(levelname)s [%(asctime)s] [%(filename)s:%(lineno)d] %(message)s"
+    )
+)
+pyqt_logger.addHandler(pyqt_file_handler)
+
+# PyQt5 日志：控制台只显示未被关键词过滤的日志。
+pyqt_console_handler = StreamHandler(original_stdout)
+pyqt_console_handler.setFormatter(
+    colorlog.ColoredFormatter(
+        '%(log_color)s%(asctime)s - %(levelname)s - %(message)s'
+    )
+)
+pyqt_console_handler.addFilter(
+    KeywordFilter(["property", "widget", "push", "layout"])
+)
+pyqt_logger.addHandler(pyqt_console_handler)
+
+# 让 PyQt5.uic 及其子 Logger 产生 DEBUG 日志，
+# 并通过 PyQt5 Logger 的两个 Handler 统一处理。
+logging.getLogger('PyQt5.uic').setLevel(logging.DEBUG)
 
 
 def my_print(*args, **kwargs):
