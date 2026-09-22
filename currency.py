@@ -47,30 +47,30 @@ class SimulatedCurrency(CurrencyUtils):
         # 普通位面选择、立即奖励和延迟奖励的状态
         self.investment_tracker = InvestmentSelectionTracker()
         self.run_history = CurrencyRunHistory()
-        #停止运行标志
+        # 停止运行标志
         self._stop = True
-        #调试级别
+        # 调试级别
         self.debug = debug
         # 设置全局调试模式标志，供 UILogHandler 使用
         GLOBAL.DEBUG_MODE = bool (self.debug)
-        #启动时时间
+        # 启动时时间
         self.init_time = time.time ()
         # 添加用于计算FPS的变量
         self.last_get_screen_time = None
         self.fps_list = []
-        #当前运行状态
+        # 当前运行状态
         self.state=None
-        #上次执行操作时间
+        # 上次执行操作时间
         self.action_time = time.time()
-        #事件与行为存储路径
+        # 事件与行为存储路径
         self.default_json_path = "actions/currencywar.json"
         self.default_json = load_actions(self.default_json_path)
         self.action_history = []
-        #已触发且触发条件仍成立的事件，条件消失后重新武装（见 run_static 的 once 触发）
+        # 已触发且触发条件仍成立的事件，条件消失后重新武装（见 run_static 的 once 触发）
         self.latched_events = set()
-        #策略最大刷新次数
+        # 策略最大刷新次数
         self.max_refresh = 1
-        #运行次数
+        # 运行次数
         self.count = 0
 
         priority = load_currency_settings()["priority"]
@@ -85,7 +85,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.BLESS_BOXES = [[298, 608, 472, 513], [783, 1095, 472, 513], [1298, 1605, 472, 513]]
 
         if debug != 2:
-            #似乎是避免鼠标越界的一个标志
+            # 似乎是避免鼠标越界的一个标志
             pyautogui.FAILSAFE = False
 
         CUS_LOGGER.debug (f"开始运行,初始计数：{self.count}")
@@ -142,7 +142,7 @@ class SimulatedCurrency(CurrencyUtils):
                 time.sleep (0.5)
                 cnt += 1
                 if cnt == 1200:
-                    set_forground ()# 将游戏窗口设为前台
+                    set_forground () # 将游戏窗口设为前台
                 hwnd,Text = get_hwnd_and_text ()
             if self._stop:
                 break
@@ -212,7 +212,7 @@ class SimulatedCurrency(CurrencyUtils):
             return True
 
         key_mouse_manager.clean()
-        key_mouse_manager.click(1692, 965, force=True)  # “开始对局”按钮坐标
+        key_mouse_manager.click(1692, 965, force=True) # “开始对局”按钮坐标
         key_mouse_manager.wait()
         self.update_state("startbattle")
         return True
@@ -254,7 +254,7 @@ class SimulatedCurrency(CurrencyUtils):
 
     def select_envir (self):
         CUS_LOGGER.info ("=== 进入投资环境选择阶段===")
-        time.sleep (1)#等待界面加载
+        time.sleep (1) # 等待界面加载
         self.ts.forward (self.get_screen ())
         boxes = self.ENVIR_BOXES
         def match_prior (texts):
@@ -272,20 +272,20 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.info ("未匹配到必选环境，点击刷新按钮")
             key_mouse_manager.click (672, 984)  # 刷新按钮坐标
             key_mouse_manager.wait()
-            time.sleep (4)        # 等待刷新完成
+            time.sleep (4) # 等待刷新完成
             self.ts.forward (self.get_screen ())
             # 刷新后重新识别并再次尝试匹配必选
             texts = self.recognize_options (self.ENVIR_BOXES)
             CUS_LOGGER.info (f"刷新后 OCR 结果: {texts}")
             matched, selected_idx = match_prior (texts)
-        #构建完整的优先级列表（按顺序）
+        # 构建完整的优先级列表（按顺序）
         if not matched:
-            #    顺序：prior_envir + envir[0] + envir[1] + ... + envir[4]
-            prior_list = self.prior_envir[:]  # 复制最高优先级列表
-            for i in range(1, 5):  # envir 有5个子列表，索引0~4
-                prior_list.extend(self.envir[i])  # 依次追加
-            #按优先级匹配选项
-            selected_idx = -1  # 初始化为-1，表示未匹配
+            # 顺序：prior_envir + envir[0] + envir[1] + ... + envir[4]
+            prior_list = self.prior_envir[:] # 复制最高优先级列表
+            for envir in self.envir: # 遍历envir列表，将每个子列表的元素按顺序添加到prior_list中
+                prior_list.extend(envir)
+            # 按优先级匹配选项
+            selected_idx = -1 # 初始化为-1，表示未匹配
             for pri in prior_list:
                 for idx, text in enumerate(texts):
                     # 判断当前选项文字中是否包含优先级关键词（使用 in 进行子串匹配）
@@ -295,7 +295,7 @@ class SimulatedCurrency(CurrencyUtils):
                         break
                 if selected_idx != -1:
                     break  # 已匹配到，跳出外层循环
-            # 5. 如果都未匹配，默认选中间
+            # 如果都未匹配，默认选中间
             if selected_idx == -1:
                 selected_idx = 1
                 CUS_LOGGER.warning("未匹配到任何优先级投资环境，默认选择中间")
@@ -304,7 +304,7 @@ class SimulatedCurrency(CurrencyUtils):
         self._apply_environment_effects(texts)
 
         # 点击选中的选项（点击其中心位置）
-        #    计算每个选项的中心像素坐标
+        # 计算每个选项的中心像素坐标
         centers = []
         for box in boxes:
             cx = (box[0] + box[1]) // 2
@@ -558,7 +558,7 @@ class SimulatedCurrency(CurrencyUtils):
         if self.investment_tracker.should_exit(self.exit_plane):
             CUS_LOGGER.info(f"达到退出位面（{self.exit_plane}面），按两次 ESC 退出当前对局，然后重开")
             self.update_state ("escshop")
-            key_mouse_manager.press('esc') #关闭商店
+            key_mouse_manager.press('esc') # 关闭商店
             time.sleep(1)
             self.ts.forward (self.get_screen ())
 
@@ -567,8 +567,7 @@ class SimulatedCurrency(CurrencyUtils):
             elif self.exit_plane in (2, 3):
                 battle_box = [569, 608, 80, 104]
             else:
-                # 默认使用第一个（保险）
-                battle_box = [724, 760, 77, 104]
+                battle_box = [724, 760, 77, 104] # 默认使用第一个（保险）
 
             if self.click_text (text = "战斗", box = battle_box, click = False, allow_fail = True):
                 CUS_LOGGER.info ("进入主界面，按 ESC 重开")
@@ -603,8 +602,8 @@ class SimulatedCurrency(CurrencyUtils):
 
         CUS_LOGGER.info("未刷出必选投资环境，准备提前退出")
 
-        max_attempts = 15 # 需要实机测试
-        timeout = 6 # 需要实机测试
+        max_attempts = 15
+        timeout = 6
 
         deadline = time.monotonic() + timeout
 
@@ -685,12 +684,12 @@ class SimulatedCurrency(CurrencyUtils):
                 else:
                     continue
                 if not matched:
-                    #触发条件已消失，允许该事件下次重新触发
+                    # 触发条件已消失，允许该事件下次重新触发
                     self.latched_events.discard(action["name"])
                     continue
 
                 name = action["name"]
-                #once 事件在触发条件持续成立期间只执行一次，避免同一弹窗被重复处理
+                # once 事件在触发条件持续成立期间只执行一次，避免同一弹窗被重复处理
                 if trigger.get("once"):
                     if name in self.latched_events:
                         continue
