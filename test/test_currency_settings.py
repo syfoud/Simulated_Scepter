@@ -8,11 +8,37 @@ from tool.currency.settings import (
     DEFAULT_EXIT_PLANE,
     EXIT_PLANES,
     load_currency_settings,
+    load_default_priority,
     save_currency_settings,
 )
 
 
 class CurrencySettingsTests(unittest.TestCase):
+    def test_default_exit_keeps_partial_and_empty_priority_groups(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "currency.yml"
+            path.write_text(
+                "prior_exit_plane: null\npriority:\n  prior_envir: []\n",
+                encoding="utf-8",
+            )
+            settings = load_currency_settings(path)
+        self.assertIsNone(settings["prior_exit_plane"])
+        self.assertEqual(settings["priority"]["prior_envir"], [])
+        self.assertEqual(settings["priority"]["envir_1"], load_default_priority()["envir_1"])
+
+    def test_partial_saves_preserve_priority_and_exit_settings(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "currency.yml"
+            priority = load_default_priority()
+            priority["prior_envir"] = ["蓝海"]
+            save_currency_settings({"priority": priority, "exit_after_plane": 2}, path)
+            save_currency_settings({"exit_after_plane": 3}, path)
+            self.assertEqual(load_currency_settings(path)["priority"], priority)
+            priority["prior_envir"] = []
+            save_currency_settings({"priority": priority}, path)
+            self.assertEqual(load_currency_settings(path)["exit_after_plane"], 3)
+            self.assertEqual(load_currency_settings(path)["priority"]["prior_envir"], [])
+
     def test_exit_plane_choices_are_fixed(self):
         self.assertEqual(EXIT_PLANES, (1, 2, 3))
 

@@ -26,7 +26,7 @@ class CurrencyGuiUiTests(unittest.TestCase):
             ".//widget[@class='QPushButton'][@name='Currency_save_btn']"
         )
         self.assertIsNotNone(save_button)
-        self.assertEqual(save_button.find("./property[@name='text']/string").text, "保存")
+        self.assertEqual(save_button.find("./property[@name='text']/string").text, "保存货币战争设置")
 
 
 if __name__ == "__main__":
