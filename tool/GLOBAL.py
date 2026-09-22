@@ -2,6 +2,8 @@
 PRINT_TO_UI = None
 IMAGE_TO_UI = None
 
+DEBUG_MODE = False
+
 # 全局停止标志（用于__init__中的阻塞等待）
 _global_stop_flag = False
 

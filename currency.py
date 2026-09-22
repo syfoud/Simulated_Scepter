@@ -20,7 +20,6 @@ from tool.currency.run_history import (
     get_newly_unlocked_investment,
 )
 from tool.currency.settings import load_currency_settings
-from tool.currency.text_key import text_keys
 from tool.currency.utils import CurrencyUtils, set_forground
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
@@ -48,38 +47,45 @@ class SimulatedCurrency(CurrencyUtils):
         # 普通位面选择、立即奖励和延迟奖励的状态
         self.investment_tracker = InvestmentSelectionTracker()
         self.run_history = CurrencyRunHistory()
-        #停止运行标志
+        # 停止运行标志
         self._stop = True
-        #调试级别
+        # 调试级别
         self.debug = debug
         # 设置全局调试模式标志，供 UILogHandler 使用
         GLOBAL.DEBUG_MODE = bool (self.debug)
-        #启动时时间
+        # 启动时时间
         self.init_time = time.time ()
         # 添加用于计算FPS的变量
         self.last_get_screen_time = None
         self.fps_list = []
-        #当前运行状态
+        # 当前运行状态
         self.state=None
-        #上次执行操作时间
+        # 上次执行操作时间
         self.action_time = time.time()
-        #事件与行为存储路径
+        # 事件与行为存储路径
         self.default_json_path = "actions/currencywar.json"
         self.default_json = load_actions(self.default_json_path)
         self.action_history = []
-        #已触发且触发条件仍成立的事件，条件消失后重新武装（见 run_static 的 once 触发）
+        # 已触发且触发条件仍成立的事件，条件消失后重新武装（见 run_static 的 once 触发）
         self.latched_events = set()
-        #策略最大刷新次数
+        # 策略最大刷新次数
         self.max_refresh = 1
-        #运行次数
+        # 运行次数
         self.count = 0
-        self.tk = text_keys ()
+
+        priority = load_currency_settings()["priority"]
+
+        self.prior_envir = priority["prior_envir"][:]
+        self.envir = [[] for _ in range(4)]
+
+        for index in range(1, 5):
+            self.envir[index - 1] = priority[f"envir_{index}"][:]
 
         self.ENVIR_BOXES = [[266, 610, 375, 413], [780, 1134, 375, 414], [1314, 1645, 373, 413]]
         self.BLESS_BOXES = [[298, 608, 472, 513], [783, 1095, 472, 513], [1298, 1605, 472, 513]]
 
         if debug != 2:
-            #似乎是避免鼠标越界的一个标志
+            # 似乎是避免鼠标越界的一个标志
             pyautogui.FAILSAFE = False
 
         CUS_LOGGER.debug (f"开始运行,初始计数：{self.count}")
@@ -94,8 +100,17 @@ class SimulatedCurrency(CurrencyUtils):
                 data = json.load(file)
 
         currency_settings = load_currency_settings()
-        self.exit_plane = currency_settings["exit_after_plane"]
-        CUS_LOGGER.info(f"货币战争退出位面设置为: 第{self.exit_plane}面")
+
+        # 本局默认退出位面，以及 prior 投资环境出现后可能使用的退出位面
+        self.set_exit_plane = currency_settings["exit_after_plane"]
+        self.exit_plane = self.set_exit_plane
+        self.prior_exit_plane = currency_settings["prior_exit_plane"]
+        self.exit_if_no_prior = currency_settings["exit_if_no_prior"]
+
+        # 记录本局是否刷出了必选（prior）投资环境
+        self.prior_environment_found = False
+
+        CUS_LOGGER.info(f"货币战争退出位面设置为: 第{self.set_exit_plane}面")
 
         self.record = data.get("recording_state", True)
 
@@ -127,7 +142,7 @@ class SimulatedCurrency(CurrencyUtils):
                 time.sleep (0.5)
                 cnt += 1
                 if cnt == 1200:
-                    set_forground ()# 将游戏窗口设为前台
+                    set_forground () # 将游戏窗口设为前台
                 hwnd,Text = get_hwnd_and_text ()
             if self._stop:
                 break
@@ -197,7 +212,7 @@ class SimulatedCurrency(CurrencyUtils):
             return True
 
         key_mouse_manager.clean()
-        key_mouse_manager.click(1692, 965, force=True)  # “开始对局”按钮坐标
+        key_mouse_manager.click(1692, 965, force=True) # “开始对局”按钮坐标
         key_mouse_manager.wait()
         self.update_state("startbattle")
         return True
@@ -239,14 +254,14 @@ class SimulatedCurrency(CurrencyUtils):
 
     def select_envir (self):
         CUS_LOGGER.info ("=== 进入投资环境选择阶段===")
-        time.sleep (1)#等待界面加载
+        time.sleep (1) # 等待界面加载
         self.ts.forward (self.get_screen ())
         boxes = self.ENVIR_BOXES
         def match_prior (texts):
-            for pri in self.tk.prior_envir:
+            for pri in self.prior_envir:
                 for idx, text in enumerate (texts):
                     if pri in text:
-                        CUS_LOGGER.info (f"匹配到必选策略: {pri}，选择选项{idx+1}")
+                        CUS_LOGGER.info (f"检测到必选环境: {pri}，选择选项{idx+1}")
                         return True, idx
             return False, -1
         texts = self.recognize_options (self.ENVIR_BOXES)
@@ -254,45 +269,42 @@ class SimulatedCurrency(CurrencyUtils):
         matched, selected_idx = match_prior (texts)
 
         if not matched:
-            CUS_LOGGER.info ("未匹配到必选策略，点击刷新按钮")
+            CUS_LOGGER.info ("未匹配到必选环境，点击刷新按钮")
             key_mouse_manager.click (672, 984)  # 刷新按钮坐标
             key_mouse_manager.wait()
-            time.sleep (4)        # 等待刷新完成
+            time.sleep (4) # 等待刷新完成
             self.ts.forward (self.get_screen ())
             # 刷新后重新识别并再次尝试匹配必选
             texts = self.recognize_options (self.ENVIR_BOXES)
             CUS_LOGGER.info (f"刷新后 OCR 结果: {texts}")
             matched, selected_idx = match_prior (texts)
-        #构建完整的优先级列表（按顺序）
+        # 构建完整的优先级列表（按顺序）
         if not matched:
-            #    顺序：prior_envir + envir[0] + envir[1] + ... + envir[4]
-            prior_list = self.tk.prior_envir[:]  # 复制最高优先级列表
-            for i in range(5):  # envir 有5个子列表，索引0~4
-                prior_list.extend(self.tk.envir[i])  # 依次追加
-            #按优先级匹配选项
-            selected_idx = -1  # 初始化为-1，表示未匹配
+            # 顺序：prior_envir + envir[0] + envir[1] + ... + envir[4]
+            prior_list = self.prior_envir[:] # 复制最高优先级列表
+            for envir in self.envir: # 遍历envir列表，将每个子列表的元素按顺序添加到prior_list中
+                prior_list.extend(envir)
+            # 按优先级匹配选项
+            selected_idx = -1 # 初始化为-1，表示未匹配
             for pri in prior_list:
                 for idx, text in enumerate(texts):
                     # 判断当前选项文字中是否包含优先级关键词（使用 in 进行子串匹配）
                     if pri in text:
                         selected_idx = idx
-                        CUS_LOGGER.info(f"匹配到优先级策略: {pri}，选择选项{idx+1}")
+                        CUS_LOGGER.info(f"匹配到优先级投资环境: {pri}，选择选项{idx+1}")
                         break
                 if selected_idx != -1:
                     break  # 已匹配到，跳出外层循环
-            # 5. 如果都未匹配，默认选中间
+            # 如果都未匹配，默认选中间
             if selected_idx == -1:
                 selected_idx = 1
-                CUS_LOGGER.warning("未匹配到任何优先级策略，默认选择中间")
+                CUS_LOGGER.warning("未匹配到任何优先级投资环境，默认选择中间")
 
+        self.max_refresh = 1
+        self._apply_environment_effects(texts)
 
-        if any("银金彩" in text for text in texts):
-            self.max_refresh = 3
-            CUS_LOGGER.info("选择银金彩，已将刷新次数调整至3次")
-        else:
-            self.max_refresh = 1
         # 点击选中的选项（点击其中心位置）
-        #    计算每个选项的中心像素坐标
+        # 计算每个选项的中心像素坐标
         centers = []
         for box in boxes:
             cx = (box[0] + box[1]) // 2
@@ -314,6 +326,34 @@ class SimulatedCurrency(CurrencyUtils):
         self.update_state("1-1")
         CUS_LOGGER.info ("投资环境选择完成")
         return 1
+
+    def _apply_environment_effects(self, texts):
+        """根据当前显示的投资环境应用特殊效果。"""
+
+        if any(
+            prior in text
+            for prior in self.prior_envir
+            for text in texts
+        ):
+            if not self.prior_environment_found:
+                self.prior_environment_found = True
+
+                if self.prior_exit_plane is not None:
+                    self.exit_plane = self.prior_exit_plane
+                    CUS_LOGGER.info(
+                        f"检测到必选环境，退出位面调整为第{self.exit_plane}面"
+                    )
+                else:
+                    self.exit_plane = self.set_exit_plane
+                    CUS_LOGGER.info(
+                        "检测到必选环境，但退出位面设置为不调整"
+                    )
+
+        if any("银金彩" in text for text in texts):
+            self.max_refresh = 3
+            CUS_LOGGER.info(
+                "检测到银金彩，已将投资策略刷新次数调整至3次"
+            )
 
     def _confirm_environment_selection(self):
         # 普通环境与蓝海额外环境的确认按钮位置相同。
@@ -349,11 +389,18 @@ class SimulatedCurrency(CurrencyUtils):
                 continue
 
             selected_idx = available[0]
+            selected_text = texts[selected_idx]
+
+            self._apply_environment_effects([selected_text])
+
             key_mouse_manager.click(*centers[selected_idx])
             key_mouse_manager.wait()
             time.sleep(0.4)
             self._confirm_environment_selection()
-            CUS_LOGGER.info("蓝海额外投资环境选择完成")
+
+            CUS_LOGGER.info(
+                f"蓝海额外投资环境选择完成：{selected_text}"
+            )
             return True
 
         return False
@@ -443,7 +490,7 @@ class SimulatedCurrency(CurrencyUtils):
                 x1, x2, y1, y2 = box
                 roi = self.screen[y1:y2, x1:x2]
                 has_icon, std = self.detect_has_icon(roi)
-                icon_presence[idx] = has_icon
+                icon_presence[idx] = bool(has_icon)
                 CUS_LOGGER.info(
                     f"选项{idx+1} 是否有图标: {has_icon} (标准差: {std:.2f})"
                 )
@@ -511,7 +558,7 @@ class SimulatedCurrency(CurrencyUtils):
         if self.investment_tracker.should_exit(self.exit_plane):
             CUS_LOGGER.info(f"达到退出位面（{self.exit_plane}面），按两次 ESC 退出当前对局，然后重开")
             self.update_state ("escshop")
-            key_mouse_manager.press('esc') #关闭商店
+            key_mouse_manager.press('esc') # 关闭商店
             time.sleep(1)
             self.ts.forward (self.get_screen ())
 
@@ -520,17 +567,74 @@ class SimulatedCurrency(CurrencyUtils):
             elif self.exit_plane in (2, 3):
                 battle_box = [569, 608, 80, 104]
             else:
-                # 默认使用第一个（保险）
-                battle_box = [724, 760, 77, 104]
+                battle_box = [724, 760, 77, 104] # 默认使用第一个（保险）
 
             if self.click_text (text = "战斗", box = battle_box, click = False, allow_fail = True):
-                CUS_LOGGER.info ("检测到'战斗'，按 ESC 重开")
+                CUS_LOGGER.info ("进入主界面，按 ESC 重开")
                 key_mouse_manager.press('esc')
                 time.sleep(1)
             else:
                 self.update_state ("startbattle")
 
         self.update_state ("startbattle")
+        return 1
+
+    def handle_1_1_reward(self):
+        """处理1-1投资环境选择后的奖励界面。"""
+
+        if self.prior_environment_found or not self.exit_if_no_prior:
+            CUS_LOGGER.info("进入1-1，准备拖动")
+            time.sleep(5.5)
+            key_mouse_manager.drag(
+                0.7703, 0.1569, 0.6107, 0.6306
+            )
+            time.sleep(1.5)
+            key_mouse_manager.drag(
+                0.7047, 0.1560, 0.5354, 0.6310
+            )
+            time.sleep(1.5)
+            key_mouse_manager.drag(
+                0.6396, 0.1551, 0.4617, 0.6310
+            )
+            time.sleep(1)
+            self.update_state("startbattle")
+            return 1
+
+        CUS_LOGGER.info("未刷出必选投资环境，准备提前退出")
+
+        max_attempts = 15
+        timeout = 6
+
+        deadline = time.monotonic() + timeout
+
+        for attempt in range(max_attempts):
+            if time.monotonic() >= deadline:
+                CUS_LOGGER.warning("提前退出检测超时或超次数，返回主循环")
+                return 1
+
+            if self._stop:
+                CUS_LOGGER.info("检测到停止标志，提前退出检测终止")
+                return 1
+
+            self.ts.forward(self.get_screen())
+
+            if self.click_text(
+                text="放弃并结算",
+                box=[707, 831, 728, 756],
+                click=False,
+                allow_fail=True,
+            ):
+                CUS_LOGGER.debug("检测到退出页面，停止按 ESC")
+                break
+
+            CUS_LOGGER.debug(
+                f"未检测到退出页面，第 {attempt + 1}/{max_attempts} 次按 ESC"
+            )
+
+            key_mouse_manager.press("esc")
+            key_mouse_manager.wait()
+            time.sleep(0.1)
+
         return 1
 
     def run_static(self, json_path=None, json_file=None, action_list=None) -> tuple[str, int]:
@@ -580,12 +684,12 @@ class SimulatedCurrency(CurrencyUtils):
                 else:
                     continue
                 if not matched:
-                    #触发条件已消失，允许该事件下次重新触发
+                    # 触发条件已消失，允许该事件下次重新触发
                     self.latched_events.discard(action["name"])
                     continue
 
                 name = action["name"]
-                #once 事件在触发条件持续成立期间只执行一次，避免同一弹窗被重复处理
+                # once 事件在触发条件持续成立期间只执行一次，避免同一弹窗被重复处理
                 if trigger.get("once"):
                     if name in self.latched_events:
                         continue
@@ -619,12 +723,18 @@ class SimulatedCurrency(CurrencyUtils):
 
     def _on_static_action_completed(self, action_name: str) -> None:
         if action_name == RUN_START_ACTION:
+            self.exit_plane = self.set_exit_plane
+            self.prior_environment_found = False
             self.run_history.start_run()
             CUS_LOGGER.info("货币战争对局计时开始")
             return
 
         if action_name != RUN_END_ACTION:
             return
+
+        # 本局结束，恢复下一局使用的默认退出配置
+        self.exit_plane = self.set_exit_plane
+        self.prior_environment_found = False
 
         try:
             record = self.run_history.finish_run()
