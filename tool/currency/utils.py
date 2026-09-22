@@ -21,7 +21,6 @@ from diver import merge_text
 from route import PATHS
 from tool.currency.config import config
 from tool.currency.ocr import get_global_my_ts
-from tool.currency.text_key import text_keys
 from tool.GLOBAL import (
     factor,
     get_global_stop_flag,
@@ -148,7 +147,6 @@ class CurrencyUtils:
         #位置预测
         self.pos_predictor=PositionPredict()
         set_forground()
-        self.tk = text_keys()
         self.debug, self.find = 0, 1
         self.bx, self.by = 1920, 1080
         CUS_LOGGER.warning("我会等待那一天的到来。一直等待下去。总有一天……会有人翻开这近乎「永恒」的一页……(等待游戏窗口)")

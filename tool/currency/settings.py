@@ -13,7 +13,28 @@ DEFAULT_PRIOR_EXIT_PLANE = None
 
 CONFIG_PATH = Path(PATHS["root"]) / "config" / "config" / "currency_config.yml"
 EXAMPLE_PATH = CONFIG_PATH.with_name("currency_config_example.yml")
+PRIORITY_KEYS = (
+    "prior_envir",
+    "envir_1",
+    "envir_2",
+    "envir_3",
+    "envir_4",
+)
 
+def load_default_priority():
+    """Load the default currency-war priority from the example config."""
+    try:
+        with EXAMPLE_PATH.open(encoding="utf-8") as config_file:
+            values = yaml.safe_load(config_file) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+    priority = values.get("priority")
+
+    if not isinstance(priority, dict):
+        return {}
+
+    return priority
 
 def normalize_currency_settings(values=None):
     """Validate currency-war settings and return serializable values."""
@@ -45,10 +66,15 @@ def normalize_currency_settings(values=None):
         if prior_exit_plane not in EXIT_PLANES:
             prior_exit_plane = DEFAULT_PRIOR_EXIT_PLANE
 
-    priority = values.get("priority")
+        priority = values.get("priority")
+        if not isinstance(priority, dict):
+            priority = {}
 
-    if not isinstance(priority, dict):
-        priority = None
+        default_priority = load_default_priority()
+
+        for key in PRIORITY_KEYS:
+            if key not in priority or not isinstance(priority[key], list):
+                priority[key] = default_priority.get(key, [])
 
     return {
         "exit_after_plane": exit_plane,
@@ -79,15 +105,18 @@ def load_currency_settings(path=CONFIG_PATH):
 def save_currency_settings(values, path=CONFIG_PATH):
     """Update currency-war settings while preserving future config fields."""
     path = Path(path)
-    normalized = normalize_currency_settings(values)
     with EXTRA.FILE_LOCK:
         try:
-            current = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            current = yaml.safe_load(
+                path.read_text(encoding="utf-8")
+            ) or {}
         except (OSError, yaml.YAMLError):
             current = {}
         if not isinstance(current, dict):
             current = {}
-        current.update(normalized)
+
+        current.update(values)
+        normalized = normalize_currency_settings(current)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             yaml.safe_dump(current, allow_unicode=True, sort_keys=False),

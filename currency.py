@@ -20,7 +20,6 @@ from tool.currency.run_history import (
     get_newly_unlocked_investment,
 )
 from tool.currency.settings import load_currency_settings
-from tool.currency.text_key import DEFAULT_CURRENCY_PRIORITY, text_keys
 from tool.currency.utils import CurrencyUtils, set_forground
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
@@ -73,17 +72,14 @@ class SimulatedCurrency(CurrencyUtils):
         self.max_refresh = 1
         #运行次数
         self.count = 0
-        self.tk = text_keys()
 
-        priority = load_currency_settings().get("priority")
+        priority = load_currency_settings()["priority"]
 
-        if priority is None:
-            priority = DEFAULT_CURRENCY_PRIORITY
-
-        self.tk.prior_envir = priority["prior_envir"][:]
+        self.prior_envir = priority["prior_envir"][:]
+        self.envir = [[] for _ in range(4)]
 
         for index in range(1, 5):
-            self.tk.envir[index] = priority[f"envir_{index}"][:]
+            self.envir[index - 1] = priority[f"envir_{index}"][:]
 
         self.ENVIR_BOXES = [[266, 610, 375, 413], [780, 1134, 375, 414], [1314, 1645, 373, 413]]
         self.BLESS_BOXES = [[298, 608, 472, 513], [783, 1095, 472, 513], [1298, 1605, 472, 513]]
@@ -262,10 +258,10 @@ class SimulatedCurrency(CurrencyUtils):
         self.ts.forward (self.get_screen ())
         boxes = self.ENVIR_BOXES
         def match_prior (texts):
-            for pri in self.tk.prior_envir:
+            for pri in self.prior_envir:
                 for idx, text in enumerate (texts):
                     if pri in text:
-                        CUS_LOGGER.info (f"匹配到必选环境: {pri}，选择选项{idx+1}")
+                        CUS_LOGGER.info (f"检测到必选环境: {pri}，选择选项{idx+1}")
                         return True, idx
             return False, -1
         texts = self.recognize_options (self.ENVIR_BOXES)
@@ -285,9 +281,9 @@ class SimulatedCurrency(CurrencyUtils):
         #构建完整的优先级列表（按顺序）
         if not matched:
             #    顺序：prior_envir + envir[0] + envir[1] + ... + envir[4]
-            prior_list = self.tk.prior_envir[:]  # 复制最高优先级列表
-            for i in range(5):  # envir 有5个子列表，索引0~4
-                prior_list.extend(self.tk.envir[i])  # 依次追加
+            prior_list = self.prior_envir[:]  # 复制最高优先级列表
+            for i in range(1, 5):  # envir 有5个子列表，索引0~4
+                prior_list.extend(self.envir[i])  # 依次追加
             #按优先级匹配选项
             selected_idx = -1  # 初始化为-1，表示未匹配
             for pri in prior_list:
@@ -336,7 +332,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         if any(
             prior in text
-            for prior in self.tk.prior_envir
+            for prior in self.prior_envir
             for text in texts
         ):
             if not self.prior_environment_found:

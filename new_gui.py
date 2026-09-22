@@ -17,9 +17,9 @@ from tool.countdown_config import (
 from tool.currency.settings import (
     EXIT_PLANES,
     load_currency_settings,
+    load_default_priority,
     save_currency_settings,
 )
-from tool.currency.text_key import DEFAULT_CURRENCY_PRIORITY
 from tool.GLOBAL import set_global_stop_flag
 from tool.log import log_emitter
 from tool.thread import ThreadWithException
@@ -353,11 +353,7 @@ class CurrencyPriorityDialog(QDialog):
 
     def load_current(self):
         currency_settings = load_currency_settings()
-        priority = currency_settings.get("priority")
-
-        if priority is None:
-            priority = DEFAULT_CURRENCY_PRIORITY
-
+        priority = currency_settings["priority"]
         self.populate_lists(priority)
 
     def populate_lists(self, data):
@@ -402,11 +398,12 @@ class CurrencyPriorityDialog(QDialog):
         )
 
     def restore_default(self):
-        self.populate_lists(DEFAULT_CURRENCY_PRIORITY)
+        default_priority = load_default_priority()
+        self.populate_lists(default_priority)
 
         try:
             currency_settings = load_currency_settings()
-            currency_settings["priority"] = DEFAULT_CURRENCY_PRIORITY
+            currency_settings["priority"] = default_priority
             save_currency_settings(currency_settings)
         except OSError as error:
             QMessageBox.critical(
