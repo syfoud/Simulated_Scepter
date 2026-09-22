@@ -1241,9 +1241,6 @@ class MainWindow(QMainWindowLog):
         dialog = CurrencyPriorityDialog(self)
         dialog.exec_()
 
-    def open_iron_blood_record_stats(self):
-        os.startfile(PATHS["root"] + "\\resource\\html\\iron_blood-record_stats.html")
-
     def open_record_stats(self):
         os.startfile(PATHS["root"] + "\\resource\\html\\record_stats.html")
     
