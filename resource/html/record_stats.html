@@ -1,0 +1,2174 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>轮回数据统计</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2028;
+    --panel-2: #232b35;
+    --border: #2e3844;
+    --text: #e6edf3;
+    --text-dim: #8b98a5;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #a371f7;
+    --gray: #6e7681;
+
+    --badge-tie-bg: rgba(248,81,73,.15);
+    --badge-tie-fg: #f85149;
+    --badge-tan-bg: rgba(163,113,247,.15);
+    --badge-tan-fg: #a371f7;
+
+    --c-zero:  #6b7280;
+    --c-one:   #16a34a;
+    --c-two:   #facc15;
+    --c-three: #dc2626;
+    --c-line-two:   #facc15;
+    --c-line-three: #dc2626;
+    --c-line-combo: #ea580c;
+
+    /* 弹指模块颜色统一为 绿黄红 */
+    --c-tan-low:    #16a34a; /* 低倒计时：绿色 */
+    --c-tan-normal: #facc15; /* 普通倒计时：黄色 */
+    --c-tan-high:   #dc2626; /* 高倒计时：红色 */
+
+    --pct-miss-bg:   rgba(110,118,129,.15);
+    --pct-miss-fg:   var(--gray);
+    
+    --pct-zero-bg:   rgba(139,152,165,.15);
+    --pct-zero-fg:   var(--text-dim);
+
+    --pct-one-bg:    rgba(22,163,74,.15);
+    --pct-one-fg:    var(--c-one);
+
+    --pct-two-bg:    rgba(250,204,21,.2);
+    --pct-two-fg:    var(--c-two);
+
+    --pct-three-bg:  rgba(220,38,38,.15);
+    --pct-three-fg:  var(--c-three);
+
+    --pct-low-bg:    rgba(22,163,74,.15);
+    --pct-low-fg:    var(--c-tan-low);
+
+    --pct-normal-bg: rgba(250,204,21,.2);
+    --pct-normal-fg: var(--c-tan-normal);
+
+    --pct-high-bg:   rgba(220,38,38,.15);
+    --pct-high-fg:   var(--c-tan-high);
+
+    --chart-axis: #8b98a5;
+    --chart-grid: #2e3844;
+    --chart-line-hover: #58a6ff;
+    --chart-tooltip-bg: #1a2028;
+    --chart-tooltip-border: #4a5763;
+
+    --drop-over: #3d5a80;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #f6f8fa;
+    --panel: #ffffff;
+    --panel-2: #f0f3f6;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-dim: #656d76;
+    --accent: #0969da;
+    --green: #1a7f37;
+    --orange: #9a6700;
+    --red: #cf222e;
+    --purple: #8250df;
+    --gray: #6e7781;
+
+    --badge-tie-bg: rgba(207,34,46,.1);
+    --badge-tie-fg: #cf222e;
+    --badge-tan-bg: rgba(130,80,223,.1);
+    --badge-tan-fg: #8250df;
+
+    --c-zero:  #6e7781;
+    --c-one:   #1a7f37;
+    --c-two:   #eab308;
+    --c-three: #cf222e;
+    --c-line-two:   #eab308;
+    --c-line-three: #cf222e;
+    --c-line-combo: #bc4c00;
+
+    /* 弹指模块颜色统一为 绿黄红 */
+    --c-tan-low:    #1a7f37; /* 低倒计时：绿色 */
+    --c-tan-normal: #eab308; /* 普通倒计时：黄色 */
+    --c-tan-high:   #cf222e; /* 高倒计时：红色 */
+
+    --pct-miss-bg:   rgba(110,119,129,.12);
+    --pct-miss-fg:   var(--gray);
+    
+    --pct-zero-bg:   rgba(101,109,118,.12);
+    --pct-zero-fg:   var(--text-dim);
+
+    --pct-one-bg:    rgba(26,127,55,.1);
+    --pct-one-fg:    var(--c-one);
+
+    --pct-two-bg:    rgba(234,179,8,.2);
+    --pct-two-fg:    #b45309;
+
+    --pct-three-bg:  rgba(207,34,46,.1);
+    --pct-three-fg:  var(--c-three);
+
+    --pct-low-bg:    rgba(26,127,55,.1);
+    --pct-low-fg:    var(--c-tan-low);
+
+    --pct-normal-bg: rgba(234,179,8,.2);
+    --pct-normal-fg: #b45309;
+
+    --pct-high-bg:   rgba(207,34,46,.1);
+    --pct-high-fg:   var(--c-tan-high);
+
+    --chart-axis: #656d76;
+    --chart-grid: #d0d7de;
+    --chart-line-hover: #0969da;
+    --chart-tooltip-bg: #ffffff;
+    --chart-tooltip-border: #94a3b8;
+
+    --drop-over: #cfe3f7;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 20px 64px;
+    line-height: 1.5;
+    transition: background-color .2s, color .2s;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  .theme-toggle {
+    position: fixed; top: 20px; right: 20px;
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--panel);
+    color: var(--text); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s; box-shadow: 0 2px 8px rgba(0,0,0,.15); z-index: 100;
+  }
+  .theme-toggle:hover {
+    border-color: var(--accent); transform: scale(1.05);
+    box-shadow: 0 4px 14px rgba(0,0,0,.2);
+  }
+  .theme-toggle svg {
+    width: 22px; height: 22px; stroke: currentColor; fill: none;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .icon-sun  { display: block; }
+  .icon-moon { display: none; }
+  :root[data-theme="light"] .icon-sun  { display: none; }
+  :root[data-theme="light"] .icon-moon { display: block; }
+
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+
+  .memo-box {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+    transition: background-color .2s, border-color .2s;
+  }
+  .memo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .memo-status { font-size: 13px; color: var(--text-dim); }
+  .memo-status.ok { color: var(--green); }
+  .memo-status.warn { color: var(--orange); }
+  .memo-hint { font-size: 12px; color: var(--text-dim); margin-top: 8px; line-height: 1.6; }
+  .memo-hint code {
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px;
+    font-size: 11px; color: var(--text);
+  }
+  .memo-btn {
+    padding: 8px 16px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--panel-2); color: var(--text); cursor: pointer;
+    font-size: 13px; font-family: inherit; transition: all .15s;
+  }
+  .memo-btn:hover { border-color: var(--accent); background: var(--bg); }
+  .memo-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .memo-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .memo-btn.primary:hover:not(:disabled) { filter: brightness(1.1); }
+
+  .drop {
+    border: 2px dashed var(--border); border-radius: 12px;
+    padding: 40px 20px; text-align: center; cursor: pointer;
+    transition: all .2s; background: var(--panel);
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: var(--panel-2); }
+  .drop.over { background: var(--drop-over); }
+  .drop .icon { font-size: 32px; margin-bottom: 8px; }
+  .drop .hint { color: var(--text-dim); font-size: 13px; margin-top: 6px; }
+
+  .tabs {
+    display: flex; gap: 4px; margin-top: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    padding: 10px 20px; border: none; background: transparent;
+    color: var(--text-dim); font-size: 14px; font-family: inherit;
+    cursor: pointer; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; transition: color .15s, border-color .15s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab .tab-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gray); }
+  .tab[data-tab="tie"].active .tab-dot { background: var(--red); }
+  .tab[data-tab="tan"].active .tab-dot { background: var(--purple); }
+  .tab-panel { display: none; padding-top: 4px; }
+  .tab-panel.active { display: block; }
+
+  .full-width {
+    margin-top: 20px;
+    padding: 20px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow-x: auto;
+  }
+  .full-width table {
+    min-width: 100%;
+  }
+
+  .result-block {
+    margin-top: 0; padding: 20px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px;
+    transition: background-color .2s, border-color .2s;
+  }
+  .result-block-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 16px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .result-block-title { font-size: 15px; font-weight: 600; }
+  .result-block-status {
+    font-size: 12px; color: var(--text-dim);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .status-dot.ok { background: var(--green); }
+  .status-dot.miss { background: var(--gray); }
+  .status-dot.err { background: var(--red); }
+
+  .section { margin-top: 20px; }
+  .section-title {
+    font-size: 15px; font-weight: 600; margin: 0 0 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title::before {
+    content: ''; width: 3px; height: 14px; background: var(--accent); border-radius: 2px;
+  }
+  .file-info { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+  .file-info strong { color: var(--text); font-weight: 500; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 6px;
+    font-size: 11px; font-weight: 500; margin-left: 8px;
+    letter-spacing: .02em;
+  }
+  .badge-tie { background: var(--badge-tie-bg); color: var(--badge-tie-fg); }
+  .badge-tan { background: var(--badge-tan-bg); color: var(--badge-tan-fg); }
+
+  table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    background: var(--panel-2); border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--border); font-size: 13px;
+  }
+  thead th {
+    background: var(--panel); color: var(--text-dim); font-weight: 500;
+    text-align: left; padding: 10px 14px; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  tbody td { padding: 10px 14px; border-top: 1px solid var(--border); }
+  tbody tr:hover { background: var(--panel); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pct {
+    display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 12px; font-variant-numeric: tabular-nums;
+  }
+  .p-miss  { background: var(--pct-miss-bg);  color: var(--pct-miss-fg); }
+  .p-zero  { background: var(--pct-zero-bg);  color: var(--pct-zero-fg); }
+  .p-one   { background: var(--pct-one-bg);   color: var(--pct-one-fg); }
+  .p-two   { background: var(--pct-two-bg);   color: var(--pct-two-fg); }
+  .p-three { background: var(--pct-three-bg); color: var(--pct-three-fg); }
+  .p-low   { background: var(--pct-low-bg);   color: var(--pct-low-fg); }
+  .p-normal{ background: var(--pct-normal-bg); color: var(--pct-normal-fg); }
+  .p-high  { background: var(--pct-high-bg);  color: var(--pct-high-fg); }
+
+  .row-total td { font-weight: 600; background: var(--panel); }
+
+  .empty {
+    text-align: center; color: var(--text-dim); padding: 40px 24px;
+    font-size: 13px; background: var(--panel); border-radius: 10px;
+    border: 1px solid var(--border); margin-top: 20px;
+  }
+
+  .legend {
+    font-size: 12px; color: var(--text-dim); margin-top: 10px; line-height: 1.7;
+  }
+  .legend code {
+    background: var(--panel-2); padding: 1px 6px; border-radius: 4px;
+    font-size: 11px; color: var(--text);
+  }
+
+  .chart-section {
+    margin-top: 24px; padding: 20px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px;
+    transition: background-color .2s, border-color .2s;
+  }
+  .chart-section + .chart-section { margin-top: 16px; }
+  .chart-warning-banner {
+    text-align: center; font-size: 13px; font-weight: 600;
+    color: var(--red); margin-bottom: 4px;
+  }
+  .chart-header {
+    text-align: center; font-size: 14px; font-weight: 600;
+    color: var(--text); margin: 0 0 16px;
+  }
+  .chart-header small { color: var(--text-dim); font-weight: 400; }
+
+  .chart-layout {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr) 220px;
+    align-items: stretch; gap: 14px;
+  }
+  .chart-left {
+    display: flex; flex-direction: column; gap: 6px;
+    justify-content: center; text-align: left; padding-right: 8px;
+  }
+  .chart-count { color: var(--text-dim); font-size: 13px; }
+  .chart-count strong { color: var(--text); }
+  .chart-tip { color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+  .chart-tip.warn { color: var(--red); font-weight: 600; }
+  .chart-tip.zoom-hint {
+    color: var(--accent);
+    font-size: 11px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-top: 4px;
+    line-height: 1.6;
+  }
+  .chart-tip.zoom-hint kbd {
+    display: inline-block;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: 10px;
+    font-family: inherit;
+    color: var(--text);
+  }
+
+  .chart-canvas-wrap { min-width: 0; height: 380px; position: relative; }
+  .chart-canvas-wrap canvas {
+    display: block; width: 100%; height: 100%;
+    cursor: crosshair;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none;
+  }
+  .chart-canvas-wrap.dragging canvas { cursor: grabbing !important; }
+  .chart-canvas-wrap.pinned { box-shadow: 0 0 0 2px var(--accent); border-radius: 8px; }
+
+  .chart-sidebar {
+    display: flex; flex-direction: column; gap: 12px; justify-content: center;
+  }
+  .selection-box {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--panel-2); padding: 12px 14px;
+    color: var(--text-dim); font-size: 13px; line-height: 1.7;
+  }
+  .selection-box .val { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .selection-box .val-two { color: var(--c-line-two); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .selection-box .val-three { color: var(--c-line-three); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .selection-box .val-combo { color: var(--c-line-combo); font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  .chart-legend {
+    display: flex; flex-direction: column; gap: 8px;
+    font-size: 12px; color: var(--text-dim);
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+
+  @media (max-width: 780px) {
+    .chart-layout { grid-template-columns: 1fr; }
+    .chart-left { order: 1; text-align: left; }
+    .chart-canvas-wrap { order: 2; height: 320px; }
+    .chart-sidebar { order: 3; }
+    .chart-legend { flex-direction: row; flex-wrap: wrap; gap: 10px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle" title="切换亮色/暗色主题" aria-label="切换主题">
+  <svg class="icon-sun" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="4.5"></circle>
+    <line x1="12" y1="1.5" x2="12" y2="3.5"></line>
+    <line x1="12" y1="20.5" x2="12" y2="22.5"></line>
+    <line x1="4.2" y1="4.2" x2="5.6" y2="5.6"></line>
+    <line x1="18.4" y1="18.4" x2="19.8" y2="19.8"></line>
+    <line x1="1.5" y1="12" x2="3.5" y2="12"></line>
+    <line x1="20.5" y1="12" x2="22.5" y2="12"></line>
+    <line x1="4.2" y1="19.8" x2="5.6" y2="18.4"></line>
+    <line x1="18.4" y1="5.6" x2="19.8" y2="4.2"></line>
+  </svg>
+  <svg class="icon-moon" viewBox="0 0 24 24">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+  </svg>
+</button>
+
+<div class="wrap">
+  <h1>轮回数据统计</h1>
+  <div class="subtitle">自动读取 backup 文件夹，或手动上传文件</div>
+
+  <div class="memo-box">
+    <div class="memo-row">
+      <button id="pickFolderBtn" class="memo-btn primary">📁 选择 backup 文件夹</button>
+      <button id="restoreBtn" class="memo-btn primary" style="display:none">🔓 恢复访问</button>
+      <span id="folderStatus" class="memo-status">未选择文件夹</span>
+      <button id="reloadBtn" class="memo-btn" style="display:none">🔄 重新读取</button>
+      <button id="clearMemoBtn" class="memo-btn" style="display:none">✖ 清除记忆</button>
+    </div>
+    <div class="memo-hint" id="memoHint">
+      选择后自动读取文件夹中的 kill_record*.txt（铁血）和 countdown*.txt（弹指），下次打开自动恢复。
+    </div>
+  </div>
+
+  <div class="drop" id="drop">
+    <div class="icon">📄</div>
+    <div>点击选择文件，或将文件拖到这里（可多选）</div>
+    <div class="hint">支持 .txt 文件，自动兼容铁血（击杀数）与弹指（倒计时）模块</div>
+    <input type="file" id="fileInput" accept=".txt,text/plain" multiple hidden>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="tie"><span class="tab-dot"></span>铁血模块</button>
+    <button class="tab" data-tab="tan"><span class="tab-dot"></span>弹指模块</button>
+  </div>
+
+  <div class="tab-panel active" id="panel-tie"></div>
+  <div class="tab-panel" id="panel-tan"></div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const THEME_KEY = 'round-stats-theme';
+
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+  }
+
+  function initTheme() {
+    let theme = null;
+    try { theme = localStorage.getItem(THEME_KEY); } catch (e) {}
+    if (theme !== 'light' && theme !== 'dark') {
+      theme = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    applyTheme(theme);
+  }
+
+  function toggleTheme() {
+    const cur = document.documentElement.dataset.theme;
+    const next = cur === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+    setTimeout(() => {
+      drawExpectationChart();
+      drawProbabilityLineChart();
+    }, 30);
+  }
+
+  document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+  initTheme();
+
+  const DB_NAME = 'round_stats_db';
+  const DB_VERSION = 1;
+  const STORE_NAME = 'handles';
+  const HANDLE_KEY = 'backup_folder';
+
+  function openDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbPut(key, value) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(value, key);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  }
+
+  async function idbGet(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = () => { db.close(); resolve(req.result); };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  }
+
+  async function idbDelete(key) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(key);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  }
+
+  const supportsFS = typeof window.showDirectoryPicker === 'function';
+
+  async function readFileFromDir(dirHandle, fileName) {
+    try {
+      const fileHandle = await dirHandle.getFileHandle(fileName);
+      const file = await fileHandle.getFile();
+      return await file.text();
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') return null;
+      throw e;
+    }
+  }
+
+  async function queryPermission(handle) {
+    if (!handle || typeof handle.queryPermission !== 'function') return 'prompt';
+    try { return await handle.queryPermission({ mode: 'read' }); } catch (e) { return 'prompt'; }
+  }
+
+  async function requestPermission(handle) {
+    if (!handle || typeof handle.requestPermission !== 'function') return false;
+    try { return (await handle.requestPermission({ mode: 'read' })) === 'granted'; } catch (e) { return false; }
+  }
+
+  function parseAll(text, forcedType) {
+    const lines = text.split(/\r?\n/);
+    const map = new Map();
+    let moduleType = forcedType || null;
+
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line) continue;
+
+      if (!moduleType) {
+        if (/第\s*[一二三123]\s*位面击杀数/.test(line) || /总?击杀数\s*[:：]/.test(line)) {
+          moduleType = 'tie';
+        } else if (/第\s*[一二三123]\s*位面倒计时/.test(line) || /总?倒计时\s*[:：]/.test(line)) {
+          moduleType = 'tan';
+        }
+      }
+
+      if (/^\d+$/.test(line)) {
+        const round = parseInt(line, 10);
+        if (!map.has(round)) {
+          map.set(round, {
+            round, value: 0, duration: null,
+            planes: [0, 0, 0], missing: true, openingExpectation: null, raw: line
+          });
+        }
+        continue;
+      }
+
+      const rec = parseRecord(line);
+      if (rec) map.set(rec.round, rec);
+    }
+
+    return {
+      records: Array.from(map.values()).sort((a, b) => a.round - b.round),
+      moduleType: moduleType || 'unknown'
+    };
+  }
+
+  function parseRecord(line) {
+    const roundMatch = line.match(/轮回次数\s*[:：]\s*(\d+)/);
+    if (!roundMatch) return null;
+    const round = parseInt(roundMatch[1], 10);
+
+    const planes = [0, 0, 0];
+    const planeRe = /第\s*([一二三123])\s*位面(?:击杀数|倒计时)\s*[:：]\s*(\d+)/g;
+    let m;
+    while ((m = planeRe.exec(line)) !== null) {
+      const key = m[1];
+      const idx = (key === '一' || key === '1') ? 0 : (key === '二' || key === '2') ? 1 : 2;
+      planes[idx] = parseInt(m[2], 10);
+    }
+
+    const stripped = line.replace(/第\s*[一二三123]\s*位面(?:击杀数|倒计时)\s*[:：]\s*\d+/g, '');
+    let value;
+    const totalMatch = stripped.match(/(?:总)?(?:击杀数|倒计时)\s*[:：]\s*(\d+)/);
+    if (totalMatch) value = parseInt(totalMatch[1], 10);
+    else value = planes[0] + planes[1] + planes[2];
+
+    let duration = null;
+    const bracketStart = line.indexOf('[');
+    const outside = bracketStart >= 0 ? line.slice(0, bracketStart) : line;
+
+    let dm = outside.match(/(?:总)?(?:耗时|用时|持续时间|花费时间)\s*[:：]\s*(\d+)\s*分\s*(\d+)\s*秒/);
+    if (dm) {
+      duration = parseInt(dm[1], 10) * 60 + parseInt(dm[2], 10);
+    } else {
+      dm = outside.match(/(?:总)?(?:耗时|用时|持续时间|花费时间)\s*[:：]\s*(\d+)\s*秒/);
+      if (dm) duration = parseInt(dm[1], 10);
+    }
+
+    let openingExpectation = null;
+    const expectationMatch = line.match(/(?:第一面期望|开局期望)\s*[:：]\s*(-?\d+(?:\.\d+)?)/);
+    if (expectationMatch) openingExpectation = parseFloat(expectationMatch[1]);
+
+    return { round, value, duration, planes, missing: false, openingExpectation, raw: line };
+  }
+
+  function formatDuration(sec) {
+    if (sec == null) return '—';
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function classifyRecords(records, type) {
+    if (type === 'tie') {
+      let zero = 0, one = 0, two = 0, three = 0;
+      for (const r of records) {
+        const k = r.value;
+        if (k === 0) zero++;
+        else if (k >= 1 && k <= 13) one++;
+        else if (k >= 14 && k <= 30) two++;
+        else if (k > 30) three++;
+      }
+      return { zero, one, two, three, total: records.length };
+    } else {
+      let low = 0, normal = 0, high = 0;
+      for (const r of records) {
+        const v = r.value;
+        if (v < 18) low++;
+        else if (v >= 18 && v <= 60) normal++;
+        else if (v > 60) high++;
+      }
+      return { low, normal, high, total: records.length };
+    }
+  }
+
+  let chartRecords = [];
+  let selectedExpectation = 0;
+  let chartHover = null;
+  let chartHoverPoint = null;
+  let lineChartData = [];
+  let lineChartHover = null;
+  let lineChartHoverPoint = null;
+
+  let scatterZoom = { x: null, y: null };
+  let lineZoom = { x: null, y: null };
+  let mouseOnScatter = false;
+  let mouseOnLine = false;
+
+  let scatterDragging = false;
+  let scatterDragStart = null;
+  let lineDragging = false;
+  let lineDragStart = null;
+
+  let isScatterPinned = false;
+  let isLinePinned = false;
+
+  const ZOOM_IN_FACTOR = 1 / 1.2;
+  const ZOOM_OUT_FACTOR = 1.2;
+
+  function applyZoom(range, factor) {
+    const center = (range.min + range.max) / 2;
+    const half = (range.max - range.min) / 2 * factor;
+    return { min: center - half, max: center + half };
+  }
+
+  function niceTicks(min, max, targetCount) {
+    targetCount = targetCount || 6;
+    if (!(max > min)) return [min];
+    const range = max - min;
+    const rawStep = range / targetCount;
+    if (!(rawStep > 0)) return [min, max];
+    const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const residual = rawStep / magnitude;
+    let niceStep;
+    if (residual <= 1.5) niceStep = 1;
+    else if (residual <= 3) niceStep = 2;
+    else if (residual <= 7) niceStep = 5;
+    else niceStep = 10;
+    niceStep *= magnitude;
+
+    const ticks = [];
+    const start = Math.ceil(min / niceStep) * niceStep;
+    for (let i = 0; i < 60; i++) {
+      const v = start + i * niceStep;
+      if (v > max + niceStep * 0.001) break;
+      ticks.push(Number(v.toFixed(6)));
+    }
+    if (ticks.length < 2) return [min, max];
+    if (ticks[0] > min) ticks.unshift(min);
+    if (ticks[ticks.length - 1] < max) ticks.push(max);
+    return ticks;
+  }
+
+  function pointColor(kills) {
+    if (kills === 0) return cssVar('--c-zero');
+    if (kills <= 13) return cssVar('--c-one');
+    if (kills <= 30) return cssVar('--c-two');
+    return cssVar('--c-three');
+  }
+
+  function calculateProbabilities(expectation) {
+    const eligible = chartRecords.filter(r => r.expectation >= expectation);
+    const total = eligible.length;
+    const two = eligible.filter(r => r.kills >= 14 && r.kills <= 30).length;
+    const three = eligible.filter(r => r.kills > 30).length;
+    return { total, two, three };
+  }
+
+  function calculateLineProbabilities(expectation) {
+    const eligible = chartRecords.filter(r => r.expectation >= expectation && r.kills !== 0);
+    const total = eligible.length;
+    const two = eligible.filter(r => r.kills >= 14 && r.kills <= 30).length;
+    const three = eligible.filter(r => r.kills > 30).length;
+    return {
+      total, two, three,
+      twoPercent: total ? two / total * 100 : 0,
+      threePercent: total ? three / total * 100 : 0,
+      combinedPercent: total ? (two + three) / total * 100 : 0
+    };
+  }
+
+  function updateSelectionSummary(value) {
+    selectedExpectation = Number.isFinite(value) ? value : 0;
+    const p = calculateProbabilities(selectedExpectation);
+    const total = p.total;
+    document.getElementById('selectedExpectation').textContent = selectedExpectation.toFixed(2);
+    document.getElementById('eligibleRecordCount').textContent = total;
+    document.getElementById('twoProbability').textContent = total ? ((p.two / total) * 100).toFixed(2) + '%' : '0.00%';
+    document.getElementById('threeProbability').textContent = total ? ((p.three / total) * 100).toFixed(2) + '%' : '0.00%';
+    document.getElementById('combinedProbability').textContent = total ? (((p.two + p.three) / total) * 100).toFixed(2) + '%' : '0.00%';
+  }
+
+  function updateLineSelectionSummary(value) {
+    const e = Number.isFinite(value) ? value : 0;
+    const p = calculateLineProbabilities(e);
+    document.getElementById('lineSelectedExpectation').textContent = e.toFixed(2);
+    document.getElementById('lineEligibleRecordCount').textContent = p.total;
+    document.getElementById('lineTwoProbability').textContent = p.twoPercent.toFixed(2) + '%';
+    document.getElementById('lineThreeProbability').textContent = p.threePercent.toFixed(2) + '%';
+    document.getElementById('lineCombinedProbability').textContent = p.combinedPercent.toFixed(2) + '%';
+  }
+
+  function niceYAxis(values) {
+    if (values.length === 0) return { min: 0, max: 1, ticks: [0, 0.2, 0.4, 0.6, 0.8, 1] };
+    let min = Math.floor(Math.min(...values) * 10) / 10;
+    let max = Math.ceil(Math.max(...values) * 10) / 10;
+    if (min === max) { min -= 0.1; max += 0.1; }
+    const target = (max - min) / 6;
+    const candidates = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100];
+    const step = candidates.find(v => v >= target) || Math.ceil(target / 10) * 10;
+    min = Math.floor(min / step) * step;
+    max = Math.ceil(max / step) * step;
+    const ticks = [];
+    for (let v = min, guard = 0; v <= max + step * 0.001 && guard < 100; v += step, guard++) {
+      ticks.push(Math.round(v * 10) / 10);
+    }
+    if (ticks[0] !== min) ticks.unshift(min);
+    if (ticks[ticks.length - 1] !== max) ticks.push(max);
+    return { min, max, ticks };
+  }
+
+  function niceProbabilityYAxis(values) {
+    const maxValue = Math.max(0, ...values);
+    const target = Math.max(maxValue / 6, 0.01);
+    const candidates = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 25, 50, 100];
+    const step = candidates.find(v => v >= target) || 100;
+    let max = Math.ceil((maxValue - 0.000001) / step) * step;
+    if (max <= 0) max = step;
+    const ticks = [];
+    for (let v = 0, guard = 0; v <= max + step * 0.001 && guard < 100; v += step, guard++) {
+      ticks.push(Number(v.toFixed(2)));
+    }
+    if (ticks[ticks.length - 1] !== max) ticks.push(max);
+    return { min: 0, max, ticks };
+  }
+
+  function drawExpectationChart() {
+    const canvas = document.getElementById('expectationChart');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const pw = Math.round(rect.width * dpr);
+    const ph = Math.round(rect.height * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    const axisColor = cssVar('--chart-axis') || '#8b98a5';
+    const gridColor = cssVar('--chart-grid') || '#2e3844';
+    const textColor = cssVar('--text') || '#e6edf3';
+    const hoverColor = cssVar('--chart-line-hover') || '#58a6ff';
+    const tooltipBg = cssVar('--chart-tooltip-bg') || '#1a2028';
+    const tooltipBorder = cssVar('--chart-tooltip-border') || '#4a5763';
+
+    const margin = { left: 68, right: 62, top: 34, bottom: 58 };
+    const plot = {
+      left: margin.left, top: margin.top,
+      right: rect.width - margin.right, bottom: rect.height - margin.bottom
+    };
+    plot.width = Math.max(1, plot.right - plot.left);
+    plot.height = Math.max(1, plot.bottom - plot.top);
+
+    const baseY = niceYAxis(chartRecords.map(r => r.expectation));
+    let yAxis;
+    if (scatterZoom.y) {
+      const yMin = scatterZoom.y.min;
+      const yMax = scatterZoom.y.max;
+      yAxis = { min: yMin, max: yMax, ticks: niceTicks(yMin, yMax) };
+    } else {
+      yAxis = baseY;
+    }
+
+    const xMin = scatterZoom.x ? scatterZoom.x.min : 0;
+    const xMax = scatterZoom.x ? scatterZoom.x.max : 40;
+    const xTicks = scatterZoom.x ? niceTicks(xMin, xMax, 8) : [0, 5, 10, 15, 20, 25, 30, 35, 40];
+
+    const xToPx = x => plot.left + ((x - xMin) / (xMax - xMin)) * plot.width;
+    const yToPx = y => plot.bottom - ((y - yAxis.min) / (yAxis.max - yAxis.min)) * plot.height;
+
+    ctx.save();
+    ctx.strokeStyle = gridColor; ctx.lineWidth = 1; ctx.setLineDash([4, 5]);
+    for (const x of xTicks) {
+      const px = xToPx(x);
+      if (px < plot.left - 1 || px > plot.right + 1) continue;
+      ctx.beginPath(); ctx.moveTo(px, plot.top); ctx.lineTo(px, plot.bottom); ctx.stroke();
+    }
+    for (const y of yAxis.ticks) {
+      const py = yToPx(y);
+      if (py < plot.top - 1 || py > plot.bottom + 1) continue;
+      ctx.beginPath(); ctx.moveTo(plot.left, py); ctx.lineTo(plot.right, py); ctx.stroke();
+    }
+    ctx.restore();
+
+    if (selectedExpectation >= yAxis.min && selectedExpectation <= yAxis.max) {
+      const yLine = yToPx(selectedExpectation);
+      if (yLine >= plot.top && yLine <= plot.bottom) {
+        ctx.save();
+        ctx.strokeStyle = hoverColor;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(plot.left, yLine);
+        ctx.lineTo(plot.right, yLine);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    if (chartHover && !scatterDragging) {
+      ctx.save();
+      ctx.strokeStyle = hoverColor; ctx.fillStyle = hoverColor; ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+      if (chartHover.axis === 'x') {
+        const px = Math.max(plot.left, Math.min(plot.right, chartHover.px));
+        const value = xMin + ((px - plot.left) / plot.width) * (xMax - xMin);
+        ctx.beginPath(); ctx.moveTo(px, plot.top); ctx.lineTo(px, plot.bottom); ctx.stroke();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(value.toFixed(1), px, plot.top - 6);
+      } else if (chartHover.axis === 'y') {
+        const py = Math.max(plot.top, Math.min(plot.bottom, chartHover.py));
+        const value = yAxis.max - ((py - plot.top) / plot.height) * (yAxis.max - yAxis.min);
+        ctx.beginPath(); ctx.moveTo(plot.left, py); ctx.lineTo(plot.right, py); ctx.stroke();
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(value.toFixed(2), plot.right + 7, py);
+      }
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.strokeStyle = axisColor; ctx.fillStyle = axisColor; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, plot.top); ctx.lineTo(plot.left, plot.bottom); ctx.lineTo(plot.right, plot.bottom);
+    ctx.stroke();
+
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const x of xTicks) {
+      const px = xToPx(x);
+      if (px < plot.left - 5 || px > plot.right + 5) continue;
+      ctx.beginPath(); ctx.moveTo(px, plot.bottom); ctx.lineTo(px, plot.bottom + 5); ctx.stroke();
+      const label = Number.isInteger(x) ? String(x) : x.toFixed(1);
+      ctx.fillText(label, px, plot.bottom + 9);
+    }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (const y of yAxis.ticks) {
+      const py = yToPx(y);
+      if (py < plot.top - 5 || py > plot.bottom + 5) continue;
+      ctx.beginPath(); ctx.moveTo(plot.left - 5, py); ctx.lineTo(plot.left, py); ctx.stroke();
+      ctx.fillText(y.toFixed(2), plot.left - 9, py);
+    }
+
+    ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('击杀数', plot.left + plot.width / 2, rect.height - 4);
+    ctx.save();
+    ctx.translate(15, plot.top + plot.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('开局期望', 0, 0);
+    ctx.restore();
+    ctx.restore();
+
+    const plottedPoints = [];
+    for (const record of chartRecords) {
+      if (record.kills < xMin || record.kills > xMax) continue;
+      if (record.expectation < yAxis.min || record.expectation > yAxis.max) continue;
+      const px = xToPx(record.kills);
+      const py = yToPx(record.expectation);
+      plottedPoints.push({ px, py, record });
+      ctx.beginPath();
+      ctx.arc(px, py, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = pointColor(record.kills);
+      ctx.fill();
+    }
+
+    if (chartHoverPoint && !scatterDragging) {
+      const record = chartHoverPoint.record;
+      const lines = [
+        `轮回次数: ${record.round}`,
+        `击杀数: ${record.kills}`,
+        `开局期望: ${record.expectationText}`
+      ];
+      ctx.save();
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+      const paddingX = 8, lineHeight = 20;
+      const boxWidth = Math.max(...lines.map(l => ctx.measureText(l).width)) + paddingX * 2;
+      const boxHeight = lines.length * lineHeight + 10;
+      let boxX = chartHoverPoint.mouseX + 12;
+      let boxY = chartHoverPoint.mouseY + 12;
+      if (boxX + boxWidth > rect.width - 2) boxX = chartHoverPoint.mouseX - boxWidth - 12;
+      if (boxY + boxHeight > rect.height - 2) boxY = chartHoverPoint.mouseY - boxHeight - 12;
+      ctx.fillStyle = tooltipBg; ctx.strokeStyle = tooltipBorder; ctx.lineWidth = 1;
+      ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+      ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+      ctx.fillStyle = textColor; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      lines.forEach((line, i) => ctx.fillText(line, boxX + paddingX, boxY + 5 + lineHeight * (i + 0.5)));
+      ctx.restore();
+    }
+
+    canvas._plotBox = plot;
+    canvas._plottedPoints = plottedPoints;
+    canvas._yAxis = yAxis;
+    canvas._xAxis = { min: xMin, max: xMax };
+  }
+
+  function getLineRange() {
+    const validRecords = chartRecords.filter(r => r.kills > 0 && r.expectation > 0);
+    if (validRecords.length === 0) return { min: 0, max: 0.1 };
+    const values = validRecords.map(r => r.expectation);
+    const rawMin = Math.min(...values);
+    const rawMax = Math.max(...values);
+    let min = Math.floor(rawMin * 10) / 10;
+    let max = Math.ceil(rawMax * 10) / 10;
+    if (max <= min) max = min + 0.1;
+    return { min, max };
+  }
+
+  function buildLineData() {
+    const range = getLineRange();
+    const points = [];
+    for (let i = 0; ; i++) {
+      const e = Number((range.min + i * 0.01).toFixed(2));
+      if (e > range.max + 0.00001 || i > 5000) break;
+      points.push({ expectation: e, ...calculateLineProbabilities(e) });
+    }
+    const last = points[points.length - 1];
+    if (!last || last.expectation < range.max - 0.00001) {
+      points.push({ expectation: Number(range.max.toFixed(2)), ...calculateLineProbabilities(range.max) });
+    }
+    return points;
+  }
+
+  function lineChartStartExpectation() {
+    return lineChartData.length ? lineChartData[0].expectation : 0;
+  }
+
+  function refreshProbabilityLineChart() {
+    lineChartData = buildLineData();
+    lineChartHover = null;
+    lineChartHoverPoint = null;
+    const nonZeroCount = chartRecords.filter(r => r.kills !== 0).length;
+    const el = document.getElementById('lineChartCount');
+    if (el) el.innerHTML = `可识别记录数：<strong>${nonZeroCount}</strong>条`;
+    updateLineSelectionSummary(selectedExpectation || lineChartStartExpectation());
+    drawProbabilityLineChart();
+  }
+
+  function drawProbabilityLineChart() {
+    const canvas = document.getElementById('probabilityLineChart');
+    if (!canvas || lineChartData.length === 0) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const pw = Math.round(rect.width * dpr);
+    const ph = Math.round(rect.height * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) { canvas.width = pw; canvas.height = ph; }
+
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, rect.width, rect.height);
+
+    const axisColor = cssVar('--chart-axis') || '#8b98a5';
+    const gridColor = cssVar('--chart-grid') || '#2e3844';
+    const textColor = cssVar('--text') || '#e6edf3';
+    const hoverColor = cssVar('--chart-line-hover') || '#58a6ff';
+    const tooltipBg = cssVar('--chart-tooltip-bg') || '#1a2028';
+    const tooltipBorder = cssVar('--chart-tooltip-border') || '#4a5763';
+
+    const margin = { left: 68, right: 62, top: 34, bottom: 58 };
+    const plot = {
+      left: margin.left, top: margin.top,
+      right: rect.width - margin.right, bottom: rect.height - margin.bottom
+    };
+    plot.width = Math.max(1, plot.right - plot.left);
+    plot.height = Math.max(1, plot.bottom - plot.top);
+
+    const baseXMin = lineChartData[0].expectation;
+    const baseXMax = lineChartData[lineChartData.length - 1].expectation;
+    const xMin = lineZoom.x ? lineZoom.x.min : baseXMin;
+    const xMax = lineZoom.x ? lineZoom.x.max : baseXMax;
+    const xTicks = niceTicks(xMin, xMax);
+    if (xTicks[0] > xMin) xTicks.unshift(xMin);
+    if (xTicks[xTicks.length - 1] < xMax) xTicks.push(xMax);
+
+    const baseY = niceProbabilityYAxis(lineChartData.flatMap(p => [p.twoPercent, p.threePercent, p.combinedPercent]));
+    let yAxis;
+    if (lineZoom.y) {
+      const yMin = Math.max(0, lineZoom.y.min);
+      const yMax = lineZoom.y.max;
+      yAxis = { min: yMin, max: yMax, ticks: niceTicks(yMin, yMax) };
+    } else {
+      yAxis = baseY;
+    }
+    if (yAxis.ticks[0] > yAxis.min) yAxis.ticks.unshift(yAxis.min);
+    if (yAxis.ticks[yAxis.ticks.length - 1] < yAxis.max) yAxis.ticks.push(yAxis.max);
+
+    const xToPx = v => plot.left + ((v - xMin) / (xMax - xMin)) * plot.width;
+    const yToPx = v => plot.bottom - ((v - yAxis.min) / (yAxis.max - yAxis.min)) * plot.height;
+
+    ctx.save();
+    ctx.strokeStyle = gridColor; ctx.lineWidth = 1; ctx.setLineDash([4, 5]);
+    for (const v of xTicks) {
+      const px = xToPx(v);
+      if (px < plot.left - 1 || px > plot.right + 1) continue;
+      ctx.beginPath(); ctx.moveTo(px, plot.top); ctx.lineTo(px, plot.bottom); ctx.stroke();
+    }
+    for (const v of yAxis.ticks) {
+      const py = yToPx(v);
+      if (py < plot.top - 1 || py > plot.bottom + 1) continue;
+      ctx.beginPath(); ctx.moveTo(plot.left, py); ctx.lineTo(plot.right, py); ctx.stroke();
+    }
+    ctx.restore();
+
+    if (selectedExpectation >= xMin && selectedExpectation <= xMax) {
+      const xLine = xToPx(selectedExpectation);
+      if (xLine >= plot.left && xLine <= plot.right) {
+        ctx.save();
+        ctx.strokeStyle = hoverColor;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(xLine, plot.top);
+        ctx.lineTo(xLine, plot.bottom);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    if (lineChartHover && !lineDragging) {
+      ctx.save();
+      ctx.strokeStyle = hoverColor; ctx.fillStyle = hoverColor; ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+      if (lineChartHover.axis === 'x') {
+        const px = Math.max(plot.left, Math.min(plot.right, lineChartHover.px));
+        const value = xMin + ((px - plot.left) / plot.width) * (xMax - xMin);
+        ctx.beginPath(); ctx.moveTo(px, plot.top); ctx.lineTo(px, plot.bottom); ctx.stroke();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(value.toFixed(2), px, plot.top - 6);
+      } else if (lineChartHover.axis === 'y') {
+        const py = Math.max(plot.top, Math.min(plot.bottom, lineChartHover.py));
+        const value = yAxis.max - ((py - plot.top) / plot.height) * (yAxis.max - yAxis.min);
+        ctx.beginPath(); ctx.moveTo(plot.left, py); ctx.lineTo(plot.right, py); ctx.stroke();
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(value.toFixed(2) + '%', plot.right + 7, py);
+      }
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.strokeStyle = axisColor; ctx.fillStyle = axisColor; ctx.lineWidth = 1.5; ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, plot.top); ctx.lineTo(plot.left, plot.bottom); ctx.lineTo(plot.right, plot.bottom);
+    ctx.stroke();
+
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const v of xTicks) {
+      const px = xToPx(v);
+      if (px < plot.left - 5 || px > plot.right + 5) continue;
+      ctx.beginPath(); ctx.moveTo(px, plot.bottom); ctx.lineTo(px, plot.bottom + 5); ctx.stroke();
+      ctx.fillText(v.toFixed(2), px, plot.bottom + 9);
+    }
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (const v of yAxis.ticks) {
+      const py = yToPx(v);
+      if (py < plot.top - 5 || py > plot.bottom + 5) continue;
+      ctx.beginPath(); ctx.moveTo(plot.left - 5, py); ctx.lineTo(plot.left, py); ctx.stroke();
+      ctx.fillText(v.toFixed(2) + '%', plot.left - 9, py);
+    }
+
+    ctx.fillStyle = textColor;
+    ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('选定期望值', plot.left + plot.width / 2, rect.height - 4);
+    ctx.save();
+    ctx.translate(15, plot.top + plot.height / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('概率', 0, 0);
+    ctx.restore();
+    ctx.restore();
+
+    const lines = [
+      { key: 'twoPercent', label: '进二面概率', color: cssVar('--c-line-two') },
+      { key: 'threePercent', label: '进三面概率', color: cssVar('--c-line-three') },
+      { key: 'combinedPercent', label: '合计概率', color: cssVar('--c-line-combo') }
+    ];
+    const plottedPoints = [];
+    for (const line of lines) {
+      ctx.save();
+      ctx.strokeStyle = line.color; ctx.lineWidth = 2;
+      ctx.beginPath();
+      let started = false;
+      lineChartData.forEach((p) => {
+        if (p.expectation < xMin - 0.001 || p.expectation > xMax + 0.001) return;
+        const px = xToPx(p.expectation);
+        const py = yToPx(p[line.key]);
+        if (!started) { ctx.moveTo(px, py); started = true; }
+        else ctx.lineTo(px, py);
+        plottedPoints.push({ px, py, line, point: p });
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (lineChartHoverPoint && !lineDragging) {
+      const { point, line, mouseX, mouseY } = lineChartHoverPoint;
+      const lines = [
+        `选定期望: ${point.expectation.toFixed(2)}`,
+        `${line.label}: ${point[line.key].toFixed(2)}%`
+      ];
+      ctx.save();
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+      const paddingX = 8, lineHeight = 20;
+      const boxWidth = Math.max(...lines.map(l => ctx.measureText(l).width)) + paddingX * 2;
+      const boxHeight = lines.length * lineHeight + 10;
+      let boxX = mouseX + 12, boxY = mouseY + 12;
+      if (boxX + boxWidth > rect.width - 2) boxX = mouseX - boxWidth - 12;
+      if (boxY + boxHeight > rect.height - 2) boxY = mouseY - boxHeight - 12;
+      ctx.fillStyle = tooltipBg; ctx.strokeStyle = tooltipBorder; ctx.lineWidth = 1;
+      ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
+      ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+      ctx.fillStyle = textColor; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      lines.forEach((l, i) => ctx.fillText(l, boxX + paddingX, boxY + 5 + lineHeight * (i + 0.5)));
+      ctx.restore();
+    }
+
+    canvas._linePlotBox = plot;
+    canvas._lineXAxis = { min: xMin, max: xMax };
+    canvas._lineYAxis = yAxis;
+    canvas._linePlottedPoints = plottedPoints;
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const key = e.key;
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'r', 'R'].includes(key)) return;
+
+    let target = null;
+    if (mouseOnScatter) target = 'scatter';
+    else if (mouseOnLine) target = 'line';
+    else return;
+
+    e.preventDefault();
+
+    if (key === 'r' || key === 'R') {
+      if (target === 'scatter') { scatterZoom = { x: null, y: null }; isScatterPinned = false; }
+      else { lineZoom = { x: null, y: null }; isLinePinned = false; }
+      drawExpectationChart();
+      drawProbabilityLineChart();
+      return;
+    }
+
+    if (target === 'scatter') {
+      const yBase = niceYAxis(chartRecords.map(r => r.expectation));
+      const currentY = scatterZoom.y || { min: yBase.min, max: yBase.max };
+      const currentX = scatterZoom.x || { min: 0, max: 40 };
+
+      if (key === 'ArrowUp') {
+        scatterZoom.y = applyZoom(currentY, ZOOM_IN_FACTOR);
+      } else if (key === 'ArrowDown') {
+        scatterZoom.y = applyZoom(currentY, ZOOM_OUT_FACTOR);
+      } else if (key === 'ArrowLeft') {
+        scatterZoom.x = applyZoom(currentX, ZOOM_IN_FACTOR);
+      } else if (key === 'ArrowRight') {
+        scatterZoom.x = applyZoom(currentX, ZOOM_OUT_FACTOR);
+      }
+      drawExpectationChart();
+      return;
+    }
+
+    if (target === 'line') {
+      const xBase = {
+        min: lineChartData[0] ? lineChartData[0].expectation : 0,
+        max: lineChartData.length ? lineChartData[lineChartData.length - 1].expectation : 1
+      };
+      const currentX = lineZoom.x || xBase;
+      const yBase = niceProbabilityYAxis(lineChartData.flatMap(p => [p.twoPercent, p.threePercent, p.combinedPercent]));
+      const currentY = lineZoom.y || { min: yBase.min, max: yBase.max };
+
+      if (key === 'ArrowUp') {
+        lineZoom.y = applyZoom(currentY, ZOOM_IN_FACTOR);
+        if (lineZoom.y.min < 0) lineZoom.y.min = 0;
+      } else if (key === 'ArrowDown') {
+        lineZoom.y = applyZoom(currentY, ZOOM_OUT_FACTOR);
+        if (lineZoom.y.min < 0) lineZoom.y.min = 0;
+      } else if (key === 'ArrowLeft') {
+        lineZoom.x = applyZoom(currentX, ZOOM_IN_FACTOR);
+      } else if (key === 'ArrowRight') {
+        lineZoom.x = applyZoom(currentX, ZOOM_OUT_FACTOR);
+      }
+      drawProbabilityLineChart();
+      return;
+    }
+  });
+
+  function startScatterDrag(scatter, x, y, plot) {
+    const xRange = scatter._xAxis || { min: 0, max: 40 };
+    const yRange = scatter._yAxis || { min: 0, max: 1 };
+    scatterDragging = true;
+    scatterDragStart = {
+      x, y,
+      xMin: xRange.min, xMax: xRange.max,
+      yMin: yRange.min, yMax: yRange.max,
+      plotWidth: plot.width, plotHeight: plot.height
+    };
+    chartHover = null;
+    chartHoverPoint = null;
+    scatter.style.cursor = 'grabbing';
+
+    function onMove(ev) {
+      if (!scatterDragging || !scatterDragStart) return;
+      const r = scatter.getBoundingClientRect();
+      const mx = ev.clientX - r.left;
+      const my = ev.clientY - r.top;
+      const dx = mx - scatterDragStart.x;
+      const dy = my - scatterDragStart.y;
+      const xDataRange = scatterDragStart.xMax - scatterDragStart.xMin;
+      const yDataRange = scatterDragStart.yMax - scatterDragStart.yMin;
+      const xShift = -dx / scatterDragStart.plotWidth * xDataRange;
+      const yShift = dy / scatterDragStart.plotHeight * yDataRange;
+
+      scatterZoom.x = {
+        min: scatterDragStart.xMin + xShift,
+        max: scatterDragStart.xMax + xShift
+      };
+      scatterZoom.y = {
+        min: scatterDragStart.yMin + yShift,
+        max: scatterDragStart.yMax + yShift
+      };
+      drawExpectationChart();
+    }
+
+    function onUp() {
+      scatterDragging = false;
+      scatterDragStart = null;
+      scatter.style.cursor = 'crosshair';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function startLineDrag(line, x, y, plot) {
+    const xRange = line._lineXAxis || { min: 0, max: 1 };
+    const yRange = line._lineYAxis || { min: 0, max: 1 };
+    lineDragging = true;
+    lineDragStart = {
+      x, y,
+      xMin: xRange.min, xMax: xRange.max,
+      yMin: yRange.min, yMax: yRange.max,
+      plotWidth: plot.width, plotHeight: plot.height
+    };
+    lineChartHover = null;
+    lineChartHoverPoint = null;
+    line.style.cursor = 'grabbing';
+
+    function onMove(ev) {
+      if (!lineDragging || !lineDragStart) return;
+      const r = line.getBoundingClientRect();
+      const mx = ev.clientX - r.left;
+      const my = ev.clientY - r.top;
+      const dx = mx - lineDragStart.x;
+      const dy = my - lineDragStart.y;
+      const xDataRange = lineDragStart.xMax - lineDragStart.xMin;
+      const yDataRange = lineDragStart.yMax - lineDragStart.yMin;
+      const xShift = -dx / lineDragStart.plotWidth * xDataRange;
+      const yShift = dy / lineDragStart.plotHeight * yDataRange;
+
+      lineZoom.x = {
+        min: lineDragStart.xMin + xShift,
+        max: lineDragStart.xMax + xShift
+      };
+      lineZoom.y = {
+        min: Math.max(0, lineDragStart.yMin + yShift),
+        max: Math.max(0.05, lineDragStart.yMax + yShift)
+      };
+      drawProbabilityLineChart();
+    }
+
+    function onUp() {
+      lineDragging = false;
+      lineDragStart = null;
+      line.style.cursor = 'crosshair';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function bindChartEvents() {
+    const scatter = document.getElementById('expectationChart');
+    const line = document.getElementById('probabilityLineChart');
+
+    if (scatter && !scatter._bound) {
+      scatter._bound = true;
+      scatter.addEventListener('mouseenter', () => { mouseOnScatter = true; });
+
+      scatter.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        if (isScatterPinned) return;
+        const rect = scatter.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const plot = scatter._plotBox;
+        if (!plot) return;
+        if (x < plot.left || x > plot.right || y < plot.top || y > plot.bottom) return;
+        e.preventDefault();
+        startScatterDrag(scatter, x, y, plot);
+      });
+
+      scatter.addEventListener('mousemove', (event) => {
+        if (scatterDragging || isScatterPinned) return;
+        const rect = scatter.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const plot = scatter._plotBox;
+        if (!plot) return;
+
+        const inPlotArea = x >= plot.left && x <= plot.right && y >= plot.top && y <= plot.bottom;
+        const nearYAxis = x >= plot.left - 55 && x < plot.left && y >= plot.top && y <= plot.bottom;
+        const nearXAxis = x >= plot.left && x <= plot.right && y > plot.bottom && y <= plot.bottom + 30;
+
+        if (inPlotArea || nearYAxis) {
+          const value = scatter._yAxis.max - ((y - plot.top) / plot.height) * (scatter._yAxis.max - scatter._yAxis.min);
+          const clamped = Math.max(scatter._yAxis.min, Math.min(scatter._yAxis.max, value));
+          updateSelectionSummary(Number(clamped.toFixed(2)));
+          updateLineSelectionSummary(selectedExpectation);
+        }
+
+        const tol = 14;
+        if (nearXAxis && Math.abs(y - plot.bottom) <= tol + 10) {
+          chartHover = { axis: 'x', px: x };
+        } else if (nearYAxis && Math.abs(x - plot.left) <= tol) {
+          chartHover = { axis: 'y', py: y };
+        } else {
+          chartHover = null;
+        }
+
+        chartHoverPoint = null;
+        if (inPlotArea) {
+          let closest = null, minDist = Infinity;
+          for (let i = scatter._plottedPoints.length - 1; i >= 0; i--) {
+            const p = scatter._plottedPoints[i];
+            const d = Math.hypot(x - p.px, y - p.py);
+            if (d <= 7 && d < minDist) { closest = p; minDist = d; }
+          }
+          if (closest) chartHoverPoint = { ...closest, mouseX: x, mouseY: y };
+        }
+        drawExpectationChart();
+        drawProbabilityLineChart();
+      });
+      scatter.addEventListener('mouseleave', () => {
+        mouseOnScatter = false;
+        if (scatterDragging || isScatterPinned) return;
+        chartHover = null;
+        chartHoverPoint = null;
+        drawExpectationChart();
+        drawProbabilityLineChart();
+      });
+
+      scatter.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        isScatterPinned = !isScatterPinned;
+        const wrap = scatter.parentElement;
+        if (isScatterPinned) {
+          wrap.classList.add('pinned');
+        } else {
+          wrap.classList.remove('pinned');
+          chartHover = null; chartHoverPoint = null;
+          drawExpectationChart(); drawProbabilityLineChart();
+        }
+      });
+    }
+
+    if (line && !line._bound) {
+      line._bound = true;
+      line.addEventListener('mouseenter', () => { mouseOnLine = true; });
+
+      line.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        if (isLinePinned) return;
+        const rect = line.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const plot = line._linePlotBox;
+        if (!plot) return;
+        if (x < plot.left || x > plot.right || y < plot.top || y > plot.bottom) return;
+        e.preventDefault();
+        startLineDrag(line, x, y, plot);
+      });
+
+      line.addEventListener('mousemove', (event) => {
+        if (lineDragging || isLinePinned) return;
+        const rect = line.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const plot = line._linePlotBox;
+        if (!plot) return;
+
+        const inPlotArea = x >= plot.left && x <= plot.right && y >= plot.top && y <= plot.bottom;
+        const nearXAxis = x >= plot.left && x <= plot.right && y > plot.bottom && y <= plot.bottom + 30;
+        const nearYAxis = x >= plot.left - 55 && x < plot.left && y >= plot.top && y <= plot.bottom;
+
+        if (inPlotArea || nearXAxis) {
+          const axis = line._lineXAxis;
+          const e = axis.min + ((x - plot.left) / plot.width) * (axis.max - axis.min);
+          const clamped = Math.max(axis.min, Math.min(axis.max, e));
+          updateSelectionSummary(Number(clamped.toFixed(2)));
+          updateLineSelectionSummary(selectedExpectation);
+        }
+
+        const tol = 14;
+        if (nearXAxis && Math.abs(y - plot.bottom) <= tol + 10) {
+          lineChartHover = { axis: 'x', px: x };
+        } else if (nearYAxis && Math.abs(x - plot.left) <= tol) {
+          lineChartHover = { axis: 'y', py: y };
+        } else {
+          lineChartHover = null;
+        }
+
+        lineChartHoverPoint = null;
+        if (inPlotArea) {
+          let closest = null, minDist = Infinity;
+          for (let i = line._linePlottedPoints.length - 1; i >= 0; i--) {
+            const p = line._linePlottedPoints[i];
+            const d = Math.hypot(x - p.px, y - p.py);
+            if (d <= 7 && d < minDist) { closest = p; minDist = d; }
+          }
+          if (closest) lineChartHoverPoint = { ...closest, mouseX: x, mouseY: y };
+        }
+        drawProbabilityLineChart();
+        drawExpectationChart();
+      });
+      line.addEventListener('mouseleave', () => {
+        mouseOnLine = false;
+        if (lineDragging || isLinePinned) return;
+        lineChartHover = null;
+        lineChartHoverPoint = null;
+        drawProbabilityLineChart();
+        drawExpectationChart();
+      });
+
+      line.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        isLinePinned = !isLinePinned;
+        const wrap = line.parentElement;
+        if (isLinePinned) {
+          wrap.classList.add('pinned');
+        } else {
+          wrap.classList.remove('pinned');
+          lineChartHover = null; lineChartHoverPoint = null;
+          drawProbabilityLineChart(); drawExpectationChart();
+        }
+      });
+    }
+  }
+
+  function buildTieChartsHTML() {
+    return `
+      <div class="chart-section">
+        <div class="chart-warning-banner">不要将不同战斗格权重的轮回记录同时导入！</div>
+        <h2 class="chart-header">开局期望-击杀数 分布图 <small>（仅适配权杖 v1.3.1 及以后版本的记录）</small></h2>
+        <div class="chart-layout">
+          <div class="chart-left">
+            <div class="chart-count" id="chartCount">可识别记录数：<strong>0</strong>条</div>
+            <div class="chart-tip">在纵轴上滑动鼠标</div>
+            <div class="chart-tip">以确定最佳期望设定值</div>
+            <div class="chart-tip warn">（样本量过少时结论不可靠）</div>
+            <div class="chart-tip zoom-hint">
+              <kbd>↑</kbd><kbd>↓</kbd> 缩放 Y 轴<br>
+              <kbd>←</kbd><kbd>→</kbd> 缩放 X 轴<br>
+              <kbd>R</kbd> 重置缩放<br>
+              🖱️ 左键拖动平移 · 右键固定光标
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="expectationChart"></canvas></div>
+          <div class="chart-sidebar">
+            <div class="selection-box">
+              <div>当前选定期望：<span class="val" id="selectedExpectation">0.00</span></div>
+              <div>在此期望及之上，</div>
+              <div>总记录数：<span class="val" id="eligibleRecordCount">0</span> 条</div>
+              <div>进二面概率：<span class="val-two" id="twoProbability">0.00%</span></div>
+              <div>进三面概率：<span class="val-three" id="threeProbability">0.00%</span></div>
+              <div>合计概率：<span class="val-combo" id="combinedProbability">0.00%</span></div>
+            </div>
+            <div class="chart-legend">
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-zero)"></span>未战斗 (0)</div>
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-one)"></span>一面 (1~13)</div>
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-two)"></span>二面 (14~30)</div>
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-three)"></span>三面 (&gt;30)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-section">
+        <h2 class="chart-header">不同情况的概率 随 选定期望值 的变化图</h2>
+        <div class="chart-layout">
+          <div class="chart-left">
+            <div class="chart-count" id="lineChartCount">可识别记录数：<strong>0</strong>条</div>
+            <div class="chart-tip">（已排除未战斗的样本）</div>
+            <div class="chart-tip">在横轴上滑动鼠标</div>
+            <div class="chart-tip">以确定最佳期望设定值</div>
+            <div class="chart-tip warn">（样本量过少时结论不可靠）</div>
+            <div class="chart-tip zoom-hint">
+              <kbd>↑</kbd><kbd>↓</kbd> 缩放 Y 轴<br>
+              <kbd>←</kbd><kbd>→</kbd> 缩放 X 轴<br>
+              <kbd>R</kbd> 重置缩放<br>
+              🖱️ 左键拖动平移 · 右键固定光标
+            </div>
+          </div>
+          <div class="chart-canvas-wrap"><canvas id="probabilityLineChart"></canvas></div>
+          <div class="chart-sidebar">
+            <div class="selection-box">
+              <div>当前选定期望：<span class="val" id="lineSelectedExpectation">0.00</span></div>
+              <div>在此期望及之上，</div>
+              <div>总记录数：<span class="val" id="lineEligibleRecordCount">0</span> 条</div>
+              <div>进二面概率：<span class="val-two" id="lineTwoProbability">0.00%</span></div>
+              <div>进三面概率：<span class="val-three" id="lineThreeProbability">0.00%</span></div>
+              <div>合计概率：<span class="val-combo" id="lineCombinedProbability">0.00%</span></div>
+            </div>
+            <div class="chart-legend">
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-line-two)"></span>进二面概率</div>
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-line-three)"></span>进三面概率</div>
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-line-combo)"></span>合计概率</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildTieSummaryTable(fileStats) {
+    let html = `<table><thead><tr>
+      <th>文件名</th>
+      <th class="num">总记录数</th>
+      <th class="num">未战斗 (0)</th>
+      <th class="num">一面 (1~13)</th>
+      <th class="num">二面 (14~30)</th>
+      <th class="num">三面 (&gt;30)</th>
+    </tr></thead><tbody>`;
+
+    let totalZero = 0, totalOne = 0, totalTwo = 0, totalThree = 0, totalAll = 0;
+
+    for (const fs of fileStats) {
+      const s = fs.stat;
+      totalZero += s.zero;
+      totalOne += s.one;
+      totalTwo += s.two;
+      totalThree += s.three;
+      totalAll += s.total;
+
+      html += `<tr>
+        <td class="file-name" title="${escapeHtml(fs.name)}">${escapeHtml(fs.name)}</td>
+        <td class="num">${s.total}</td>
+        <td class="num"><span class="pct p-zero">${s.zero}</span> (${(s.zero/s.total*100||0).toFixed(2)}%)</td>
+        <td class="num"><span class="pct p-one">${s.one}</span> (${(s.one/s.total*100||0).toFixed(2)}%)</td>
+        <td class="num"><span class="pct p-two">${s.two}</span> (${(s.two/s.total*100||0).toFixed(2)}%)</td>
+        <td class="num"><span class="pct p-three">${s.three}</span> (${(s.three/s.total*100||0).toFixed(2)}%)</td>
+      </tr>`;
+    }
+
+    html += `<tr class="row-total">
+      <td>📌 总计</td>
+      <td class="num">${totalAll}</td>
+      <td class="num"><span class="pct p-zero">${totalZero}</span> (${(totalZero/totalAll*100||0).toFixed(2)}%)</td>
+      <td class="num"><span class="pct p-one">${totalOne}</span> (${(totalOne/totalAll*100||0).toFixed(2)}%)</td>
+      <td class="num"><span class="pct p-two">${totalTwo}</span> (${(totalTwo/totalAll*100||0).toFixed(2)}%)</td>
+      <td class="num"><span class="pct p-three">${totalThree}</span> (${(totalThree/totalAll*100||0).toFixed(2)}%)</td>
+    </tr></tbody></table>`;
+    return html;
+  }
+
+  function buildTanSummaryTable(fileStats) {
+    let html = `<table><thead><tr>
+      <th>文件名</th>
+      <th class="num">总记录数</th>
+      <th class="num">低倒计时 (&lt;18)</th>
+      <th class="num">普通倒计时 (18~60)</th>
+      <th class="num">高倒计时 (&gt;60)</th>
+    </tr></thead><tbody>`;
+
+    let totalLow = 0, totalNormal = 0, totalHigh = 0, totalAll = 0;
+
+    for (const fs of fileStats) {
+      const s = fs.stat;
+      totalLow += s.low;
+      totalNormal += s.normal;
+      totalHigh += s.high;
+      totalAll += s.total;
+
+      html += `<tr>
+        <td class="file-name" title="${escapeHtml(fs.name)}">${escapeHtml(fs.name)}</td>
+        <td class="num">${s.total}</td>
+        <td class="num"><span class="pct p-low">${s.low}</span> (${(s.low/s.total*100||0).toFixed(2)}%)</td>
+        <td class="num"><span class="pct p-normal">${s.normal}</span> (${(s.normal/s.total*100||0).toFixed(2)}%)</td>
+        <td class="num"><span class="pct p-high">${s.high}</span> (${(s.high/s.total*100||0).toFixed(2)}%)</td>
+      </tr>`;
+    }
+
+    html += `<tr class="row-total">
+      <td>📌 总计</td>
+      <td class="num">${totalAll}</td>
+      <td class="num"><span class="pct p-low">${totalLow}</span> (${(totalLow/totalAll*100||0).toFixed(2)}%)</td>
+      <td class="num"><span class="pct p-normal">${totalNormal}</span> (${(totalNormal/totalAll*100||0).toFixed(2)}%)</td>
+      <td class="num"><span class="pct p-high">${totalHigh}</span> (${(totalHigh/totalAll*100||0).toFixed(2)}%)</td>
+    </tr></tbody></table>`;
+    return html;
+  }
+
+  function buildTieDetailTable(allRecords) {
+    const filtered = allRecords.filter(r => !r.missing && r.value > 30);
+
+    if (filtered.length === 0) {
+      return '<div class="empty">暂无三面记录（击杀数 > 30）</div>';
+    }
+
+    const grouped = {};
+    for (const r of filtered) {
+      const file = r.sourceFile || '未知';
+      if (!grouped[file]) grouped[file] = [];
+      grouped[file].push(r);
+    }
+    const diffMap = new Map();
+    for (const file in grouped) {
+      const records = grouped[file];
+      records.sort((a, b) => a.round - b.round);
+      let prev = null;
+      for (const r of records) {
+        const diff = prev === null ? '—' : (r.round - prev);
+        diffMap.set(`${file}|${r.round}`, diff);
+        prev = r.round;
+      }
+    }
+
+    filtered.sort((a, b) => a.round - b.round);
+
+    let html = `<table><thead><tr>
+      <th>来源文件</th>
+      <th class="num">轮回次数</th>
+      <th class="num">击杀数</th>
+      <th class="num">用时</th>
+      <th class="num">开局期望</th>
+      <th class="num">与上一的轮回差</th>
+    </tr></thead><tbody>`;
+
+    for (const r of filtered) {
+      const diff = diffMap.get(`${r.sourceFile}|${r.round}`) || '—';
+      const expectationVal = (r.openingExpectation !== null && r.openingExpectation !== undefined)
+        ? r.openingExpectation.toFixed(2)
+        : '—';
+      html += `<tr>
+        <td>${escapeHtml(r.sourceFile || '')}</td>
+        <td class="num">${r.round}</td>
+        <td class="num"><span class="pct p-three">${r.value}</span></td>
+        <td class="num">${formatDuration(r.duration)}</td>
+        <td class="num">${expectationVal}</td>
+        <td class="num">${diff}</td>
+      </tr>`;
+    }
+
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function buildTanDetailTable(allRecords) {
+    const filtered = allRecords.filter(r => !r.missing && r.value > 60);
+
+    if (filtered.length === 0) {
+      return '<div class="empty">暂无高倒计时记录（倒计时 > 60）</div>';
+    }
+
+    const grouped = {};
+    for (const r of filtered) {
+      const file = r.sourceFile || '未知';
+      if (!grouped[file]) grouped[file] = [];
+      grouped[file].push(r);
+    }
+    const diffMap = new Map();
+    for (const file in grouped) {
+      const records = grouped[file];
+      records.sort((a, b) => a.round - b.round);
+      let prev = null;
+      for (const r of records) {
+        const diff = prev === null ? '—' : (r.round - prev);
+        diffMap.set(`${file}|${r.round}`, diff);
+        prev = r.round;
+      }
+    }
+
+    filtered.sort((a, b) => a.round - b.round);
+
+    let html = `<table><thead><tr>
+      <th>来源文件</th>
+      <th class="num">轮回次数</th>
+      <th class="num">倒计时</th>
+      <th class="num">用时</th>
+      <th class="num">与上一的轮回差</th>
+    </tr></thead><tbody>`;
+
+    for (const r of filtered) {
+      const diff = diffMap.get(`${r.sourceFile}|${r.round}`) || '—';
+      html += `<tr>
+        <td>${escapeHtml(r.sourceFile || '')}</td>
+        <td class="num">${r.round}</td>
+        <td class="num"><span class="pct p-high">${r.value}</span></td>
+        <td class="num">${formatDuration(r.duration)}</td>
+        <td class="num">${diff}</td>
+      </tr>`;
+    }
+
+    html += '</tbody></table>';
+    return html;
+  }
+
+  function renderTiePanel(fileStats) {
+    const panel = document.getElementById('panel-tie');
+    panel.innerHTML = '';
+
+    if (fileStats.length === 0) {
+      panel.innerHTML = '<div class="empty">未找到 kill_record*.txt 文件</div>';
+      return;
+    }
+
+    let allRecords = [];
+    for (const fs of fileStats) {
+      for (const r of fs.records) {
+        r.sourceFile = fs.name;
+      }
+      allRecords = allRecords.concat(fs.records);
+    }
+
+    const summaryDiv = document.createElement('div');
+    summaryDiv.className = 'result-block';
+    summaryDiv.style.marginTop = '0';
+    summaryDiv.innerHTML = `<div class="result-block-header">
+      <div class="result-block-title">铁血模块 · 全部文件汇总</div>
+      <div class="result-block-status"><span class="status-dot ok"></span>共 ${fileStats.length} 个文件</div>
+    </div>` + buildTieSummaryTable(fileStats);
+    panel.appendChild(summaryDiv);
+
+    const detailDiv = document.createElement('div');
+    detailDiv.className = 'full-width';
+    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">三面详细记录（击杀数 &gt; 30）</div>` + buildTieDetailTable(allRecords);
+    panel.appendChild(detailDiv);
+
+    const validRecords = allRecords
+      .filter(r => !r.missing && Number.isFinite(r.openingExpectation))
+      .map(r => ({
+        round: r.round,
+        kills: r.value,
+        expectation: r.openingExpectation,
+        expectationText: r.openingExpectation.toFixed(2)
+      }));
+
+    if (validRecords.length > 0) {
+      chartRecords = validRecords;
+      chartHover = null;
+      chartHoverPoint = null;
+      scatterZoom = { x: null, y: null };
+      lineZoom = { x: null, y: null };
+      scatterDragging = false;
+      lineDragging = false;
+      isScatterPinned = false;
+      isLinePinned = false;
+
+      const chartHolder = document.createElement('div');
+      chartHolder.innerHTML = buildTieChartsHTML();
+      while (chartHolder.firstChild) panel.appendChild(chartHolder.firstChild);
+
+      const countEl = document.getElementById('chartCount');
+      if (countEl) countEl.innerHTML = `可识别记录数：<strong>${chartRecords.length}</strong>条`;
+
+      lineChartData = buildLineData();
+      selectedExpectation = lineChartStartExpectation();
+
+      bindChartEvents();
+      updateSelectionSummary(selectedExpectation);
+      updateLineSelectionSummary(selectedExpectation);
+      drawExpectationChart();
+      drawProbabilityLineChart();
+
+      const lineCountEl = document.getElementById('lineChartCount');
+      if (lineCountEl) {
+        const nonZero = chartRecords.filter(r => r.kills !== 0).length;
+        lineCountEl.innerHTML = `可识别记录数：<strong>${nonZero}</strong>条`;
+      }
+    }
+  }
+
+  function renderTanPanel(fileStats) {
+    const panel = document.getElementById('panel-tan');
+    panel.innerHTML = '';
+
+    if (fileStats.length === 0) {
+      panel.innerHTML = '<div class="empty">未找到 countdown*.txt 文件</div>';
+      return;
+    }
+
+    let allRecords = [];
+    for (const fs of fileStats) {
+      for (const r of fs.records) {
+        r.sourceFile = fs.name;
+      }
+      allRecords = allRecords.concat(fs.records);
+    }
+
+    const summaryDiv = document.createElement('div');
+    summaryDiv.className = 'result-block';
+    summaryDiv.style.marginTop = '0';
+    summaryDiv.innerHTML = `<div class="result-block-header">
+      <div class="result-block-title">弹指模块 · 全部文件汇总</div>
+      <div class="result-block-status"><span class="status-dot ok"></span>共 ${fileStats.length} 个文件</div>
+    </div>` + buildTanSummaryTable(fileStats);
+    panel.appendChild(summaryDiv);
+
+    const detailDiv = document.createElement('div');
+    detailDiv.className = 'full-width';
+    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">高倒计时详细记录（倒计时 &gt; 60）</div>` + buildTanDetailTable(allRecords);
+    panel.appendChild(detailDiv);
+  }
+
+  async function loadFromCurrentHandle() {
+    if (!currentHandle) return;
+
+    let tieFiles = [];
+    let tanFiles = [];
+
+    try {
+      for await (const entry of currentHandle.values()) {
+        if (entry.kind !== 'file') continue;
+        const name = entry.name;
+        if (!name.toLowerCase().endsWith('.txt')) continue;
+
+        let type = null;
+        if (name.includes('kill_record')) type = 'tie';
+        else if (name.includes('countdown')) type = 'tan';
+        if (!type) continue;
+
+        try {
+          const file = await entry.getFile();
+          const text = await file.text();
+          const result = parseAll(text, type);
+          if (result.records.length === 0) continue;
+          const stat = classifyRecords(result.records, type);
+          const fileData = { name, records: result.records, stat };
+          if (type === 'tie') tieFiles.push(fileData);
+          else tanFiles.push(fileData);
+        } catch (err) {
+          console.warn('读取失败：', name, err);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus('读取目录失败：' + (e.message || e), 'warn');
+      return;
+    }
+
+    tieFiles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
+    tanFiles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
+
+    renderTiePanel(tieFiles);
+    renderTanPanel(tanFiles);
+
+    if (tieFiles.length === 0 && tanFiles.length === 0) {
+      setStatus('文件夹中未找到 kill_record*.txt 或 countdown*.txt', 'warn');
+    } else {
+      setStatus('已加载 ' + (tieFiles.length + tanFiles.length) + ' 个文件', 'ok');
+    }
+  }
+
+  function handleFiles(fileList) {
+    const tieFiles = [];
+    const tanFiles = [];
+
+    const promises = [];
+    for (const file of fileList) {
+      if (!file.name.toLowerCase().endsWith('.txt')) continue;
+      const p = new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const text = e.target.result;
+          let type = null;
+          if (file.name.includes('kill_record')) type = 'tie';
+          else if (file.name.includes('countdown')) type = 'tan';
+          if (!type) { resolve(null); return; }
+          const result = parseAll(text, type);
+          if (result.records.length === 0) { resolve(null); return; }
+          const stat = classifyRecords(result.records, type);
+          resolve({ name: file.name, records: result.records, stat, type });
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsText(file, 'UTF-8');
+      });
+      promises.push(p);
+    }
+
+    Promise.all(promises).then(results => {
+      for (const r of results) {
+        if (!r) continue;
+        if (r.type === 'tie') tieFiles.push(r);
+        else if (r.type === 'tan') tanFiles.push(r);
+      }
+
+      tieFiles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
+      tanFiles.sort((a, b) => a.name.localeCompare(b.name, 'zh-Hans-CN', { numeric: true }));
+
+      renderTiePanel(tieFiles);
+      renderTanPanel(tanFiles);
+
+      if (tieFiles.length > 0) switchTab('tie');
+      else if (tanFiles.length > 0) switchTab('tan');
+
+      idbDelete(HANDLE_KEY).catch(()=>{});
+    });
+  }
+
+  const el = {
+    pickBtn: document.getElementById('pickFolderBtn'),
+    restoreBtn: document.getElementById('restoreBtn'),
+    reloadBtn: document.getElementById('reloadBtn'),
+    clearBtn: document.getElementById('clearMemoBtn'),
+    folderStatus: document.getElementById('folderStatus'),
+    memoHint: document.getElementById('memoHint'),
+    tabs: document.getElementById('tabs'),
+    drop: document.getElementById('drop'),
+    fileInput: document.getElementById('fileInput'),
+  };
+
+  let currentHandle = null;
+
+  function setStatus(text, cls) {
+    el.folderStatus.textContent = text;
+    el.folderStatus.className = 'memo-status' + (cls ? ' ' + cls : '');
+  }
+
+  function showButtons(opts) {
+    el.pickBtn.style.display    = opts.pick    ? '' : 'none';
+    el.restoreBtn.style.display = opts.restore ? '' : 'none';
+    el.reloadBtn.style.display  = opts.reload  ? '' : 'none';
+    el.clearBtn.style.display   = opts.clear   ? '' : 'none';
+  }
+
+  function switchTab(name) {
+    mouseOnScatter = false;
+    mouseOnLine = false;
+    el.tabs.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.getElementById('panel-tie').classList.toggle('active', name === 'tie');
+    document.getElementById('panel-tan').classList.toggle('active', name === 'tan');
+    if (name === 'tie') {
+      setTimeout(() => {
+        drawExpectationChart();
+        drawProbabilityLineChart();
+      }, 20);
+    }
+  }
+
+  el.tabs.addEventListener('click', e => {
+    const btn = e.target.closest('.tab');
+    if (!btn) return;
+    switchTab(btn.dataset.tab);
+  });
+
+  async function pickFolder() {
+    if (!supportsFS) return;
+    try {
+      const handle = await window.showDirectoryPicker();
+      currentHandle = handle;
+      await idbPut(HANDLE_KEY, handle);
+      setStatus('已选择：' + handle.name, 'ok');
+      showButtons({ pick: false, restore: false, reload: true, clear: true });
+      await loadFromCurrentHandle();
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      console.error(e);
+      setStatus('选择失败：' + (e && e.message ? e.message : e), 'warn');
+    }
+  }
+
+  async function restoreAccess() {
+    if (!currentHandle) return;
+    const ok = await requestPermission(currentHandle);
+    if (ok) {
+      setStatus('已恢复访问：' + currentHandle.name, 'ok');
+      showButtons({ pick: false, restore: false, reload: true, clear: true });
+      await loadFromCurrentHandle();
+    } else {
+      setStatus('权限被拒绝，请重新选择文件夹', 'warn');
+      showButtons({ pick: true, restore: false, reload: false, clear: true });
+    }
+  }
+
+  async function reloadFolder() {
+    if (!currentHandle) return;
+    const perm = await queryPermission(currentHandle);
+    if (perm !== 'granted') {
+      const ok = await requestPermission(currentHandle);
+      if (!ok) { setStatus('无法重新读取，权限不足', 'warn'); return; }
+    }
+    await loadFromCurrentHandle();
+  }
+
+  async function clearMemo() {
+    try { await idbDelete(HANDLE_KEY); } catch (e) { console.warn('清除句柄失败', e); }
+    currentHandle = null;
+    document.getElementById('panel-tie').innerHTML = '';
+    document.getElementById('panel-tan').innerHTML = '';
+    chartRecords = [];
+    scatterZoom = { x: null, y: null };
+    lineZoom = { x: null, y: null };
+    isScatterPinned = false;
+    isLinePinned = false;
+    setStatus('未选择文件夹', '');
+    showButtons({ pick: true, restore: false, reload: false, clear: false });
+  }
+
+  el.pickBtn.addEventListener('click', pickFolder);
+  el.restoreBtn.addEventListener('click', restoreAccess);
+  el.reloadBtn.addEventListener('click', reloadFolder);
+  el.clearBtn.addEventListener('click', clearMemo);
+
+  el.drop.addEventListener('click', () => el.fileInput.click());
+  el.drop.addEventListener('dragover', e => { e.preventDefault(); el.drop.classList.add('over'); });
+  el.drop.addEventListener('dragleave', () => el.drop.classList.remove('over'));
+  el.drop.addEventListener('drop', e => {
+    e.preventDefault();
+    el.drop.classList.remove('over');
+    if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  });
+  el.fileInput.addEventListener('change', e => {
+    if (e.target.files.length) handleFiles(e.target.files);
+  });
+
+  window.addEventListener('resize', () => {
+    drawExpectationChart();
+    drawProbabilityLineChart();
+  });
+
+  async function init() {
+    if (!supportsFS) {
+      el.pickBtn.disabled = true;
+      el.memoHint.innerHTML =
+        '⚠️ 当前浏览器或打开方式不支持文件夹记忆功能。' +
+        '该功能需要 Chrome/Edge 浏览器，且通过 <code>http(s)</code> 方式打开页面。' +
+        '请使用下方的手动上传功能。';
+      return;
+    }
+
+    try {
+      const handle = await idbGet(HANDLE_KEY);
+      if (!handle) return;
+
+      currentHandle = handle;
+      const perm = await queryPermission(handle);
+
+      if (perm === 'granted') {
+        setStatus('已记住：' + handle.name, 'ok');
+        showButtons({ pick: false, restore: false, reload: true, clear: true });
+        await loadFromCurrentHandle();
+      } else if (perm === 'prompt') {
+        setStatus('已记住：' + handle.name + '（点击"恢复访问"授权）', 'warn');
+        showButtons({ pick: false, restore: true, reload: false, clear: true });
+      } else {
+        setStatus('权限被拒绝，请重新选择文件夹', 'warn');
+        showButtons({ pick: true, restore: false, reload: false, clear: true });
+        await idbDelete(HANDLE_KEY);
+        currentHandle = null;
+      }
+    } catch (e) {
+      console.warn('初始化失败', e);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

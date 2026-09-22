@@ -82,7 +82,10 @@ class IronBloodUniverse(AnyFateUniverse):
             start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
             total_min = self.elapsed_time // 60
             total_sec = self.elapsed_time % 60
-            line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight:.2f}"
+            if self.first_plane_weight == 0:
+                line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}"
+            else:
+                line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight:.2f}"
             with open(record_file, "a", encoding="utf-8") as file:
                 file.write(line + "\n")
         except Exception as e:
