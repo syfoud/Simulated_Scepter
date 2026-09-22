@@ -1420,9 +1420,9 @@ border:none</string>
                     </widget>
                    </item>
                    <item>
-                    <widget class="QPushButton" name="Iron_blood_record_stats_btn">
+                    <widget class="QPushButton" name="record_stats_btn">
                      <property name="text">
-                      <string>查看铁血战士轮回记录可视化统计</string>
+                      <string>查看轮回数据可视化统计</string>
                      </property>
                     </widget>
                    </item>
