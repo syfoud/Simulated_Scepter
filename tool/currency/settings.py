@@ -75,6 +75,7 @@ def normalize_currency_settings(values=None):
     for key in PRIORITY_KEYS:
         if key not in priority or not isinstance(priority[key], list):
             priority[key] = default_priority.get(key, [])
+        priority[key] = [entry for entry in priority[key] if isinstance(entry, str)]
 
     return {
         "exit_after_plane": exit_plane,

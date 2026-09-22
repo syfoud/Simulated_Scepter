@@ -39,6 +39,24 @@ class CurrencySettingsTests(unittest.TestCase):
             self.assertEqual(load_currency_settings(path)["exit_after_plane"], 3)
             self.assertEqual(load_currency_settings(path)["priority"]["prior_envir"], [])
 
+    def test_priority_filters_non_string_entries_and_keeps_order(self):
+        cases = [
+            ([42, "蓝海", None, True, {}, [], "黄金时代"], ["蓝海", "黄金时代"]),
+            ([42, None], []),
+            ([], []),
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "currency.yml"
+            for entries, expected in cases:
+                with self.subTest(entries=entries):
+                    priority = {key: entries[:] for key in load_default_priority()}
+                    path.write_text(
+                        yaml.safe_dump({"priority": priority}, allow_unicode=True),
+                        encoding="utf-8",
+                    )
+                    loaded = load_currency_settings(path)["priority"]
+                    self.assertEqual(loaded, {key: expected for key in priority})
+
     def test_exit_plane_choices_are_fixed(self):
         self.assertEqual(EXIT_PLANES, (1, 2, 3))
 
