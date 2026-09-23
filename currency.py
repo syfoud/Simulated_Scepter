@@ -175,7 +175,8 @@ class SimulatedCurrency(CurrencyUtils):
                     shot_saved = True
                     shot = os.path.join(
                         PATHS["root"],
-                        "logs",
+                        "temp",
+                        "currencywar",
                         f"unknown_screen_{time.strftime('%Y%m%d_%H%M%S')}.png",
                     )
                     cv2.imwrite(shot, np.array(self.screen))
