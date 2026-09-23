@@ -49,10 +49,7 @@ def set_forground():
     try:
         pythoncom.CoInitialize()
         shell = win32com.client.Dispatch("WScript.Shell")
-        if getattr(sys, 'frozen', False):
-            shell.SendKeys(" ")  # Undocks my focus from Python IDLE
-        else:
-            shell.SendKeys("")
+        shell.SendKeys("")
         set_game_foreground()
     except Exception:
         pass
