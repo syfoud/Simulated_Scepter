@@ -1,0 +1,99 @@
+name: 自动打包并发布release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Validate version
+        shell: powershell
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid version '$env:VERSION'. Expected format: number.number.number (e.g. 1.3.0)."
+          }
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: cd
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Build with PyInstaller
+        run: |
+          uv run pyinstaller SimSce.spec
+
+      - name: Prepare release files
+        shell: powershell
+        run: |
+          $version = "${{ inputs.version }}"
+          $releaseDir = "release/SimSce-v$version"
+
+          New-Item -ItemType Directory -Force -Path $releaseDir
+
+          Copy-Item "dist/SimSce/*" $releaseDir -Recurse -Force
+          Copy-Item "actions" $releaseDir -Recurse -Force
+          Copy-Item "config" $releaseDir -Recurse -Force
+          Copy-Item "doc" $releaseDir -Recurse -Force
+          Copy-Item "resource" $releaseDir -Recurse -Force
+
+          Copy-Item "LICENSE" $releaseDir -Force
+          Copy-Item "README.md" $releaseDir -Force
+          Copy-Item "README_CHT.md" $releaseDir -Force
+          Copy-Item "README_ENG.md" $releaseDir -Force
+
+      - name: Create ZIP
+        shell: powershell
+        run: |
+          $version = "${{ inputs.version }}"
+          Compress-Archive `
+            -Path "release/SimSce-v$version" `
+            -DestinationPath "SimSce-v$version.zip"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimSce-v${{ inputs.version }}
+          path: SimSce-v${{ inputs.version }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SimSce-v${{ inputs.version }}
+          path: release
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            "release/SimSce-v$VERSION.zip" \
+            --title "v$VERSION"
