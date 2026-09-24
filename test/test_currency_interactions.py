@@ -1,5 +1,4 @@
 import unittest
-from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
 from currency import SimulatedCurrency
@@ -9,6 +8,8 @@ class CurrencyInteractionTests(unittest.TestCase):
     @staticmethod
     def make_currency():
         currency = object.__new__(SimulatedCurrency)
+        currency.prior_envir = []
+        currency.envir = [[], [], [], []]
         currency.ts = Mock()
         currency.get_screen = Mock(return_value=object())
         currency.ENVIR_BOXES = [
@@ -22,6 +23,23 @@ class CurrencyInteractionTests(unittest.TestCase):
             [1298, 1605, 472, 513],
         ]
         return currency
+
+    @patch("currency.time.sleep")
+    @patch("currency.key_mouse_manager")
+    def test_fallback_uses_first_and_last_priority_groups(self, manager, _sleep):
+        for groups in [[["一级"], [], [], ["四级"]], [[], [], [], ["一级"]]]:
+            with self.subTest(groups=groups):
+                currency = self.make_currency()
+                currency.envir = groups
+                currency.recognize_options = Mock(return_value=["一级", "四级", "其他"])
+                currency._confirm_environment_selection = Mock(return_value=True)
+                currency.investment_tracker = Mock()
+                currency.update_state = Mock()
+                manager.reset_mock()
+
+                self.assertEqual(currency.select_envir(), 1)
+                self.assertEqual(manager.click.call_args, call(438, 394))
+                currency.update_state.assert_called_once_with("1-1")
 
     @patch("currency.time.sleep")
     @patch("currency.key_mouse_manager")
@@ -64,10 +82,7 @@ class CurrencyInteractionTests(unittest.TestCase):
         self, _manager, _sleep
     ):
         currency = self.make_currency()
-        currency.tk = SimpleNamespace(
-            prior_envir=[],
-            envir=[[], ["蓝海"], [], [], []],
-        )
+        currency.envir = [["蓝海"], [], [], []]
         currency.recognize_options = Mock(
             side_effect=[
                 ["环境甲", "蓝海", "环境丙"],
@@ -89,10 +104,7 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("currency.key_mouse_manager")
     def test_blue_ocean_failure_does_not_advance_state(self, _manager, _sleep):
         currency = self.make_currency()
-        currency.tk = SimpleNamespace(
-            prior_envir=[],
-            envir=[[], ["蓝海"], [], [], []],
-        )
+        currency.envir = [["蓝海"], [], [], []]
         currency.recognize_options = Mock(
             side_effect=[
                 ["环境甲", "蓝海", "环境丙"],
