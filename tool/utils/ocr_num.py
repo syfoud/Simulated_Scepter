@@ -87,7 +87,7 @@ def _match_action_count_in_region(or_image, region, count_name, threshold=0.9,
 
     crop = or_image[y1:y2, x1:x2].copy()
     template_dir = template_dir or os.path.join(PATHS["image"], "roll_count_num")
-    unmatched_dir = unmatched_dir or os.path.join(template_dir, "unmatched")
+    unmatched_dir = unmatched_dir or os.path.join(PATHS["root"], "temp", "unmatched_action_count")
 
     best_value = None
     best_score = -1.0
