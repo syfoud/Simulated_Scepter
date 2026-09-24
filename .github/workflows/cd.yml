@@ -94,6 +94,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release create "v$VERSION"
+          gh release create "v$VERSION" \
             "release/SimSce-v$VERSION.zip" \
-            --title "v$VERSION"
+            --title "v$VERSION" \
+            --repo "${{ github.repository }}"
