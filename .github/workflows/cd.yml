@@ -28,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: cd
+          ref: master
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -94,6 +94,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release create "v$VERSION" \
+          gh release create "v$VERSION"
             "release/SimSce-v$VERSION.zip" \
             --title "v$VERSION"
