@@ -11,13 +11,9 @@ from tool.log import CUS_LOGGER
 
 class Config:
     def __init__(self):
-        self.abspath = PATHS["config"]+"//config"
-        if getattr(sys, 'frozen', False):
-            self.abspath = './config/config'
         self.angle = "1.0"
         self.difficult = "5"
         self.allow_difficult = [1, 2, 3, 4, 5]
-        self.text = "info.yml"
         self.skill_char = ['黄泉', '白厄']
 
         # 推测定义的是远程角色
@@ -86,8 +82,8 @@ class Config:
 
 
     def read(self):
-        config_path = os.path.join(self.abspath, self.text)
-        example_path = os.path.join(self.abspath, 'info_example.yml')
+        config_path = os.path.join(PATHS["config"], 'config', 'info.yml')
+        example_path = os.path.join(PATHS["config"], 'config', 'info_example.yml')
         if not os.path.exists(config_path):
             if os.path.exists(example_path):
                 shutil.copy2(example_path, config_path)
@@ -124,7 +120,7 @@ class Config:
             self.save()
 
     def save(self):
-        with open(os.path.join(self.abspath, self.text), "w", encoding="utf-8") as f:
+        with open(os.path.join(PATHS["config"], 'config', 'info.yml'), "w", encoding="utf-8") as f:
             yaml.safe_dump({
                 "config": {
                     "angle": float(self.angle),
