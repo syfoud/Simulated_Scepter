@@ -12,6 +12,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from tool.log import CUS_LOGGER
+
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tool" / "divine_treasure"))  # 面具/图鉴模块已归入子包；worker 子进程的 sys.path[0] 只有仓库根
 STATES = ("home", "mode", "regular", "ranked", "practice", "masks")
@@ -125,7 +127,7 @@ def enter_universe(ocr, output):
             state = result["state"]
             stable_count = stable_count + 1 if state == stable_state else 1
             if state != stable_state:
-                print(f"Observed: {state}", flush=True)
+                CUS_LOGGER.debug(f"Observed: {state}", flush=True)
                 save_evidence(output, f"{sequence:02d}-{state}", image, result)
                 sequence += 1
             stable_state = state
@@ -135,14 +137,14 @@ def enter_universe(ocr, output):
                     if last_clicked != 4:
                         raise RuntimeError("Mask page appeared before this probe launched a run")
                     save_evidence(output, "success-masks", image, result)
-                    print("SUCCESS: mask selection detected; no mask selected", flush=True)
+                    CUS_LOGGER.debug("SUCCESS: mask selection detected; no mask selected", flush=True)
                     return
                 if index > last_clicked:
                     if index != last_clicked + 1:
                         raise RuntimeError(f"Unexpected page {state}; start from sample 1")
                     if state == "practice" and result["protocol"] != 5:
                         raise RuntimeError(f"Protocol must be 5, observed {result['protocol']}; no adjustment made")
-                    print(f"Click once: {state} at {result['target']}", flush=True)
+                    CUS_LOGGER.debug(f"Click once: {state} at {result['target']}", flush=True)
                     click_game(hwnd, rect, result["target"])
                     last_clicked = index
                     deadline = time.monotonic() + (45 if state == "practice" else 15)
@@ -174,7 +176,7 @@ def main(default_stage="entry"):
         import win32api
         import win32con
 
-        print(f"Stage: {args.stage}\nOutput: {output}\nFocus the matching start screen within 5 seconds. F8 or switching away stops.", flush=True)
+        CUS_LOGGER.debug(f"Stage: {args.stage}\nOutput: {output}\nFocus the matching start screen within 5 seconds. F8 or switching away stops.", flush=True)
         time.sleep(5)
         worker = subprocess.Popen(
             [sys.executable, str(ROOT / "divine_treasure_entry.py"), "--worker", "--stage", args.stage,
@@ -192,7 +194,7 @@ def main(default_stage="entry"):
                 time.sleep(0.1)
             return worker.returncode
         except (TimeoutError, InterruptedError, KeyboardInterrupt) as error:
-            print(f"STOPPED: {type(error).__name__}", flush=True)
+            CUS_LOGGER.error(f"STOPPED: {type(error).__name__}", flush=True)
             return 2
         finally:
             if worker.poll() is None:
@@ -219,7 +221,7 @@ def main(default_stage="entry"):
                 save_evidence(output, f"sample-{number}", image, result)
                 passed = result["state"] == expected
                 summary.append(passed)
-                print(f"Sample {number}: {result['state']}, {'PASS' if passed else 'FAIL'}", flush=True)
+                CUS_LOGGER.debug(f"Sample {number}: {result['state']}, {'PASS' if passed else 'FAIL'}", flush=True)
             return 0 if all(summary) else 1
         summary = []
         for number, expected in enumerate(STATES[:5], 1):
@@ -231,8 +233,8 @@ def main(default_stage="entry"):
             save_evidence(output, f"sample-{number}", image, result)
             passed = result["state"] == expected and (number != 5 or result["protocol"] == 5)
             summary.append(passed)
-            print(f"Sample {number}: {result['state']}, protocol={result['protocol']}, {'PASS' if passed else 'FAIL'}", flush=True)
-        print(f"Offline evidence: {output}", flush=True)
+            CUS_LOGGER.debug(f"Sample {number}: {result['state']}, protocol={result['protocol']}, {'PASS' if passed else 'FAIL'}", flush=True)
+        CUS_LOGGER.debug(f"Offline evidence: {output}", flush=True)
         return 0 if all(summary) else 1
     try:
         if args.stage in ("entry", "opening"):
@@ -249,7 +251,7 @@ def main(default_stage="entry"):
                 if time.monotonic() >= deadline:
                     raise TimeoutError("Opening retry time limit reached")
                 attempt += 1
-                print(f"Restarting opening: attempt {attempt}", flush=True)
+                CUS_LOGGER.debug(f"Restarting opening: attempt {attempt}", flush=True)
                 enter_universe(ocr, output / f"attempt-{attempt:02d}" / "entry")
             else:
                 raise TimeoutError("Opening retry time limit reached")
@@ -261,7 +263,7 @@ def main(default_stage="entry"):
     except Exception as error:
         output.mkdir(parents=True, exist_ok=True)
         (output / "error.txt").write_text(f"{type(error).__name__}: {error}\n", encoding="utf-8")
-        print(f"STOPPED: {error}\nEvidence: {output}", flush=True)
+        CUS_LOGGER.error(f"STOPPED: {error}\nEvidence: {output}", flush=True)
         return 2
 
 

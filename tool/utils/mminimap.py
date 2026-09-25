@@ -116,7 +116,7 @@ def update_direction(or_image=None, minimap=None):
         area = area_pad(get_bbox(image, threshold=128), pad=-1)
         area = area_limit(area, (0, 0, *image_size(image)))
     except IndexError:
-        print('小地图上没有方向箭头')
+        CUS_LOGGER.debug('小地图上没有方向箭头')
         return None
 
     image = crop(image, area=area, copy=False)
@@ -159,12 +159,12 @@ def update_direction(or_image=None, minimap=None):
 
     direction_similarity = round(precise_sim, 3)
     direction = round(precise_loca % 360, 1)
-    print('direction:', direction, 'confidence:', direction_similarity)
+    CUS_LOGGER.debug('direction:', direction, 'confidence:', direction_similarity)
     return direction
 
 
 def show_minimap(image, rotation, direction=0):
-    print('视角:', rotation, '角色朝向:', direction)
+    CUS_LOGGER.debug('视角:', rotation, '角色朝向:', direction)
     position = np.array((93, 93)).astype(int)
 
     def vector(degree):
@@ -296,7 +296,7 @@ class PositionPredict:
         # 跑步时缩放为1.25
         for scale in scale_list:
             state = self._predict_position(image, scale)
-            # print([np.round(i, 3) for i in [scale, state.sim, state.local_sim, state.global_loca]])
+            # CUS_LOGGER.debug([np.round(i, 3) for i in [scale, state.sim, state.local_sim, state.global_loca]])
             if state.sim > best_sim:
                 best_sim = state.sim
                 best_scale = scale
@@ -325,7 +325,7 @@ class PositionPredict:
             None
         """
         # 创建assets_floor_feat的副本用于绘制
-        print(f"绘制位置: {self.position}")
+        CUS_LOGGER.debug(f"绘制位置: {self.position}")
         map_with_position = self.assets_floor_feat.copy()
 
         # 将全局坐标转换为地图坐标反向执行坐标变换
