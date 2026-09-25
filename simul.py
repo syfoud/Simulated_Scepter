@@ -801,7 +801,7 @@ class SimulatedUniverse(UniverseUtils):
         备份文件从项目目录下的config/backup文件夹中读取。
         """
         try:
-            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup")
+            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup"))
 
             # 从磁盘读取 big_map 图像文件
             backup_file = os.path.join(backup_dir, "big_map_backup.png")
