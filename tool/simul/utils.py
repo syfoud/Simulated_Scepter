@@ -1027,7 +1027,7 @@ class UniverseUtils:
         """
         try:
             # 确保备份目录存在（相对于项目根目录）
-            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup")
+            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup"))
             if not os.path.exists(backup_dir):
                 os.makedirs(backup_dir)
 
