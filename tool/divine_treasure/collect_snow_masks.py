@@ -97,14 +97,14 @@ def run(ocr, output):
                         records[name] = {"effect": result["effect"],
                                          "source": (output / f"{evidence}.png").resolve().as_posix()}
                         write_document(records, report)
-                        CUS_LOGGER.debug(f"Collected {index}/10: {name}", flush=True)
+                        CUS_LOGGER.debug(f"Collected {index}/10: {name}", extra={"flush": True})
                         break
                 else:
                     stable, count = None, 0
             else:
                 save_evidence(output, f"{index:02d}-timeout", image, result)
                 raise TimeoutError(f"No stable matching details for {name}; partial report: {report}")
-        CUS_LOGGER.debug(f"SUCCESS: 10/10\nReport: {report}\nEvidence: {output}", flush=True)
+        CUS_LOGGER.debug(f"SUCCESS: 10/10\nReport: {report}\nEvidence: {output}", extra={"flush": True})
         return records
     finally:
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)

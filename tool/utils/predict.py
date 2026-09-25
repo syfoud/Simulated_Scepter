@@ -208,7 +208,7 @@ def predict_enemy(h, v):
         primary_feature, AIM_ENEMY_PRIMARY_RADII
     )
     if point_count > 1000:
-        CUS_LOGGER.warning(f'AimDetector.predict_enemy() 绘制点过多: {point_count}')
+        CUS_LOGGER.warning(f"AimDetector.predict_enemy() 绘制点过多: {point_count}")
     if (score >= AIM_ENEMY_PEAK_MIN and
             not _is_horizontal_red_scenery(red_pixels, center)):
         return draw_enemy, np.array([center])
@@ -296,7 +296,7 @@ def predict_item(v):
     points = inrange(y, lower=18)
     # print(points.shape)
     if points.shape[0] > 1000:
-        CUS_LOGGER.debug(f'AimDetector.predict_item() 绘制点过多: {points.shape}')
+        CUS_LOGGER.debug(f"AimDetector.predict_item() 绘制点过多: {points.shape}")
     # 绘制圆形
     draw = np.zeros((height, width), dtype=np.uint8)
     draw_circle(draw, circle_item, points)
@@ -317,7 +317,7 @@ def aimed_enemy(points_enemy) -> tuple[int, int] | None:
 
     count = len(points_enemy)
     if count >= 2:
-        CUS_LOGGER.debug(f'发现多个瞄准的敌人: {points_enemy}')
+        CUS_LOGGER.debug(f"发现多个瞄准的敌人: {points_enemy}")
     try:
         point = points_enemy[0]
         return tuple(point)
@@ -328,7 +328,7 @@ def aimed_item(points_item) -> tuple[int, int] | None:
         return None
     try:
         _ = points_item[1]
-        CUS_LOGGER.debug(f'发现多个瞄准的物品，使用第一个点 {points_item}')
+        CUS_LOGGER.debug(f"发现多个瞄准的物品，使用第一个点 {points_item}")
     except IndexError:
         pass
     try:

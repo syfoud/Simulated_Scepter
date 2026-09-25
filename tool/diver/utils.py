@@ -28,6 +28,7 @@ from route import PATHS
 from tool.diver.config import config
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER, print_exc
+from tool.log import my_print as print
 from tool.public_ocr import merge_text
 from tool.screenshot import Screen
 from tool.utils.game_window import (
@@ -131,7 +132,7 @@ class UniverseUtils:
                     self.x0, self.y0, self.x1, self.y1 = get_client_screen_rect(hwnd)
                 else:
                     self.x0, self.y0, self.x1, self.y1 = get_window_rect(hwnd)
-                # CUS_LOGGER.debug("窗口坐标: " + str(self.x0) + " " + str(self.y0) + " " + str(self.x1) + " " + str(self.y1))
+                # print("窗口坐标: " + str(self.x0) + " " + str(self.y0) + " " + str(self.x1) + " " + str(self.y1))
                 self.full = self.x0 == 0 and self.y0 == 0
                 self.x0 = max(0, self.x1 - self.xx)
                 self.y0 = max(0, self.y1 - self.yy)
@@ -401,7 +402,7 @@ class UniverseUtils:
     # 点击一个点
     def click(self, points, click=1):
         if self.debug == 2:
-            CUS_LOGGER.debug(points)
+            CUS_LOGGER.debug(f"Clicking point: {points}")
         self.print_stack()
         x, y = points
         # 如果是浮点数表示，则计算实际坐标
@@ -526,12 +527,12 @@ class UniverseUtils:
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
         self.tx = x - (max_loc[0] - 0.5 * local_screen.shape[1] + 0.5 * target.shape[1]) / self.xx
         self.ty = y - (max_loc[1] - 0.5 * local_screen.shape[0] + 0.5 * target.shape[0]) / self.yy
-        if path == "./resource/imgs/run.jpg" and 0:
-            CUS_LOGGER.debug(max_val)
+        if path == "./resource/imgs/run.jpg" and 0: # 此if被设置为无法触发，可能是调试代码
+            print(max_val)
             cv.imwrite('target.jpg',target)
             cv.imwrite('local.jpg',local_screen)
-            # CUS_LOGGER.debug(self.tx,self.ty)
-            # CUS_LOGGER.debug(x,y,max_loc,local_screen.shape)
+            # print(self.tx,self.ty)
+            # print(x,y,max_loc,local_screen.shape)
             # self.click((self.tx,self.ty),click=0)
             # exit()
         self.tm = max_val
@@ -842,7 +843,7 @@ class UniverseUtils:
             if not check_text:
                 return 1
             text = self.ts.ocr_one_row(self.screen, [1206, 1437, 587, 635])
-            CUS_LOGGER.debug(text)
+            CUS_LOGGER.debug(f"text: {text}")
             if len(text):
                 CUS_LOGGER.info('识别到交互信息：' + text)
                 for i in is_in:
@@ -1429,7 +1430,7 @@ class UniverseUtils:
             stk = traceback.extract_stack()
             for i in range(num):
                 try:
-                    CUS_LOGGER.debug(stk[-2].name,stk[-3-i].filename.split('\\')[-1].split('.')[0],stk[-3-i].name,stk[-3-i].lineno)
+                    CUS_LOGGER.debug(f"Stack frame {i}: {stk[-2].name}, {stk[-3-i].filename.split('\\\\')[-1].split('.')[0]}, {stk[-3-i].name}, {stk[-3-i].lineno}")
                 except Exception:
                     pass
 
@@ -1464,7 +1465,7 @@ class UniverseUtils:
 
     def get_direc_only_minimap(self):
         if self.debug==2:
-            CUS_LOGGER.debug('mini',self.ang_off,self.mini_state)
+            CUS_LOGGER.debug(f"mini: {self.ang_off}, {self.mini_state}")
         self.ang_neg=self.ang_off<0
         if self.ang_off:
             time.sleep(0.6)
@@ -1776,7 +1777,7 @@ class UniverseUtils:
         mx_area, mx_cnt = 0, None
         for cnt in contours:
             x, y, w, h = cv.boundingRect(cnt)
-            # CUS_LOGGER.debug(w,h)
+            # print(w,h)
             if h > 22:
                 continue
             if mx_area < w * h:

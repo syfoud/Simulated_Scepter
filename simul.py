@@ -596,7 +596,7 @@ class SimulatedUniverse(UniverseUtils):
             if ft != self.fate or i == len(self.tk.secondary):
                 img_down = self.get_small_interaction_img(x=0.5042, y=0.3204, mask="mask", fresh=True)
                 if self.debug == 2:
-                    CUS_LOGGER.debug(list(st), self.tk.secondary)
+                    CUS_LOGGER.debug(f"St: {list(st)}, Secondary: {self.tk.secondary}")
                 res_down = self.ts.split_and_find(list(st), img_down, mode="bless")
                 if res_down[1] == 2:
                     key_mouse_manager.click(*self.calc_point((0.5042, 0.3204), res_down[0]))

@@ -175,7 +175,7 @@ class DivergentUniverse(UniverseUtils):
                         self.ts.forward(self.get_screen())
                         static_res = self.run_static(action_list=['过量转化'])
                         if static_res != '':
-                            CUS_LOGGER.debug(static_res)
+                            CUS_LOGGER.debug(f"static_res: {static_res}")
                             break
                 else:
                     if time.time() - self.last_action_time > 60:
@@ -270,7 +270,7 @@ class DivergentUniverse(UniverseUtils):
             keyops.keyUp(i)
 
     def save_or_exit(self):
-        CUS_LOGGER.debug('saved_num:', self.saved_num, 'save_cnt:', config.save_cnt)
+        CUS_LOGGER.debug(f"saved_num: {self.saved_num}, save_cnt: {config.save_cnt}")
         if self.saved_num < self.total_empty_saves:
             time.sleep(1.5)
             self.saved_num += 1
@@ -335,7 +335,7 @@ class DivergentUniverse(UniverseUtils):
     def get_now_area(self, deep=0):
         team_member = self.find_team_member(self.team_member)
         self.area_text = clean_text(self.ts.ocr_one_row(self.screen, [50, 350, 3, 35]), char=0)
-        CUS_LOGGER.debug('area_text:', self.area_text, 'deep:', deep)
+        CUS_LOGGER.debug(f"area_text: {self.area_text}, deep: {deep}")
         if '位面' in self.area_text or '区域' in self.area_text or '第' in self.area_text:
             check_ok = 1
             for i in team_member:
@@ -345,7 +345,7 @@ class DivergentUniverse(UniverseUtils):
 
             if not check_ok:
                 self.team_member = team_member
-                CUS_LOGGER.debug('team_member:', team_member)
+                CUS_LOGGER.debug(f"team_member: {team_member}")
                 for i in self.team_member:
 
                     # 从当前队伍中,选取处于内置远程角色列表中的第一个远程角色
@@ -391,7 +391,7 @@ class DivergentUniverse(UniverseUtils):
                         portal['nums'] = i['nums']
         ocr_time = time.time() - tm
         self.ocr_time_list = self.ocr_time_list[-5:] + [ocr_time]
-        CUS_LOGGER.debug(f'识别时间:{int(ocr_time*1000)}ms', text, portal)
+        CUS_LOGGER.debug(f"识别时间:{int(ocr_time*1000)}ms, text:{text}, portal:{portal}")
         return portal
 
     def sleep(self, tm=2):
@@ -427,7 +427,7 @@ class DivergentUniverse(UniverseUtils):
             self.get_screen()
             if self.check_f(check_text=0):
                 keyops.keyUp('w')
-                CUS_LOGGER.debug(text_list)
+                CUS_LOGGER.debug(f"text_list: {text_list}")
                 if chaos:
                     if self.check_f(is_in=['混沌', '战利品']):
                         self.press('f')
@@ -548,7 +548,7 @@ class DivergentUniverse(UniverseUtils):
         tm = time.time()
         while time.time() - tm < 20:
             title_text = clean_text(self.ts.ocr_one_row(self.screen, [185, 820, 945, 1005]), char=0)
-            CUS_LOGGER.debug(title_text)
+            CUS_LOGGER.debug(f"title_text: {title_text}")
             if event_id[0] == -1:
                 for i, e in enumerate(self.event_prior):
                     if e in title_text and len(e) > len(event_id[1]):
@@ -568,7 +568,7 @@ class DivergentUniverse(UniverseUtils):
             # 事件选择界面
             elif self.check("star", 0.1828, 0.5000, mask="mask_event", threshold=0.965):
                 if self.debug and event_id[0] == -1:
-                    CUS_LOGGER.debug(self.ts.res)
+                    CUS_LOGGER.debug(f"self.ts.res: {self.ts.res}")
                     with open('test.txt', 'a') as f:
                         format_string = "%H:%M:%S"
                         formatted_time = time.strftime(format_string, time.localtime())
@@ -599,7 +599,7 @@ class DivergentUniverse(UniverseUtils):
                         e['raw_text'] = clean_text(e['raw_text'], 0)
                         e['score'] = self.event_score(e['raw_text'], self.event_prior[event_id[1]])
                     events = sorted(events, key=lambda x: x['score'], reverse=True)
-                    CUS_LOGGER.debug([{k: v for k, v in event.items() if k != 'box'} for event in events])
+                    CUS_LOGGER.debug(f"Events: {[{k: v for k, v in event.items() if k != 'box'} for event in events]}")
                     for i in events:
                         self.click_box(i['box'])
                         time.sleep(0.4)
@@ -643,7 +643,7 @@ class DivergentUniverse(UniverseUtils):
         res = 0
         event_text = ''
         debug_res = []
-        CUS_LOGGER.debug('event_text:', text)
+        CUS_LOGGER.debug(f"event_text: {text}")
         for i in text:
             box = i['box']
             if 'ms' in i['raw_text'] or '状态效' in i['raw_text'] or len(i['raw_text']) < 2 or (box[0] > 1470 and box[2] < 75)\
@@ -659,7 +659,7 @@ class DivergentUniverse(UniverseUtils):
                 event_text = i['raw_text']
             debug_res.append(i)
         if self.debug:
-            CUS_LOGGER.debug(debug_res, res, event_text)
+            CUS_LOGGER.debug(f"debug_res: {debug_res}, res: {res}, event_text: {event_text}")
         if res == 0:
             scr = np.copy(self.screen)
             mask = np.zeros(scr.shape[:2], dtype=np.uint8)
@@ -722,7 +722,6 @@ class DivergentUniverse(UniverseUtils):
                 sub = event_text - event_text_after
                 if key == 'a':
                     sub = -sub
-                CUS_LOGGER.debug('sub:', sub)
                 CUS_LOGGER.info(f"event_text_after: {event_text_after}, sub: {sub}")
             else:
                 sub = 100000
@@ -1119,7 +1118,7 @@ class DivergentUniverse(UniverseUtils):
             bless_raw_text = merge_text(bless_text, char=0)
             blesses.append({'raw_text': bless_raw_text, 'box': box, 'score': self.bless_score(bless_raw_text)})
         blesses = sorted(blesses, key=lambda x: x['score'], reverse=reverse)
-        CUS_LOGGER.debug(blesses)
+        CUS_LOGGER.debug(f"Blesses: {blesses}")
         box = blesses[0]['box']
         if not self.click_img("new"):
             self.click_position([(box[0] + box[1]) // 2, 500])

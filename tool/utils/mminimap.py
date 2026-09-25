@@ -159,12 +159,12 @@ def update_direction(or_image=None, minimap=None):
 
     direction_similarity = round(precise_sim, 3)
     direction = round(precise_loca % 360, 1)
-    CUS_LOGGER.debug('direction:', direction, 'confidence:', direction_similarity)
+    CUS_LOGGER.debug(f"direction: {direction}, confidence: {direction_similarity}")
     return direction
 
 
 def show_minimap(image, rotation, direction=0):
-    CUS_LOGGER.debug('视角:', rotation, '角色朝向:', direction)
+    CUS_LOGGER.debug(f"视角: {rotation}, 角色朝向: {direction}")
     position = np.array((93, 93)).astype(int)
 
     def vector(degree):
@@ -296,7 +296,7 @@ class PositionPredict:
         # 跑步时缩放为1.25
         for scale in scale_list:
             state = self._predict_position(image, scale)
-            # CUS_LOGGER.debug([np.round(i, 3) for i in [scale, state.sim, state.local_sim, state.global_loca]])
+            # print([np.round(i, 3) for i in [scale, state.sim, state.local_sim, state.global_loca]])
             if state.sim > best_sim:
                 best_sim = state.sim
                 best_scale = scale
