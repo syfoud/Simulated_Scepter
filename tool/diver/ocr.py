@@ -4,6 +4,7 @@ import shutil
 import numpy as np
 import yaml
 
+from route import PATHS
 from tool.log import CUS_LOGGER
 from tool.onnxocr.onnx_paddleocr import ONNXPaddleOcr
 from tool.public_ocr import box_contain, filter_non_white, merge, sort_text
@@ -146,8 +147,8 @@ class text_keys:
                            '偏时引燃的炬火', '延迟衍射的烛光', '金属斑驳的华盖', '线圈编制的罗琦', '管道交错的桂冠']
         self.secondary = ['巡猎', '毁灭', '丰饶']
         try:
-            config_file = 'info.yml'
-            example_file = 'config/config/info_example.yml'
+            config_file = os.path.join(PATHS["config"], 'info.yml')
+            example_file = os.path.join(PATHS["config"], 'info_example.yml')
             if not os.path.exists(config_file):
                 if os.path.exists(example_file):
                     shutil.copy2(example_file, config_file)

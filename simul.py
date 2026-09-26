@@ -801,7 +801,7 @@ class SimulatedUniverse(UniverseUtils):
         备份文件从项目目录下的config/backup文件夹中读取。
         """
         try:
-            backup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config", "backup")
+            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup"))
 
             # 从磁盘读取 big_map 图像文件
             backup_file = os.path.join(backup_dir, "big_map_backup.png")
@@ -1246,7 +1246,10 @@ class SimulatedUniverse(UniverseUtils):
         if self.record and self.bveerelbcpgyqan :
             CUS_LOGGER.info("以「爱」的名义，她将逝去的一切尽数珍藏……直到世间的尽头……")
             try:
-                self.recorder.stop_recording()
+                if hasattr(self, "kill_count"):
+                    self.recorder.stop_recording(delete_video=self.kill_count == 0)
+                else:
+                    self.recorder.stop_recording()
             except Exception as e:
                 CUS_LOGGER.error(f"停止录制时发生错误: {e}")
         self.save_screen(not_now=True,save_path="/temp/stop/")
