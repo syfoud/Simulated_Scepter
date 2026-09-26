@@ -50,10 +50,10 @@ class CountdownProductionTests(unittest.TestCase):
         nodes, edges = linear_map()
         self.agent.load_map(nodes, edges, 0, (), 15, 1, 2, plane=1)
 
-    def test_effect_text_accepts_ui_and_rule_aliases(self):
+    def test_effect_text_accepts_ui_names_inside_ocr_text(self):
         self.assertEqual(EFFECT_SELECT, parse_effect_text("本次效果：慈怀"))
-        self.assertEqual(EFFECT_ADJACENT, parse_effect_text("邻接感染"))
-        self.assertEqual(EFFECT_SPREAD, parse_effect_text("灌溉"))
+        self.assertEqual(EFFECT_ADJACENT, parse_effect_text("本次效果：丰饶对症"))
+        self.assertEqual(EFFECT_SPREAD, parse_effect_text("本次效果：丰饶浇灌"))
         self.assertIsNone(parse_effect_text("OCR失败"))
 
     def test_finger_snap_only_calls_the_production_decision_interface(self):
@@ -69,7 +69,8 @@ class CountdownProductionTests(unittest.TestCase):
         self.assertIn("advice.context.phase == PHASE_EFFECT", early_stop)
         self.assertIn('text="确认效果"', early_stop)
         self.assertIn("advice.context.phase == PHASE_TARGET", early_stop)
-        self.assertIn('text="放弃"', early_stop)
+        self.assertIn(
+            "self.abandon_confirm(confirm=True, allow_fail=True)", early_stop)
         self.assertNotIn('key_mouse_manager.press("esc")', early_stop)
         self.assertIn("else:\n                return False", early_stop)
         select_doing = source[source.index("    def select_doing"):
