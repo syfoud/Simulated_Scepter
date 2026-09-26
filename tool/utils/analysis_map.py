@@ -663,7 +663,7 @@ def display_matches(image, matches, path=None, highlight_idx=None, save_path=Non
         alt_path: 备选路径（如替换后的新路径），用不同颜色绘制
     """
     if image is None:
-        print('没有图像可显示')
+        CUS_LOGGER.error('没有图像可显示')
         return
     vis = image.copy()
     font_path = PATHS["font"] + '/手书体.ttf'
