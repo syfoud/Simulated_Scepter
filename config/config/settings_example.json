@@ -16,7 +16,7 @@
     "pig_switch_2_role": false,
     "auto_attack_breakable": false,
     "hotkeys": {
-        "stop": "end",
+        "stop": "f5",
         "test": "f6",
         "print": "f7"
     },
