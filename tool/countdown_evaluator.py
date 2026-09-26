@@ -374,6 +374,7 @@ class MonteCarloController:
         self._effect_heuristic_cache = {}
         self.total_control_rollouts = 0
         self.total_evaluation_trials = 0
+        self._sampled_contexts = {}
 
     def _state_key(self, state: CountdownState) -> tuple:
         # 均分目标对当前 CD 线性可加；Q 回填后续累计回报后可安全去掉该维度。
@@ -385,25 +386,43 @@ class MonteCarloController:
                 useful_cheat, state.reroll_rem)
 
     def _context_key(self, context: DecisionContext) -> tuple:
-        return (context.phase, self._state_key(context.state),
-                context.observed_effect, context.locked_effect)
+        # 路径阶段的普通效果已结算进事实状态，只有对症仍影响下一次移动。
+        locked = None
+        if context.phase == PHASE_PATH:
+            locked = context.locked_effect == EFFECT_ADJACENT
+        state_key = self._state_key(context.state)
+        if context.phase in (PHASE_TARGET, PHASE_PATH):
+            remaining = max(0, self.map.longest_steps_from(context.state.node_idx) - 1)
+            state_key = state_key[:2] + (min(state_key[2], remaining), state_key[3])
+        return (context.phase, state_key,
+                context.observed_effect if context.phase == PHASE_EFFECT else None,
+                locked)
 
     def _win_context_key(self, context: DecisionContext) -> tuple:
         # 达标概率取决于当前绝对 CD，不能像均分回报那样省略该维度。
         state = context.state
-        useful_cheat = min(
-            state.cheat_rem, self.map.longest_steps_from(state.node_idx))
+        key = self._context_key(context)
+        useful_cheat = key[1][2]
         normalized = (
             state.node_idx,
             state.infected & ~self.map.destroy_masks[state.node_idx],
             state.countdown, useful_cheat, state.reroll_rem)
-        return (context.phase, normalized,
-                context.observed_effect, context.locked_effect)
+        return (context.phase, normalized, key[2], key[3])
 
     def _q_key(self, context: DecisionContext, action: object) -> tuple:
+        # 已选效果及付费后的状态相同，就不应按原骰面拆散样本。
+        if context.phase == PHASE_EFFECT and action != "reroll":
+            effect = context.observed_effect if action == "keep" else int(action[1])
+            state = context.state
+            if action != "keep":
+                state = replace(state, cheat_rem=state.cheat_rem - 1)
+            settled_key = self._context_key(DecisionContext(PHASE_PATH, state))[1]
+            return ("settle", settled_key, effect)
         return self._context_key(context) + (action,)
 
     def _win_q_key(self, context: DecisionContext, action: object) -> tuple:
+        if context.phase == PHASE_EFFECT and action != "reroll":
+            return self._q_key(context, action) + (context.state.countdown,)
         return self._win_context_key(context) + (action,)
 
     def legal_actions(self, context: DecisionContext) -> tuple:
@@ -536,10 +555,11 @@ class MonteCarloController:
             scored = []
             best_score = float("-inf")
             for action in actions:
-                q_key = context_key + (action,)
+                q_key = self._q_key(context, action)
                 samples = self.q.get(q_key)
                 heuristic = self._heuristic(context, action)
-                reliable = min(64, self.config.min_visits)
+                # 深层状态不能套用根节点的样本门槛；保留两次观测以免单次异常覆盖先验。
+                reliable = min(2, self.config.min_visits)
                 score = (samples.mean if samples and samples.count >= reliable
                          else heuristic) + self._score_bonus(context, action)
                 scored.append((score, heuristic, action))
@@ -586,11 +606,11 @@ class MonteCarloController:
             if policy_cache is not None:
                 policy_cache[cache_key] = selected
             return selected
-        reliable = min(64, self.config.min_visits)
         learned = [(action, self.win_q.get(self._win_q_key(context, action)))
                    for action in actions]
+        # 成功轨迹不能因深层访问不足而被丢弃；是否可靠由后续独立续采验证。
         learned = [(action, stats) for action, stats in learned
-                   if stats and stats.count >= reliable and stats.target_count]
+                   if stats and stats.target_count]
         noise_floor = self.config.win_rate_noise_floor_percent / 100.0
         winners = [(action, stats) for action, stats in learned
                    if (stats.win_rate or 0.0) >= noise_floor
@@ -628,6 +648,10 @@ class MonteCarloController:
             if not actions:
                 context = DecisionContext(PHASE_TERMINAL, context.state)
                 break
+            if learn or learn_win:
+                key = self._win_context_key(context)
+                entry = self._sampled_contexts.setdefault(key, [context, 0])
+                entry[1] += 1
             if first and forced_action is not None:
                 action = forced_action
             elif epsilon and rng.random() < epsilon:
@@ -638,10 +662,9 @@ class MonteCarloController:
                     else self._greedy_action(
                         context, policy_cache, actions, context_key))
             if learn:
-                trace.append((context_key + (action,), context.state.countdown))
+                trace.append((self._q_key(context, action), context.state.countdown))
             if learn_win:
-                win_key = self._win_context_key(context)
-                win_trace.append(win_key + (action,))
+                win_trace.append(self._win_q_key(context, action))
             context = self._advance(context, action, rng, False)
             first = False
         else:
@@ -761,6 +784,21 @@ class MonteCarloController:
         self.total_evaluation_trials += 1
         return seed
 
+    def _freeze_action(self, context: DecisionContext, action: object,
+                       win_policy: bool = False) -> None:
+        policy = self.frozen_win_policy if win_policy else self.frozen_policy
+        key = self._win_context_key if win_policy else self._context_key
+        policy[key(context)] = action
+        # 剩余作弊足够覆盖每一步时，骰面不限制可选效果；共享同一条件策略。
+        if (context.phase == PHASE_EFFECT and context.state.cheat_rem
+                >= self.map.longest_steps_from(context.state.node_idx)):
+            effect = context.observed_effect if action == "keep" else (
+                None if action == "reroll" else action[1])
+            for observed in ALL_EFFECTS:
+                equivalent = replace(context, observed_effect=observed)
+                policy[key(equivalent)] = ("reroll" if effect is None else
+                                          "keep" if effect == observed else ("cheat", effect))
+
     def evaluate_current_policy(
             self, context: DecisionContext, target: Optional[float] = None,
             progress: Optional[Callable[[int, int, str], None]] = None,
@@ -783,7 +821,7 @@ class MonteCarloController:
                                             - self._score_bonus(context, action),
                                             self._action_sort_key(action)))
         if target is None:
-            self.frozen_policy[self._context_key(context)] = ranked[0]
+            self._freeze_action(context, ranked[0])
             return MCRecommendation(context, reports, ranked[0], ranked[0],
                                     int(control_rollouts), evaluated)
 
@@ -801,9 +839,9 @@ class MonteCarloController:
                                 - self._score_bonus(context, action),
                                 self._action_sort_key(action)))
         winner = win_ranked[0] if win_ranked else ranked[0]
-        self.frozen_policy[self._context_key(context)] = ranked[0]
+        self._freeze_action(context, ranked[0])
         if win_ranked:
-            self.frozen_win_policy[self._win_context_key(context)] = winner
+            self._freeze_action(context, winner, True)
         return MCRecommendation(
             context, reports, ranked[0], winner, int(control_rollouts),
             evaluated + win_evaluated, win_reports)
@@ -834,7 +872,7 @@ class MonteCarloController:
             evaluation_budget: int,
             progress: Optional[Callable[[int, int, str], None]] = None,
             cancelled: Optional[Callable[[], bool]] = None) -> tuple[int, int]:
-        """在固定总预算内公平补采直接后继，并保存独立评价发现的策略。"""
+        """在预算内对实际访问的状态作完整 MC 续跑，先改进下游再评价上游。"""
         if not successors:
             return 0, 0
         weights = [len(self.legal_actions(item)) for item in successors]
@@ -849,26 +887,55 @@ class MonteCarloController:
             return budgets
 
         trained = evaluated = 0
-        control_budgets = allocate(control_budget)
-        evaluation_budgets = allocate(evaluation_budget)
-        for index, (successor, train_budget) in enumerate(zip(
-                successors, control_budgets), 1):
+        for successor, budget in zip(successors, allocate(control_budget)):
             if cancelled and cancelled():
-                break
+                return trained, evaluated
             trained += self._refine_with_budget(
-                successor, train_budget, progress, cancelled,
-                f"后继状态控制采样 {index}/{len(successors)}",
-                train_win=target is not None)
+                successor, budget, progress, cancelled, train_win=target is not None)
+        evaluation_budgets = allocate(evaluation_budget // 2)
+        remaining = evaluation_budget - sum(evaluation_budgets)
+        selected = []
+        grouped = {}
+        for key, (successor, visits) in self._sampled_contexts.items():
+            if (successor.phase == PHASE_EFFECT and successor.state.cheat_rem
+                    >= self.map.longest_steps_from(successor.state.node_idx)):
+                key = key[:2] + (None, key[3])
+            entry = grouped.setdefault(key, [successor, 0])
+            entry[1] += visits
+        for successor, visits in sorted(grouped.values(), key=lambda item: -item[1]):
+            # 每动作先作四次策略改进试采；展示值仍由最后的独立评价产生。
+            cost = len(self.legal_actions(successor)) * 4
+            if cost <= remaining:
+                selected.append((successor, cost))
+                remaining -= cost
+        stages = {PHASE_EFFECT: 0, PHASE_TARGET: 1, PHASE_PATH: 2}
+        selected.sort(key=lambda item: (
+            self.map.longest_steps_from(item[0].state.node_idx),
+            self._context_key(item[0])[1][2], item[0].state.reroll_rem, -stages[item[0].phase]))
+        for successor, budget in selected:
+            incumbent = (self._greedy_win_action(successor) if target is not None
+                         else self._greedy_action(successor))
+            reports, completed = self.evaluate_actions(
+                successor, target, progress, cancelled,
+                rollouts=budget, win_policy=target is not None)
+            evaluated += completed
+            if cancelled and cancelled():
+                return trained, evaluated
+            # 小批试采没有观察到胜率提升时，不因一次幸运高分改掉已有成功策略。
+            winner = min(reports, key=lambda action: (
+                -(reports[action].win_rate or 0.0),
+                -int(action == incumbent and (reports[action].win_rate or 0.0) > 0),
+                -reports[action].mean - self._score_bonus(successor, action),
+                self._action_sort_key(action)))
+            self._freeze_action(successor, winner, target is not None)
         if cancelled and cancelled():
             return trained, evaluated
-        # 所有共享深层状态训练完成后再统一冻结，避免先评价的后继保留旧策略。
         for successor, eval_budget in zip(successors, evaluation_budgets):
             if cancelled and cancelled():
                 break
-            recommendation = self.evaluate_current_policy(
+            evaluated += self.evaluate_current_policy(
                 successor, target, progress, cancelled,
-                evaluation_rollouts=eval_budget)
-            evaluated += recommendation.evaluation_rollouts
+                evaluation_rollouts=eval_budget).evaluation_rollouts
         return trained, evaluated
 
     def evaluate_unobserved_effect_policy(
@@ -891,6 +958,7 @@ class MonteCarloController:
                   progress: Optional[Callable[[int, int, str], None]] = None,
                   cancelled: Optional[Callable[[], bool]] = None) -> MCRecommendation:
         normalized_target = None if target is None else float(target)
+        self._sampled_contexts.clear()
         self.frozen_policy.clear()
         self.frozen_win_policy.clear()
         if normalized_target != self.win_target:
@@ -904,7 +972,7 @@ class MonteCarloController:
             successor_control = max(
                 sum(len(self.legal_actions(item)) for item in successors),
                 self.config.control_rollouts - root_control)
-            root_evaluation = max(len(actions), self.config.evaluation_rollouts // 2)
+            root_evaluation = max(len(actions), self.config.evaluation_rollouts // 4)
             successor_evaluation = max(
                 sum(len(self.legal_actions(item)) for item in successors),
                 self.config.evaluation_rollouts - root_evaluation)
@@ -919,6 +987,7 @@ class MonteCarloController:
         branch_control, branch_evaluation = self._calibrate_successors(
             successors, target, successor_control, successor_evaluation,
             progress, cancelled)
+        self._sampled_contexts.clear()
         recommendation = self.evaluate_current_policy(
             context, target, progress, cancelled,
             control_rollouts=control + branch_control,

@@ -84,6 +84,25 @@ def rational_path_map():
     return backend.CountdownMap(nodes, edges, 9, (0, 1, 3, 4, 7))
 
 
+def adjacent_effect_map():
+    """20260801_010202.png 的识图拓扑。"""
+    nodes = [
+        {"idx": 0, "name": "boss", "cx": 1118.5, "cy": 454.5},
+        {"idx": 1, "name": "bugevent", "cx": 977.5, "cy": 375.5},
+        {"idx": 2, "name": "wait", "cx": 1026.0, "cy": 456.5},
+        {"idx": 3, "name": "adventure", "cx": 974.5, "cy": 539.0},
+        {"idx": 4, "name": "elite", "cx": 922.5, "cy": 455.5},
+        {"idx": 5, "name": "reward", "cx": 882.5, "cy": 536.5},
+        {"idx": 6, "name": "bugbattle", "cx": 877.5, "cy": 375.5},
+        {"idx": 7, "name": "trade", "cx": 830.5, "cy": 458.0},
+    ]
+    edges = {
+        0: (), 1: (2,), 2: (0,), 3: (2,), 4: (1, 2, 3),
+        5: (3, 4), 6: (1, 4), 7: (4, 5, 6),
+    }
+    return backend.CountdownMap(nodes, edges, 7, ())
+
+
 class CountdownRuleTests(unittest.TestCase):
     def test_backend_has_no_qt_cv_or_dp_dependency(self):
         source = inspect.getsource(backend)
@@ -157,6 +176,99 @@ class CountdownRuleTests(unittest.TestCase):
 
 
 class CountdownMonteCarloTests(unittest.TestCase):
+    def test_selected_effect_with_enough_cheats_has_real_guaranteed_route(self):
+        model = adjacent_effect_map()
+        for first in (backend.EFFECT_ADJACENT, backend.EFFECT_SELECT):
+            for observed in backend.ALL_EFFECTS:
+                with self.subTest(first=first, observed=observed):
+                    session = backend.CountdownSession(model, 4, 0, countdown=15)
+                    session.set_observed_effect(first)
+                    session.choose_effect("keep")
+                    if first == backend.EFFECT_SELECT:
+                        session.choose_target(4)
+                    session.choose_path(5)
+                    for effect, node in ((backend.EFFECT_ADJACENT, 4),
+                                         (backend.EFFECT_BONUS, 1),
+                                         (backend.EFFECT_BONUS, 2),
+                                         (backend.EFFECT_SELECT, 0)):
+                        session.set_observed_effect(observed)
+                        session.choose_effect("keep" if observed == effect else ("cheat", effect))
+                        if effect == backend.EFFECT_SELECT:
+                            session.choose_target(0)
+                        session.choose_path(node)
+                    self.assertEqual(20, session.state.countdown)
+                    self.assertGreaterEqual(session.state.cheat_rem, 0)
+
+    def test_select_and_adjacent_win_evaluation_survives_seed_and_resource_changes(self):
+        model = adjacent_effect_map()
+        for seed in (7, 20260802):
+            for effect, reroll in ((backend.EFFECT_SELECT, 0),
+                                   (backend.EFFECT_SELECT, 3),
+                                   (backend.EFFECT_ADJACENT, 0)):
+                with self.subTest(seed=seed, effect=effect, reroll=reroll):
+                    controller = backend.MonteCarloController(
+                        model, backend.MCConfig(min_visits=200, seed=seed))
+                    context = backend.DecisionContext(
+                        backend.PHASE_EFFECT, model.initial_state(4, reroll, 15), effect)
+                    result = controller.recommend(context, 20)
+                    keep = result.win_reports["keep"]
+                    self.assertGreater(keep.target_count, 0)
+                    self.assertEqual(keep.target_count, keep.wins)
+                    self.assertLessEqual(result.control_rollouts, 10_000)
+                    self.assertLessEqual(result.evaluation_rollouts, 10_000)
+
+    def test_bonus_cheat_to_adjacent_with_three_cheats_discovers_wins(self):
+        model = adjacent_effect_map()
+        for seed in (7, 20260802):
+            with self.subTest(seed=seed):
+                controller = backend.MonteCarloController(
+                    model, backend.MCConfig(min_visits=200, seed=seed))
+                context = backend.DecisionContext(
+                    backend.PHASE_EFFECT, model.initial_state(3, 2, 15), backend.EFFECT_BONUS)
+                result = controller.recommend(context, 20)
+                report = result.win_reports[("cheat", backend.EFFECT_ADJACENT)]
+                self.assertGreater(report.wins, 0)
+                self.assertGreaterEqual(report.maximum, 20)
+                self.assertEqual(report.wins / report.target_count, report.win_rate)
+
+    def test_settled_contexts_share_only_equivalent_states(self):
+        model = adjacent_effect_map()
+        controller = backend.MonteCarloController(model)
+        state = model.initial_state(4, 2, 15)
+        selected = backend.DecisionContext(backend.PHASE_PATH, state,
+                                           locked_effect=backend.EFFECT_SELECT)
+        nothing = backend.DecisionContext(backend.PHASE_PATH, state,
+                                          locked_effect=backend.EFFECT_NOTHING)
+        adjacent = backend.DecisionContext(backend.PHASE_PATH, state,
+                                           locked_effect=backend.EFFECT_ADJACENT)
+        self.assertEqual(controller._context_key(selected), controller._context_key(nothing))
+        self.assertNotEqual(controller._context_key(selected), controller._context_key(adjacent))
+        before = backend.DecisionContext(backend.PHASE_EFFECT, state, backend.EFFECT_BONUS)
+        paid = backend.DecisionContext(backend.PHASE_EFFECT, model.initial_state(3, 2, 15),
+                                       backend.EFFECT_ADJACENT)
+        self.assertEqual(controller._win_q_key(before, ("cheat", backend.EFFECT_ADJACENT)),
+                         controller._win_q_key(paid, "keep"))
+        free = backend.DecisionContext(backend.PHASE_EFFECT, state, backend.EFFECT_ADJACENT)
+        self.assertNotEqual(controller._win_q_key(free, "keep"),
+                            controller._win_q_key(paid, "keep"))
+
+    def test_effect_evaluation_uses_the_same_rational_policy_as_path_evaluation(self):
+        model = adjacent_effect_map()
+        controller = backend.MonteCarloController(
+            model, backend.MCConfig(control_rollouts=10_000,
+                                    evaluation_rollouts=10_000,
+                                    min_visits=200, seed=20260802))
+        context = backend.DecisionContext(
+            backend.PHASE_EFFECT, model.initial_state(4, 2, 15),
+            observed_effect=backend.EFFECT_ADJACENT)
+        recommendation = controller.recommend(context, target=20)
+        self.assertEqual(
+            1.0, max(report.win_rate
+                     for report in recommendation.win_reports.values()))
+        self.assertEqual(1.0, recommendation.win_reports["keep"].win_rate)
+        self.assertLessEqual(recommendation.control_rollouts, 10_000)
+        self.assertLessEqual(recommendation.evaluation_rollouts, 10_000)
+
     def test_win_policy_uses_rational_shared_downstream_route(self):
         model = rational_path_map()
         controller = backend.MonteCarloController(
