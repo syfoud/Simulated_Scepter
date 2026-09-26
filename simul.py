@@ -1246,7 +1246,10 @@ class SimulatedUniverse(UniverseUtils):
         if self.record and self.bveerelbcpgyqan :
             CUS_LOGGER.info("以「爱」的名义，她将逝去的一切尽数珍藏……直到世间的尽头……")
             try:
-                self.recorder.stop_recording()
+                if hasattr(self, "kill_count"):
+                    self.recorder.stop_recording(delete_video=self.kill_count == 0)
+                else:
+                    self.recorder.stop_recording()
             except Exception as e:
                 CUS_LOGGER.error(f"停止录制时发生错误: {e}")
         self.save_screen(not_now=True,save_path="/temp/stop/")
