@@ -255,12 +255,14 @@ class QMainWindowLog(QMainWindowLoadUI):
         model_exists = os.path.exists(model_path)
 
         if not model_exists:
-            self.recording_checkBox2.setEnabled(False)
-            self.recording_label_checkbox.setEnabled(False)
-            self.recording_time_input.setEnabled(False)
             self.early_stop_checkbox.setEnabled(False)
             self.Iron_blood_first_plane_input.setEnabled(False)
             self.Iron_blood_second_plane_input.setEnabled(False)
+            self.Iron_blood_battle_weight_input.setEnabled(False)
+            self.recording_checkBox2.setEnabled(False)
+            self.recording_label_checkbox.setEnabled(False)
+            self.recording_time_input.setEnabled(False)
+            self.recording_keep_long_run_checkbox.setEnabled(False)
             return False
         else:
             self.Aboutupdatelock.setVisible(False)
