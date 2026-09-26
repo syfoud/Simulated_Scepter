@@ -52,8 +52,8 @@ class My_TS:
         for txt in text:
             for res in self.res:
                 if res['raw_text'] in txt or txt in res['raw_text']:
-                    print("识别到文本：",txt,"匹配文本：",self.text)
-                    ans.append({'text':text, **res})
+                    CUS_LOGGER.debug(f"识别到文本：{txt}, 匹配文本：{self.text}")
+                    ans.append({'text': text, **res})
         return sorted(ans, key=lambda x: x['score'], reverse=True)
 
     def find_text(self, img, text, find_all=False):
