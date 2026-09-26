@@ -1,6 +1,12 @@
 name: 自动打包并发布release
 
 on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - master
+
   workflow_dispatch:
     inputs:
       version:
@@ -8,23 +14,237 @@ on:
         required: true
         type: string
 
+# 新的打包任务开始时，取消同组中仍在运行的旧任务
+# 短时间内连续 merge 多个 PR 时，只保留最后一次打包
+concurrency:
+  group: auto-release
+  cancel-in-progress: true
+
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  prepare:
+    # pull_request 只有真正 merge 后才执行
+    # workflow_dispatch 始终执行
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.merged == true
+
+    runs-on: windows-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      previous_version: ${{ steps.version.outputs.previous_version }}
+      major_minor_changed: ${{ steps.version.outputs.major_minor_changed }}
+      release_notes: ${{ steps.version.outputs.release_notes }}
+
+    steps:
+      - name: Determine release version
+        id: version
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "Checking latest release..."
+
+          # 获取当前最新正式 Release
+          $latestReleaseJson = gh release list `
+            --repo $env:REPOSITORY `
+            --limit 100 `
+            --json tagName,isDraft,isPrerelease
+
+          $latestReleases = $latestReleaseJson | ConvertFrom-Json
+
+          $latestRelease = $latestReleases |
+            Where-Object {
+              $_.isDraft -eq $false -and
+              $_.isPrerelease -eq $false -and
+              $_.tagName -match '^v\d+\.\d+\.\d+$'
+            } |
+            Select-Object -First 1
+
+          if ($null -eq $latestRelease) {
+            Write-Host "No existing release was found."
+
+            if ($env:EVENT_NAME -eq "workflow_dispatch") {
+              $version = $env:INPUT_VERSION
+            }
+            else {
+              # 理论上仓库已有 Release
+              # 如果没有 Release，则自动发布从 1.0.0 开始
+              $version = "1.0.0"
+            }
+
+            $previousVersion = ""
+            $majorMinorChanged = "false"
+            $releaseNotes = ""
+          }
+          else {
+            $previousVersion = $latestRelease.tagName -replace '^v', ''
+
+            if ($previousVersion -notmatch '^\d+\.\d+\.\d+$') {
+              throw "Latest release '$($latestRelease.tagName)' does not use semantic version format."
+            }
+
+            $previousParts = $previousVersion.Split('.')
+            $previousMajor = [int]$previousParts[0]
+            $previousMinor = [int]$previousParts[1]
+            $previousPatch = [int]$previousParts[2]
+
+            if ($env:EVENT_NAME -eq "workflow_dispatch") {
+              $version = $env:INPUT_VERSION
+
+              if ($version -notmatch '^\d+\.\d+\.\d+$') {
+                throw "Invalid version '$version'. Expected format: number.number.number (e.g. 1.3.0)."
+              }
+
+              $parts = $version.Split('.')
+              $major = [int]$parts[0]
+              $minor = [int]$parts[1]
+              $patch = [int]$parts[2]
+
+              # 手动输入的版本必须严格大于当前 Release
+              $isGreater =
+                ($major -gt $previousMajor) -or
+                (
+                  $major -eq $previousMajor -and
+                  $minor -gt $previousMinor
+                ) -or
+                (
+                  $major -eq $previousMajor -and
+                  $minor -eq $previousMinor -and
+                  $patch -gt $previousPatch
+                )
+
+              if (-not $isGreater) {
+                throw @"Invalid version '$version'.Must be greater than the current release '$previousVersion'."@
+              }
+            }
+            else {
+              # PR merge 自动触发时，当前 Release 的 patch + 1
+              $patch = $previousPatch + 1
+              $version = "$previousMajor.$previousMinor.$patch"
+            }
+
+            $parts = $version.Split('.')
+            $major = [int]$parts[0]
+            $minor = [int]$parts[1]
+
+            # major 或 minor 任意一个发生变化都视为需要重新生成 Release Notes 的版本升级
+            if (
+              $major -ne $previousMajor -or
+              $minor -ne $previousMinor
+            ) {
+              $majorMinorChanged = "true"
+            }
+            else {
+              $majorMinorChanged = "false"
+            }
+
+            $releaseNotes = ""
+
+            if ($majorMinorChanged -eq "true") {
+              Write-Host "Major/minor version update detected."
+              Write-Host "Previous release: $previousVersion"
+              Write-Host "New release: $version"
+
+              # 找到与当前 Release 相同 major/minor 的最新 Release
+              $previousMajorMinorReleases = $latestReleases |
+                Where-Object {
+                  $_.isDraft -eq $false -and
+                  $_.isPrerelease -eq $false -and
+                  $_.tagName -match "^v$previousMajor\.$previousMinor\.\d+$"
+                }
+
+              $previousMajorMinorRelease = $previousMajorMinorReleases |
+                Sort-Object {
+                  [int](($_.tagName -replace "^v$previousMajor\.$previousMinor\.", ""))
+                } -Descending |
+                Select-Object -First 1
+
+              if ($null -eq $previousMajorMinorRelease) {
+                Write-Host "Could not find the previous major/minor release."
+                Write-Host "No automatic PR list will be generated."
+              }
+              else {
+                $previousMajorMinorTag = $previousMajorMinorRelease.tagName
+
+                Write-Host "Previous major/minor release: $previousMajorMinorTag"
+
+                # 获取该 Release 的发布时间
+                $previousReleaseInfoJson = gh release view `
+                  $previousMajorMinorTag `
+                  --repo $env:REPOSITORY `
+                  --json publishedAt
+
+                $previousReleaseInfo = $previousReleaseInfoJson | ConvertFrom-Json
+                $previousReleaseDate = [DateTimeOffset]::Parse($previousReleaseInfo.publishedAt)
+
+                Write-Host "Collecting merged PRs after $previousReleaseDate..."
+
+                # 获取所有已 merge PR
+                $mergedPrsJson = gh pr list `
+                  --repo $env:REPOSITORY `
+                  --state merged `
+                  --limit 1000 `
+                  --json number,title,mergedAt
+
+                $mergedPrs = $mergedPrsJson | ConvertFrom-Json
+
+                $changedPrs = $mergedPrs |
+                  Where-Object {
+                    $_.mergedAt -ne $null -and
+                    ([DateTimeOffset]::Parse($_.mergedAt) -gt $previousReleaseDate)
+                  } |
+                  Sort-Object {
+                    [DateTimeOffset]::Parse($_.mergedAt)
+                  }
+
+                if ($changedPrs.Count -gt 0) {
+                  $notesLines = @(
+                    "## What's Changed"
+                    ""
+                  )
+
+                  foreach ($pr in $changedPrs) {
+                    $notesLines += "- $($pr.title) (#$($pr.number))"
+                  }
+
+                  $releaseNotes = $notesLines -join "`n"
+                }
+                else {
+                  Write-Host "No merged PRs were found after the previous major/minor release."
+                }
+              }
+            }
+          }
+
+          Write-Host "Release version: $version"
+          Write-Host "Previous version: $previousVersion"
+          Write-Host "Major/minor changed: $majorMinorChanged"
+
+          # 写入 GitHub Actions outputs
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "previous_version=$previousVersion" >> $env:GITHUB_OUTPUT
+          "major_minor_changed=$majorMinorChanged" >> $env:GITHUB_OUTPUT
+
+          "release_notes<<EOF" >> $env:GITHUB_OUTPUT
+          $releaseNotes >> $env:GITHUB_OUTPUT
+          "EOF" >> $env:GITHUB_OUTPUT
+
   build:
+    needs: prepare
+
     runs-on: windows-latest
 
     steps:
-      - name: Validate version
-        shell: powershell
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          if ($env:VERSION -notmatch '^\d+\.\d+\.\d+$') {
-            throw "Invalid version '$env:VERSION'. Expected format: number.number.number (e.g. 1.3.0)."
-          }
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -44,8 +264,12 @@ jobs:
 
       - name: Prepare release files
         shell: powershell
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          $version = "${{ inputs.version }}"
+          $ErrorActionPreference = "Stop"
+
+          $version = $env:VERSION
           $releaseDir = "release/SimSce-v$version"
 
           New-Item -ItemType Directory -Force -Path $releaseDir
@@ -63,8 +287,13 @@ jobs:
 
       - name: Create ZIP
         shell: powershell
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          $version = "${{ inputs.version }}"
+          $ErrorActionPreference = "Stop"
+
+          $version = $env:VERSION
+
           Compress-Archive `
             -Path "release/SimSce-v$version" `
             -DestinationPath "SimSce-v$version.zip"
@@ -72,29 +301,135 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SimSce-v${{ inputs.version }}
-          path: SimSce-v${{ inputs.version }}.zip
+          name: SimSce-v${{ needs.prepare.outputs.version }}
+          path: SimSce-v${{ needs.prepare.outputs.version }}.zip
 
   release:
-    needs: build
-    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build
+
+    runs-on: windows-latest
 
     permissions:
       contents: write
+      pull-requests: read
 
     steps:
       - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
-          name: SimSce-v${{ inputs.version }}
+          name: SimSce-v${{ needs.prepare.outputs.version }}
           path: release
 
-      - name: Create GitHub Release
+      - name: Publish GitHub Release
+        shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PREVIOUS_VERSION: ${{ needs.prepare.outputs.previous_version }}
+          MAJOR_MINOR_CHANGED: ${{ needs.prepare.outputs.major_minor_changed }}
+          RELEASE_NOTES: ${{ needs.prepare.outputs.release_notes }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          gh release create "v$VERSION" \
-            "release/SimSce-v$VERSION.zip" \
-            --title "v$VERSION" \
-            --repo "${{ github.repository }}"
+          $ErrorActionPreference = "Stop"
+
+          $version = $env:VERSION
+          $previousVersion = $env:PREVIOUS_VERSION
+          $majorMinorChanged = $env:MAJOR_MINOR_CHANGED
+          $releaseNotes = $env:RELEASE_NOTES
+
+          $tag = "v$version"
+          $asset = "release/SimSce-v$version.zip"
+
+          Write-Host "Preparing release $tag"
+
+          # 直接删除旧 Release + tag，创建一个完全新的 Release
+          # 删除动作放在 build 完成以后，避免新的 workflow 在 build 阶段读取不到当前 Release
+
+          if ($majorMinorChanged -eq "true") {
+            Write-Host "Major/minor update detected."
+            Write-Host "Previous release: v$previousVersion"
+            Write-Host "New release: $tag"
+
+            $previousTag = "v$previousVersion"
+
+            $previousReleaseExists = $true
+
+            try {
+              gh release view $previousTag `
+                --repo $env:REPOSITORY `
+                | Out-Null
+            }
+            catch {
+              $previousReleaseExists = $false
+            }
+
+            if ($previousReleaseExists) {
+              Write-Host "Deleting previous release $previousTag..."
+
+              gh release delete $previousTag `
+                --repo $env:REPOSITORY `
+                --cleanup-tag `
+                --yes
+
+              Write-Host "Previous release and tag removed."
+            }
+            else {
+              Write-Host "Previous release $previousTag does not exist."
+            }
+          }
+
+          # 防止极短时间内的竞态：如果同一个目标 tag 已经被另一个 workflow 创建，删除它并重新创建
+          # 最终 Release 一定对应当前 workflow 的完整 build
+
+          $targetReleaseExists = $true
+
+          try {
+            gh release view $tag `
+              --repo $env:REPOSITORY `
+              | Out-Null
+          }
+          catch {
+            $targetReleaseExists = $false
+          }
+
+          if ($targetReleaseExists) {
+            Write-Host "Release $tag already exists."
+            Write-Host "Removing it before creating the new release."
+
+            gh release delete $tag `
+              --repo $env:REPOSITORY `
+              --cleanup-tag `
+              --yes
+          }
+
+          # 创建全新的 Release
+
+          if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
+            Write-Host "Creating release without generated PR notes."
+
+            gh release create $tag `
+              $asset `
+              --title $tag `
+              --repo $env:REPOSITORY
+          }
+          else {
+            Write-Host "Creating release with merged PR titles."
+
+            # 将多行 Release Notes 写入临时文件，避免 PowerShell 多行字符串通过命令行传递时出现转义问题
+            $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
+
+            Set-Content `
+              -Path $notesFile `
+              -Value $releaseNotes `
+              -Encoding UTF8
+
+            gh release create $tag `
+              $asset `
+              --title $tag `
+              --notes-file $notesFile `
+              --repo $env:REPOSITORY
+          }
+
+          Write-Host "Release $tag created successfully."
