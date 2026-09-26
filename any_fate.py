@@ -194,6 +194,7 @@ class AnyFateUniverse(SimulatedUniverse):
         if self.current_role != num:
             key_mouse_manager.press(f"{num}")
             self.current_role = num
+            CUS_LOGGER.debug(f"已切换至{num}号位角色")
             return True
         else:
             return False
@@ -235,9 +236,10 @@ class AnyFateUniverse(SimulatedUniverse):
                 else:
                     self.switch_current_role(num=1)
                     pig = False
+                key_mouse_manager.wait()
                 if "黑塔的办公" not in self.area:
                     key_mouse_manager.clean()
-                    # 歪比巴卜：空打一拳
+                    # 空打一拳，5秒内不重复操作
                     if self.auto_attack_breakable and time.time() - self.attack_time >= 5:
                         key_mouse_manager.click(0.5, 0.5)
                         CUS_LOGGER.debug("尝试空打一拳")
