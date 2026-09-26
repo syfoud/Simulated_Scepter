@@ -663,6 +663,7 @@ class MainWindow(QMainWindowLog):
         self.debug_checkbox2.setChecked(data.get("debug", False))
         self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
         self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", True))
+        self.recording_keep_long_run_threshold_input.setText(str(data.get("recording_keep_long_run_threshold", 1.2)))
         self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
 
 
@@ -862,6 +863,7 @@ class MainWindow(QMainWindowLog):
         debug_and_recording = debug_enabled and recording_enabled
         self.debug_group.setVisible(debug_enabled)
         self.recording_keep_long_run_checkbox.setEnabled(debug_and_recording)
+        self.recording_keep_long_run_threshold_input.setEnabled(debug_and_recording)
         self.recording_label_checkbox.setEnabled(debug_and_recording)
         finger_snap_visible = debug_enabled or (0 <= time.localtime().tm_hour < 6)
         self.finger_snap_btn.setVisible(finger_snap_visible)
@@ -1262,6 +1264,7 @@ class MainWindow(QMainWindowLog):
             "debug": self.debug_checkbox2.isChecked(),
             "record_event_map": self.record_event_map_checkbox.isChecked(),
             "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),
+            "recording_keep_long_run_threshold": float(self.recording_keep_long_run_threshold_input.text()),
             "record_add_label": self.recording_label_checkbox.isChecked(),
         })
 

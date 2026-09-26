@@ -1559,9 +1559,23 @@ border:none</string>
                       <item>
                        <widget class="QCheckBox" name="recording_keep_long_run_checkbox">
                         <property name="text">
-                         <string>演算时间异常过长（分钟数/击杀数>1.2）时是否保存视频（仅影响铁血战士的录制保存行为）</string>
+                         <string>演算时间异常过长时是否保存视频（仅影响铁血战士的录制保存行为）</string>
                         </property>
                        </widget>
+                      </item>
+                      <item>
+                       <layout class="QHBoxLayout" name="horizontalLayout_30">
+                        <item>
+                         <widget class="QLabel" name="label_23">
+                          <property name="text">
+                           <string>演算时间异常过长视频保存阈值（分钟数/击杀数）（默认1.2）</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QLineEdit" name="recording_keep_long_run_threshold_input"/>
+                        </item>
+                       </layout>
                       </item>
                       <item>
                        <widget class="QCheckBox" name="recording_label_checkbox">
