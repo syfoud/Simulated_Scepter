@@ -124,9 +124,7 @@ jobs:
                 )
 
               if (-not $isGreater) {
-                throw @"
-Invalid version '$version'. Must be greater than the current release '$previousVersion'.
-"@
+                throw "Invalid version '$version'. Must be greater than the current release '$previousVersion'."
               }
             }
             else {
