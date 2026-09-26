@@ -24,6 +24,7 @@
     "debug": false,
     "record_event_map": false,
     "recording_keep_long_run": true,
+    "recording_keep_long_run_threshold": 1.2,
     "record_add_label": false,
     "finger_snap_model": {
         "control_rollouts": 10000,
