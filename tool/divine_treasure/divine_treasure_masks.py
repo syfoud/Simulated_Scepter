@@ -8,6 +8,7 @@ import time
 import cv2
 
 from pathlib import Path
+from tool.log import CUS_LOGGER
 # 直接运行本脚本时保证能导入仓库根目录的入口模块。
 REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if REPO_ROOT not in sys.path:
@@ -180,7 +181,7 @@ def run(ocr, output):
                         target, next_phase = result["reroll_target"], "after_reroll"
                     else:
                         restart = True
-                        print("No preferred opening wonder after available rerolls; settle this run", flush=True)
+                        CUS_LOGGER.debug(f"No preferred opening wonder after available rerolls; settle this run", extra={"flush": True})
             elif state == expected.get(phase):
                 if phase in ("confirm_mask", "close_mask"):
                     observed = result["selected"]
@@ -192,7 +193,7 @@ def run(ocr, output):
                     result.update(chosen=chosen, wonder=chosen_wonder, restart=restart,
                                   actions=actions, rerolls_used=rerolls_used)
                     save_evidence(output, "success", image, result)
-                    print(f"SUCCESS: {'returned home for restart' if restart else 'snow mask and preferred wonder in first combat area'}", flush=True)
+                    CUS_LOGGER.debug(f"SUCCESS: {'returned home for restart' if restart else 'snow mask and preferred wonder in first combat area'}", extra={"flush": True})
                     return result
                 if phase == "area":
                     target, next_phase = "esc", "settle"
@@ -220,7 +221,7 @@ def run(ocr, output):
                 pyautogui.press("esc")
             else:
                 click_game(hwnd, rect, target)
-            print(f"Action {actions + 1}: {phase} -> {next_phase}", flush=True)
+            CUS_LOGGER.debug(f"Action {actions + 1}: {phase} -> {next_phase}", extra={"flush": True})
             actions += 1
             phase, stable, count = next_phase, None, 0
             deadline = time.monotonic() + (45 if phase in ("area", "close_settlement", "home") else 15)
