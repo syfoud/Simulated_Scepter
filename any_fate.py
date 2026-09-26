@@ -194,6 +194,8 @@ class AnyFateUniverse(SimulatedUniverse):
         if self.current_role != num:
             key_mouse_manager.press(f"{num}")
             self.current_role = num
+            CUS_LOGGER.debug(f"已切换至{num}号位角色")
+            key_mouse_manager.sleep(0.6)
             return True
         else:
             return False
@@ -219,7 +221,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 CUS_LOGGER.debug(f"当前区域{self.area}")
                 # 当前节点为祝福猪节点时切2号位并重置黄泉/白厄状态
                 start_node = getattr(self, 'start_nodes', None)
-                if "精英" not in self.area and start_node is not None:
+                if "战斗" in self.area and start_node is not None:
                     cm = (start_node.get('orig') or {}).get('corner_marker')
                     if cm and cm.get('name') in ('pig1', 'pig2'):
                         CUS_LOGGER.info("梦中那刺骨的愤怒与对自我的憎恨仍在震动着他的心。")
@@ -236,8 +238,7 @@ class AnyFateUniverse(SimulatedUniverse):
                     self.switch_current_role(num=1)
                     pig = False
                 if "黑塔的办公" not in self.area:
-                    key_mouse_manager.clean()
-                    # 歪比巴卜：空打一拳
+                    # 空打一拳，5秒内不重复操作
                     if self.auto_attack_breakable and time.time() - self.attack_time >= 5:
                         key_mouse_manager.click(0.5, 0.5)
                         CUS_LOGGER.debug("尝试空打一拳")
