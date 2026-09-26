@@ -1555,7 +1555,7 @@
   function buildTieChartsHTML() {
     return `
       <div class="chart-section">
-        <div class="chart-warning-banner">不要将不同战斗格权重的轮回记录同时导入！</div>
+        <div class="chart-warning-banner">不要将 权重设置不同 的轮回记录同时导入，否则以下数据无参考价值！</div>
         <h2 class="chart-header">开局期望-击杀数 分布图 <small>（仅适配权杖 v1.3.1 及以后版本的记录）</small></h2>
         <div class="chart-layout">
           <div class="chart-left">
@@ -1590,7 +1590,7 @@
         </div>
       </div>
       <div class="chart-section">
-        <h2 class="chart-header">不同情况的概率 随 选定期望值 的变化图</h2>
+        <h2 class="chart-header">不同情况的概率 随 选定期望值 的变化图 <small>（仅适配权杖 v1.3.1 及以后版本的记录）</small></h2>
         <div class="chart-layout">
           <div class="chart-left">
             <div class="chart-count" id="lineChartCount">可识别记录数：<strong>0</strong>条</div>
@@ -1737,7 +1737,7 @@
       <th class="num">击杀数</th>
       <th class="num">用时</th>
       <th class="num">开局期望</th>
-      <th class="num">与上一的轮回差</th>
+      <th class="num">与上一次的轮回差</th>
     </tr></thead><tbody>`;
 
     for (const r of filtered) {
@@ -1791,7 +1791,7 @@
       <th class="num">轮回次数</th>
       <th class="num">倒计时</th>
       <th class="num">用时</th>
-      <th class="num">与上一的轮回差</th>
+      <th class="num">与上一次的轮回差</th>
     </tr></thead><tbody>`;
 
     for (const r of filtered) {
