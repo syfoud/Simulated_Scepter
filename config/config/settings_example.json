@@ -1,20 +1,30 @@
 {
-    "skin_type": 1,
     "recording_state": false,
     "record_map": false,
-    "record_event_map": false,
-    "recording_iron_blood": false,
-    "record_add_label": false,
-    "recording_keep_long_run": true,
-    "del_record_time": 14,
-    "max_run_time": 0,
+    "early_stop": false,
     "first_plane": 14,
     "second_plane": 31,
-    "first_plane_min_weight": 8,
-    "debug": false,
+    "battle_weight": 1.2,
+    "battle_weight_warning_shown": false,
+    "first_plane_min_weight": 8.0,
+    "third_plane_pause_count": 0,
+    "boss_before_pause_count": 0,
+    "recording_iron_blood": false,
+    "del_record_time": 14,
+    "max_run_time": 0,
     "max_interact_time": 40,
-    "early_stop": false,
+    "pig_switch_2_role": false,
+    "auto_attack_breakable": false,
+    "hotkeys": {
+        "stop": "end",
+        "test": "f6",
+        "print": "f7"
+    },
     "any_fate": "巡猎",
+    "debug": false,
+    "record_event_map": false,
+    "recording_keep_long_run": true,
+    "record_add_label": false,
     "finger_snap_model": {
         "control_rollouts": 10000,
         "evaluation_rollouts": 10000,
@@ -22,16 +32,16 @@
         "epsilon_start": 0.35,
         "epsilon_end": 0.03,
         "seed": 20260802,
+        "decision_mode": "win_rate",
         "win_rate_noise_floor_percent": 0.2,
+        "dp_early_stop": false,
+        "win_rate_dp_early_stop": false,
+        "mc_dp_early_stop": false,
         "path_reward_bonus": 0.0008,
         "path_event_bonus": 0.0004,
         "path_trade_bonus": 0.0003,
         "path_adventure_bonus": 0.0002,
         "path_bugevent_bonus": 0.0001,
-        "decision_mode": "win_rate",
-        "dp_early_stop": false,
-        "win_rate_dp_early_stop": false,
-        "mc_dp_early_stop": false,
         "plane_targets": [
             15,
             75,
@@ -40,9 +50,5 @@
         "first_plane_threshold": 4.0,
         "record_keep_count": 31
     },
-    "hotkeys": {
-        "stop": "f5",
-        "test": "f6",
-        "print": "f7"
-    }
+    "skin_type": 1
 }

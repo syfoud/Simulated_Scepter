@@ -1400,6 +1400,13 @@ border:none</string>
                      </property>
                     </widget>
                    </item>
+                    <item>
+                     <widget class="QPushButton" name="Iron_blood_save_btn">
+                      <property name="text">
+                       <string>保存铁血战士设置</string>
+                      </property>
+                     </widget>
+                    </item>
                    <item>
                     <widget class="QPushButton" name="record_stats_btn">
                      <property name="text">
@@ -1469,9 +1476,9 @@ border:none</string>
                       </layout>
                      </item>
                      <item>
-                      <widget class="QPushButton" name="Iron_blood_save_btn">
+                      <widget class="QPushButton" name="hotkey_save_btn">
                        <property name="text">
-                        <string>保存铁血战士相关设置</string>
+                        <string>保存快捷键设置</string>
                        </property>
                       </widget>
                      </item>
@@ -1544,9 +1551,6 @@ border:none</string>
                       </item>
                       <item>
                        <widget class="QCheckBox" name="record_event_map_checkbox">
-                        <property name="visible">
-                         <bool>false</bool>
-                        </property>
                         <property name="text">
                          <string>事件/休整/交易地图录图模式</string>
                         </property>
@@ -1563,6 +1567,13 @@ border:none</string>
                        <widget class="QCheckBox" name="recording_label_checkbox">
                         <property name="text">
                          <string>进行视频录制时是否添加其它信息标签</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QPushButton" name="debug_save_btn">
+                        <property name="text">
+                         <string>保存调试模式设置</string>
                         </property>
                        </widget>
                       </item>
