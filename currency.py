@@ -112,8 +112,6 @@ class SimulatedCurrency(CurrencyUtils):
 
         CUS_LOGGER.info(f"货币战争退出位面设置为: 第{self.set_exit_plane}面")
 
-        self.record = data.get("recording_state", True)
-
     def recognize_options (self, boxes, redundancy = 30):
         """对多个选项区域进行 OCR 识别，返回文字列表"""
         texts = []
