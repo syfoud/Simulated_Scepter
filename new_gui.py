@@ -629,7 +629,9 @@ class MainWindow(QMainWindowLog):
         self.config_save_btn.clicked.connect(self.save_config)
         self.Currency_save_btn.clicked.connect(self.save_currency_config)
         self.Currency_priority_settings_btn.clicked.connect(self.open_currency_priority_settings)
+        self.debug_save_btn.clicked.connect(self.save_debug_config)
         self.Iron_blood_save_btn.clicked.connect(self.save_iron_config)
+        self.hotkey_save_btn.clicked.connect(self.save_hotkey_config)
         self.Iron_blood_manual_settings_btn.clicked.connect(lambda: self.advanced_settings_stack.setCurrentWidget(self.iron_blood_manual_page))
         self.Iron_blood_manual_back_btn.clicked.connect(lambda: self.advanced_settings_stack.setCurrentWidget(self.advanced_settings_main_page))
         self.record_stats_btn.clicked.connect(self.open_record_stats)
@@ -644,23 +646,26 @@ class MainWindow(QMainWindowLog):
         with EXTRA.FILE_LOCK:
             with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
-        self.recording_checkBox.setChecked(data.get("recording_state", True))
-        self.recording_checkBox2.setChecked(data.get("recording_iron_blood", True))
-        self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
+        self.recording_checkBox.setChecked(data.get("recording_state", False))
         self.early_stop_checkbox.setChecked(data.get("early_stop", False))
-        self.pig_switch_2_role.setChecked(data.get("pig_switch_2_role", False))
-        self.auto_attack_breakable.setChecked(data.get("auto_attack_breakable", False))
-        self.recording_time_input.setText(str(data.get("del_record_time", 31)))
-        self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
-        self.Iron_blood_max_run_input.setText(str(int(data.get("max_run_time", 0))))
         self.Iron_blood_first_plane_input.setText(str(data.get("first_plane", 14)))
         self.Iron_blood_second_plane_input.setText(str(data.get("second_plane", 31)))
         self.Iron_blood_battle_weight_input.setText(str(data.get("battle_weight", 1.2)))
-        self.Iron_blood_first_plane_min_weight_input.setText(str(data.get("first_plane_min_weight", 6)))
+        self.Iron_blood_first_plane_min_weight_input.setText(str(data.get("first_plane_min_weight", 8.0)))
         self.Iron_blood_third_plane_pause_input.setText(str(data.get("third_plane_pause_count", 0)))
         self.Iron_blood_boss_before_pause_input.setText(str(data.get("boss_before_pause_count", 0)))
+        self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
+        self.recording_time_input.setText(str(data.get("del_record_time", 14)))
+        self.Iron_blood_max_run_input.setText(str(int(data.get("max_run_time", 0))))
         self.Iron_blood_interact_time_input.setText(str(data.get("max_interact_time", 40)))
-        self.debug_checkox2.setChecked(data.get("debug", True))
+        self.pig_switch_2_role.setChecked(data.get("pig_switch_2_role", False))
+        self.auto_attack_breakable.setChecked(data.get("auto_attack_breakable", False))
+        self.debug_checkbox2.setChecked(data.get("debug", False))
+        self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
+        self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", True))
+        self.recording_keep_long_run_threshold_input.setText(str(data.get("recording_keep_long_run_threshold", 1.2)))
+        self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
+
 
         # 初始化寰宇蝗灾命途演算倾向配置界面
         self.Any_fate_combo.addItems([
@@ -696,14 +701,14 @@ class MainWindow(QMainWindowLog):
         # 更新按钮文本显示当前快捷键
         self.update_button_hotkey_text(hotkey_config)
 
+        # 由 eventFilter 在编辑动作生效前拦截；提示状态持久化在 settings.json
+        self._battle_weight_warning_shown = data.get("battle_weight_warning_shown", False)
+
         # 设置控件的启用/禁用状态
         self.update_dependent_controls_state()
 
         # 连接信号以实现动态更新
         self.connect_dependency_signals()
-
-        # 由 eventFilter 在编辑动作生效前拦截；提示状态持久化在 settings.json
-        self._battle_weight_warning_shown = data.get("battle_weight_warning_shown", False)
 
         assert self.restore_action is not None
         self.restore_action.triggered.connect(self.run_iron_blood)
@@ -749,49 +754,23 @@ class MainWindow(QMainWindowLog):
                 keyboard.on_press_key(key.lower(), lambda event, act=action: self._on_hotkey_pressed(event, act))
                 self.registered_hotkeys.append(key.lower())
 
-    def save_ui_settings(self):
-        """保存 ui 的状态到 settings.json"""
-
+    def update_settings(self, updates):
         settings_path = PATHS["root"] + "\\config\\config\\settings.json"
         example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
+
         with EXTRA.FILE_LOCK:
             with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
 
-        data["recording_state"] = self.recording_checkBox.isChecked()
-        data["recording_iron_blood"] = self.recording_checkBox2.isChecked()
-        data["record_add_label"] = self.recording_label_checkbox.isChecked()
-        data["early_stop"] = self.early_stop_checkbox.isChecked()
-        data["pig_switch_2_role"] = self.pig_switch_2_role.isChecked()
-        data["auto_attack_breakable"] = self.auto_attack_breakable.isChecked()
-        data["del_record_time"] = int(self.recording_time_input.text())
-        data["record_event_map"] = self.record_event_map_checkbox.isChecked()
-        data["max_run_time"] = int(self.Iron_blood_max_run_input.text())
-        data["first_plane"] = int(self.Iron_blood_first_plane_input.text())
-        data["second_plane"] = int(self.Iron_blood_second_plane_input.text())
-        data["battle_weight"] = float(self.Iron_blood_battle_weight_input.text())
-        data["first_plane_min_weight"] = float(self.Iron_blood_first_plane_min_weight_input.text())
-        data["third_plane_pause_count"] = int(self.Iron_blood_third_plane_pause_input.text())
-        data["boss_before_pause_count"] = int(self.Iron_blood_boss_before_pause_input.text())
-        data["max_interact_time"] = int(self.Iron_blood_interact_time_input.text())
-        data["debug"] = self.debug_checkox2.isChecked()
+            data.update(updates)
 
-        # 保存快捷键配置
-        data["hotkeys"] = {
-            "stop": self.stop_hotkey_input.text().strip(),
-            "test": self.test_hotkey_input.text().strip(),
-            "print": self.print_hotkey_input.text().strip()
-        }
-
-        with EXTRA.FILE_LOCK:
-            with open(PATHS["root"] + "\\config\\config\\settings.json", mode="w", encoding="UTF-8") as file:
+            with open(settings_path, mode="w", encoding="UTF-8") as file:
                 json.dump(data, file, ensure_ascii=False, indent=4)
+
         self.opt = data
-        self.hotkey_config = data["hotkeys"]
-        self.refresh_keyboard_listener()
-        self.update_button_hotkey_text(self.hotkey_config)
 
     def _on_hotkey_pressed(self, event, action):
         """
@@ -871,25 +850,27 @@ class MainWindow(QMainWindowLog):
                 self.registered_hotkeys.append(key.lower())
 
     def update_dependent_controls_state(self):
-        debug_enabled = self.debug_checkox2.isChecked()
-        debug_and_recording = debug_enabled and self.recording_checkBox2.isChecked()
-        self.recording_label_checkbox.setEnabled(debug_and_recording)
-        self.recording_time_input.setEnabled(self.recording_checkBox2.isChecked())
-        # 事件地图录图属于调试功能，仅在调试模式下展示。
-        self.record_event_map_checkbox.setVisible(debug_enabled)
-        self.record_event_map_checkbox.setEnabled(debug_enabled)
-        finger_snap_visible = debug_enabled or (0 <= time.localtime().tm_hour < 6)
-        self.finger_snap_btn.setVisible(finger_snap_visible)
-        self.Finger_snap_group.setVisible(finger_snap_visible)
         early_stop_enabled = self.early_stop_checkbox.isChecked()
         self.Iron_blood_first_plane_input.setEnabled(early_stop_enabled)
         self.Iron_blood_second_plane_input.setEnabled(early_stop_enabled)
+        self.Iron_blood_battle_weight_input.setEnabled(early_stop_enabled)
         self.Iron_blood_first_plane_min_weight_input.setEnabled(early_stop_enabled)
         self.Iron_blood_third_plane_pause_input.setEnabled(early_stop_enabled)
         self.Iron_blood_boss_before_pause_input.setEnabled(early_stop_enabled)
+        recording_enabled = self.recording_checkBox2.isChecked()
+        self.recording_time_input.setEnabled(recording_enabled)
+        debug_enabled = self.debug_checkbox2.isChecked()
+        debug_and_recording = debug_enabled and recording_enabled
+        self.debug_group.setVisible(debug_enabled)
+        self.recording_keep_long_run_checkbox.setEnabled(debug_and_recording)
+        self.recording_keep_long_run_threshold_input.setEnabled(debug_and_recording)
+        self.recording_label_checkbox.setEnabled(debug_and_recording)
+        finger_snap_visible = debug_enabled or (0 <= time.localtime().tm_hour < 6)
+        self.finger_snap_btn.setVisible(finger_snap_visible)
+        self.Finger_snap_group.setVisible(finger_snap_visible)
 
     def connect_dependency_signals(self):
-        self.debug_checkox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
+        self.debug_checkbox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.recording_checkBox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
         self.early_stop_checkbox.stateChanged.connect(lambda: self.update_dependent_controls_state())
 
@@ -898,8 +879,8 @@ class MainWindow(QMainWindowLog):
         在战斗格权重首次被编辑前拦截本次操作
         """
         if (obj is self.Iron_blood_battle_weight_input
-                and not self._battle_weight_warning_shown
-                and self.is_battle_weight_edit_event(event)):
+            and not getattr(self, "_battle_weight_warning_shown", True)
+            and self.is_battle_weight_edit_event(event)):
             self.show_battle_weight_warning()
             return True
         return super().eventFilter(obj, event)
@@ -1056,6 +1037,7 @@ class MainWindow(QMainWindowLog):
             self.start_task(task)
         except RuntimeError as e:
             QMessageBox.warning(self, "警告", str(e))
+
     def run_simul(self):
         def task():
             su = SimulatedUniverse(
@@ -1069,7 +1051,6 @@ class MainWindow(QMainWindowLog):
             )
             self.current_task = su
             su.start()
-
 
         try:
             self.start_task(task)
@@ -1212,9 +1193,7 @@ class MainWindow(QMainWindowLog):
         config_simul.save()
         config_diver.save()
 
-        self.save_ui_settings()
-
-        QMessageBox.information(self, "提示", "配置已保存")
+        QMessageBox.information(self, "提示", "模拟宇宙和差分宇宙配置已保存")
 
     def save_currency_config(self):
         try:
@@ -1243,10 +1222,54 @@ class MainWindow(QMainWindowLog):
 
     def open_record_stats(self):
         os.startfile(PATHS["root"] + "\\resource\\html\\record_stats.html")
-    
+
     def save_iron_config(self):
-        self.save_ui_settings()
-        QMessageBox.information(self, "提示", "配置已保存")
+        self.update_settings({
+            "early_stop": self.early_stop_checkbox.isChecked(),
+            "first_plane": int(self.Iron_blood_first_plane_input.text()),
+            "second_plane": int(self.Iron_blood_second_plane_input.text()),
+            "battle_weight": float(self.Iron_blood_battle_weight_input.text()),
+            "first_plane_min_weight": float(self.Iron_blood_first_plane_min_weight_input.text()),
+            "third_plane_pause_count": int(self.Iron_blood_third_plane_pause_input.text()),
+            "boss_before_pause_count": int(self.Iron_blood_boss_before_pause_input.text()),
+            "recording_iron_blood": self.recording_checkBox2.isChecked(),
+            "del_record_time": int(self.recording_time_input.text()),
+            "max_run_time": int(self.Iron_blood_max_run_input.text()),
+            "max_interact_time": int(self.Iron_blood_interact_time_input.text()),
+            "pig_switch_2_role": self.pig_switch_2_role.isChecked(),
+            "auto_attack_breakable": self.auto_attack_breakable.isChecked(),
+        })
+
+        QMessageBox.information(self, "提示", "铁血战士配置已保存")
+
+    def save_hotkey_config(self):
+        hotkey_config = {
+            "stop": self.stop_hotkey_input.text().strip(),
+            "test": self.test_hotkey_input.text().strip(),
+            "print": self.print_hotkey_input.text().strip(),
+        }
+
+        self.update_settings({
+            "hotkeys": hotkey_config
+        })
+
+        self.hotkey_config = hotkey_config
+        self.refresh_keyboard_listener()
+        self.update_button_hotkey_text(self.hotkey_config)
+
+        QMessageBox.information(self, "提示", "快捷键配置已保存")
+
+    def save_debug_config(self):
+        self.update_settings({
+            "debug": self.debug_checkbox2.isChecked(),
+            "record_event_map": self.record_event_map_checkbox.isChecked(),
+            "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),
+            "recording_keep_long_run_threshold": float(self.recording_keep_long_run_threshold_input.text()),
+            "record_add_label": self.recording_label_checkbox.isChecked(),
+        })
+
+        QMessageBox.information(self, "提示", "调试模式配置已保存")
+
     def save_any_fate_config(self):
         settings_path = PATHS["root"] + "\\config\\config\\settings.json"
         example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
@@ -1297,6 +1320,7 @@ class MainWindow(QMainWindowLog):
             return
         QMessageBox.information(
             self, "提示", "弹指一挥配置已独立保存；下次启动弹指任务时生效。")
+
     def set_FPS(self,TimePerFrame):
         Fps = 1.0 / float(TimePerFrame)
         Fps = round(Fps, 2)
