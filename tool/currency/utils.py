@@ -35,14 +35,13 @@ from tool.utils.game_window import (
     BASE_WIDTH,
     CLOUD_WINDOW_KIND,
     find_game_window,
-    get_client_screen_rect,
-    is_supported_resolution,
+    get_capture_geometry,
+    validate_capture_geometry,
     set_game_foreground,
 )
-from tool.utils.get_win_rect import get_window_rect
-from tool.utils.image_tool import find_image_by_name, find_image_in_folder
+from tool.utils.image_tool import find_image_by_name, find_image_in_folder, match_template_soft
 from tool.utils.minimap_util import MINIMAP_RADIUS, POSITION_SEARCH_SCALE, get_minimap
-from tool.utils.mminimap import PositionPredict
+from tool.utils.mminimap import POSITION_MIN_SIMILARITY, PositionPredict
 
 
 def set_forground():
@@ -170,7 +169,7 @@ class CurrencyUtils:
             set_global_stop_flag(False)  # 重置标志
             return
         self.order = config.order
-        self.sct = Screen()
+        self.sct = Screen(self.cap_w, self.cap_h, self.bx, self.by)
     def get_xy(self):
         game_window = find_game_window(prefer_foreground=True)
         if game_window is None:
@@ -179,40 +178,29 @@ class CurrencyUtils:
         hwnd = game_window.hwnd
         Text = game_window.title
         self.game_hwnd = hwnd
+        self.game_size = (game_window.client_width, game_window.client_height)
         self.game_window_kind = game_window.kind
         self.xx = game_window.client_width
         self.yy = game_window.client_height
-        if game_window.kind == CLOUD_WINDOW_KIND:
-            self.x0, self.y0, self.x1, self.y1 = get_client_screen_rect(hwnd)
-        else:
-            self.x0, self.y0, self.x1, self.y1 = get_window_rect(hwnd)
-        self.full = self.x0 == 0 and self.y0 == 0
-        self.x0 = max(0, self.x1 - self.xx)  # + 9 * self.full
-        self.y0 = max(0, self.y1 - self.yy)  # + 9 * self.full
-        if game_window.kind != CLOUD_WINDOW_KIND and (
-                (self.xx == 1920 or self.yy == 1080)
-                and self.xx >= 1920
-                and self.yy >= 1080
-        ):
-            self.x0 += (self.xx - 1920) // 2
-            self.y0 += (self.yy - 1080) // 2
-            self.x1 -= (self.xx - 1920) // 2
-            self.y1 -= (self.yy - 1080) // 2
-            self.xx, self.yy = 1920, 1080
-        if not is_supported_resolution(game_window.kind, self.xx, self.yy):
+        geometry = get_capture_geometry(game_window)
+        if geometry is None:
             if game_window.kind == CLOUD_WINDOW_KIND:
                 CUS_LOGGER.error(
                     f"云游戏窗口大小错误 {self.xx} {self.yy}，"
                     f"请将窗口调整到接近{BASE_WIDTH}*{BASE_HEIGHT}"
                 )
             else:
-                CUS_LOGGER.error(f"分辨率错误 {self.xx} {self.yy} 请设为1920*1080")
+                CUS_LOGGER.error(f"游戏分辨率错误 {self.xx} {self.yy}，请使用1920*1080窗口化或3840*2160全屏；若游戏内已是1920*1080，请把游戏程序兼容性设置中的“高DPI缩放替代”改为“应用程序”")
             time.sleep(0.3)
             return 0
-        if game_window.kind == CLOUD_WINDOW_KIND:
-            self.x1 = self.x0 + BASE_WIDTH
-            self.y1 = self.y0 + BASE_HEIGHT
-            self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
+        self.x0, self.y0, self.x1, self.y1 = (
+            geometry.left, geometry.top, geometry.right, geometry.bottom
+        )
+        self.capture_geometry = geometry
+        self.full = geometry.full
+        self.cap_w, self.cap_h = geometry.width, geometry.height
+        self.cap_scale, self.cap_scale_y = geometry.scale_x, geometry.scale_y
+        self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
         self.scx = self.xx / self.bx
         self.scy = self.yy / self.by
         dc = win32gui.GetWindowDC(hwnd)
@@ -324,9 +312,12 @@ class CurrencyUtils:
         return False
 
     # 由click_target调用，返回图片匹配结果
-    def scan_screenshot(self, prepared):
+    def scan_screenshot(self, prepared, threshold=None):
         screenshot = self.get_screen()
-        result = cv.matchTemplate(screenshot, prepared, cv.TM_CCOEFF_NORMED)
+        result = match_template_soft(
+            screenshot, prepared, self.cap_scale != 1.0,
+            cv.TM_CCOEFF_NORMED, threshold=threshold,
+        )
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
         return {
             "screenshot": screenshot,
@@ -351,8 +342,14 @@ class CurrencyUtils:
     # 点击与模板匹配的点，flag=True表示必须匹配，不匹配就会一直寻找直到出现匹配
     def click_target(self, target_path, threshold, flag=True, sub=True, click=False):
         target = target_path
+        deadline = time.monotonic() + 10
+        min_threshold = max(0.85, threshold - 0.05)
+        attempts = 0
         while not self._stop:
-            result = self.scan_screenshot(target)
+            result = self.scan_screenshot(target, threshold)
+            attempts += 1
+            if self._stop:
+                break
             if result["max_val"] > threshold:
                 CUS_LOGGER.debug(f"全局图像匹配度{result['max_val']}")
                 points = self.calculated(result, target.shape)
@@ -361,8 +358,19 @@ class CurrencyUtils:
                 return True
             if not flag:
                 return False
-            elif sub:  # 降低阈值直到匹配到为止
-                threshold -= 0.01
+            if time.monotonic() >= deadline:
+                break
+            if sub:
+                threshold = max(min_threshold, threshold - 0.01)
+            time.sleep(0.1)
+        if self._stop:
+            CUS_LOGGER.debug("停止目标图像等待：attempts=%s", attempts)
+            return False
+        CUS_LOGGER.warning(
+            "等待目标图像超时，未执行点击：attempts=%s score=%.4f threshold=%.4f template=%s",
+            attempts, result["max_val"], threshold, target.shape,
+        )
+        return False
 
     # 在截图中裁剪需要匹配的部分
     def get_local(self, x, y, size, large=True):
@@ -453,7 +461,7 @@ class CurrencyUtils:
             result = cv.matchTemplate(binary_screen, binary_target, cv.TM_CCORR_NORMED)
         else:
             try:
-                result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
+                result = match_template_soft(local_screen, target, self.cap_scale != 1.0, threshold=threshold)
             except Exception:
                 CUS_LOGGER.error(f"{path}匹配失败，源图像{local_screen.shape}，目标图像{target.shape}")
                 raise
@@ -472,6 +480,7 @@ class CurrencyUtils:
 
     # 从全屏截屏中裁剪得到游戏窗口截屏
     def get_screen(self):
+        validate_capture_geometry(self.game_hwnd, self.game_size, self.capture_geometry)
         current_time = time.time()
         if hasattr(self, 'last_get_screen_time') and self.last_get_screen_time is not None:
             interval = current_time - self.last_get_screen_time
@@ -619,23 +628,27 @@ class CurrencyUtils:
             cv.waitKey(0)
         return sc
     def update_direction_data(self,mode=None,target=None):
+        if self._stop:
+            return False
         self.rotation, d = self.pos_predictor.update_minimap_data(self.screen)
-        if d is None:
+        if self._stop or d is None:
+            key_mouse_manager.clean()
             return False
         CUS_LOGGER.debug(f"视角{self.rotation}朝向{d}模式{mode}小地图目标{target}")
         CUS_LOGGER.debug(f"当前点位{self.now_loc}大地图目标点位{self.target_loc}")
         if 20<abs(self.rotation-d)<340:
             key_mouse_manager.wait()
             self.rotation, d = self.pos_predictor.update_minimap_data(self.get_screen())
-            if d is None:
+            if self._stop or d is None:
+                key_mouse_manager.clean()
                 return False
             if 20<abs(self.rotation-d)<340 and mode !=1:
                 # cv.imshow("now", self.screen)
                 if self.debug:
                     self.save_screen(not_now=True)
                 CUS_LOGGER.error(f"角度误差过大视角{self.rotation}朝向{d}模式{mode}")
-                # raise BigAngError(f"角度误差过大视角{self.rotation}朝向{d}")
-                d = self.rotation
+                key_mouse_manager.clean()
+                return False
             elif 20<abs(self.rotation-d)<340:
                 CUS_LOGGER.debug(f"角度误差过大视角{self.rotation}朝向{d}模式1")
                 d=self.rotation
@@ -695,8 +708,13 @@ class CurrencyUtils:
         if fresh:
             self.get_screen()
             if not self.is_run():
+                key_mouse_manager.clean()
                 return False
         pos,sim=self.pos_predictor.update_position(self.screen)
+        if not np.isfinite(sim) or sim <= POSITION_MIN_SIMILARITY:
+            CUS_LOGGER.debug("小地图定位分数不足：%.3f，保留上一位置", sim)
+            key_mouse_manager.clean()
+            return False
         self.now_loc= pos
         CUS_LOGGER.debug(f"获取到新坐标{self.now_loc}")
         return True

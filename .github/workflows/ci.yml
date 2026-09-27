@@ -33,9 +33,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Sync dependencies & verify main module imports
+      # 锁文件保留国内镜像；CI 从 PyPI 下载相同版本，并校验锁文件中的哈希。
+      - name: Export locked dependencies
+        run: uv export --locked --format requirements.txt --no-emit-project --output-file "$env:RUNNER_TEMP/startup-requirements.txt"
+
+      - name: Install locked dependencies from PyPI
+        run: uv pip sync --python .venv/Scripts/python.exe --require-hashes --default-index https://pypi.org/simple "$env:RUNNER_TEMP/startup-requirements.txt"
+
+      - name: Verify main module imports
         env:
           PYTHONIOENCODING: utf-8
-        run: |
-          uv sync
-          uv run python -c "import new_gui; print('Startup import OK')"
+        run: uv run --no-sync python -c "import new_gui; print('Startup import OK')"
+
+      - name: 4K capture, recognition and shutdown regression
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run --no-sync python -m test.run_4k_regression

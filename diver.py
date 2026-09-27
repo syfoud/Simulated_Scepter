@@ -46,7 +46,9 @@ class DivergentUniverse(UniverseUtils):
         # 设置并启动键鼠管理器
         key_mouse_manager.set_config(config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params(self.x0 + self.cap_w, self.y0 + self.cap_h,
+                                            self.cap_w, self.cap_h,
+                                            self.cap_scale, self.cap_scale_y)
 
         self.is_get_team = True #首次进入差分宇宙后,获取队伍成员
         self.team_detect = {} #队伍成员检测
@@ -1203,27 +1205,20 @@ class DivergentUniverse(UniverseUtils):
 
     def stop(self, *_, **__):
         CUS_LOGGER.info("尝试停止运行")
-        if self.record and self._u1a:
-            CUS_LOGGER.info("尝试停止录制")
-            try:
-                self.recorder.stop_recording()
-            except Exception as e:
-                CUS_LOGGER.error(f"停止录制时发生错误: {e}")
+        self._stop_input_workers()
         try:
             self.init_floor()
         except Exception:
             pass
-        self._stop = True
-        key_mouse_manager.stop()
 
 
     def start(self):
         self._stop = False
-        self.keys = KeyController(self)
-        key_mouse_manager.start()
-        if self.record and self._u1a:
-            self.recorder.start_recording(self.count)
         try:
+            self.keys = KeyController(self)
+            key_mouse_manager.start()
+            if self.record:
+                self.recorder.start_recording(self.count)
             self.route()
         except KeyboardInterrupt:
             CUS_LOGGER.warning("KeyboardInterrupt")
@@ -1233,13 +1228,19 @@ class DivergentUniverse(UniverseUtils):
                 pass
             if not self._stop:
                 self.stop()
-        except Exception as e:
-            print_exc()
-            traceback.print_exc()
-            CUS_LOGGER.info(str(e))
+        except Exception:
             CUS_LOGGER.info("发生错误，尝试停止运行")
             self.stop()
             raise
+        finally:
+            try:
+                self._stop_input_workers()
+            finally:
+                try:
+                    if self.record:
+                        self.recorder.stop_recording()
+                finally:
+                    self.sct.close()
 
     def screen_test(self):
         try:
@@ -1255,6 +1256,16 @@ class DivergentUniverse(UniverseUtils):
             self.click_target(find_image_by_name('universe.jpg'),threshold=0.9,click=True)
             self.click_text(text="差分宇宙",after_delay=0.5,box=[301, 429, 433, 470])
             self.click_text(text="前往参与",after_delay=5,box=[1443, 1539, 856, 884])
+
+    def _stop_input_workers(self):
+        self.stop_movement_threads()
+        if hasattr(self, 'keys'):
+            self.keys.join()
+        failures = keyops.release_pressed_keys()
+        for key, exc in failures.items():
+            CUS_LOGGER.error("停止时无法释放按键 %s：%s", key, exc)
+        key_mouse_manager.stop()
+
 
 
 def main():

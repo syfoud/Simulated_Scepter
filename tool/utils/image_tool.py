@@ -4,6 +4,7 @@
 """
 
 import os
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -418,6 +419,68 @@ def print_cache_info():
     if _image_cache:
         CUS_LOGGER.info("缓存结构:")
         print_structure(_image_cache)
+
+
+
+
+# 亚像素平移补偿的采样网格：高分辨率窗口（如4K全屏）截图缩回 1920×1080 后，
+# 内容相对 1080p 基准模板存在亚像素错位与软化，直接匹配分数系统性偏低
+_SOFT_SHIFTS = tuple(np.arange(-0.5, 0.51, 0.25))
+
+
+def _shifted_targets(target):
+    h, w = target.shape[:2]
+    for dx in _SOFT_SHIFTS:
+        for dy in _SOFT_SHIFTS:
+            if dx == 0 and dy == 0:
+                continue
+            yield cv2.warpAffine(
+                target, np.float32([[1, 0, dx], [0, 1, dy]]), (w, h),
+                flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE,
+            )
+
+
+@lru_cache(maxsize=16)
+def _cached_shifts(shape, dtype, pixels):
+    target = np.frombuffer(pixels, dtype=np.dtype(dtype)).reshape(shape)
+    return tuple(_shifted_targets(target))
+
+
+def match_template_soft(image, target, soft, method=cv2.TM_CCORR_NORMED, threshold=None, *, all_matches=False):
+    """模板匹配，soft=True 时对模板做 ±0.5px 亚像素平移并逐像素取最大相关矩阵。
+
+    仅支持相关度类方法（分数越大越好）。返回矩阵语义与 cv2.matchTemplate 一致，
+    调用方的 minMaxLoc / np.where 等下游处理无需改动。
+    传入 threshold 时启用快速路径：单目标明确达标或整体差距过大时不做补偿。
+    多目标搜索不能因某处已达标而跳过其他位置的补偿。
+
+    Args:
+        image: 待匹配图像（截图或裁剪区域）
+        target: 模板图像
+        soft: 是否启用亚像素补偿（高分辨率缩放截图时启用）
+        method: cv2 模板匹配方法
+        threshold: 调用方的判定阈值；None 表示总是补偿
+        all_matches: 是否需要保留所有达标位置；重复数字拼接等多目标搜索使用 True
+
+    Returns:
+        相关度矩阵，形状与 cv2.matchTemplate 结果相同
+    """
+    result = cv2.matchTemplate(image, target, method)
+    if not soft:
+        return result
+    if threshold is not None:
+        peak = float(result.max())
+        if (not all_matches and peak >= threshold) or peak < threshold - 0.15:
+            return result
+    # 高频 UI 模板尺寸较小且内容稳定；按像素内容缓存，避免每帧重做 24 次插值。
+    # 仅缓存小模板，防止大模板的 24 份副本长期占用内存。
+    if target.nbytes <= 64 * 1024:
+        shifted_targets = _cached_shifts(target.shape, target.dtype.str, target.tobytes())
+    else:
+        shifted_targets = _shifted_targets(target)
+    for shifted in shifted_targets:
+        np.maximum(result, cv2.matchTemplate(image, shifted, method), out=result)
+    return result
 
 
 

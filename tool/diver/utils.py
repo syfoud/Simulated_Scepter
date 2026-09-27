@@ -36,12 +36,13 @@ from tool.utils.game_window import (
     BASE_WIDTH,
     CLOUD_WINDOW_KIND,
     find_game_window,
-    get_client_screen_rect,
-    get_foreground_game_window,
-    is_supported_resolution,
+    get_capture_geometry,
+    validate_capture_geometry,
     set_game_foreground,
 )
-from tool.utils.get_win_rect import get_window_rect
+
+
+from tool.utils.image_tool import match_template_soft
 
 
 def notif(title, msg, cnt=None):
@@ -95,6 +96,9 @@ class UniverseUtils:
         self.check_bonus = 1
         self._stop = False
         self.stop_move = 0
+        self._movement_lock = threading.Lock()
+        self._movement_threads = []
+        self.move_error = None
         self.move = 0
         self.multi = config.multi
         self.diffi = config.diffi
@@ -125,45 +129,33 @@ class UniverseUtils:
                 hwnd = game_window.hwnd
                 Text = game_window.title
                 self.game_hwnd = hwnd
+                self.game_size = (game_window.client_width, game_window.client_height)
                 self.game_window_kind = game_window.kind
                 self.xx = game_window.client_width
                 self.yy = game_window.client_height
-                if game_window.kind == CLOUD_WINDOW_KIND:
-                    self.x0, self.y0, self.x1, self.y1 = get_client_screen_rect(hwnd)
-                else:
-                    self.x0, self.y0, self.x1, self.y1 = get_window_rect(hwnd)
-                # print("窗口坐标: " + str(self.x0) + " " + str(self.y0) + " " + str(self.x1) + " " + str(self.y1))
-                self.full = self.x0 == 0 and self.y0 == 0
-                self.x0 = max(0, self.x1 - self.xx)
-                self.y0 = max(0, self.y1 - self.yy)
-                if game_window.kind != CLOUD_WINDOW_KIND:
-                    self.x0 += 9 * self.full
-                    self.y0 += 9 * self.full
-
-                if game_window.kind != CLOUD_WINDOW_KIND and (
-                    (self.xx == 1920 or self.yy == 1080)
-                    and self.xx >= 1920
-                    and self.yy >= 1080
-                ):
-                    self.x0 += (self.xx - 1920) // 2
-                    self.y0 += (self.yy - 1080) // 2
-                    self.x1 -= (self.xx - 1920) // 2
-                    self.y1 -= (self.yy - 1080) // 2
-                    self.xx, self.yy = 1920, 1080
-                if not is_supported_resolution(game_window.kind, self.xx, self.yy):
+                geometry = get_capture_geometry(game_window)
+                if geometry is None:
                     if game_window.kind == CLOUD_WINDOW_KIND:
                         CUS_LOGGER.error(
                             f"云游戏窗口大小错误 {self.xx} {self.yy}，"
                             f"请将窗口调整到接近{BASE_WIDTH}*{BASE_HEIGHT}"
                         )
                     else:
-                        CUS_LOGGER.error(f"分辨率错误 {self.xx} {self.yy} 请设为1920*1080")
+                        CUS_LOGGER.error(f"游戏分辨率错误 {self.xx} {self.yy}，请使用1920*1080窗口化或3840*2160全屏；若游戏内已是1920*1080，请把游戏程序兼容性设置中的“高DPI缩放替代”改为“应用程序”")
                     time.sleep(0.3)
                     continue
-                if game_window.kind == CLOUD_WINDOW_KIND:
-                    self.x1 = self.x0 + BASE_WIDTH
-                    self.y1 = self.y0 + BASE_HEIGHT
-                    self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
+                self.x0, self.y0, self.x1, self.y1 = (
+                    geometry.left, geometry.top, geometry.right, geometry.bottom
+                )
+                self.capture_geometry = geometry
+                self.full = geometry.full
+                self.cap_w, self.cap_h = geometry.width, geometry.height
+                self.cap_scale, self.cap_scale_y = geometry.scale_x, geometry.scale_y
+                self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
+                # 差分宇宙沿用原全屏输入与截图偏移；其他模式不使用该补偿。
+                if game_window.kind != CLOUD_WINDOW_KIND and self.full:
+                    self.x0 += 9
+                    self.y0 += 9
                 self.scx = self.xx / self.bx
                 self.scy = self.yy / self.by
                 dc = win32gui.GetWindowDC(hwnd)
@@ -188,7 +180,7 @@ class UniverseUtils:
             except Exception:
                 print_exc()
                 pass
-        self.sct = Screen()
+        self.sct = Screen(self.cap_w, self.cap_h, self.bx, self.by)
 
     def gen_hotkey_img(self,hotkey="e",bg="resource/imgs/f_bg.jpg"):
         hotkey = hotkey.upper()
@@ -211,8 +203,10 @@ class UniverseUtils:
             keyops.keyDown(c)
         else:
             raise ValueError("正在退出")
-        time.sleep(t)
-        keyops.keyUp(c)
+        try:
+            time.sleep(t)
+        finally:
+            keyops.keyUp(c)
 
     def sprint(self):
         if config.long_press_sprint:
@@ -330,18 +324,17 @@ class UniverseUtils:
         return False
 
     # 由click_target调用，返回图片匹配结果
-    def scan_screenshot(self, prepared, mask=None, refine_mask=None, use_binary=False):
-        temp = pyautogui.screenshot()
-        screenshot = np.array(temp)
-        screenshot = cv.cvtColor(screenshot, cv.COLOR_BGR2RGB)
+    def scan_screenshot(self, prepared, mask=None, refine_mask=None, use_binary=False, threshold=None):
+        # 与 check() 使用同一游戏窗口截图和 1920×1080 识别坐标系。
+        screenshot = self.get_screen()
         if use_binary:
             if len(screenshot.shape) == 3:
-                gray_screenshot = cv.cvtColor(screenshot, cv.COLOR_RGB2GRAY)
+                gray_screenshot = cv.cvtColor(screenshot, cv.COLOR_BGR2GRAY)
             else:
                 gray_screenshot = screenshot
 
             if len(prepared.shape) == 3:
-                gray_prepared = cv.cvtColor(prepared, cv.COLOR_RGB2GRAY)
+                gray_prepared = cv.cvtColor(prepared, cv.COLOR_BGR2GRAY)
             else:
                 gray_prepared = prepared
 
@@ -355,7 +348,10 @@ class UniverseUtils:
             if mask is not None:
                 result = cv.matchTemplate(screenshot, prepared, cv.TM_CCOEFF_NORMED, mask=mask)
             else:
-                result = cv.matchTemplate(screenshot, prepared, cv.TM_CCOEFF_NORMED)
+                result = match_template_soft(
+                    screenshot, prepared, self.cap_scale != 1.0,
+                    cv.TM_CCOEFF_NORMED, threshold=threshold,
+                )
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
 
         # 如果提供了refine_mask，则在最佳匹配点位置使用refine_mask进行更精确的匹配度计算
@@ -402,14 +398,14 @@ class UniverseUtils:
     # 点击一个点
     def click(self, points, click=1):
         if self.debug == 2:
-            CUS_LOGGER.debug(f"Clicking point: {points}")
+            print(points)
         self.print_stack()
         x, y = points
-        # 如果是浮点数表示，则计算实际坐标
+        # 如果是浮点数表示，则计算实际坐标（cap_w/cap_h 为物理截取尺寸）
         if not isinstance(x, int):
-            x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
+            x, y = self.x1 - int(x * self.cap_w), self.y1 - int(y * self.cap_h)
         # 全屏模式会有一个偏移
-        if self.full:
+        if self.full and self.game_window_kind != CLOUD_WINDOW_KIND:
             x += 9
             y += 9
         if self._stop == 0:
@@ -423,11 +419,11 @@ class UniverseUtils:
     # 滚轮滚动
     def scroll(self, points, clicks=1):
         x, y = points
-        # 如果是浮点数表示，则计算实际坐标
+        # 如果是浮点数表示，则计算实际坐标（cap_w/cap_h 为物理截取尺寸）
         if not isinstance(x, int):
-            x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
+            x, y = self.x1 - int(x * self.cap_w), self.y1 - int(y * self.cap_h)
         # 全屏模式会有一个偏移
-        if self.full:
+        if self.full and self.game_window_kind != CLOUD_WINDOW_KIND:
             x += 9
             y += 9
         if self._stop == 0:
@@ -440,11 +436,11 @@ class UniverseUtils:
     # 拖动
     def drag(self, pt1, pt2):
         x1, y1 = pt1
-        x1, y1 = self.x1 - int(x1 * self.xx), self.y1 - int(y1 * self.yy)
+        x1, y1 = self.x1 - int(x1 * self.cap_w), self.y1 - int(y1 * self.cap_h)
         x2, y2 = pt2
-        x2, y2 = self.x1 - int(x2 * self.xx), self.y1 - int(y2 * self.yy)
+        x2, y2 = self.x1 - int(x2 * self.cap_w), self.y1 - int(y2 * self.cap_h)
         # 全屏模式会有一个偏移
-        if self.full:
+        if self.full and self.game_window_kind != CLOUD_WINDOW_KIND:
             x1 += 9
             y1 += 9
             x2 += 9
@@ -461,6 +457,8 @@ class UniverseUtils:
         target = target_path
         mask = None
         refine_mask = None
+        deadline = time.monotonic() + 10  # 等待菜单动画与目标出现，超时后停止查找。
+        min_threshold = max(0.85, threshold - 0.05)
 
         if mask_path is not None:
             mask = cv.imread(mask_path, cv.IMREAD_GRAYSCALE)
@@ -468,20 +466,33 @@ class UniverseUtils:
         if refine_mask_path is not None:
             refine_mask = cv.imread(refine_mask_path, cv.IMREAD_GRAYSCALE)
 
-        while True:
-            result = self.scan_screenshot(target, mask, refine_mask, use_binary)
+        attempts = 0
+        while not self._stop:
+            result = self.scan_screenshot(target, mask, refine_mask, use_binary, threshold=threshold)
+            attempts += 1
+            if self._stop:
+                break
             if result["max_val"] > threshold:
-                CUS_LOGGER.info(f"匹配度{result['max_val']}")
+                CUS_LOGGER.debug(f"匹配度{result['max_val']}")
                 points = self.calculated(result, target.shape)
-                self.get_point(*points)
-                CUS_LOGGER.info(f"target shape: {target.shape}")
                 if click:
-                    self.click(points)
-                return
+                    self.click_position(points)
+                return True
             if not flag:
-                return
-            elif sub:#降低阈值直到匹配到为止
-                threshold-=0.01
+                return False
+            if time.monotonic() >= deadline:
+                break
+            if sub:
+                threshold = max(min_threshold, threshold - 0.01)
+            time.sleep(0.1)
+        if self._stop:
+            CUS_LOGGER.debug("停止目标图像等待：attempts=%s", attempts)
+            return False
+        CUS_LOGGER.warning(
+            "等待目标图像超时，未执行点击：attempts=%s score=%.4f threshold=%.4f template=%s",
+            attempts, result["max_val"], threshold, target.shape,
+        )
+        return False
 
     # 在截图中裁剪需要匹配的部分
     def get_local(self, x, y, size, large=True):
@@ -523,7 +534,7 @@ class UniverseUtils:
         local_screen = self.get_local(x, y, shape, large)
         if not large:
             return local_screen
-        result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
+        result = match_template_soft(local_screen, target, self.cap_scale != 1.0, threshold=threshold)
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
         self.tx = x - (max_loc[0] - 0.5 * local_screen.shape[1] + 0.5 * target.shape[1]) / self.xx
         self.ty = y - (max_loc[1] - 0.5 * local_screen.shape[0] + 0.5 * target.shape[0]) / self.yy
@@ -601,16 +612,24 @@ class UniverseUtils:
                 return -((-dx) ** 0.7)
 
     def move_to_end(self, i=0):
+        if self._stop or self.stop_move:
+            return 0
         dx = self.get_end_point(i)
+        if self._stop or self.stop_move:
+            return 0
         if dx is None:
             if i:
                 return 0
             win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, -200)
             time.sleep(0.3)
+            if self._stop or self.stop_move:
+                return 0
             dx = self.get_end_point()
             off = 0
             if dx is None:
                 for k in [60,120,60,60,30,-60,-60,-60,-60]:
+                    if self._stop or self.stop_move:
+                        return 0
                     if self.ang_neg:
                         self.mouse_move(k)
                         off -= k
@@ -618,6 +637,8 @@ class UniverseUtils:
                         self.mouse_move(-k)
                         off += k
                     time.sleep(0.3)
+                    if self._stop or self.stop_move:
+                        return 0
                     dx = self.get_end_point()
                     if dx is not None:
                         break
@@ -625,6 +646,8 @@ class UniverseUtils:
                     self.mouse_move(off*1.03)
                     time.sleep(0.3)
                     return 0
+        if self._stop or self.stop_move:
+            return 0
         if i == 0:
             self.mouse_move(dx / 3)
             time.sleep(0.3)
@@ -633,6 +656,8 @@ class UniverseUtils:
             time.sleep(0.3)
         if i == 0 and abs(dx / 3) > 30:
             time.sleep(0.3)
+            if self._stop or self.stop_move:
+                return 0
             dx = self.get_end_point(1)
             if dx is not None:
                 self.mouse_move(dx / 4)
@@ -668,11 +693,7 @@ class UniverseUtils:
 
     # 从全屏截屏中裁剪得到游戏窗口截屏
     def get_screen(self):
-        game_window = get_foreground_game_window()
-        while game_window is None and not self._stop:
-            CUS_LOGGER.warning("等待游戏窗口")
-            time.sleep(0.5)
-            game_window = get_foreground_game_window()
+        validate_capture_geometry(self.game_hwnd, self.game_size, self.capture_geometry)
         current_time = time.time()
         if hasattr(self, 'last_get_screen_time') and self.last_get_screen_time is not None:
             interval = current_time - self.last_get_screen_time
@@ -797,24 +818,37 @@ class UniverseUtils:
 
     # 计算小地图中蓝色箭头的角度
     def get_now_direc(self, loc_scr):
-        # blue = np.array([234, 191, 4])
-        arrow = self.format_path("loc_arrow")
-        arrow = cv.imread(arrow)
-        hsv = cv.cvtColor(loc_scr, cv.COLOR_BGR2HSV)  # 转HSV
+        # 人物箭头位于小地图中心，先裁掉外围图标与路径；扫描面积显著缩小。
+        height, width = loc_scr.shape[:2]
+        center_y, center_x = height // 2, width // 2
+        local_arrow = loc_scr[
+            max(0, center_y - 40):min(height, center_y + 40),
+            max(0, center_x - 40):min(width, center_x + 40),
+        ]
+        hsv = cv.cvtColor(local_arrow, cv.COLOR_BGR2HSV)
         lower = np.array([93, 90, 60])  # 90 改成120只剩箭头，但是角色移动过的印记会消失
         upper = np.array([97, 255, 255])
-        mask = cv.inRange(hsv, lower, upper)  # 创建掩膜
-        loc_tp = cv.bitwise_and(loc_scr, loc_scr, mask=mask)
-        # loc_tp[np.sum(np.abs(loc_tp - blue), axis=-1) > 0] = [0, 0, 0]
+        mask = cv.inRange(hsv, lower, upper)
+        if cv.countNonZero(mask) < 8:
+            self.direction_invalid = True
+            CUS_LOGGER.warning("小地图人物箭头像素不足，跳过本次转向")
+            return None
+        loc_tp = cv.bitwise_and(local_arrow, local_arrow, mask=mask)
+        if not hasattr(self, "_rotated_arrow_templates"):
+            arrow = cv.imread(self.format_path("loc_arrow"))
+            if arrow is None:
+                raise FileNotFoundError("找不到人物箭头模板 loc_arrow")
+            self._rotated_arrow_templates = tuple(self.image_rotate(arrow, i) for i in range(360))
         mx_acc = 0
-        ang = 0
-        for i in range(360):
-            rt = self.image_rotate(arrow, i)
+        ang = None
+        for i, rt in enumerate(self._rotated_arrow_templates):
             result = cv.matchTemplate(loc_tp, rt, cv.TM_CCORR_NORMED)
-            min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+            _, max_val, _, _ = cv.minMaxLoc(result)
             if max_val > mx_acc:
                 mx_acc = max_val
                 ang = i
+        self.direction_invalid = ang is None
+        CUS_LOGGER.debug("小地图人物箭头最佳相似度：%.3f", mx_acc)
         return ang
 
     def get_level(self):
@@ -870,6 +904,8 @@ class UniverseUtils:
         return loc, type
 
     def move_to_interac(self, ii=0, abyss=0):
+        if self._stop or self.stop_move:
+            return 0
         self.get_screen()
         threshold = 0.88
         shape = (int(self.scx * 190), int(self.scx * 190))
@@ -879,7 +915,7 @@ class UniverseUtils:
         nearest = (-1, -1)
         minicon = cv.imread(self.format_path("mini" + str(ii + 1)))
         sp = minicon.shape
-        result = cv.matchTemplate(local_screen, minicon, cv.TM_CCORR_NORMED)
+        result = match_template_soft(local_screen, minicon, self.cap_scale != 1.0, threshold=threshold)
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
         if max_val > threshold:
             nearest = (max_loc[1] + sp[0] // 2, max_loc[0] + sp[1] // 2)
@@ -890,7 +926,7 @@ class UniverseUtils:
         else:  # 226 64 66
             minicon = cv.imread(self.format_path("mini" + str(ii + 2)))
             sp = minicon.shape
-            result = cv.matchTemplate(local_screen, minicon, cv.TM_CCORR_NORMED)
+            result = match_template_soft(local_screen, minicon, self.cap_scale != 1.0, threshold=threshold)
             min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
             if max_val > threshold-0.035*(self.floor in [4,8,11]):
                 nearest = (max_loc[1] + sp[0] // 2, max_loc[0] + sp[1] // 2)
@@ -898,10 +934,8 @@ class UniverseUtils:
                 CUS_LOGGER.info(f"黑塔相似度{max_val}，位置{max_loc[1]},{max_loc[0]}")
                 if self.floor >= 12:
                     self.floor = 11
-        for i in range(local_screen.shape[0]):
-            for j in range(local_screen.shape[1]):
-                if self.get_dis((120, 128), (i, j)) >= 82:
-                    local_screen[i, j] = [0, 0, 0]
+        rows, cols = np.ogrid[:local_screen.shape[0], :local_screen.shape[1]]
+        local_screen[(rows - 120) ** 2 + (cols - 128) ** 2 >= 82 ** 2] = 0
         if max_val <= threshold:
             red = [47, 47, 232]
             rd = np.where(np.sum((local_screen - red) ** 2, axis=-1) <= 4500)
@@ -913,7 +947,12 @@ class UniverseUtils:
         if self.mini_target == 0:
             self.mini_target = target[1]
         if target[1] >= 1:
-            self.ang = 360 - self.get_now_direc(local_screen) - 90
+            direction = self.get_now_direc(local_screen)
+            if direction is None:
+                self.stop_move = 1
+                keyops.keyUp("w")
+                return 0
+            self.ang = 360 - direction - 90
             ang = (
                 math.atan2(target[0][0] - curloc[0], target[0][1] - curloc[1])
                 / math.pi
@@ -937,35 +976,35 @@ class UniverseUtils:
             return 0
 
     def move_thread(self):
-        me = 0
-        if self.mini_state > 2:
-            me = self.move_to_end()
-            self.is_target+=me
-        else:
-            self.ang_off += self.move_to_interac(2)
-            self.is_target+=self.ang_off
-        self.ready = 1
-        now_time = time.time()
-        if me == 0:
-            me = 0.5
-        while not self.stop_move and time.time() - now_time < 3:
-            if self.mini_state <= 2:
-                self.ang_off += self.move_to_interac()
-            else:
-                me = max(self.move_to_end(me), me)
         try:
-            '''
-            exec(
-                self.mag
-                + "p show n"
-                + "um' + 'p"
-                + "y > NU"
-                + "L 2>&1') and not self.unlock"
-            )
-            '''
-            pass
-        except Exception:
-            pass
+            if self._stop or self.stop_move:
+                return
+            me = 0
+            if self.mini_state > 2:
+                me = self.move_to_end()
+                self.is_target += me
+            else:
+                self.ang_off += self.move_to_interac(2)
+                self.is_target += self.ang_off
+            if self._stop or self.stop_move:
+                return
+            self.ready = 1
+            now_time = time.time()
+            if me == 0:
+                me = 0.5
+            while not self._stop and not self.stop_move and time.time() - now_time < 3:
+                if self.mini_state <= 2:
+                    self.ang_off += self.move_to_interac()
+                else:
+                    me = max(self.move_to_end(me), me)
+        except Exception as exc:
+            # “正在退出”是停止请求的正常收尾；截图失败等其余异常需告知等待方
+            if not (isinstance(exc, ValueError) and self._stop):
+                self.move_error = exc
+                raise
+        finally:
+            # 成功、停止、失败都必须唤醒等待方，由等待方依据 move_error 区分结果
+            self.ready = 1
 
     def nof(self,must_be=None):
         tm = time.time()
@@ -1013,7 +1052,10 @@ class UniverseUtils:
                 self.get_screen()
                 local_screen = self.get_local(0.9333, 0.8657, shape)
                 self.now_map = '19788'
-            self.ang = 360 - self.get_now_direc(local_screen) - 90
+            direction = self.get_now_direc(local_screen)
+            if direction is None:
+                return False
+            self.ang = 360 - direction - 90
             self.get_real_loc()
             loc, type = self.get_tar()
             # 当前坐标与目标点连成的直线的斜率（大概）
@@ -1096,7 +1138,7 @@ class UniverseUtils:
                         self.press("w", 0.3)
                         self.move = 1
                         self.get_screen()
-                        threading.Thread(target=self.keep_move).start()
+                        self._start_movement_thread(self.keep_move, "差分持续移动")
                         bw_map = self.get_bw_map(gs=0)
                         self.get_loc(bw_map, rg=28, fbw=1)
                         self.get_real_loc()
@@ -1210,10 +1252,14 @@ class UniverseUtils:
     def keep_move(self):
         op = 'ws'
         i = 0
-        while self.move and not self._stop:
-            self.press(op[i], 0.05)
-            time.sleep(0.08)
-            i ^= 1
+        try:
+            while self.move and not self._stop:
+                self.press(op[i], 0.05)
+                time.sleep(0.08)
+                i ^= 1
+        except ValueError:
+            if not self._stop:
+                raise
         if not self._stop:
             keyops.keyDown("w")
 
@@ -1465,7 +1511,7 @@ class UniverseUtils:
 
     def get_direc_only_minimap(self):
         if self.debug==2:
-            CUS_LOGGER.debug(f"mini: {self.ang_off}, {self.mini_state}")
+            print('mini',self.ang_off,self.mini_state)
         self.ang_neg=self.ang_off<0
         if self.ang_off:
             time.sleep(0.6)
@@ -1518,13 +1564,19 @@ class UniverseUtils:
         self.ang_off=0
         self.stop_move=0
         self.ready=0
+        self.move_error=None
         self.mini_target=0
+        self.direction_invalid = False
         self.get_screen()
         self.is_target=0
         first = self.first_mini
-        threading.Thread(target=self.move_thread).start()
-        while not self.ready:
-            time.sleep(0.1)
+        worker = self._start_movement_thread(self.move_thread, "差分寻路移动")
+        if worker is None:
+            return
+        if not self.wait_move_ready(worker) or self.direction_invalid:
+            self.stop_move = 1
+            keyops.keyUp("w")
+            return
         if not self.ang_off and self.mini_state == 1:
             if self.check("z",0.5906,0.9537,mask="mask_z",threshold=0.95):
                 if self.floor == 11:
@@ -1542,7 +1594,7 @@ class UniverseUtils:
         init_time = time.time()
         while True:
             self.get_screen()
-            if self._stop == 1:
+            if self._stop == 1 or self.direction_invalid:
                 keyops.keyUp("w")
                 self.stop_move=1
                 break
@@ -1749,6 +1801,54 @@ class UniverseUtils:
             self.get_screen()
             if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
                 return
+
+    def _start_movement_thread(self, target, name):
+        with self._movement_lock:
+            if self._stop:
+                return None
+            self._movement_threads = [thread for thread in self._movement_threads if thread.is_alive()]
+            worker = threading.Thread(target=target, name=name)
+            self._movement_threads.append(worker)
+            worker.start()
+        return worker
+
+
+    def stop_movement_threads(self):
+        """通知所有移动线程退出，并等待它们结束后再允许关闭截图器。"""
+        with self._movement_lock:
+            self._stop = True
+            self.stop_move = 1
+            self.move = 0
+            workers = tuple(self._movement_threads)
+        for worker in workers:
+            if worker is not threading.current_thread():
+                worker.join()
+        with self._movement_lock:
+            self._movement_threads = [thread for thread in self._movement_threads if thread.is_alive()]
+
+
+    def wait_move_ready(self, worker):
+        """等待移动线程完成首次方向识别。
+
+        Args:
+            worker: _start_movement_thread 启动的移动线程。
+
+        Returns:
+            移动线程就绪返回 True，收到停止请求返回 False。
+
+        Raises:
+            RuntimeError: 移动线程识别失败，或未就绪便已退出。
+        """
+        while not self._stop:
+            if self.move_error is not None:
+                raise RuntimeError("移动方向识别线程失败") from self.move_error
+            if self.ready:
+                return True
+            if not worker.is_alive():
+                raise RuntimeError("移动方向识别线程未就绪便已退出")
+            time.sleep(0.05)
+        return False
+
 
     def get_text_position(self, clean=0):
         if self.event_mask is None:

@@ -1,3 +1,5 @@
+import time
+
 import cv2
 import numpy as np
 from scipy import signal
@@ -17,6 +19,7 @@ from tool.utils.minimap_util import (
     POSITION_SEARCH_SCALE,
     ArrowRotateMap,
     ArrowRotateMapAll,
+    ImageNotSupported,
     PositionPredictState,
     RotationRemapData,
     area_limit,
@@ -29,6 +32,7 @@ from tool.utils.minimap_util import (
     deal_minimap,
     get_bbox,
     get_minimap,
+    get_minimap_center,
     image_center_crop,
     image_size,
     peak_confidence,
@@ -38,13 +42,22 @@ from tool.utils.minimap_util import (
 )
 
 
-def update_rotation(or_image=None, minimap=None):
-    """
-    获取角色方向，耗时约0.66ms。
+# 低于已有地图匹配下限时不更新搜索原点。
+POSITION_MIN_SIMILARITY = 0.01
+# 合成噪声与真实 4K 裁剪回归支持的箭头相关系数下限。
+DIRECTION_MIN_SIMILARITY = 0.35
 
-    将设置以下属性：
-    - direction_similarity
-    - direction
+
+def update_rotation(or_image=None, minimap=None, *, with_confidence=False):
+    """识别小地图视角角度。
+
+    Args:
+        or_image: 原始截图；传入 minimap 时不使用。
+        minimap: 已裁剪的小地图。
+        with_confidence: 同时返回角度峰值相对次峰的显著性。
+
+    Returns:
+        默认返回角度；请求置信度时返回 (角度, 0～1 的峰值显著性)。
     """
     d = MINIMAP_RADIUS * 2
     scale = 1
@@ -90,42 +103,82 @@ def update_rotation(or_image=None, minimap=None):
         average = np.mean(conv0, axis=0)
         minimum = np.min(conv0, axis=0)
         result = convolve(maximum * average * minimum, 2 * scale)
-        rotation_confidence = round(peak_confidence(maximum), 3)
+        rotation_confidence = round(peak_confidence(result), 3)
 
     # 将匹配点转换为角度
     degree = np.argmax(result) / (d * scale) * 360 + 135
     degree = int(degree % 360)
 
+    if with_confidence:
+        return degree, rotation_confidence
     return degree
 
 
-def update_direction(or_image=None, minimap=None):
-    """
-    获取角色方向，耗时约0.64ms。
+def update_direction(or_image=None, minimap=None, *, with_confidence=False, diagnostics=None):
+    """识别角色箭头方向，无法可靠识别时返回 None。
 
-    将设置以下属性：
-    - direction_similarity
-    - direction
+    Args:
+        or_image: 原始截图；传入 minimap 时不使用。
+        minimap: 已裁剪的箭头区域。
+        with_confidence: 同时返回原始归一化模板相关系数。
+        diagnostics: 可选输出字典，记录同一次识别的门控原因与分数。
+
+    Returns:
+        默认返回方向；请求置信度时返回 (方向或 None, 相似度)。
     """
+    if diagnostics is None:
+        diagnostics = {}
+    diagnostics["reason"] = "arrow_missing"
     if minimap is None:
         minimap = get_minimap(or_image, DIRECTION_RADIUS)
 
     image = color_similarity_2d(minimap, color=DIRECTION_ARROW_COLOR)
+    arrow_mask = np.uint8(image > 128)
+    pixels = cv2.countNonZero(arrow_mask)
+    diagnostics["arrow_pixels"] = pixels
+    if pixels < 8:
+        if with_confidence:
+            return None, 0.0
+        return None
+    count, _, stats, _ = cv2.connectedComponentsWithStats(arrow_mask, connectivity=8)
+    largest_component = int(np.max(stats[1:, cv2.CC_STAT_AREA])) if count > 1 else 0
+    diagnostics["largest_component"] = largest_component
+    # 箭头应形成连续色块；随机同色噪点无法主导整块前景。
+    if largest_component < pixels * 0.2:
+        diagnostics["reason"] = "arrow_fragmented"
+        if with_confidence:
+            return None, 0.0
+        return None
 
     try:
         area = area_pad(get_bbox(image, threshold=128), pad=-1)
         area = area_limit(area, (0, 0, *image_size(image)))
-    except IndexError:
-        CUS_LOGGER.debug('小地图上没有方向箭头')
+    except ImageNotSupported:
+        diagnostics["reason"] = "arrow_bounds"
+        if with_confidence:
+            return None, 0.0
         return None
 
+    diagnostics["arrow_bounds"] = tuple(int(value) for value in area)
     image = crop(image, area=area, copy=False)
     scale = DIRECTION_ROTATION_SCALE * DIRECTION_SEARCH_SCALE
     mapping = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+    if mapping.size < 16 or not np.ptp(mapping):
+        diagnostics["reason"] = "arrow_flat"
+        if with_confidence:
+            return None, 0.0
+        return None
 
-    result = cv2.matchTemplate(ArrowRotateMap, mapping, cv2.TM_CCOEFF_NORMED)
-    result = subtract_blur(result, 5)
-    _, sim, _, loca = cv2.minMaxLoc(result)
+    raw_result = cv2.matchTemplate(ArrowRotateMap, mapping, cv2.TM_CCOEFF_NORMED)
+    _, coarse_sim, _, _ = cv2.minMaxLoc(raw_result)
+    diagnostics["coarse_score"] = float(coarse_sim) if np.isfinite(coarse_sim) else None
+    if not np.isfinite(coarse_sim) or coarse_sim < DIRECTION_MIN_SIMILARITY:
+        diagnostics["reason"] = "arrow_coarse"
+        if with_confidence:
+            return None, float(coarse_sim) if np.isfinite(coarse_sim) else 0.0
+        return None
+    result = subtract_blur(raw_result, 5)
+    _, _, _, loca = cv2.minMaxLoc(result)
     loca = np.array(loca) / DIRECTION_SEARCH_SCALE // (DIRECTION_RADIUS * 2)
 
     degree = int((loca[0] + loca[1] * 8) * 5)
@@ -138,14 +191,15 @@ def update_direction(or_image=None, minimap=None):
     row = (to_map(row[0]) - 5, to_map(row[1]) + 5)
     precise_map = ArrowRotateMapAll[row[0]:row[1], :].copy()
 
-    result = cv2.matchTemplate(precise_map, mapping, cv2.TM_CCOEFF_NORMED)
-    result = subtract_blur(result, 5)
-
-    _, _, _, precise_loc = cv2.minMaxLoc(result)
-
+    raw_result = cv2.matchTemplate(precise_map, mapping, cv2.TM_CCOEFF_NORMED)
+    result = subtract_blur(raw_result, 5)
 
     def to_map(x):
         return int((x * DIRECTION_RADIUS * 2) * 0.5)
+
+    # 定角只使用前三行、每行八个候选；裁剪余量产生的边缘峰不属于
+    # 这些角度。置信度必须取同一候选区，不能被区域外的高通峰替代。
+    _, _, _, precise_loc = cv2.minMaxLoc(result[:to_map(3), :to_map(8)])
 
     def get_precise_sim(d):
         y, x = divmod(d, 8)
@@ -154,12 +208,21 @@ def update_direction(or_image=None, minimap=None):
         return sim
 
     precise = np.array([[get_precise_sim(_) for _ in range(24)]])
-    precise_sim, precise_loca = cubic_find_maximum(precise, precision=0.1)
+    _, precise_loca = cubic_find_maximum(precise, precision=0.1)
     precise_loca = degree // 8 * 8 - 16 + precise_loca[0]
 
-    direction_similarity = round(precise_sim, 3)
+    # 高通滤波后的峰值用于定角，原始归一化相关系数才可解释为模板相似度。
+    direction_similarity = float(raw_result[precise_loc[1], precise_loc[0]])
+    diagnostics["precise_score"] = direction_similarity if np.isfinite(direction_similarity) else None
     direction = round(precise_loca % 360, 1)
-    CUS_LOGGER.debug(f"direction: {direction}, confidence: {direction_similarity}")
+    if not np.isfinite(direction_similarity) or direction_similarity < DIRECTION_MIN_SIMILARITY:
+        diagnostics["reason"] = "arrow_precise"
+        if with_confidence:
+            return None, round(direction_similarity, 3) if np.isfinite(direction_similarity) else 0.0
+        return None
+    diagnostics["reason"] = "ok"
+    if with_confidence:
+        return direction, round(direction_similarity, 3)
     return direction
 
 
@@ -218,6 +281,9 @@ class PositionPredict:
         self.set_now_map(1)
         self.rotation=None
         self.direction=None
+        self.rotation_confidence = 0.0
+        self.direction_similarity = 0.0
+        self._last_direction_warning = float("-inf")
         self.scale=1.00
     def _predict_position(self,image, scale=1.0):
         """
@@ -242,7 +308,7 @@ class PositionPredict:
             search_image = crop(self.assets_floor_feat, search_area, copy=False)
             result_mask = crop(self.assets_floor_outside_mask, search_area, copy=False)
         else:
-            search_area = (0, 0, *image_size(local))
+            search_area = (0, 0, *image_size(self.assets_floor_feat))
             search_image = self.assets_floor_feat
             result_mask = self.assets_floor_outside_mask
 
@@ -305,7 +371,7 @@ class PositionPredict:
         best_state = _predict_precise_position(best_state)
 
         position_similarity = round(best_state.precise_sim, 3)
-        if update:
+        if update and position_similarity > POSITION_MIN_SIMILARITY:
             self.position = tuple(np.round(best_state.global_loca, 1))
             self.scale=round(best_scale, 3)
             position=self.position
@@ -402,23 +468,41 @@ class PositionPredict:
             CUS_LOGGER.warning(f"{factor}未想起任何相似的命运抉择...（未找到匹配的大地图）")
 
         return best_match
-    def update_minimap_data(self,image=None,rotation_minimap=None, direction_minimap=None):
-        if rotation_minimap is None:
-            rotation_minimap = get_minimap(image, radius=MINIMAP_RADIUS)
-        if direction_minimap is None:
-            direction_minimap = get_minimap(image, radius=DIRECTION_RADIUS)
+    def update_minimap_data(self, image=None, rotation_minimap=None, direction_minimap=None):
+        """同帧识别视角与角色方向；低可信结果以方向 None 表示。"""
+        diagnostics = {}
         try:
-            self.direction = update_direction(minimap=direction_minimap)
-        except Exception as e:
-            CUS_LOGGER.error(f"{factor}无法更新当前方向: {e}")
+            center = None
+            if image is not None and (rotation_minimap is None or direction_minimap is None):
+                center = get_minimap_center(image)
+            if rotation_minimap is None:
+                rotation_minimap = get_minimap(image, radius=MINIMAP_RADIUS, center=center)
+            if direction_minimap is None:
+                direction_minimap = get_minimap(image, radius=DIRECTION_RADIUS, center=center)
+            self.direction, self.direction_similarity = update_direction(
+                minimap=direction_minimap, with_confidence=True, diagnostics=diagnostics,
+            )
+            self.rotation_confidence = 0.0
+            if self.direction is not None:
+                self.rotation, self.rotation_confidence = update_rotation(
+                    minimap=rotation_minimap, with_confidence=True,
+                )
+                if self.rotation_confidence <= 0:
+                    self.direction = None
+                    diagnostics["reason"] = "rotation_flat"
+        except Exception:
+            CUS_LOGGER.exception("无法更新当前方向，本次停止导航")
             self.direction = None
-            return self.rotation, self.direction
-        if self.direction is None:
-            return self.rotation, self.direction
-        self.rotation = update_rotation(minimap=rotation_minimap)
-
+            self.direction_similarity = 0.0
+            self.rotation_confidence = 0.0
+        if self.direction is None and time.monotonic() - self._last_direction_warning >= 5:
+            CUS_LOGGER.warning(
+                "小地图方向不可靠，本次停止导航：reason=%s arrow=%.3f view=%.3f",
+                diagnostics.get("reason", "direction_exception"),
+                self.direction_similarity, self.rotation_confidence,
+            )
+            self._last_direction_warning = time.monotonic()
         return self.rotation, self.direction
-
 
 if __name__ == "__main__":
     pass

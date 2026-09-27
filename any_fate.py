@@ -139,10 +139,7 @@ class AnyFateUniverse(SimulatedUniverse):
 
     def restart_recording(self):
         if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
-            self.recorder.stop_recording()
-            time.sleep(0.8)
-            self.recorder.start_recording(self.count + 1)
-            self.update_state("re_start")
+            self.rotate_recording()
         self.fail_match_count=0
         self.node_count=0
         self.chaoyan_seen = False  # 新轮回重置「超验之镜」已进过标记
@@ -339,6 +336,9 @@ class AnyFateUniverse(SimulatedUniverse):
                     key_mouse_manager.wait()
             # 长时间未交互/战斗，暂离或重开
             if ((time.time() - self.last_interact_time >= self.max_interact_time) and not self.need_record )or self.need_end:
+                self._abort_walk()
+                if self._stop or not self.is_run():
+                    return 0  # 导航过程中可能已进入祝福或过场，复核新帧后才允许恢复输入。
                 key_mouse_manager.clean()
                 key_mouse_manager.wait()
                 key_mouse_manager.keyUp("w")

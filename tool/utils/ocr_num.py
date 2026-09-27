@@ -7,7 +7,7 @@ import numpy as np
 
 from route import PATHS
 from tool.log import CUS_LOGGER
-from tool.utils.image_tool import find_image_in_folder
+from tool.utils.image_tool import find_image_in_folder, match_template_soft
 
 ROLL_COUNT_REGION = (1660, 707, 1700, 740)
 CHEAT_COUNT_REGION = (1325, 707, 1365, 740)
@@ -147,13 +147,14 @@ def extract_number(s):
     return match.group(1) if match else None
 
 
-def match_numbers_in_region(or_image, threshold=0.9):
+def match_numbers_in_region(or_image, threshold=0.9, soft=False):
     """
     在指定区域匹配数字模板
 
     Args:
         or_image: 输入图像数组
         threshold: 匹配阈值
+        soft: 高分辨率缩放截图时启用亚像素补偿
     Returns:
         str: 匹配结果列表，已按从左到右排序
     """
@@ -170,7 +171,12 @@ def match_numbers_in_region(or_image, threshold=0.9):
     for template_name in templates:
         template = find_image_in_folder("nums", template_name)
         th, tw = template.shape[:2]
-        res = cv2.matchTemplate(or_image, template, cv2.TM_CCOEFF_NORMED)
+        # 数字可能重复出现，必须补偿每个位置。单个峰值达标不能代表其他同字
+        # 也已达标，否则 4K 的 +112% 会因首个 1 漏检而拼成 +12%。
+        res = match_template_soft(
+            or_image, template, soft, cv2.TM_CCOEFF_NORMED,
+            threshold=threshold, all_matches=True,
+        )
         ys, xs = np.where(res >= threshold)
         for x, y in zip(xs, ys):
             all_matches.append(

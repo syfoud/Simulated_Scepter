@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 import cv2
@@ -317,7 +318,9 @@ def color_similarity_2d(image, color):
     cv2.add(positive, negative, dst=positive)
     cv2.subtract(255, positive, dst=positive)
     return positive
+@lru_cache(maxsize=1)
 def RotationRemapData():
+    """返回固定小地图尺寸的极坐标采样表，供每帧只读复用。"""
     d = MINIMAP_RADIUS * 2
     half_d = d / 2.0
 
@@ -515,22 +518,32 @@ def mask_minimap_outside(minimap, center_radius=40, outer_radius=None):
     masked_minimap = cv2.bitwise_and(minimap, minimap, mask=mask)
 
     return masked_minimap
+@lru_cache(maxsize=1)
+def _minimap_ring_template():
+    """缓存固定半径的小地图边缘模板。"""
+    template = np.zeros((2 * MINIMAP_RADIUS, 2 * MINIMAP_RADIUS), dtype=np.uint8)
+    cv2.circle(template, (MINIMAP_RADIUS, MINIMAP_RADIUS), MINIMAP_RADIUS, 255, 3)
+    return template
+
+
 def detect_minimap_center(image):
     """
     通过白色圆形边缘模板匹配检测小地图中心
     """
-    # 创建白色圆形边缘模板
-    template = np.zeros((2 * MINIMAP_RADIUS, 2 * MINIMAP_RADIUS), dtype=np.uint8)
-    cv2.circle(template, (MINIMAP_RADIUS, MINIMAP_RADIUS), MINIMAP_RADIUS, 255, 3)
-    gray_template = template
-
-    result = cv2.matchTemplate(image, gray_template, cv2.TM_CCOEFF_NORMED)
+    result = cv2.matchTemplate(image, _minimap_ring_template(), cv2.TM_CCOEFF_NORMED)
     _, _, _, max_loc = cv2.minMaxLoc(result)
     # 计算实际中心坐标
     center_x = max_loc[0] + MINIMAP_RADIUS
     center_y = max_loc[1] + MINIMAP_RADIUS
     return (center_x, center_y)
-def get_minimap(image, radius, copy=False, rotation=False, center_radius=80):
+
+
+def get_minimap_center(image):
+    """从基准分辨率截图中识别小地图中心。"""
+    return detect_minimap_center(map_image_preprocess(crop(image, (0, 0, 245, 255), copy=False)))
+
+
+def get_minimap(image, radius, copy=False, rotation=False, center_radius=80, center=None):
     """
     裁剪图像中的小地图区域
 
@@ -540,14 +553,15 @@ def get_minimap(image, radius, copy=False, rotation=False, center_radius=80):
         copy (bool): 是否复制图像
         rotation (bool): 是否进行旋转校正
         center_radius (int): 中心掩膜半径
+        center: 同一帧已识别的小地图中心；提供时不重复模板匹配。
 
     Returns:
         np.ndarray: 处理后的小地图图像
     """
-    # 通过模板匹配获取准确的MINIMAP_CENTER（很奇怪，小地图相对坐标会变化）
-    area = [0,0,245,255]
-    MINIMAP_CENTER = detect_minimap_center(map_image_preprocess(crop(image, area, copy=copy)))
-    area = area_offset((-radius, -radius, radius, radius), offset=MINIMAP_CENTER)
+    # 小地图中心可能随 UI 布局变化；同一帧的多种半径可共用一次识别结果。
+    if center is None:
+        center = get_minimap_center(image)
+    area = area_offset((-radius, -radius, radius, radius), offset=center)
     image = crop(image, area, copy=copy)
     if rotation:
         from tool.utils.mminimap import update_rotation
@@ -614,7 +628,7 @@ def peak_confidence(arr, **kwargs):
     elif count == 1:
         highest, second = 1, 0
     else:
-        highest, second = 1, 0
+        return 0.0
     confidence = (highest - second) / highest
     return confidence
 def rgb2yuv(image):

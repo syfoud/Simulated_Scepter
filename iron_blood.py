@@ -60,10 +60,7 @@ class IronBloodUniverse(AnyFateUniverse):
             keep_long_run = self.debug and minutes_divide_kill >= 1.2 # 演算时间过长录制保留阈值（分钟数÷战斗数）
             need_del = self.del_record_time and self.del_record_time>self.kill_count and not keep_long_run
             CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}")
-            self.recorder.stop_recording(need_del, battle_count=self.kill_count)
-            time.sleep(0.8)
-            self.recorder.start_recording(self.count + 1)
-            self.update_state("re_start")
+            self.rotate_recording(need_del, battle_count=self.kill_count)
         self.elapsed_time = 0  # 重置演算持续时间
         self.kill_count = 0
         self.first_plane_weight = 0 # 重置开局期望
@@ -244,7 +241,7 @@ class IronBloodUniverse(AnyFateUniverse):
             self.abandon_confirm(confirm=True)
 
     def select_go(self):
-        num = extract_number(match_numbers_in_region(self.screen))
+        num = extract_number(match_numbers_in_region(self.screen, soft=self.cap_scale != 1.0))
         if num is not None:
             num=int(num)
             if num%8==0:

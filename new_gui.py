@@ -5,6 +5,11 @@ import shutil
 import sys
 import time
 
+from tool.utils.game_window import set_process_dpi_awareness
+
+# 在 Qt、截图和键鼠初始化前统一物理像素坐标。
+set_process_dpi_awareness()
+
 import keyboard
 from PyQt5.QtGui import QFont, QKeySequence
 
@@ -429,6 +434,7 @@ class MainWindow(QMainWindowLog):
         # 任务管理相关属性
         self.current_task = None
         self.task_thread = None
+        self.close_pending = False
         self._task_monitor_timer = QTimer(self)
         self._task_monitor_timer.setInterval(100)
         self._task_monitor_timer.timeout.connect(self._check_task_thread)
@@ -491,6 +497,8 @@ class MainWindow(QMainWindowLog):
 
         self.Label_RunningState.setText("任务序列线程状态: 未运行")
         self._task_monitor_timer.stop()
+        if self.close_pending:
+            self.close()
 
     def is_task_running(self):
         """
@@ -984,6 +992,12 @@ class MainWindow(QMainWindowLog):
         """
         窗口关闭事件，清理键盘监听器
         """
+        if self.is_task_running():
+            event.ignore()
+            if not self.close_pending:
+                self.close_pending = True
+                self.stop_task()
+            return
         keyboard.unhook_all()
         super().closeEvent(event)
 
@@ -1036,8 +1050,13 @@ class MainWindow(QMainWindowLog):
                 bonus=config_simul.bonus
             )
             self.current_task = su
-            # 等待游戏窗口(可被中断)
-            su.save_screen()
+            try:
+                su.save_screen()
+            finally:
+                try:
+                    su.stop_background_threads()
+                finally:
+                    su.sct.close()
 
         try:
             self.start_task(task)
@@ -1058,12 +1077,18 @@ class MainWindow(QMainWindowLog):
             )
             self.current_task = su
             print_text = self.PrintEdit.text()
-            if self.PrintPhoto.isChecked():
-                su.click_target(find_image_by_name(print_text), 0.9, True, use_binary=False)
-            elif self.PrintText.isChecked():
-                su.click_text(print_text,click=False,find_all=True)
-            else:
-                su.click_text(print_text,click=True)
+            try:
+                if self.PrintPhoto.isChecked():
+                    su.click_target(find_image_by_name(print_text), 0.9, True)
+                elif self.PrintText.isChecked():
+                    su.click_text(print_text,click=False,find_all=True)
+                else:
+                    su.click_text(print_text,click=True)
+            finally:
+                try:
+                    su.stop_background_threads()
+                finally:
+                    su.sct.close()
 
         try:
             self.start_task(task)

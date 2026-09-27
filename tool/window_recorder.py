@@ -1,6 +1,7 @@
 import ctypes
 import datetime
 import os
+import threading
 import time
 
 # 导入必要的 Windows API 函数
@@ -34,6 +35,7 @@ class WindowRecorder:
         self.window_class_name = window_class_name
         self.recording = False
         self.recording_thread = None
+        self.recording_lock = threading.Lock()
         self.hwnd = handle
         self.out = None
         self.width = 0
@@ -149,120 +151,135 @@ class WindowRecorder:
 
     def start_recording(self,count=0):
         """开始录制指定窗口"""
-        CUS_LOGGER.debug(f"启动录制第{count}次")
-        if self.recording:
-            CUS_LOGGER.info("Already recording")
-            return
-        timestamp=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_file = self.output_path + f"第{count}次轮回-{timestamp}.mp4"
-        # 查找目标窗口
-        if self.hwnd and not is_usable_game_window(self.hwnd):
-            self.hwnd = None
-        if not self.hwnd:
-            self.hwnd = win32gui.FindWindow(self.window_class_name, self.window_title)
-        # 本地客户端沿用 UnityWndClass；找不到时为云游戏选择真正的
-        # Chrome_WidgetWin_1，避免精确标题命中 Explorer 的 TabProxyWindow。
-        if (
-            not is_usable_game_window(self.hwnd)
-            and self.window_title == LOCAL_GAME_TITLE
-        ):
-            game_window = find_game_window(prefer_foreground=True)
-            self.hwnd = game_window.hwnd if game_window else None
-        CUS_LOGGER.info(f"找到窗口句柄: {self.hwnd or 0}")
+        with self.recording_lock:
+            CUS_LOGGER.debug(f"启动录制第{count}次")
+            if self.recording:
+                CUS_LOGGER.debug("视频录制已启动")
+                return
+            if self.recording_thread and self.recording_thread.is_alive():
+                raise RuntimeError("上一次录制尚未结束，不能启动新录像")
+            if self.out is not None:
+                raise RuntimeError("上一次视频写入器尚未释放，请先停止录制")
+            timestamp=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            self.output_file = self.output_path + f"第{count}次轮回-{timestamp}.mp4"
+            # 查找目标窗口
+            if self.hwnd and not is_usable_game_window(self.hwnd):
+                self.hwnd = None
+            if not self.hwnd:
+                self.hwnd = win32gui.FindWindow(self.window_class_name, self.window_title)
+            # 本地客户端沿用 UnityWndClass；找不到时为云游戏选择真正的
+            # Chrome_WidgetWin_1，避免精确标题命中 Explorer 的 TabProxyWindow。
+            if (
+                not is_usable_game_window(self.hwnd)
+                and self.window_title == LOCAL_GAME_TITLE
+            ):
+                game_window = find_game_window(prefer_foreground=True)
+                self.hwnd = game_window.hwnd if game_window else None
+            CUS_LOGGER.info(f"找到窗口句柄: {self.hwnd or 0}")
 
-        if not self.hwnd:
-            if self.window_class_name:
-                CUS_LOGGER.error(f"未找到类名为 '{self.window_class_name}' 且标题包含 '{self.window_title}' 的窗口")
-                raise ValueError(f"未找到类名为 '{self.window_class_name}' 且标题包含 '{self.window_title}' 的窗口")
-            else:
-                CUS_LOGGER.error(f"未找到标题包含 '{self.window_title}' 的窗口")
-                raise ValueError(f"未找到标题包含 '{self.window_title}' 的窗口")
+            if not self.hwnd:
+                if self.window_class_name:
+                    CUS_LOGGER.error(f"未找到类名为 '{self.window_class_name}' 且标题包含 '{self.window_title}' 的窗口")
+                    raise ValueError(f"未找到类名为 '{self.window_class_name}' 且标题包含 '{self.window_title}' 的窗口")
+                else:
+                    CUS_LOGGER.error(f"未找到标题包含 '{self.window_title}' 的窗口")
+                    raise ValueError(f"未找到标题包含 '{self.window_title}' 的窗口")
 
-        # 确保窗口可见且有效
-        if not win32gui.IsWindowVisible(self.hwnd):
-            CUS_LOGGER.warning("警告: 窗口不可见")
+            # 确保窗口可见且有效
+            if not win32gui.IsWindowVisible(self.hwnd):
+                CUS_LOGGER.warning("警告: 窗口不可见")
 
-        if not win32gui.IsWindow(self.hwnd):
-            CUS_LOGGER.error("窗口句柄无效")
-            raise ValueError("窗口句柄无效")
+            if not win32gui.IsWindow(self.hwnd):
+                CUS_LOGGER.error("窗口句柄无效")
+                raise ValueError("窗口句柄无效")
 
-        self.window_kind = get_window_kind(self.hwnd)
-        if self.window_kind is None:
-            CUS_LOGGER.error("找到的窗口不是受支持的游戏主窗口")
-            raise ValueError("找到的窗口不是受支持的游戏主窗口")
+            self.window_kind = get_window_kind(self.hwnd)
+            if self.window_kind is None:
+                CUS_LOGGER.error("找到的窗口不是受支持的游戏主窗口")
+                raise ValueError("找到的窗口不是受支持的游戏主窗口")
 
-        # 设置DPI感知
-        try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)  # 2 = Per-monitor v2 DPI awareness
-        except Exception as e:
-            CUS_LOGGER.warning(f"无法设置DPI感知级别: {e}")
+            # 设置DPI感知
             try:
-                ctypes.windll.user32.SetProcessDPIAware()
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)  # 2 = Per-monitor v2 DPI awareness
             except Exception as e:
-                CUS_LOGGER.warning(f"无法设置DPI感知级别(备用方法): {e}")
+                CUS_LOGGER.warning(f"无法设置DPI感知级别: {e}")
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception as e:
+                    CUS_LOGGER.warning(f"无法设置DPI感知级别(备用方法): {e}")
 
-        # 获取窗口位置和尺寸
-        try:
-            # 云游戏只录制 Edge 客户区；本地客户端保持原窗口矩形逻辑。
-            if self.window_kind == CLOUD_WINDOW_KIND:
-                rect = get_client_screen_rect(self.hwnd)
-            else:
-                rect = win32gui.GetWindowRect(self.hwnd)
-            self.left, self.top, self.right, self.bottom = rect
-            self.width = self.right - self.left
-            self.height = self.bottom - self.top
+            # 获取窗口位置和尺寸
+            try:
+                # 云游戏只录制 Edge 客户区；本地客户端保持原窗口矩形逻辑。
+                if self.window_kind == CLOUD_WINDOW_KIND:
+                    rect = get_client_screen_rect(self.hwnd)
+                else:
+                    rect = win32gui.GetWindowRect(self.hwnd)
+                self.left, self.top, self.right, self.bottom = rect
+                self.width = self.right - self.left
+                self.height = self.bottom - self.top
 
-            CUS_LOGGER.info(
-                f"窗口类型: {self.window_kind}, 位置: "
-                f"({self.left}, {self.top}, {self.right}, {self.bottom}), "
-                f"尺寸: {self.width}x{self.height}"
+                CUS_LOGGER.info(
+                    f"窗口类型: {self.window_kind}, 位置: "
+                    f"({self.left}, {self.top}, {self.right}, {self.bottom}), "
+                    f"尺寸: {self.width}x{self.height}"
+                )
+            except Exception as e:
+                CUS_LOGGER.error(f"获取窗口位置失败: {e}")
+                raise
+
+            # 确保输出目录存在
+            import os
+            output_dir = os.path.dirname(self.output_file)
+            if output_dir and not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            # 应用偏移后的实际录制尺寸
+            self.capture_left = self.left + self.offsets[0]
+            self.capture_top = self.top + self.offsets[1]
+            self.capture_right = self.right - self.offsets[2]
+            self.capture_bottom = self.bottom - self.offsets[3]
+            actual_width = self.capture_right - self.capture_left
+            actual_height = self.capture_bottom - self.capture_top
+            # 常见编码器要求偶数宽高。云窗口可能是 1920x1079，裁剪后为奇数。
+            if actual_width % 2:
+                self.capture_right -= 1
+                actual_width -= 1
+            if actual_height % 2:
+                self.capture_bottom -= 1
+                actual_height -= 1
+            if actual_width <= 0 or actual_height <= 0:
+                raise ValueError(f"录像区域无效: {actual_width}x{actual_height}")
+
+            # 设置视频写入器
+            CUS_LOGGER.info(f"初始化视频写入器，尺寸: {actual_width}x{actual_height}")
+            self.out = cv2.VideoWriter(
+                self.output_file,
+                cv2.VideoWriter_fourcc(*'mp4v'),
+                self.fps,
+                (actual_width, actual_height)
             )
-        except Exception as e:
-            CUS_LOGGER.error(f"获取窗口位置失败: {e}")
-            raise
 
-        # 确保输出目录存在
-        import os
-        output_dir = os.path.dirname(self.output_file)
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+            if not self.out.isOpened():
+                self.out.release()
+                self.out = None
+                raise RuntimeError("无法初始化视频写入器")
 
-        # 应用偏移后的实际录制尺寸
-        self.capture_left = self.left + self.offsets[0]
-        self.capture_top = self.top + self.offsets[1]
-        self.capture_right = self.right - self.offsets[2]
-        self.capture_bottom = self.bottom - self.offsets[3]
-        actual_width = self.capture_right - self.capture_left
-        actual_height = self.capture_bottom - self.capture_top
-        # 常见编码器要求偶数宽高。云窗口可能是 1920x1079，裁剪后为奇数。
-        if actual_width % 2:
-            self.capture_right -= 1
-            actual_width -= 1
-        if actual_height % 2:
-            self.capture_bottom -= 1
-            actual_height -= 1
-        if actual_width <= 0 or actual_height <= 0:
-            raise ValueError(f"录像区域无效: {actual_width}x{actual_height}")
+            # 写入器只交给本次线程；上一线程彻底退出前禁止启动下一次。
+            self.recording = True
+            try:
+                self.recording_thread = ThreadWithException(
+                    target=self._record_window, kwargs={"writer": self.out}, daemon=True, name="视频录制",
+                )
+                self.recording_thread.start()
+            except BaseException:
+                self.recording = False
+                self.recording_thread = None
+                self.out.release()
+                self.out = None
+                raise
 
-        # 设置视频写入器
-        CUS_LOGGER.info(f"初始化视频写入器，尺寸: {actual_width}x{actual_height}")
-        self.out = cv2.VideoWriter(
-            self.output_file,
-            cv2.VideoWriter_fourcc(*'mp4v'),
-            self.fps,
-            (actual_width, actual_height)
-        )
-
-        if not self.out.isOpened():
-            CUS_LOGGER.error("无法初始化视频写入器")
-            raise RuntimeError("无法初始化视频写入器")
-
-        # 启动录制线程
-        self.recording = True
-        self.recording_thread = ThreadWithException(target=self._record_window, daemon=True,name="视频录制")
-        self.recording_thread.start()
-
-    def _record_window(self):
+    def _record_window(self, writer):
         """实际的窗口录制线程"""
         try:
             while self.recording:
@@ -441,14 +458,14 @@ class WindowRecorder:
                                     font_thickness)
 
                     # 写入视频文件
-                    self.out.write(img_cv)
+                    writer.write(img_cv)
 
                     if self.is_show:
                         # 实时显示当前帧
                         cv2.imshow('Window Recorder', img_cv)
                         if cv2.waitKey(1) & 0xFF == ord('q'):
                             CUS_LOGGER.info("用户按 q 键，停止录制")
-                            self.stop_recording()
+                            self.recording = False
                             break
 
                     # 控制帧率
@@ -462,11 +479,11 @@ class WindowRecorder:
             import traceback
             traceback.print_exc()
         finally:
-            # 释放资源
-            if self.out:
-                self.out.release()
-                self.out = None
-            CUS_LOGGER.info("视频写入器已释放")
+            self.recording = False
+            # 只有所属线程退出写入循环后才释放，stop 超时不能抢先关闭编码器。
+            writer.release()
+            self.out = None
+            CUS_LOGGER.debug("视频写入器已释放")
 
     def stop_recording(self, delete_video=False, battle_count=None):
         """停止录制
@@ -475,45 +492,43 @@ class WindowRecorder:
             delete_video (bool): 是否删除录制的视频文件，默认为 False
             battle_count (int, optional): 战斗次数；保留录制且不为 None 时，用于更新视频文件名
         """
-        if not self.recording:
-            return
-        self.recording = False
+        with self.recording_lock:
+            if self.recording_thread is None and self.out is None:
+                return
+            self.recording = False
 
-        # 等待录制线程完全退出，避免 FFmpeg DLL 资源竞争
-        if self.recording_thread and self.recording_thread.is_alive():
-            try:
-                CUS_LOGGER.debug("等待录制线程结束...")
+            if self.recording_thread and self.recording_thread.is_alive():
+                if self.recording_thread is threading.current_thread():
+                    raise RuntimeError("录制线程不能等待自身退出")
                 self.recording_thread.join(timeout=3.0)
                 if self.recording_thread.is_alive():
-                    CUS_LOGGER.warning("录制线程未在规定时间内结束")
-                else:
-                    CUS_LOGGER.debug("录制线程已正常结束")
-            except Exception as e:
-                CUS_LOGGER.warning(f"等待录制线程结束时发生错误：{e}")
+                    raise TimeoutError("录制线程未在 3 秒内结束，已请求停止；保留写入器和视频，请稍后重试")
 
-        if self.out:
-            self.out.release()
-            self.out = None
+            # 线程已退出才可重试失败的资源释放，并执行删除或改名。
+            if self.out is not None:
+                self.out.release()
+                self.out = None
+            self.recording_thread = None
 
-        # 如果需要删除视频文件
-        if delete_video:
-            try:
-                if os.path.exists(self.output_file):
-                    os.remove(self.output_file)
-                    CUS_LOGGER.debug(f"已删除视频文件：{self.output_file}")
-            except Exception as e:
-                CUS_LOGGER.warning(f"删除视频文件失败：{e}")
-        else:
-            # 保留录制时，更新视频文件名，增加战斗次数信息
-            if battle_count is not None:
+            # 如果需要删除视频文件
+            if delete_video:
                 try:
-                    head, tail = self.output_file.rsplit("次轮回-", 1)
-                    new_path = f"{head}次轮回-{battle_count}战-{tail}"
-                    os.rename(self.output_file, new_path)
-                    self.output_file = new_path
+                    if os.path.exists(self.output_file):
+                        os.remove(self.output_file)
+                        CUS_LOGGER.debug(f"已删除视频文件：{self.output_file}")
                 except Exception as e:
-                    CUS_LOGGER.warning(f"更新视频文件名失败：{e}")
-            CUS_LOGGER.debug(f"停止录制{self.output_file}")
+                    CUS_LOGGER.warning(f"删除视频文件失败：{e}")
+            else:
+                # 保留录制时，更新视频文件名，增加战斗次数信息
+                if battle_count is not None:
+                    try:
+                        head, tail = self.output_file.rsplit("次轮回-", 1)
+                        new_path = f"{head}次轮回-{battle_count}战-{tail}"
+                        os.rename(self.output_file, new_path)
+                        self.output_file = new_path
+                    except Exception as e:
+                        CUS_LOGGER.warning(f"更新视频文件名失败：{e}")
+                CUS_LOGGER.debug(f"停止录制{self.output_file}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,41 @@
+[
+  {
+    "file": "8a45427a.png",
+    "box": [
+      1837,
+      482,
+      1909,
+      560
+    ],
+    "running": false,
+    "source": "logs/evidence/20260927-113112-719134-11876/8a45427ae8384ca08e541f02f953f4cb-navigation_timeout/screen.png",
+    "source_sha256": "7540592a161217b17f71d4956397a665660d863fb815d99b118d91fe3f6d746d",
+    "sha256": "4d7bbacd334ed48c82cf07f989830a0363bd1ced3414cd6c8ad93dc05a09e97f"
+  },
+  {
+    "file": "a1b024e3.png",
+    "box": [
+      1837,
+      482,
+      1909,
+      560
+    ],
+    "running": false,
+    "source": "logs/evidence/20260927-113112-719134-11876/a1b024e347a541ff923e9ef9e8dc887f-navigation_timeout/screen.png",
+    "source_sha256": "c5a7b1e1ab409ea5aa03106d26d1b37fca2fc170cc5841bbc7fe975866bda858",
+    "sha256": "13592732f07525f324d27da2acc56a3cd52313a323c23b851d987b73c549a070"
+  },
+  {
+    "file": "7de0a1be.png",
+    "box": [
+      1837,
+      482,
+      1909,
+      560
+    ],
+    "running": true,
+    "source": "logs/evidence/20260927-113112-719134-11876/7de0a1bedca4464782c77b05bdaac353-navigation_timeout/screen.png",
+    "source_sha256": "eceff63652ff3144eb6c0804c8506abcaa4e7aa66c5177e48a69c46a2f2fac39",
+    "sha256": "06502f96a79e2840c6d40deae30da5dd35db0f62d3ea0f3cc67ec6c3e4eada49"
+  }
+]

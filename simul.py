@@ -3,6 +3,7 @@ import json
 import os
 import random
 import shutil
+import threading
 import time
 from copy import deepcopy
 
@@ -60,7 +61,9 @@ class SimulatedUniverse(UniverseUtils):
         CUS_LOGGER.debug("当前命途：" + self.fate)
         key_mouse_manager.set_config(config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params(self.x0 + self.cap_w, self.y0 + self.cap_h,
+                                            self.cap_w, self.cap_h,
+                                            self.cap_scale, self.cap_scale_y)
 
         #停止运行标志
         self._stop = True
@@ -228,10 +231,7 @@ class SimulatedUniverse(UniverseUtils):
     def restart_recording(self):
         #是否把视频每轮裁剪一次
         if self.record and self.cut_video and self.bveerelbcpgyqan and self.YKItDYvq3FpnOYx:
-            self.recorder.stop_recording()
-            time.sleep(0.8)
-            self.recorder.start_recording(self.count + 1)
-            self.update_state("re_start")
+            self.rotate_recording()
     def setting_exit(self):
         if self.state != "end" and self.state!="exit":
             key_mouse_manager.click(1359, 811)
@@ -342,6 +342,9 @@ class SimulatedUniverse(UniverseUtils):
                 self.map_data_load()
             # 长时间未交互/战斗，暂离或重开
             if ((time.time() - self.last_interact_time >= 37 - 2 * self.debug + 8 * self.slow) and self.find == 1)or (self.floor == 13 and self.mini_state > 4):
+                self._abort_walk()
+                if self._stop or not self.is_run():
+                    return 0  # 停止或已离开跑图时，禁止按旧状态发送恢复输入。
                 key_mouse_manager.clean()
                 key_mouse_manager.wait()
                 key_mouse_manager.keyUp("w")
@@ -801,7 +804,7 @@ class SimulatedUniverse(UniverseUtils):
         备份文件从项目目录下的config/backup文件夹中读取。
         """
         try:
-            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup"))
+            backup_dir = os.path.join(PATHS["config"], "backup")
 
             # 从磁盘读取 big_map 图像文件
             backup_file = os.path.join(backup_dir, "big_map_backup.png")
@@ -1208,14 +1211,17 @@ class SimulatedUniverse(UniverseUtils):
 
         如果在执行过程中发生异常，会尝试停止运行并重新抛出异常。
         """
-        self._stop = False
-        key_mouse_manager.start()
-        if self.record and self.gwypzmgzcndqlp:
-            self.recorder.start_recording(self.count + 1)
-        if self._show_map:
-            self.map_thread = ThreadWithException(target=self.show_map,name="地图")
-            self.map_thread.start()
+        with self._worker_lock:
+            self._stop = False
         try:
+            key_mouse_manager.start()
+            if self.record and self.gwypzmgzcndqlp:
+                self.start_recording()
+            if self._show_map:
+                with self._worker_lock:
+                    if not self._stop:
+                        self.map_thread = ThreadWithException(target=self.show_map,name="地图")
+                        self.map_thread.start()
             self.route()
         except NormalEndError as e:
             CUS_LOGGER.warning(f'离开游戏界面，正常终止进程{e}')
@@ -1226,6 +1232,20 @@ class SimulatedUniverse(UniverseUtils):
                 self.stop()
             # 重新抛出异常，以便上层能够捕获
             raise
+        finally:
+            stopped = self._stop
+            try:
+                self.stop_background_threads()
+            finally:
+                try:
+                    # 仅业务线程关闭录像，避免与切段或 writer.release 并发。
+                    if self.record and self.bveerelbcpgyqan:
+                        self.recorder.stop_recording(
+                            delete_video=stopped and getattr(self, "kill_count", None) == 0,
+                        )
+                finally:
+                    with self._worker_lock:
+                        self.sct.close()
 
     def stop(self, *_, **__):
         """
@@ -1241,19 +1261,40 @@ class SimulatedUniverse(UniverseUtils):
             **__: 忽略的关键字参数
         """
         CUS_LOGGER.info("翁法罗斯已经等待了这一刻太久……还可以等待更久……只要祂还曾燃烧……")
-        self._stop = 1
-        key_mouse_manager.stop()
-        if self.record and self.bveerelbcpgyqan :
-            CUS_LOGGER.info("以「爱」的名义，她将逝去的一切尽数珍藏……直到世间的尽头……")
+        self.stop_background_threads()
+        # start 的 finally 在业务线程退出时回收录像；此处不能与正在切段的线程竞争。
+        with self._worker_lock:
             try:
-                if hasattr(self, "kill_count"):
-                    self.recorder.stop_recording(delete_video=self.kill_count == 0)
-                else:
-                    self.recorder.stop_recording()
-            except Exception as e:
-                CUS_LOGGER.error(f"停止录制时发生错误: {e}")
-        self.save_screen(not_now=True,save_path="/temp/stop/")
-        self.save_screen(save_path="/temp/stop/")
-        self.map_thread = None
+                self.save_screen(not_now=True, save_path="/temp/stop/")
+                self.save_screen(save_path="/temp/stop/")
+            except Exception as exc:
+                CUS_LOGGER.warning("停止时无法保存诊断截图：%s", exc)
 
+    def stop_background_threads(self):
+        with self._worker_lock:
+            self._stop = True
+            self.stop_move = 1
+            self.should_update_map = False
+            threads = (self.move_thread, self.update_thread, self.map_thread)
+        try:
+            key_mouse_manager.stop()
+        finally:
+            current = threading.current_thread()
+            for worker in threads:
+                if worker is not None and worker is not current and worker.ident is not None:
+                    worker.join()
 
+    def start_recording(self):
+        """在任务生命周期锁内确认仍可启动，防止停止后创建新录制。"""
+        with self._worker_lock:
+            if self._stop:
+                return False
+            self.recorder.start_recording(self.count + 1)
+            return True
+
+    def rotate_recording(self, delete_video=False, battle_count=None):
+        """由业务线程切段；停止线程只发停止请求，录像在任务出口统一回收。"""
+        self.recorder.stop_recording(delete_video, battle_count=battle_count)
+        time.sleep(0.8)
+        if self.start_recording():
+            self.update_state("re_start")

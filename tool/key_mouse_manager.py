@@ -9,6 +9,7 @@ import win32con
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
+
 # 延迟导入，避免循环导入
 def get_CUS_LOGGER():
     from tool.log import CUS_LOGGER
@@ -22,7 +23,11 @@ class KeyMouseManager:
     def __init__(self):
         self.operation_queue = deque()  # 使用deque支持在队首插入操作
         self.queue_lock = threading.Lock()  # 保护队列的锁
+        self.input_lock = threading.RLock()  # 物理输入与登记/释放必须原子执行。
+        self.input_generation = 0  # clean/stop 使已经出队的旧操作失效。
+        self.pressed_keys = set()  # 工作线程登记已按下按键；stop()/clean() 统一释放。
         self.worker_thread = None
+        self.worker_error = None
         self.running = False
         #键鼠配置
         self.config = None
@@ -32,13 +37,14 @@ class KeyMouseManager:
         self.y0 = 0
         self.xx = 1
         self.yy = 1
-        self.full = False
         self.multi = 1.0
         self.scale = 1.0
+        self.coord_scale = 1.0
+        self.coord_scale_y = 1.0
         # 用于支持强制操作中断睡眠
         self.sleep_start_time = None
         self.sleep_duration = 0
-        self.ending = False
+        self.ending = True
 
     def set_config(self, config):
         """
@@ -53,16 +59,17 @@ class KeyMouseManager:
         if hasattr(config, 'scale'):
             self.scale = config.scale
 
-    def set_screen_params(self, x1, y1, xx, yy, full=False):
+    def set_screen_params(self, x1, y1, xx, yy, coord_scale=1.0, coord_scale_y=None):
         """
         设置屏幕参数，用于坐标转换
 
         Args:
             x1: 屏幕右边界坐标
             y1: 屏幕下边界坐标
-            xx: 屏幕宽度
-            yy: 屏幕高度
-            full: 是否全屏模式
+            xx: 截取区域宽度（物理像素）
+            yy: 截取区域高度（物理像素）
+            coord_scale: 基准分辨率横坐标到物理像素的放大系数。
+            coord_scale_y: 纵坐标放大系数；省略时沿用横坐标系数。
         """
         self.x1 = x1
         self.y1 = y1
@@ -70,67 +77,77 @@ class KeyMouseManager:
         self.yy = yy
         self.x0 = x1-xx
         self.y0 = y1-yy
-        self.full = False
+        self.coord_scale = coord_scale
+        self.coord_scale_y = coord_scale if coord_scale_y is None else coord_scale_y
 
     def start(self):
-        """
-        启动键鼠管理器线程
-        """
-        CUS_LOGGER = get_CUS_LOGGER()
-        CUS_LOGGER.info("启动键鼠管理器线程")
-        if not self.running:
+        """启动键鼠线程；仍在退出的线程不能与新任务共享输入。"""
+        with self.input_lock:
+            if self.running:
+                return
+            if self.worker_thread and self.worker_thread.is_alive():
+                raise RuntimeError("键鼠管理器仍在停止，不能重新启动")
             self.running = True
-            self.operation_queue.clear()
-            self.worker_thread = ThreadWithException(target=self._worker, daemon=True,name="键鼠管理")
+            self.worker_error = None
+            with self.queue_lock:
+                self.operation_queue.clear()
+                self.ending = True
+            self.worker_thread = ThreadWithException(target=self._worker, daemon=True, name="键鼠管理")
             self.worker_thread.start()
+        CUS_LOGGER.info("启动键鼠管理器线程")
 
     def stop(self):
-        """
-        停止键鼠管理器线程
-        """
-        CUS_LOGGER = get_CUS_LOGGER()
-        CUS_LOGGER.info("停止键鼠管理器线程")
+        """取消排队和执行中的后续输入，等线程退出并重试释放按键。"""
         self.running = False
-        if self.worker_thread and self.worker_thread.is_alive():
-            # 发送停止信号
-            with self.queue_lock:
-                self.operation_queue.clear()  # 清空队列中的所有操作
-                self.operation_queue.append("stop")
-            self.worker_thread.join()
+        self.clean()
+        worker = self.worker_thread
+        if worker and worker is not threading.current_thread() and worker.is_alive():
+            worker.join()
+        self._release_pressed_keys()
 
     def clean(self):
-        """
-        清除当前键鼠管理器线程所有操作
-        """
-        CUS_LOGGER = get_CUS_LOGGER()
-        CUS_LOGGER.debug("清除当前所有操作")
-        if self.worker_thread and self.worker_thread.is_alive():
+        """清空操作并释放按键，包括已经出队但尚未发出的输入。"""
+        with self.input_lock:
             with self.queue_lock:
-                self.operation_queue.clear()  # 清空队列中的所有操作
+                self.input_generation += 1
+                self.operation_queue.clear()
+                self.end_time = 0
+                self.sleep_start_time = None
+                self.sleep_duration = 0
+            self._release_pressed_keys()
+
+    def _release_pressed_keys(self):
+        """释放已登记的按键；失败的按键保留，供停止时重试。"""
+        with self.input_lock:
+            for key in tuple(self.pressed_keys):
+                try:
+                    pyautogui.keyUp(key)
+                except Exception as exc:
+                    CUS_LOGGER.error("释放按键 %s 失败：%s", key, exc)
+                else:
+                    self.pressed_keys.discard(key)
 
     def _worker(self):
-        """
-        工作线程，处理队列中的操作
-        """
-        CUS_LOGGER = get_CUS_LOGGER()
-        while self.running:
-            operation = None
-            with self.queue_lock:
-                if self.operation_queue:
-                    operation = self.operation_queue.popleft()
-
-            if operation == "stop":
-                # None作为停止信号
-                break
-
-            if operation != "stop" and operation is not None:
-                self.ending = False
-                self._execute_operation(operation)
-                self.ending = True
-            else:
-                # 队列为空，短暂休眠
-                time.sleep(0.01)
-        CUS_LOGGER.info("键鼠管理器线程已停止")
+        """消费输入队列；出队和忙碌状态同步更新，失败时释放已按键。"""
+        try:
+            while self.running:
+                with self.queue_lock:
+                    operation = self.operation_queue.popleft() if self.operation_queue else None
+                    generation = self.input_generation
+                    self.ending = operation is None
+                if operation is not None:
+                    self._execute_operation(operation, generation)
+                    with self.queue_lock:
+                        self.ending = True
+                else:
+                    time.sleep(0.01)
+        except Exception as exc:
+            self.worker_error = exc
+            raise
+        finally:
+            self.running = False
+            self._release_pressed_keys()
+            CUS_LOGGER.info("键鼠管理器线程已停止")
 
     def _get_mapping(self, key):
         """
@@ -162,117 +179,99 @@ class KeyMouseManager:
         if isinstance(x, float):
             actual_x, actual_y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
         else:
-            actual_x, actual_y = self.x1-self.xx+x, self.y1-self.yy+y
-        # 全屏模式会有一个偏移
-        if self.full:
-            actual_x += 9
-            actual_y += 9
+            # int 是 1920×1080 基准坐标，高分辨率窗口需放大回物理像素
+            actual_x = self.x1 - self.xx + int(x * self.coord_scale)
+            actual_y = self.y1 - self.yy + int(y * self.coord_scale_y)
 
         return actual_x, actual_y
 
-    def _execute_operation(self, operation):
-        """
-        执行单个键鼠操作
-
-        Args:
-            operation: 操作字典，包含操作类型和参数
-        """
+    def _execute_operation(self, operation, generation=None):
+        """执行操作；每次物理输入前复核停止和清队列代次。"""
+        if generation is None:
+            generation = self.input_generation
         op_type = operation['type']
-        CUS_LOGGER = get_CUS_LOGGER()
-        CUS_LOGGER.debug(f"执行操作{operation}，当前队列长度{len(self.operation_queue)}")
-        if op_type == 'keyDown':
-            key = self._get_mapping(operation['key'])
-            pyautogui.keyDown(key)
-
-        elif op_type == 'keyUp':
-            key = self._get_mapping(operation['key'])
-            # 特殊处理shift键
-            if (self.config and hasattr(self.config, 'long_press_sprint') and
-                self.config.long_press_sprint and operation['key'] == 'w'):
-                pyautogui.keyUp(self._get_mapping('shift'))
-            pyautogui.keyUp(key)
-
-        elif op_type == 'press':
-            key = self._get_mapping(operation['key'])
-            duration = operation.get('duration', 0)
-
-            # 检查是否需要跳过该按键
-            if operation.get('allow_e', 1) == 0 and key == 'e':
+        if op_type == 'mouse_move':
+            self._direct_mouse_move(operation['dx'], operation.get('fine', 1), generation)
+            return
+        if op_type == 'sleep':
+            self._sleep(operation.get('duration', 0), generation)
+            return
+        with self.input_lock:
+            if not self.running or generation != self.input_generation:
                 return
+            if op_type in ('keyDown', 'keyUp', 'press'):
+                key = self._get_mapping(operation['key'])
+                if op_type == 'keyUp':
+                    if (self.config and getattr(self.config, 'long_press_sprint', False)
+                            and operation['key'] == 'w'):
+                        shift = self._get_mapping('shift')
+                        pyautogui.keyUp(shift)
+                        self.pressed_keys.discard(shift)
+                    pyautogui.keyUp(key)
+                    self.pressed_keys.discard(key)
+                    return
+                if op_type == 'press':
+                    if operation.get('allow_e', 1) == 0 and key == 'e':
+                        return
+                    if self.config and getattr(self.config, 'slow', False) and key == 'shift':
+                        return
+                # 先登记再发送：底层输入发出后抛异常时仍能在 finally 重试释放。
+                self.pressed_keys.add(key)
+                pyautogui.keyDown(key)
+                if op_type == 'keyDown':
+                    return
+            elif op_type in ('click', 'scroll'):
+                win32api.SetCursorPos(self._convert_coordinates(operation['x'], operation['y']))
+                if op_type == 'click':
+                    pyautogui.click()
+                    return
+            elif op_type == 'drag':
+                win32api.SetCursorPos(self._convert_coordinates(operation['start_x'], operation['start_y']))
 
-            if (self.config and hasattr(self.config, 'slow') and
-                self.config.slow and key == 'shift'):
-                return
-
-            pyautogui.keyDown(key)
-            if duration > 0:
-                self._sleep(duration)
-            pyautogui.keyUp(key)
-
-        elif op_type == 'click':
-            x, y = operation['x'], operation['y']
-            # 转换坐标
-            actual_x, actual_y = self._convert_coordinates(x, y)
-            win32api.SetCursorPos((actual_x, actual_y))
-            pyautogui.click()
-
-        elif op_type == 'mouse_move':
-            dx = operation['dx']
-            fine = operation.get('fine', 1)
-            # 仿照UniverseUtils.mouse_move实现
-            self._direct_mouse_move(dx, fine)
-
+        if op_type == 'press':
+            try:
+                self._sleep(operation.get('duration', 0), generation)
+            finally:
+                with self.input_lock:
+                    pyautogui.keyUp(key)
+                    self.pressed_keys.discard(key)
         elif op_type == 'scroll':
-            x, y = operation['x'], operation['y']
-            direct = operation['direct']
-            # 转换坐标
-            actual_x, actual_y = self._convert_coordinates(x, y)
-            win32api.SetCursorPos((actual_x, actual_y))
-            count = abs(direct)
-            for _ in range(count):
-                if direct > 0:
-                    pyautogui.scroll(120)
-                else:
-                    pyautogui.scroll(-120)
-
+            for _ in range(abs(operation['direct'])):
+                with self.input_lock:
+                    if not self.running or generation != self.input_generation:
+                        break
+                    pyautogui.scroll(120 if operation['direct'] > 0 else -120)
         elif op_type == 'drag':
-            start_x, start_y = operation['start_x'], operation['start_y']
-            end_x, end_y = operation['end_x'], operation['end_y']
-            duration = operation.get('duration', 0.4)
-            # 转换起始坐标
-            actual_start_x, actual_start_y = self._convert_coordinates(start_x, start_y)
-            actual_end_x, actual_end_y = self._convert_coordinates(end_x, end_y)
-            win32api.SetCursorPos((actual_start_x, actual_start_y))
-            self._sleep(0.2)
-            pyautogui.dragTo(actual_end_x, actual_end_y, duration, button='left')
-            # pyautogui.drag(actual_end_x - actual_start_x, actual_end_y - actual_start_y, duration)
+            self._sleep(0.2, generation)
+            with self.input_lock:
+                if not self.running or generation != self.input_generation:
+                    return
+                end_x, end_y = self._convert_coordinates(operation['end_x'], operation['end_y'])
+                try:
+                    pyautogui.dragTo(end_x, end_y, operation.get('duration', 0.4), button='left')
+                finally:
+                    pyautogui.mouseUp(button='left')
 
-        elif op_type == 'sleep':
-            duration = operation.get('duration', 0)
-            self._sleep(duration)
+    def _direct_mouse_move(self, x, fine=1, generation=None):
+        """分段旋转镜头，清队列或停止后不再发送剩余移动。"""
+        if generation is None:
+            generation = self.input_generation
+        if not 0 < fine <= 30:
+            raise ValueError("转向精度必须大于 0 且不超过 30")
+        while True:
+            y = max(-30 // fine, min(30 // fine, x))
+            with self.input_lock:
+                if not self.running or generation != self.input_generation:
+                    return
+                dx = int(16.5 * y * self.multi * self.scale)
+                CUS_LOGGER.debug("旋转%s°，精度%s，移动距离%s", x, fine, dx)
+                win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, 0)
+            self._sleep(0.05 * fine, generation)
+            if x == y:
+                return
+            x -= y
 
-    def _direct_mouse_move(self, x, fine=1):
-        """
-        直接执行鼠标移动，不通过队列
-
-        Args:
-            dx: x轴移动距离
-            fine: 精细度控制参数
-        """
-        if x > 30 // fine:
-            y = 30 // fine
-        elif x < -30 // fine:
-            y = -30 // fine
-        else:
-            y = x
-        dx = int(16.5 * y * self.multi * self.scale)
-        CUS_LOGGER.debug(f"旋转{x}°，精度{fine},移动距离{dx}，倍率{self.multi}，缩放比{self.scale}")
-        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, 0)  # 进行视角移动
-        self._sleep(0.05 * fine)
-        if x != y:
-            self._direct_mouse_move(x - y, fine)
-
-    def _sleep(self, duration):
+    def _sleep(self, duration, generation=None):
         """
         可中断的sleep方法，支持强制操作中断
 
@@ -281,17 +280,22 @@ class KeyMouseManager:
         """
         if duration <= 0:
             return
+        if generation is None:
+            generation = self.input_generation
 
-        # 记录睡眠开始时间和总时长
-        self.sleep_start_time = time.time()
-        self.sleep_duration = duration
-        # 循环检查是否需要中断睡眠
-        self.end_time = self.sleep_start_time + duration
-        while time.time() < self.end_time and self.running:
+        with self.queue_lock:
+            if not self.running or generation != self.input_generation:
+                return
+            self.sleep_start_time = time.time()
+            self.sleep_duration = duration
+            self.end_time = self.sleep_start_time + duration
+        while (time.time() < self.end_time and self.running
+               and generation == self.input_generation):
             time.sleep(0.005)  # 短暂休眠以避免占用过多CPU
         # 清除睡眠状态
-        self.sleep_start_time = None
-        self.sleep_duration = 0
+        with self.queue_lock:
+            self.sleep_start_time = None
+            self.sleep_duration = 0
 
     def _handle_force_operation(self, operation):
         """
@@ -300,50 +304,26 @@ class KeyMouseManager:
         Args:
             operation: 强制操作
         """
-        # 检查当前是否正在睡眠
-        put=True
-        if self.sleep_start_time is not None and self.sleep_duration > 0:
-            # 计算剩余睡眠时间
-            elapsed = time.time() - self.sleep_start_time
-            remaining = self.sleep_duration - elapsed
-
-            # 如果还有剩余时间，将其作为sleep操作插入队首
-            if remaining > 0.01:
-                CUS_LOGGER.debug(f"强制操作{operation}，剩余睡眠时间{remaining}秒")
-                sleep_operation = {
-                    'type': 'sleep',
-                    'duration': remaining
-                }
-                with self.queue_lock:
-                    self.operation_queue.appendleft(sleep_operation)
-                    self.operation_queue.appendleft(operation)
-                    put=False
-
-            # 清除睡眠状态
-            self.sleep_start_time = None
-            self.sleep_duration = 0
-            self.end_time = 0
-        if put:
-            # 将强制操作插入队首
-            with self.queue_lock:
-                self.operation_queue.appendleft(operation)
+        with self.queue_lock:
+            if self.sleep_start_time is not None and self.sleep_duration > 0:
+                elapsed = time.time() - self.sleep_start_time
+                remaining = self.sleep_duration - elapsed
+                if remaining > 0.01:
+                    self.operation_queue.appendleft({'type': 'sleep', 'duration': remaining})
+                self.sleep_start_time = None
+                self.sleep_duration = 0
+                self.end_time = 0
+            self.operation_queue.appendleft(operation)
 
     def wait(self):
-        """
-        等待直到操作队列为空
-        如果当前队列为空则直接返回，否则等待直至队列为空
-        """
+        """等待排队和已出队操作完成；线程失败向业务调用方传播。"""
         while True:
-            # 如果队列为空或者只有"stop"信号，则返回
-            if not self.running:
-                return
-            if not len(self.operation_queue) and self.ending:
-                return
+            if self.worker_error is not None:
+                raise RuntimeError("键鼠管理器线程执行失败") from self.worker_error
             with self.queue_lock:
-                if len(self.operation_queue) == 1 and self.operation_queue[0] == "stop":
+                if not self.running or (not self.operation_queue and self.ending):
                     return
-            # 等待一小段时间再检查
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     def keyDown(self, key, force=False):
         """

@@ -26,7 +26,6 @@ class ThreadWithException(threading.Thread):
         :param daemon: 是否将线程设置为守护线程
         """
         super().__init__(target=target, kwargs=kwargs, name=name, daemon=daemon)
-        threading.Thread.__init__(self)
 
         # 转化None 为空字典
         if kwargs is None:
@@ -40,6 +39,7 @@ class ThreadWithException(threading.Thread):
 
         # 额外参数
         self.return_value = None  # 用于获取函数返回值
+        self.error = None  # 任务结束后供 GUI 汇总真实失败结果。
 
     def run(self):
         try:
@@ -47,13 +47,15 @@ class ThreadWithException(threading.Thread):
             if self.is_print:
                 CUS_LOGGER.debug(f"[{self.name}] Start")
             self.return_value = self.target(**self.kwargs)
-        except Exception:
-            PRINT_TO_UI = get_globals()
-            PRINT_TO_UI.emit("任务发生错误, 子线程已中断, 详见日志或信息框体.")
-            _, log_emitter = get_logger()
+        except Exception as exc:
+            self.error = exc
             err_msg = traceback.format_exc()
+            CUS_LOGGER.exception("任务执行器的子线程失败：%s", self.name)
+            PRINT_TO_UI = get_globals()
+            if PRINT_TO_UI is not None:
+                PRINT_TO_UI.emit("任务发生错误, 子线程已中断, 详见日志或信息框体.")
+            _, log_emitter = get_logger()
             log_emitter.show_error_signal.emit(f"任务执行器的子线程中发生错误 - {self.name}", err_msg)
-            CUS_LOGGER.error(err_msg)
         finally:
             CUS_LOGGER, _ = get_logger()
             if self.is_print:

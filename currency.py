@@ -43,7 +43,9 @@ class SimulatedCurrency(CurrencyUtils):
         super ().__init__ (speed)
         key_mouse_manager.set_config (config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params (self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params (self.x0 + self.cap_w, self.y0 + self.cap_h,
+                                            self.cap_w, self.cap_h,
+                                            self.cap_scale, self.cap_scale_y)
         # 普通位面选择、立即奖励和延迟奖励的状态
         self.investment_tracker = InvestmentSelectionTracker()
         self.run_history = CurrencyRunHistory()
@@ -820,8 +822,8 @@ class SimulatedCurrency(CurrencyUtils):
         如果在执行过程中发生异常，会尝试停止运行并重新抛出异常。
         """
         self._stop = False
-        key_mouse_manager.start ()
         try:
+            key_mouse_manager.start()
             self.route()
         except NormalEndError as e:
             CUS_LOGGER.warning(f'离开游戏界面，正常终止进程{e}')
@@ -832,6 +834,11 @@ class SimulatedCurrency(CurrencyUtils):
                 self.stop()
             # 重新抛出异常，以便上层能够捕获
             raise
+        finally:
+            try:
+                key_mouse_manager.stop()
+            finally:
+                self.sct.close()
     def stop(self, *_, **__):
         """
         停止任务运行

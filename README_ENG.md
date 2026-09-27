@@ -102,7 +102,7 @@ Then... walk towards tomorrow
 
 ## Compatibility
 
-Only supports 1080p and above screens (x>=1920, windowed or fullscreen), HDR disabled, text language set to Simplified Chinese, game interface must not have any obstructions, and must be in the foreground.
+Existing 1920×1080 behavior is retained. Newly added support is limited to the local game at **4K (3840×2160), with DLAA and anti-aliasing disabled**. Disable HDR, use Simplified Chinese, and keep the unobstructed game window in the foreground. Other resolutions are outside this contribution; cloud gaming retains its existing 1080p rules. See [4K adaptation notes](docs/4k-adaptation.md) for requirements and validation limits.
 
 Due to the onnxruntime environment, please ensure Windows 10 version is greater than or equal to 2004 (Windows 11 is supported by default). It is recommended to have more than 2GB of VRAM to run this software.
 

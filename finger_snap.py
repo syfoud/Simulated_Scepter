@@ -78,10 +78,7 @@ class FingerSnap(AnyFateUniverse):
         if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
             need_del=(self.del_record_time and self.del_record_time>self.countdown) and not self.ruanmei2
             CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}，本轮阮梅其二{self.ruanmei2}")
-            self.recorder.stop_recording(need_del)
-            time.sleep(0.8)
-            self.recorder.start_recording(self.count + 1)
-            self.update_state("re_start")
+            self.rotate_recording(need_del)
         self.countdown = 15
         self.countdown_agent.reset()
         self._cheat_count = self._reroll_count = 0
@@ -230,7 +227,7 @@ class FingerSnap(AnyFateUniverse):
         self._pending_target = None
         self._target_decided = False
     def select_go(self):
-        num = extract_number(match_numbers_in_region(self.screen))
+        num = extract_number(match_numbers_in_region(self.screen, soft=self.cap_scale != 1.0))
         if num is None:
             CUS_LOGGER.warning("未知的被动效果参数")
             return
