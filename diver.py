@@ -110,7 +110,7 @@ class DivergentUniverse(UniverseUtils):
             with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
         self.record = data.get("recording_state", True)
-        self.recorder = WindowRecorder('logs/video/', fps=30, window_title="崩坏：星穹铁道",
+        self.recorder = WindowRecorder(output_path="video/", fps=30, window_title="崩坏：星穹铁道",
                                        window_class_name="UnityWndClass", see_time=True, offsets=[10, 50, 10, 10], simul_instance=self)
 
     def route(self):

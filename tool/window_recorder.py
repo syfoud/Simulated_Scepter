@@ -26,7 +26,7 @@ from tool.utils.game_window import (
 
 
 class WindowRecorder:
-    def __init__(self, output_path="window_recording.mp4", handle=None, fps=30.0, window_title=None, window_class_name=None, see_time=False, is_show=False, offsets=None, overlay_map=False, map_alpha=0.7, simul_instance=None):
+    def __init__(self, output_path="video/", handle=None, fps=30.0, window_title=None, window_class_name=None, see_time=False, is_show=False, offsets=None, overlay_map=False, map_alpha=0.7, simul_instance=None):
         self.output_path = output_path
         self.fps = fps
         self.window_title = window_title
