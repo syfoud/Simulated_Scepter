@@ -4,6 +4,7 @@ import time
 
 import yaml
 
+from route import PATHS
 from any_fate import AnyFateUniverse
 from tool.countdown_config import (
     EARLY_STOP_FIELDS, MC_SETTING_FIELDS, load_finger_snap_settings,
@@ -67,12 +68,9 @@ class FingerSnap(AnyFateUniverse):
         self._pending_cheat_effect = None
         self._target_decided = False
         CUS_LOGGER.info("令她感伤的是，永恒的生命没能让她积累无穷的智慧，反倒是那些曾被她视作珍瑰的事物，开始变得模糊，一去不返。。。")
-        config_file = "config/config/event_info3.yml"
-        example_file = "config/config/info_example.yml"
-        if not os.path.exists(config_file) and os.path.exists(example_file):
-            shutil.copy2(example_file, config_file)
+        event_finger_snap = os.path.join(PATHS["event"], "event_finger_snap.yml")
 
-        with open(config_file, encoding="utf-8", errors="ignore") as f:
+        with open(event_finger_snap, encoding="utf-8", errors="ignore") as f:
             self.event_prior = yaml.safe_load(f)["event"]
     def restart_recording(self):
         if self.record and self.cut_video and self.YKItDYvq3FpnOYx:

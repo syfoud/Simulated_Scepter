@@ -5,6 +5,7 @@ import time
 
 import yaml
 
+from route import PATHS
 from any_fate import AnyFateUniverse
 from simul import SimulatedUniverse
 from tool.GLOBAL import factor, key_mouse_manager
@@ -40,12 +41,8 @@ class IronBloodUniverse(AnyFateUniverse):
         self.tk = text_keys(self.my_fate)
         self.first_plane_weight = 0 # 保存开局期望
         # 铁血战士使用毁灭专属事件优先级
-        config_file = "config/config/event_info2.yml"
-        example_file = "config/config/info_example.yml"
-        if not os.path.exists(config_file):
-            if os.path.exists(example_file):
-                shutil.copy2(example_file, config_file)
-        with open(config_file, encoding="utf-8", errors="ignore") as f:
+        event_iron_blood = os.path.join(PATHS["event"], "event_iron_blood.yml")
+        with open(event_iron_blood, encoding="utf-8", errors="ignore") as f:
             self.event_prior = yaml.safe_load(f)["event"]
 
     def restart_recording(self):

@@ -99,13 +99,8 @@ class AnyFateUniverse(SimulatedUniverse):
         self.default_json_path = "actions/insect.json"
         self.default_json = load_actions(self.default_json_path)
 
-        config_file = "config/config/event_info.yml"
-        example_file = "config/config/info_example.yml"
-        if not os.path.exists(config_file):
-            if os.path.exists(example_file):
-                shutil.copy2(example_file, config_file)
-
-        with open(config_file, encoding="utf-8", errors="ignore") as f:
+        event_any_fate = os.path.join(PATHS["event"], "event_any_fate.yml")
+        with open(event_any_fate, encoding="utf-8", errors="ignore") as f:
             self.event_prior = yaml.safe_load(f)["event"]
         self.action_history = []
         self.steps=None
@@ -203,30 +198,6 @@ class AnyFateUniverse(SimulatedUniverse):
             return True
         else:
             return False
-
-    def is_pig_node(self):
-        """当前节点是否为祝福扑满。"""
-        if self.start_nodes is None:
-            return False
-        corner_marker = (self.start_nodes.get('orig') or {}).get('corner_marker')
-        return bool(corner_marker) and corner_marker.get('name') in ('pig1', 'pig2')
-
-    def switch_to_configured_role(self):
-        """按 silver_wolf_switch 配置切换到指定角色位。"""
-        switch_target = self.opt.get("silver_wolf_switch", 1)
-        CUS_LOGGER.debug(f"按设置切至{switch_target}号位")
-        self.switch_current_role(switch_target)
-        self.quan = 0
-        self.bai_e = 0
-
-    def use_e(self, face=False, fixed=False):
-        """使用秘技；银狼秘技勾选，一号位为黄泉/白厄且秘技点不足银狼释放时，改用普通攻击以保留秘技点。"""
-        if not fixed and self.silver_wolf_manager.should_skip_skill():
-            CUS_LOGGER.debug("银狼秘技：为保留秘技点，本次改为普通攻击")
-            key_mouse_manager.click(0.5, 0.5)
-            key_mouse_manager.wait()
-            return
-        super().use_e(face=face, fixed=fixed)
 
     def normal(self):
         bk_lst_changed = self.last_interact_time
