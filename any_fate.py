@@ -113,7 +113,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.attack_time = 0 # 上次空打一拳时间
         self.need_end=False
         self.record = self.opt.get("recording_iron_blood", True)
-        self.recorder = WindowRecorder(output_path="video/", fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", True), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", True) and self._show_map, simul_instance=self)
+        self.recorder = WindowRecorder(output_path=PATHS["video"], fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", True), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", True) and self._show_map, simul_instance=self)
         self.auto_attack_breakable=self.opt.get("auto_attack_breakable", False)
         self.del_record_time=self.opt.get("del_record_time", 31)
         self.max_interact_time=self.opt.get("max_interact_time", 40)

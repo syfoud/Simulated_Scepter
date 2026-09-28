@@ -12,7 +12,7 @@ import win32gui
 import win32ui
 from PIL import ImageGrab
 
-# 导入日志模块
+from route import PATHS
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 from tool.utils.game_window import (
@@ -26,7 +26,7 @@ from tool.utils.game_window import (
 
 
 class WindowRecorder:
-    def __init__(self, output_path="video/", handle=None, fps=30.0, window_title=None, window_class_name=None, see_time=False, is_show=False, offsets=None, overlay_map=False, map_alpha=0.7, simul_instance=None):
+    def __init__(self, output_path=PATHS["video"], handle=None, fps=30.0, window_title=None, window_class_name=None, see_time=False, is_show=False, offsets=None, overlay_map=False, map_alpha=0.7, simul_instance=None):
         self.output_path = output_path
         self.fps = fps
         self.window_title = window_title
@@ -518,7 +518,7 @@ class WindowRecorder:
 if __name__ == "__main__":
     try:
         window_title = "崩坏：星穹铁道"
-        output_file = "../logs/video/"
+        output_file = PATHS["video"]
         fps = 10
 
         CUS_LOGGER.info("=== 窗口录制器测试 (带透明度地图叠加) ===")
