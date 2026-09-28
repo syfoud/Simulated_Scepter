@@ -27,7 +27,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
         self.opt = None
 
-        uic.loadUi(os.path.join(PATHS["ui"] + "UI.ui", self))
+        uic.loadUi(os.path.join(PATHS["ui"], "UI.ui"), self)
 
         self.setWindowTitle("ω- u13.exe - 本软件免费且开源")
 
@@ -162,7 +162,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.Title_Logo.setFixedSize(40, 40)
         self.Title_Logo.setScaledContents(True)
 
-        cus_path = os.path.join(PATHS["ui"] + "background.png")
+        cus_path = os.path.join(PATHS["ui"], "background.png").replace(os.sep, "/")
         style_sheet = f"""
             #SkinWidget{{
             background-image: url({cus_path});
