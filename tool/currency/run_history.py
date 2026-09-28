@@ -78,6 +78,7 @@ class CurrencyRunHistory:
         if not os.path.exists(self.record_path):
             return 0
 
+        last_count = 0
         with open(self.record_path, encoding="utf-8", errors="replace") as file:
             for line in file:
                 match = _COUNT_PATTERN.search(line)
