@@ -295,7 +295,7 @@ class UniverseUtils:
                 return 0
             self.get_screen()
         return 0
-        
+
     @timer
     def fresh_state(self):
         self.get_screen()
@@ -1027,13 +1027,12 @@ class UniverseUtils:
         """
         try:
             # 确保备份目录存在（相对于项目根目录）
-            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup"))
-            if not os.path.exists(backup_dir):
-                os.makedirs(backup_dir)
+            if not os.path.exists(PATHS["backup"]):
+                os.makedirs(PATHS["backup"])
 
             # 保存 big_map 到磁盘作为图像文件
             if self.big_map is not None:
-                cv.imwrite(os.path.join(backup_dir, "big_map_backup.png"), self.big_map)
+                cv.imwrite(os.path.join(PATHS["backup"], "big_map_backup.png"), self.big_map)
 
             # 保存其他属性到JSON文件
             backup_data = {
@@ -1042,7 +1041,7 @@ class UniverseUtils:
                 'mini_state': self.mini_state,
                 'first_mini': self.first_mini
             }
-            with open(os.path.join(backup_dir, "map_attrs_backup.json"), 'w') as f:
+            with open(os.path.join(PATHS["backup"], "map_attrs_backup.json"), 'w') as f:
                 json.dump(backup_data, f)
         except Exception:
             pass
@@ -1108,7 +1107,7 @@ class UniverseUtils:
         else:
             CUS_LOGGER.warning('……那我偏偏，绝不顺从……')
         return ava
-    def save_screen(self, save_path="/temp/",force=False,not_now=False):
+    def save_screen(self, save_path=PATHS["temp"], force=False, not_now=False):
         """
         获取截图并保存到指定路径
         :param save_path: 保存截图的路径
@@ -1118,12 +1117,8 @@ class UniverseUtils:
             sc=self.screen
         else:
             sc = self.get_screen()
-        save_path = PATHS["root"]+save_path
-        try:
-            os.mkdir(save_path)
-        except Exception:
-            pass
-        filename = save_path+datetime.now().strftime("%Y%m%d_%H%M%S") + ".png"
+        os.makedirs(save_path, exist_ok=True)
+        filename = os.path.join(save_path, datetime.now().strftime("%Y%m%d_%H%M%S") + ".png")
         cv.imwrite(filename,sc)
         if force:
             cv.imshow("save",sc)
@@ -1143,7 +1138,7 @@ class UniverseUtils:
             if 20<abs(self.rotation-d)<340 and mode !=1:
                 # cv.imshow("now", self.screen)
                 if self.debug:
-                    self.save_screen(not_now=True,save_path="/temp/angle/")
+                    self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "angle"))
                 CUS_LOGGER.error(f"角度误差过大视角{self.rotation}朝向{d}模式{mode}")
                 # raise BigAngError(f"角度误差过大视角{self.rotation}朝向{d}")
                 d = self.rotation
@@ -1804,7 +1799,7 @@ class UniverseUtils:
                                 self.get_screen()
                                 if predict(self.screen, enemy=True, item=False)['enemy'] is not None:
                                     CUS_LOGGER.info("检测到待击杀目标")
-                                    self.save_screen(not_now=True,save_path="/temp/kill/")
+                                    self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "kill"))
                                     break
 
                     if self.quan:
@@ -2615,7 +2610,7 @@ class UniverseUtils:
                                 if predict(self.screen, enemy=True, item=False)['enemy'] is not None:
                                     CUS_LOGGER.info(f"或者，兑现命运的不止他们。只是{factor}已记不清了。")
                                     if self.debug:
-                                        self.save_screen(not_now=True,save_path="/temp/kill/")
+                                        self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "kill"))
                                     break
 
                     if self.quan:
@@ -2903,7 +2898,7 @@ class UniverseUtils:
                     else:
                         CUS_LOGGER.info(f"真是如出一辙啊，就像{factor}过去认识的许多个他们……既狡猾…又天真。")
                         if self.debug:
-                            self.save_screen(not_now=True,save_path="/temp/no_red2/")
+                            self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "no_red2"))
                         has_not_found_red = True
                         # self.target_loc, type = self.get_recent_target()
                     if has_not_found_red:

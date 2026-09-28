@@ -27,11 +27,11 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
         self.opt = None
 
-        uic.loadUi(PATHS["ui"] + '\\UI.ui', self)
+        uic.loadUi(os.path.join(PATHS["ui"] + "UI.ui", self))
 
         self.setWindowTitle("ω- u13.exe - 本软件免费且开源")
 
-        self.setWindowIcon(QIcon(PATHS["logo"] + "\\圆角-FetDeathWing-256x-AllSize.ico"))
+        self.setWindowIcon(QIcon(os.path.join(PATHS["logo"] + "圆角-FetDeathWing-256x-AllSize.ico")))
 
         self.Title_Version.setText(EXTRA.VERSION)
 
@@ -42,8 +42,8 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.tray_icon = None
         self.init_tray_icon()
 
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
+        example_path = os.path.join(PATHS["example"], "settings_example.json")
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         self.json_to_opt(settings_path)
@@ -150,8 +150,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
     def set_image_resource(self):
 
-        cus_path = PATHS["root"] + "\\resource\\logo\\圆角-FetDeathWing-450x.png"
-        cus_path = cus_path.replace("\\", "/")
+        cus_path = os.path.join(PATHS["logo"], "圆角-FetDeathWing-450x.png")
 
         pixmap = QtGui.QPixmap(cus_path).scaled(
             40,
@@ -163,8 +162,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.Title_Logo.setFixedSize(40, 40)
         self.Title_Logo.setScaledContents(True)
 
-        cus_path = PATHS["ui"] + "\\background.png"
-        cus_path = cus_path.replace("\\", "/")
+        cus_path = os.path.join(PATHS["ui"] + "background.png")
         style_sheet = f"""
             #SkinWidget{{
             background-image: url({cus_path});
@@ -234,7 +232,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
     def init_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(QIcon(PATHS["logo"] + "\\圆角-FetDeathWing-256x-AllSize.ico"))
+        self.tray_icon.setIcon(QIcon(os.path.join(PATHS["logo"] + "圆角-FetDeathWing-256x-AllSize.ico")))
         self.tray_icon.setToolTip("ω- u13.exe - 正在后台运行")
 
         tray_menu = QMenu()

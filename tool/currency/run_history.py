@@ -1,15 +1,15 @@
+import os
 import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from route import PATHS
 from tool import EXTRA
 
 RUN_START_ACTION = "选择难度后开始对局"
 RUN_END_ACTION = "重开最终"
-DEFAULT_RECORD_PATH = Path(PATHS["root"]) / "config" / "backup" / "currency_count.txt"
+DEFAULT_RECORD_PATH = os.path.join(PATHS["backup"], "currency_count.txt")
 _COUNT_PATTERN = re.compile(r"对局次数\s*[：:]\s*(\d+)")
 
 
@@ -30,7 +30,7 @@ def get_newly_unlocked_investment(
 
 @dataclass
 class CurrencyRunHistory:
-    record_path: Path = DEFAULT_RECORD_PATH
+    record_path: str = DEFAULT_RECORD_PATH
     clock: Callable[[], float] = time.time
     _started_at: float | None = field(default=None, init=False)
     _unlocked_investments: list[str] = field(default_factory=list, init=False)
@@ -65,8 +65,8 @@ class CurrencyRunHistory:
                     f"对局次数：{run_count}，本局解锁的投资策略：{investments}，"
                     f"用时：{elapsed // 60}分{elapsed % 60}秒"
                 )
-                self.record_path.parent.mkdir(parents=True, exist_ok=True)
-                with self.record_path.open("a", encoding="utf-8") as file:
+                os.makedirs(os.path.dirname(self.record_path), exist_ok=True)
+                with open(self.record_path, "a", encoding="utf-8") as file:
                     file.write(record + "\n")
         finally:
             self._started_at = None
@@ -75,11 +75,10 @@ class CurrencyRunHistory:
         return record
 
     def _read_last_run_count(self) -> int:
-        if not self.record_path.exists():
+        if not os.path.exists(self.record_path):
             return 0
 
-        last_count = 0
-        with self.record_path.open(encoding="utf-8", errors="replace") as file:
+        with open(self.record_path, encoding="utf-8", errors="replace") as file:
             for line in file:
                 match = _COUNT_PATTERN.search(line)
                 if match:

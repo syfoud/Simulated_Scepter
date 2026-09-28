@@ -82,8 +82,8 @@ class Config:
 
 
     def read(self):
-        config_path = os.path.join(PATHS["config"], 'config', 'info.yml')
-        example_path = os.path.join(PATHS["config"], 'config', 'info_example.yml')
+        config_path = os.path.join(PATHS["config"], "info.yml")
+        example_path = os.path.join(PATHS["example"], "info_example.yml")
         if not os.path.exists(config_path):
             if os.path.exists(example_path):
                 shutil.copy2(example_path, config_path)
@@ -93,13 +93,13 @@ class Config:
 
         if os.path.exists(config_path):
             with open(config_path, encoding="utf-8", errors='ignore') as f:
-                config: dict[str, int | float | str | list[int]] = yaml.safe_load(f)['config']
+                config = yaml.safe_load(f)['config']
                 try:
                     self.angle = str(config['angle'])
                     self.difficult = config['difficulty']
                     self.team = config['team']
                     self.speed_mode = config['speed_mode']
-                    self.debug_mode = config['debug_mode']
+                    self.debug_mode = config['debug_mode'] # congcongzai 此处需额外检查
                     self.weekly_mode = config['weekly_mode']
                     self.cpu_mode = config['cpu_mode']
                     self.update_skill(config['skill'])
@@ -120,7 +120,7 @@ class Config:
             self.save()
 
     def save(self):
-        with open(os.path.join(PATHS["config"], 'config', 'info.yml'), "w", encoding="utf-8") as f:
+        with open(os.path.join(PATHS["config"], "info.yml"), "w", encoding="utf-8") as f:
             yaml.safe_dump({
                 "config": {
                     "angle": float(self.angle),

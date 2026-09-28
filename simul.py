@@ -128,16 +128,16 @@ class SimulatedUniverse(UniverseUtils):
                 self.img_map[file]= image
 
         CUS_LOGGER.debug(f"加载地图完成，共 {len(self.img_map)} 张")
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
+        example_path = os.path.join(PATHS["example"], "settings_example.json")
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
             with open(settings_path, encoding="UTF-8") as file:
                 data = json.load(file)
 
-        config_file = "config/config/info_old.yml"
-        example_file = "config/config/info_example_old.yml"
+        config_file = os.path.join(PATHS["config"], "info_old.yml")
+        example_file = os.path.join(PATHS["example"], "info_example_old.yml")
         if not os.path.exists(config_file):
             if os.path.exists(example_file):
                 shutil.copy2(example_file, config_file)
@@ -643,7 +643,7 @@ class SimulatedUniverse(UniverseUtils):
         返回值:
             无返回值，直接更新实例变量self.count
         """
-        file_name = "config/backup/count.txt"
+        file_name = os.path.join(PATHS["backup"], "count.txt")
         if read:
             new_cnt = 0
             if os.path.exists(file_name):
@@ -654,7 +654,7 @@ class SimulatedUniverse(UniverseUtils):
                     except Exception:
                         pass
             else:
-                os.makedirs("config/backup", exist_ok=True)
+                os.makedirs(PATHS["backup"], exist_ok=True)
                 with open(file_name, "w", encoding="utf-8") as file:
                     file.write("0")
                     file.close()
@@ -801,15 +801,13 @@ class SimulatedUniverse(UniverseUtils):
         备份文件从项目目录下的config/backup文件夹中读取。
         """
         try:
-            backup_dir = os.path.join(os.path.dirname(PATHS["config"], "backup"))
-
             # 从磁盘读取 big_map 图像文件
-            backup_file = os.path.join(backup_dir, "big_map_backup.png")
+            backup_file = os.path.join(PATHS["backup"], "big_map_backup.png")
             if os.path.exists(backup_file):
                 self.big_map = cv.imread(backup_file, cv.IMREAD_GRAYSCALE)
 
             # 从磁盘读取其他属性
-            attrs_file = os.path.join(backup_dir, "map_attrs_backup.json")
+            attrs_file = os.path.join(PATHS["backup"], "map_attrs_backup.json")
             if os.path.exists(attrs_file):
                 with open(attrs_file) as f:
                     backup_data = json.load(f)
@@ -1252,8 +1250,8 @@ class SimulatedUniverse(UniverseUtils):
                     self.recorder.stop_recording()
             except Exception as e:
                 CUS_LOGGER.error(f"停止录制时发生错误: {e}")
-        self.save_screen(not_now=True,save_path="/temp/stop/")
-        self.save_screen(save_path="/temp/stop/")
+        self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "stop"))
+        self.save_screen(save_path=os.path.join(PATHS["temp"], "stop"))
         self.map_thread = None
 
 

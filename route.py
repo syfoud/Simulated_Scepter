@@ -20,22 +20,21 @@ def build_paths(root):
     # 定义一个辅助函数来构建路径
     return {
         "root": root,
-        # "config": os.path.join(root, "config"), 需检查congcongzai
         "logs": os.path.join(root, "logs"),
-        "plugins": os.path.join(root, "plugins"),
         # 资源文件
         "font": os.path.join(root, "resource", "font"),
         "logo": os.path.join(root, "resource", "logo"),
+        "html": os.path.join(root, "resource", "html"),
         "model": os.path.join(root, "resource", "model"),
         "image": os.path.join(root, "resource", "imgs"),
         "theme": os.path.join(root, "resource", "theme"),
         "ui": os.path.join(root, "resource", "ui"),
-        "db": os.path.join(root, "resource", "db"), # congcongzai 未被使用过
         "event": os.path.join(root, "resource", "event"),
-        # 配置、备份、示例文件
-        "config": os.path.join(root, "config", "config"), # congcongzai 新增
-        "backup": os.path.join(root, "config", "backup"), # congcongzai 新增
-        "example": os.path.join(root, "config", "example") # congcongzai 新增
+        # 配置、备份、示例、临时文件
+        "config": os.path.join(root, "config", "config"),
+        "backup": os.path.join(root, "config", "backup"),
+        "example": os.path.join(root, "config", "example"),
+        "temp": os.path.join(root, "temp")
     }
 
 

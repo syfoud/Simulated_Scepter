@@ -646,8 +646,8 @@ class MainWindow(QMainWindowLog):
         self.Finger_snap_save_btn.clicked.connect(self.save_finger_snap_config)
         self.Aboutupdatelock.clicked.connect(self.show_unlock_dialog)
 
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
+        example_path = os.path.join(PATHS["example"], "settings_example.json")
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
@@ -754,8 +754,8 @@ class MainWindow(QMainWindowLog):
         }
 
         try:
-            settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-            example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+            settings_path = os.path.join(PATHS["config"], "settings.json")
+            example_path = os.path.join(PATHS["example"], "settings_example.json")
             if not os.path.exists(settings_path) and os.path.exists(example_path):
                 shutil.copy2(example_path, settings_path)
             with EXTRA.FILE_LOCK:
@@ -785,8 +785,8 @@ class MainWindow(QMainWindowLog):
                 self.registered_hotkeys.append(key.lower())
 
     def update_settings(self, updates):
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
+        example_path = os.path.join(PATHS["example"], "settings_example.json")
 
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
@@ -971,7 +971,7 @@ class MainWindow(QMainWindowLog):
         """
         将已提示状态写入现有配置，使其跨重启生效
         """
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
         try:
             with EXTRA.FILE_LOCK:
                 with open(settings_path, encoding="UTF-8") as file:
@@ -1257,7 +1257,7 @@ class MainWindow(QMainWindowLog):
         dialog.exec_()
 
     def open_record_stats(self):
-        os.startfile(PATHS["root"] + "\\resource\\html\\record_stats.html")
+        os.startfile(PATHS["html"], "record_stats.html")
 
     def save_iron_config(self):
         self.update_settings({
@@ -1309,8 +1309,8 @@ class MainWindow(QMainWindowLog):
         QMessageBox.information(self, "提示", "调试模式配置已保存")
 
     def save_any_fate_config(self):
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
+        example_path = os.path.join(PATHS["example"], "settings_example.json")
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:

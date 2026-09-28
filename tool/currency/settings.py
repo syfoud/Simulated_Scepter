@@ -1,5 +1,5 @@
+import os
 import shutil
-from pathlib import Path
 
 import yaml
 
@@ -11,8 +11,8 @@ DEFAULT_EXIT_PLANE = 1
 DEFAULT_EXIT_IF_NO_PRIOR = False
 DEFAULT_PRIOR_EXIT_PLANE = None
 
-CONFIG_PATH = Path(PATHS["root"]) / "config" / "config" / "currency_config.yml"
-EXAMPLE_PATH = CONFIG_PATH.with_name("currency_config_example.yml")
+CONFIG_PATH = os.path.join(PATHS["config"], "currency_config.yml")
+EXAMPLE_PATH = os.path.join(PATHS["example"], "currency_config_example.yml")
 PRIORITY_KEYS = (
     "prior_envir",
     "envir_1",
@@ -24,7 +24,7 @@ PRIORITY_KEYS = (
 def load_default_priority():
     """Load the default currency-war priority from the example config."""
     try:
-        with EXAMPLE_PATH.open(encoding="utf-8") as config_file:
+        with open(EXAMPLE_PATH, encoding="utf-8") as config_file:
             values = yaml.safe_load(config_file) or {}
     except (OSError, yaml.YAMLError):
         return {}
@@ -84,19 +84,18 @@ def normalize_currency_settings(values=None):
         "priority": priority,
     }
 
-
 def load_currency_settings(path=CONFIG_PATH):
     """Load the currency-war settings, falling back to safe defaults."""
-    path = Path(path)
-    if not path.exists() and path == CONFIG_PATH and EXAMPLE_PATH.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
+    path = os.fspath(path)
+    if not os.path.exists(path) and path == CONFIG_PATH and os.path.exists(EXAMPLE_PATH):
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         shutil.copy2(EXAMPLE_PATH, path)
-    if not path.exists():
+    if not os.path.exists(path):
         return normalize_currency_settings()
 
     with EXTRA.FILE_LOCK:
         try:
-            with path.open(encoding="utf-8") as config_file:
+            with open(path, encoding="utf-8") as config_file:
                 values = yaml.safe_load(config_file) or {}
         except (OSError, yaml.YAMLError):
             values = {}
@@ -105,12 +104,11 @@ def load_currency_settings(path=CONFIG_PATH):
 
 def save_currency_settings(values, path=CONFIG_PATH):
     """Update currency-war settings while preserving future config fields."""
-    path = Path(path)
+    path = os.fspath(path)
     with EXTRA.FILE_LOCK:
         try:
-            current = yaml.safe_load(
-                path.read_text(encoding="utf-8")
-            ) or {}
+            with open(path, encoding="utf-8") as config_file:
+                current = yaml.safe_load(config_file) or {}
         except (OSError, yaml.YAMLError):
             current = {}
         if not isinstance(current, dict):
@@ -118,9 +116,7 @@ def save_currency_settings(values, path=CONFIG_PATH):
 
         current.update(values)
         normalized = normalize_currency_settings(current)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            yaml.safe_dump(current, allow_unicode=True, sort_keys=False),
-            encoding="utf-8",
-        )
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        with open(path, "w", encoding="utf-8") as config_file:
+            yaml.safe_dump(current, config_file, allow_unicode=True, sort_keys=False)
     return normalized

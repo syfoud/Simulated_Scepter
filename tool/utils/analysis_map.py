@@ -152,7 +152,7 @@ def get_battle_weight(default=1.2):
     '''
     用于读取配置文件中的战斗格权重，默认值为1.2
     '''
-    settings_path = os.path.join(PATHS["root"], "config", "config", "settings.json")
+    settings_path = os.path.join(PATHS["config"], "settings.json")
     try:
         with open(settings_path, "r", encoding="UTF-8") as f:
             data = json.load(f)
@@ -752,7 +752,7 @@ def display_matches(image, matches, path=None, highlight_idx=None, save_path=Non
     # cv2.waitKey(wait_ms);
     # cv2.destroyAllWindows()
     if save_path:
-        cv2.imwrite(PATHS["root"]+"/temp/"+datetime.now().strftime("%Y%m%d_%H%M%S")+".png", vis)
+        cv2.imwrite(PATHS["temp"]+datetime.now().strftime("%Y%m%d_%H%M%S")+".png", vis)
 
 
 def detect_infectable_nodes(color_image, matches, pad=20, cyan_ratio_threshold=0.20,
@@ -813,7 +813,7 @@ def detect_infectable_nodes(color_image, matches, pad=20, cyan_ratio_threshold=0
 
 
 def save_analysis_map_debug(image, matches, start=None, tag="",
-                            save_dir="/temp/analysis_map/"):
+                            save_dir=os.path.join(PATHS["temp"], "analysis_map")):
     """把识图各接口的结果框回原图，并连同原图一起保存，用于排查识别问题。
 
     覆盖的接口结果：
@@ -827,16 +827,14 @@ def save_analysis_map_debug(image, matches, start=None, tag="",
         matches: match_multiple_targets 返回的匹配列表
         start: 起点坐标 (cx, cy)
         tag: 文件名附加标签（如 mode 或阶段）
-        save_dir: 保存目录（相对 PATHS["root"] 或绝对路径）
+        save_dir: 完整保存路径
     """
     if image is None:
         return
-    directory = (save_dir if save_dir.startswith(PATHS["root"])
-                 else PATHS["root"] + save_dir)
-    os.makedirs(directory, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     tag = f"_{tag}" if tag else ""
-    cv2.imwrite(os.path.join(directory, f"{stamp}{tag}_raw.png"), image)
+    cv2.imwrite(os.path.join(save_dir, f"{stamp}{tag}_raw.png"), image)
 
     vis = image.copy()
     for i, m in enumerate(matches):
@@ -886,7 +884,7 @@ def save_analysis_map_debug(image, matches, start=None, tag="",
         cv2.putText(vis, "start", (sx + 14, sy - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
-    cv2.imwrite(os.path.join(directory, f"{stamp}{tag}_annotated.png"), vis)
+    cv2.imwrite(os.path.join(save_dir, f"{stamp}{tag}_annotated.png"), vis)
 
 
         #使用作弊100%能替换节点，重投在1与2位面1/5概率能替换节点，第三位面1/3概率能替换节点，还可以什么都不做

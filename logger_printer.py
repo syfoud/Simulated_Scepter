@@ -251,7 +251,7 @@ class QMainWindowLog(QMainWindowLoadUI):
 
     def check_model_file(self):
 
-        model_path = os.path.join(PATHS["root"], "resource", "models", "kesln.onnx")
+        model_path = os.path.join(PATHS["models"], "kesln.onnx")
         model_exists = os.path.exists(model_path)
 
         if not model_exists:

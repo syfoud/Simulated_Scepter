@@ -1,18 +1,15 @@
+import os
 import sys
 
 from route import PATHS
 
 
 class Config:
-    def __init__(self):
-        self.abspath = PATHS["config"]+"//config"
-        if getattr(sys, 'frozen', False):
-            self.abspath = './config/config'
+    def __init__(self): # 缺失self.abspath = os.path.join(PATHS["config"], "settings.json")和        self.text = "info_old.yml"能否正常运行？
         self.order_text = "1 2 3 4"
         self.angle = "1.0"
         self.difficult = "5"
         self.allow_difficult = [1, 2, 3, 4, 5]
-        self.text = "info_old.yml"
         self.fate = "巡猎"
         self.map_sha = ""
         self.fates = ["存护", "记忆", "虚无", "丰饶", "巡猎", "毁灭", "欢愉", "繁育", "智识"]

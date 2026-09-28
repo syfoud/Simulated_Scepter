@@ -1,5 +1,6 @@
 """弹指生产模型的独立配置读写。"""
 
+import os
 import json
 import shutil
 from dataclasses import asdict, fields
@@ -27,8 +28,8 @@ EARLY_STOP_FIELDS = {
     DECISION_WIN_RATE_DP: "win_rate_dp_early_stop",
     DECISION_MC: "mc_dp_early_stop",
 }
-SETTINGS_PATH = Path(PATHS["root"]) / "config" / "config" / "settings.json"
-EXAMPLE_PATH = SETTINGS_PATH.with_name("settings_example.json")
+settings_path = os.path.join(PATHS["config"], "settings.json")
+example_path = os.path.join(PATHS["example"], "settings_example.json")
 
 
 def normalize_finger_snap_settings(values=None):

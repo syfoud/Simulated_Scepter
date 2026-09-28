@@ -9,7 +9,6 @@ import traceback
 from copy import deepcopy
 from datetime import datetime
 from math import cos, sin
-from pathlib import Path
 
 import cv2 as cv
 import numpy as np
@@ -690,7 +689,7 @@ class UniverseUtils:
         self.screen = self.sct.grab(self.x0, self.y0)
         return self.screen
 
-    def save_screen(self, save_path=r"./temp",force=False):
+    def save_screen(self, save_path=PATHS["temp"], force=False):
         """
         获取截图并保存到指定路径
         :param save_path: 保存截图的路径
@@ -705,10 +704,10 @@ class UniverseUtils:
             nc = Image.fromarray(rgb_img)
         else:
             nc = sc
-        save_path = Path(save_path)
-        save_path.mkdir(parents=True, exist_ok=True)
-        filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".png"
-        nc.save(save_path / filename)
+        save_path = os.fspath(save_path)
+        os.makedirs(save_path, exist_ok=True)
+        filename = os.path.join(save_path, datetime.now().strftime("%Y%m%d_%H%M%S") + ".png")
+        nc.save(filename)
         return sc if force else nc
 
     # 移动视角，获得小地图中不变的部分（白线、灰块）

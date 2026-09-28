@@ -95,8 +95,8 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.debug (f"开始运行,初始计数：{self.count}")
         self.last_interact_time = time.time ()
 
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
+        example_path = os.path.join(PATHS["example"], "settings_example.json")
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         with EXTRA.FILE_LOCK:
@@ -184,8 +184,7 @@ class SimulatedCurrency(CurrencyUtils):
                 if not shot_saved:
                     shot_saved = True
                     shot = os.path.join(
-                        PATHS["root"],
-                        "temp",
+                        PATHS["temp"],
                         "currencywar",
                         f"unknown_screen_{time.strftime('%Y%m%d_%H%M%S')}.png",
                     )

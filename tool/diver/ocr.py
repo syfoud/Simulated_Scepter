@@ -148,7 +148,7 @@ class text_keys:
         self.secondary = ['巡猎', '毁灭', '丰饶']
         try:
             config_file = os.path.join(PATHS["config"], 'info.yml')
-            example_file = os.path.join(PATHS["config"], 'info_example.yml')
+            example_file = os.path.join(PATHS["example"], 'info_example.yml')
             if not os.path.exists(config_file):
                 if os.path.exists(example_file):
                     shutil.copy2(example_file, config_file)

@@ -77,11 +77,11 @@ class IronBloodUniverse(AnyFateUniverse):
     def end_of_university(self):
         SimulatedUniverse.end_of_university(self)
         self.elapsed_time = int(time.time() - self.run_start_time)
-        record_file = "config/backup/kill_record.txt"
+        record_file = os.path.join(PATHS["backup"], "kill_record.txt")
         try:
             if self.plane_floor==3:
                 self.kill_count+=1
-            os.makedirs("config/backup", exist_ok=True)
+            os.makedirs(PATHS["backup"], exist_ok=True)
             start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
             total_min = self.elapsed_time // 60
             total_sec = self.elapsed_time % 60
@@ -112,7 +112,7 @@ class IronBloodUniverse(AnyFateUniverse):
         """
         更新或读取计数器值（铁血战士使用 count.txt 的第一行）
         """
-        file_name = "config/backup/count.txt"
+        file_name = os.path.join(PATHS["backup"], "count.txt")
         if read:
             new_cnt = 0
             if os.path.exists(file_name):
@@ -124,7 +124,7 @@ class IronBloodUniverse(AnyFateUniverse):
                         except Exception:
                             pass
             else:
-                os.makedirs("config/backup", exist_ok=True)
+                os.makedirs(PATHS["backup"], exist_ok=True)
                 with open(file_name, "w", encoding="utf-8") as file:
                     file.write("0\n0\n")
             self.count = new_cnt
