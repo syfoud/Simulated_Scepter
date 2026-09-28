@@ -99,7 +99,7 @@ class Config:
                     self.difficult = config['difficulty']
                     self.team = config['team']
                     self.speed_mode = config['speed_mode']
-                    self.debug_mode = config['debug_mode'] # congcongzai 此处需额外检查
+                    self.debug_mode = config['debug_mode']
                     self.weekly_mode = config['weekly_mode']
                     self.cpu_mode = config['cpu_mode']
                     self.update_skill(config['skill'])
