@@ -5,7 +5,7 @@ from route import PATHS
 
 
 class Config:
-    def __init__(self): # 缺失self.abspath = os.path.join(PATHS["config"], "settings.json")和        self.text = "info_old.yml"能否正常运行？
+    def __init__(self):
         self.order_text = "1 2 3 4"
         self.angle = "1.0"
         self.difficult = "5"
