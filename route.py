@@ -20,10 +20,11 @@ def build_paths(root):
     # 定义一个辅助函数来构建路径
     return {
         "root": root,
-        # 配置、备份、示例、临时文件
+        # 配置、备份、示例配置文件
         "config": os.path.join(root, "config", "config"),
         "backup": os.path.join(root, "config", "backup"),
         "example": os.path.join(root, "config", "example"),
+        # 日志文件
         "logs": os.path.join(root, "logs"),
         # 资源文件
         "event": os.path.join(root, "resource", "event"),
@@ -34,7 +35,9 @@ def build_paths(root):
         "model": os.path.join(root, "resource", "model"),
         "theme": os.path.join(root, "resource", "theme"),
         "ui": os.path.join(root, "resource", "ui"),
+        # 临时文件
         "temp": os.path.join(root, "temp"),
+        # 录制视频文件
         "video": os.path.join(root, "video")
 
     }
