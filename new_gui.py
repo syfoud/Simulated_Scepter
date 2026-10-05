@@ -710,14 +710,23 @@ class MainWindow(QMainWindowLog):
         self.run_script_btn.setEnabled(available)
 
     def run_script(self):
-        """在现有任务线程中运行选中的动作脚本。"""
+        """在现有任务线程中运行选中的动作脚本，或启动完整自动化模块。"""
         script_path = self.script_combo.currentData()
         if script_path is None:
             QMessageBox.warning(self, "提示", "请先在 actions 文件夹中添加 JSON 动作脚本。")
             return
+
         engine_class = self.engine_combo.currentData()
         engine_name = self.engine_combo.currentText()
         stop_key = self.load_hotkey_config()["stop"].upper()
+
+        # 需要完整自动化流程的内核：直接调用 start()，忽略动作脚本
+        full_auto_engines = (
+            IronBloodUniverse,
+            AnyFateUniverse,
+            CurrencyWar,
+            FingerSnap,
+        )
 
         # 在主线程确定脚本与内核，运行期间切换下拉框不会改变当前任务。
         def task():
@@ -738,10 +747,23 @@ class MainWindow(QMainWindowLog):
                 )
             else:
                 su = engine_class()
+
             self.current_task = su
-            CUS_LOGGER.info("使用%s内核运行脚本：%s；点击“停止任务”或按 %s 可终止。",
-                            engine_name, os.path.basename(script_path), stop_key)
-            run_action_script(su, script_path)
+
+            if engine_class in full_auto_engines:
+                # 完整自动化模块：直接启动主流程
+                CUS_LOGGER.info(
+                    "使用%s内核启动完整自动化流程；点击“停止任务”或按 %s 可终止。",
+                    engine_name, stop_key
+                )
+                su.start()
+            else:
+                # 普通脚本执行模式（SimulatedUniverse / DivergentUniverse）
+                CUS_LOGGER.info(
+                    "使用%s内核运行脚本：%s；点击“停止任务”或按 %s 可终止。",
+                    engine_name, os.path.basename(script_path), stop_key
+                )
+                run_action_script(su, script_path)
 
         try:
             self.start_task(task)
