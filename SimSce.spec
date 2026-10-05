@@ -1,10 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
+import ast
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_submodules
 
 hiddenimports = []
 hiddenimports += collect_submodules('scipy')
 hiddenimports += collect_submodules('numpy')
 
+def collect_dynamic_imports(path, variable):
+    tree = ast.parse(Path(path).read_text(encoding='utf-8'))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if variable not in names or not isinstance(node.value, ast.Dict):
+            continue
+        return [v.value for v in node.value.values
+                if isinstance(v, ast.Constant) and isinstance(v.value, str)]
+    raise SystemExit(f'{path} 中找不到 {variable}，打包脚本需要同步更新')
+
+hiddenimports += collect_dynamic_imports('tool/gui/engine_settings.py', 'SETTINGS_MODULES')
 
 a = Analysis(
     ['new_gui.py'],
