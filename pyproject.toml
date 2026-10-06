@@ -1,6 +1,6 @@
 [project]
 name = "auto-difficult-achievement"
-version = "1.4.11"
+version = "1.4.13"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
