@@ -712,10 +712,23 @@ class MainWindow(QMainWindowLog):
         self.run_script_btn.setEnabled(available and self.engine_combo.count() > 0)
 
     def run_script(self):
-        script_path = self.script_combo.currentData()
         kernel_id = self.engine_combo.currentData()
-        if script_path is None or kernel_id is None:
-            QMessageBox.warning(self, "提示", "请选择可用的内核和 JSON 动作脚本。")
+        if kernel_id is None:
+            QMessageBox.warning(self, "提示", "请选择一个可用的内核。")
+            return
+        spec = self.registry.specs.get(kernel_id)
+        if spec is None:
+            QMessageBox.warning(self, "提示", "所选内核不可用。")
+            return
+        # 未声明动作脚本能力的内核依赖 start() 主循环，动作脚本模式无法推进状态机。
+        if not spec.scriptable:
+            CUS_LOGGER.info(
+                "%s 内核依赖完整主循环，已改用完整启动方式。", spec.name)
+            self.run_kernel(kernel_id)
+            return
+        script_path = self.script_combo.currentData()
+        if script_path is None:
+            QMessageBox.warning(self, "提示", "请选择可用的 JSON 动作脚本。")
             return
         engine_name = self.engine_combo.currentText()
         stop_key = self.load_hotkey_config()["stop"].upper()

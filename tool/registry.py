@@ -23,6 +23,7 @@ class KernelSpec:
     order: int
     tray: bool
     calibration: bool
+    scriptable: bool = False
 
     def import_entry(self, entry):
         module, symbol = entry.split(":")
@@ -52,6 +53,7 @@ class KernelRegistry:
                     module.getint("button_order", 0),
                     module.getint("order", 0), module.getboolean("tray", False),
                     module.getboolean("calibration", False),
+                    module.getboolean("scriptable", False),
                 )
                 if not spec.id.isidentifier():
                     raise ValueError("模块 ID 必须是标识符")
