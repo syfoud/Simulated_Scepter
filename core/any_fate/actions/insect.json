@@ -11,6 +11,12 @@
             {
                 "position": [900, 1000]
             },
+            {
+                "sleep": 0.5
+            },
+            {
+                "position": [900, 1000]
+            },
             "restart_recording"
         ]
     },
@@ -361,7 +367,7 @@
                 "position": [1393, 948]
             },
             {
-                "delay": 1000
+                "sleep": 1
             },
             {
                 "position": [1147, 676]
