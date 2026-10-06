@@ -286,7 +286,7 @@
         "trigger":{
             "text": "被动效果",
             "box": [205, 296, 826, 855],
-            "interval": 3,
+            "interval": 0.5,
             "redundancy": 30
         },
         "actions":
