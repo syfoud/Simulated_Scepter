@@ -31,7 +31,7 @@ wheels = [
 
 [[package]]
 name = "auto-difficult-achievement"
-version = "1.4.11"
+version = "1.4.14"
 source = { virtual = "." }
 dependencies = [
     { name = "colorlog" },
