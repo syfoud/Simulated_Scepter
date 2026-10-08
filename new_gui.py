@@ -100,8 +100,9 @@ def parse_startup_args(argv=None):
 
     if args.start_task:
         registry = KernelRegistry()
+        search_target = args.start_task.lower()
         spec = next(
-            (item for item in registry.runnable() if args.start_task == item.id),
+            (item for item in registry.runnable() if search_target == item.id.lower()),
             None,
         )
         if spec is None:
