@@ -81,7 +81,7 @@ STARTUP_TASK_DELAY_SECONDS = 5
 
 def parse_startup_args(argv=None):
     """解析启动时可选的任务及其延迟时间。"""
-    parser = argparse.ArgumentParser(description="启动自动化程序并可选地自动运行一个任务。")
+    parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "--start-task",
         metavar="TASK",
@@ -100,14 +100,8 @@ def parse_startup_args(argv=None):
 
     if args.start_task:
         registry = KernelRegistry()
-        task_key = args.start_task.casefold()
         spec = next(
-            (
-                item
-                for item in registry.runnable()
-                if task_key
-                in {item.id.casefold(), item.folder.name.casefold(), item.button.casefold()}
-            ),
+            (item for item in registry.runnable() if args.start_task == item.id),
             None,
         )
         if spec is None:

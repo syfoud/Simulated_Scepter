@@ -126,16 +126,16 @@ uv run new_gui.py
 也可以在启动时指定自动运行的任务。以下命令会在界面初始化后等待默认的 5 秒，再启动“擢升铁血战士”：
 
 ```powershell
-uv run new_gui.py --start-task ironblood
+uv run new_gui.py --start-task IronBlood
 ```
 
 使用 `--start-delay` 可自定义等待秒数；例如等待 10 秒：
 
 ```powershell
-uv run new_gui.py --start-task ironblood --start-delay 10
+uv run new_gui.py --start-task IronBlood --start-delay 10
 ```
 
-任务可填写内核 ID 或界面按钮名称。运行 `uv run new_gui.py --help` 可查看参数说明。
+`--start-task` 只接受内核 ID，例如铁血战士内核的 ID 为 `IronBlood`。
 ----------------------------------------------------------------------------------------------
 
 # 相关配置建议
