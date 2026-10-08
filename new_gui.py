@@ -1,14 +1,15 @@
+import argparse
 import ctypes
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 
 import keyboard
 from PyQt5.QtGui import QFont
 
-from tool.registry import KernelRegistry
 from route import PATHS
 from tool import EXTRA
 from tool.action_script import run_script as run_action_script
@@ -36,6 +37,7 @@ from tool.gui.advanced_features import show_unlock_dialog
 from tool.gui.schedule_dialog import ScheduleDialog, ScheduleTimer
 from tool.gui.script_editor import ScriptEditor
 from tool.log import CUS_LOGGER, log_emitter
+from tool.registry import KernelRegistry
 from tool.script_files import discover_scripts, read_script, script_key, script_path
 from tool.script_tools import capture_sample, debug_events
 from tool.settings import load_settings, update_settings
@@ -74,6 +76,45 @@ from logger_printer import QMainWindowLog
 HOTKEY_DEBOUNCE_SECONDS = 1.0
 # 程序启动时触发的清理延迟执行的毫秒数，让主界面先完成显示。
 CLEANUP_STARTUP_DELAY_MS = 1500
+STARTUP_TASK_DELAY_SECONDS = 5
+
+
+def parse_startup_args(argv=None):
+    """解析启动时可选的任务及其延迟时间。"""
+    parser = argparse.ArgumentParser(description="启动自动化程序并可选地自动运行一个任务。")
+    parser.add_argument(
+        "--start-task",
+        metavar="TASK",
+        help="启动后自动运行的任务 ID 或按钮名称，例如 IronBlood。",
+    )
+    parser.add_argument(
+        "--start-delay",
+        type=int,
+        default=STARTUP_TASK_DELAY_SECONDS,
+        metavar="SECONDS",
+        help=f"任务启动前等待的秒数（默认：{STARTUP_TASK_DELAY_SECONDS}）。",
+    )
+    args = parser.parse_args(argv)
+    if args.start_delay < 0:
+        parser.error("--start-delay 必须是大于或等于 0 的整数")
+
+    if args.start_task:
+        registry = KernelRegistry()
+        task_key = args.start_task.casefold()
+        spec = next(
+            (
+                item
+                for item in registry.runnable()
+                if task_key
+                in {item.id.casefold(), item.folder.name.casefold(), item.button.casefold()}
+            ),
+            None,
+        )
+        if spec is None:
+            available = ", ".join(item.id for item in registry.runnable())
+            parser.error(f"未知任务 {args.start_task!r}；可用任务 ID：{available}")
+        args.start_task = spec.id
+    return args
 
 
 class CleanupSettingsSection(QWidget):
@@ -260,7 +301,7 @@ class MainWindow(QMainWindowLog):
     hotkey_pressed = pyqtSignal(str)
     script_tool_result = pyqtSignal(str, object)
 
-    def __init__(self):
+    def __init__(self, start_task=None, start_delay=STARTUP_TASK_DELAY_SECONDS):
         super().__init__()
         # 任务管理相关属性
         self.current_task = None
@@ -300,6 +341,17 @@ class MainWindow(QMainWindowLog):
 
         # 程序启动后先让界面完成显示，再按配置执行程序启动时触发的清理
         QTimer.singleShot(CLEANUP_STARTUP_DELAY_MS, lambda: self.cleanup_at("program_start"))
+        if start_task is not None:
+            spec = self.registry.specs[start_task]
+            CUS_LOGGER.debug(
+                "将在等待 %s 秒后，自动启动内核 %s。",
+                start_delay,
+                spec.id,
+            )
+            QTimer.singleShot(
+                start_delay * 1000,
+                lambda: self.run_kernel(start_task),
+            )
 
     def create_task_engine(self, kernel_id, *, script=False):
         """创建内核实例，并把它绑到本次任务线程上。
@@ -1247,7 +1299,7 @@ class MainWindow(QMainWindowLog):
 **使用本软件即表示您已阅读并同意以上条款。**
 """
 
-def main(show):
+def main(show, startup_args=None):
     def is_admin():
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()
@@ -1258,16 +1310,21 @@ def main(show):
     # 以管理员权限重新运行程序，使用pythonw避免命令行窗口
     def run_as_admin():
         try:
-            ctypes.windll.shell32.ShellExecuteW(
+            result = ctypes.windll.shell32.ShellExecuteW(
                 None,
                 "runas",
                 sys.executable,
-                __file__,
+                subprocess.list2cmdline(
+                    [os.path.abspath(__file__), *sys.argv[1:]]
+                ),
                 None,
                 show
             )
-            return True
-        except Exception:
+            if result <= 32:
+                CUS_LOGGER.error("请求管理员权限启动程序失败，ShellExecuteW 返回值：%s", result)
+            return result > 32
+        except Exception as error:
+            CUS_LOGGER.error("请求管理员权限启动程序失败：%s", error, exc_info=True)
             return False
 
 
@@ -1285,7 +1342,10 @@ def main(show):
             root.destroy()
     else:
         app = QApplication(sys.argv)
-        window = MainWindow()
+        window = MainWindow(
+            start_task=startup_args.start_task if startup_args else None,
+            start_delay=startup_args.start_delay if startup_args else STARTUP_TASK_DELAY_SECONDS,
+        )
         window.show()
         try:
             sys.exit(app.exec())
@@ -1293,6 +1353,7 @@ def main(show):
             print(f"异常退出，进程已结束,退出代码:{e.code}")
             input("按Enter键退出...")
 if __name__ == "__main__":
+    startup_args = parse_startup_args()
     fault_log_file = open("logs/crash_dump.txt", "w", encoding="utf-8")
     faulthandler.enable(file=fault_log_file)
-    main(1)
+    main(1, startup_args)
