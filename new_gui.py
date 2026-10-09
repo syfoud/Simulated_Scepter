@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import time
+import hashlib
 
 import keyboard
 from PyQt5.QtGui import QFont
@@ -110,6 +111,28 @@ def parse_startup_args(argv=None):
             parser.error(f"未知任务 {args.start_task!r}；可用任务 ID：{available}")
         args.start_task = spec.id
     return args
+
+
+def acquire_instance_lock(mutex_name):
+    """按程序目录获取单实例锁，允许其他目录中的副本同时运行。"""
+    handle = ctypes.windll.kernel32.CreateMutexW(None, True, mutex_name)
+    if not handle:
+        raise ctypes.WinError()
+    if ctypes.windll.kernel32.GetLastError() == 183:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return None
+    return handle
+
+
+def show_instance_warning():
+    """提示同目录的程序实例已启动。"""
+    import tkinter
+    from tkinter import messagebox
+
+    root = tkinter.Tk()
+    root.withdraw()
+    messagebox.showwarning("程序已运行", "当前程序目录下的权杖已经启动，请勿重复启动。")
+    root.destroy()
 
 
 class CleanupSettingsSection(QWidget):
@@ -1295,6 +1318,14 @@ class MainWindow(QMainWindowLog):
 """
 
 def main(show, startup_args=None):
+    root_path = os.path.normcase(os.path.realpath(PATHS["root"]))
+    mutex_name = f"Local\\Simulated_Scepter_{hashlib.sha256(root_path.encode('utf-8')).hexdigest()}"
+    mutex_handle = ctypes.windll.kernel32.OpenMutexW(0x00100000, False, mutex_name)
+    if mutex_handle:
+        ctypes.windll.kernel32.CloseHandle(mutex_handle)
+        show_instance_warning()
+        return
+
     def is_admin():
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()
@@ -1336,7 +1367,11 @@ def main(show, startup_args=None):
             messagebox.showerror("权限错误", "此程序需要管理员权限才能正常运行。请右键点击程序并选择'以管理员身份运行'。")
             root.destroy()
     else:
-        app = QApplication(sys.argv)
+        instance_lock = acquire_instance_lock(mutex_name)
+        if instance_lock is None:
+            show_instance_warning()
+            return
+        app = QApplication.instance() or QApplication(sys.argv)
         window = MainWindow(
             start_task=startup_args.start_task if startup_args else None,
             start_delay=startup_args.start_delay if startup_args else STARTUP_TASK_DELAY_SECONDS,
