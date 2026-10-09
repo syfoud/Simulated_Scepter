@@ -1,4 +1,6 @@
 {
+    "start_game_on_task": false,
+    "game_executable_path": "",
     "recording_state": false,
     "record_map": false,
     "recording_iron_blood": false,

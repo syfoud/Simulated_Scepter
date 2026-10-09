@@ -898,6 +898,27 @@ border:none</string>
                   <item>
                    <layout class="QVBoxLayout" name="verticalLayout_14">
                     <item>
+                     <widget class="QCheckBox" name="start_game_checkbox">
+                      <property name="text">
+                       <string>启动任务时，若崩坏：星穹铁道未启动，则尝试将其启动</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout" name="horizontalLayout_game_path">
+                      <item>
+                       <widget class="QLabel" name="game_path_label">
+                        <property name="text">
+                         <string>崩铁安装位置（请填入StarRail.exe的完整路径，不支持云崩铁）</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item stretch="1">
+                       <widget class="QLineEdit" name="game_path_input" />
+                      </item>
+                     </layout>
+                    </item>
+                    <item>
                      <widget class="QCheckBox" name="recording_checkBox">
                       <property name="text">
                        <string>模拟宇宙视频录制</string>

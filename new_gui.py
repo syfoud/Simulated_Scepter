@@ -2,6 +2,7 @@ import ctypes
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 
@@ -329,6 +330,23 @@ class MainWindow(QMainWindowLog):
             self.task_thread = None
             self.current_task = None
 
+        if self.start_game_checkbox.isChecked() and find_game_window() is None:
+            game_path = self.game_path_input.text().strip().strip('"')
+            if (not os.path.isabs(game_path)
+                    or os.path.basename(game_path).casefold() != "starrail.exe"
+                    or not os.path.isfile(game_path)):
+                QMessageBox.warning(
+                    self, "无法启动游戏", "请在进阶设置中填写有效的 StarRail.exe 完整路径",
+                )
+                return
+            try:
+                subprocess.Popen([game_path], cwd=os.path.dirname(game_path))
+            except OSError as error:
+                CUS_LOGGER.error("无法启动崩坏：星穹铁道：%s", error, exc_info=True)
+                QMessageBox.warning(self, "无法启动游戏", f"启动 StarRail.exe 失败：{error}")
+                return
+            CUS_LOGGER.info("未检测到崩坏：星穹铁道，已尝试启动 StarRail.exe。")
+
         if self.scheduler is not None:
             self.scheduler.release_active()
 
@@ -449,6 +467,8 @@ class MainWindow(QMainWindowLog):
             "抢救模式：尽可能保留更多帧，结尾有概率出现异常帧", "rescue")
 
         self.opt = data = load_settings()
+        self.start_game_checkbox.setChecked(data.get("start_game_on_task", False))
+        self.game_path_input.setText(data.get("game_executable_path", ""))
         self.recording_checkBox.setChecked(data.get("recording_state", False))
         self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
         self.recording_time_input.setText(str(data.get("del_record_time", 14)))
@@ -612,6 +632,7 @@ class MainWindow(QMainWindowLog):
                 self.registered_hotkeys.append(key.lower())
 
     def update_dependent_controls_state(self):
+        self.game_path_input.setEnabled(self.start_game_checkbox.isChecked())
         debug_enabled = bool(self.opt.get("debug", False))
         recording_enabled = self.recording_checkBox2.isEnabled() and self.recording_checkBox2.isChecked()
         self.recording_time_input.setEnabled(recording_enabled)
@@ -631,6 +652,7 @@ class MainWindow(QMainWindowLog):
 
 
     def connect_dependency_signals(self):
+        self.start_game_checkbox.toggled.connect(self.update_dependent_controls_state)
         self.recording_checkBox2.toggled.connect(self.update_dependent_controls_state)
 
 
@@ -993,6 +1015,8 @@ class MainWindow(QMainWindowLog):
     def save_general_config(self):
         try:
             self.update_settings({
+                "start_game_on_task": self.start_game_checkbox.isChecked(),
+                "game_executable_path": self.game_path_input.text().strip(),
                 "recording_state": self.recording_checkBox.isChecked(),
                 "recording_iron_blood": self.recording_checkBox2.isChecked(),
                 "del_record_time": int(self.recording_time_input.text()),
