@@ -909,7 +909,7 @@ border:none</string>
                       <item>
                        <widget class="QLabel" name="game_path_label">
                         <property name="text">
-                         <string>崩铁安装位置（请填入StarRail.exe的完整路径，不支持云崩铁）</string>
+                         <string>崩铁安装位置（可留空自动检测；未检测到时请填写StarRail.exe完整路径，不支持云崩铁）</string>
                         </property>
                        </widget>
                       </item>

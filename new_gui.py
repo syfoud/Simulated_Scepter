@@ -41,6 +41,8 @@ from tool.script_files import discover_scripts, read_script, script_key, script_
 from tool.script_tools import capture_sample, debug_events
 from tool.settings import load_settings, update_settings
 from tool.thread import ThreadWithException
+from tool.utils.game_install import find_star_rail_executable
+from tool.utils.game_process import is_star_rail_process_running
 from tool.utils.game_window import find_game_window
 from tool.utils.image_tool import find_image_by_name, load_all_images_from_directory
 from tool.window_recorder.video_remux import (
@@ -330,22 +332,39 @@ class MainWindow(QMainWindowLog):
             self.task_thread = None
             self.current_task = None
 
-        if self.start_game_checkbox.isChecked() and find_game_window() is None:
-            game_path = self.game_path_input.text().strip().strip('"')
-            if (not os.path.isabs(game_path)
-                    or os.path.basename(game_path).casefold() != "starrail.exe"
-                    or not os.path.isfile(game_path)):
-                QMessageBox.warning(
-                    self, "无法启动游戏", "请在进阶设置中填写有效的 StarRail.exe 完整路径",
-                )
-                return
-            try:
-                subprocess.Popen([game_path], cwd=os.path.dirname(game_path))
-            except OSError as error:
-                CUS_LOGGER.error("无法启动崩坏：星穹铁道：%s", error, exc_info=True)
-                QMessageBox.warning(self, "无法启动游戏", f"启动 StarRail.exe 失败：{error}")
-                return
-            CUS_LOGGER.info("未检测到崩坏：星穹铁道，已尝试启动 StarRail.exe。")
+        if self.start_game_checkbox.isChecked():
+            game_running = find_game_window() is not None
+            if not game_running:
+                try:
+                    game_running = is_star_rail_process_running()
+                except OSError as error:
+                    CUS_LOGGER.error("无法检查崩坏：星穹铁道进程：%s", error, exc_info=True)
+                    QMessageBox.warning(self, "无法确认游戏状态", "无法检查游戏进程，本次不会尝试启动游戏。")
+                    return
+
+            if not game_running:
+                game_path = self.game_path_input.text().strip().strip('"')
+                if not game_path:
+                    game_path = find_star_rail_executable() or ""
+                    if game_path:
+                        self.game_path_input.setText(game_path)
+                if (not os.path.isabs(game_path)
+                        or os.path.basename(game_path).casefold() != "starrail.exe"
+                        or not os.path.isfile(game_path)):
+                    QMessageBox.warning(
+                        self, "无法启动游戏",
+                        "未能自动找到游戏，请在进阶设置中填写有效的 StarRail.exe 完整路径。",
+                    )
+                    return
+                try:
+                    subprocess.Popen([game_path], cwd=os.path.dirname(game_path))
+                except OSError as error:
+                    CUS_LOGGER.error("无法启动崩坏：星穹铁道：%s", error, exc_info=True)
+                    QMessageBox.warning(self, "无法启动游戏", f"启动 StarRail.exe 失败：{error}")
+                    return
+                CUS_LOGGER.info("未检测到崩坏：星穹铁道，已尝试启动 StarRail.exe。")
+            else:
+                CUS_LOGGER.debug("已检测到崩坏：星穹铁道窗口或进程，跳过重复启动。")
 
         if self.scheduler is not None:
             self.scheduler.release_active()
