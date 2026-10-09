@@ -1,0 +1,10 @@
+{
+    "daily_relic_module": "inner",
+    "daily_relic_inner": "虫虫来袭",
+    "daily_relic_outer": "密伶之径-生研院",
+    "daily_relic_inner_auto": false,
+    "daily_relic_inner_runs": 1,
+    "daily_relic_outer_auto": false,
+    "daily_relic_outer_runs": 1,
+    "daily_relic_inner_skill_order": ""
+}
