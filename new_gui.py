@@ -125,14 +125,11 @@ def acquire_instance_lock(mutex_name):
 
 
 def show_instance_warning():
-    """提示同目录的程序实例已启动。"""
-    import tkinter
-    from tkinter import messagebox
-
-    root = tkinter.Tk()
-    root.withdraw()
-    messagebox.showwarning("程序已运行", "当前程序目录下的权杖已经启动，请勿重复启动。")
-    root.destroy()
+    """在控制台提示同目录的程序实例已启动。"""
+    try:
+        print("当前程序目录下的权杖已经启动，请勿重复启动。")
+    except UnicodeEncodeError:
+        print("Simulated Scepter is already running in this directory; do not start it again.")
 
 
 class CleanupSettingsSection(QWidget):
