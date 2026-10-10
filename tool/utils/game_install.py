@@ -17,6 +17,7 @@ def find_star_rail_executable() -> tuple[str, bool] | None:
     candidates = (
         _mihoyo_launcher_candidates()
         + _hoyoplay_candidates()
+        + _game_config_store_candidates()
         + _registry_candidates()
     )
 
@@ -62,6 +63,45 @@ def _registry_candidates() -> list[tuple[Path, bool | None]]:
                                 candidates.append((path, _path_region(path)))
         except OSError:
             continue
+    return candidates
+
+
+def _game_config_store_candidates() -> list[tuple[Path, bool | None]]:
+    """读取 Windows 游戏配置记录中的已匹配可执行文件路径。"""
+    import winreg
+
+    candidates = []
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"System\GameConfigStore\Children",
+            0,
+            winreg.KEY_READ,
+        ) as root:
+            child_names = [
+                winreg.EnumKey(root, index)
+                for index in range(winreg.QueryInfoKey(root)[0])
+            ]
+    except OSError:
+        return candidates
+
+    for child_name in child_names:
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                rf"System\GameConfigStore\Children\{child_name}",
+                0,
+                winreg.KEY_READ,
+            ) as child:
+                matched_path = _registry_value(child, "MatchedExeFullPath")
+        except OSError:
+            continue
+        if not matched_path:
+            continue
+        position = matched_path.casefold().find("starrail.exe")
+        if position >= 0:
+            game_path = Path(matched_path[:position + len("starrail.exe")])
+            candidates.append((game_path, _path_region(game_path)))
     return candidates
 
 
