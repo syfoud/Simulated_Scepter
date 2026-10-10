@@ -2,13 +2,13 @@ import ctypes
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 
 import keyboard
 from PyQt5.QtGui import QFont
 
-from tool.registry import KernelRegistry
 from route import PATHS
 from tool import EXTRA
 from tool.action_script import run_script as run_action_script
@@ -36,10 +36,16 @@ from tool.gui.advanced_features import show_unlock_dialog
 from tool.gui.schedule_dialog import ScheduleDialog, ScheduleTimer
 from tool.gui.script_editor import ScriptEditor
 from tool.log import CUS_LOGGER, log_emitter
+from tool.registry import KernelRegistry
 from tool.script_files import discover_scripts, read_script, script_key, script_path
 from tool.script_tools import capture_sample, debug_events
 from tool.settings import load_settings, update_settings
 from tool.thread import ThreadWithException
+from tool.utils.game_install import (
+    find_star_rail_executable,
+    is_global_star_rail_executable,
+)
+from tool.utils.game_process import is_star_rail_process_running
 from tool.utils.game_window import find_game_window
 from tool.utils.image_tool import find_image_by_name, load_all_images_from_directory
 from tool.window_recorder.video_remux import (
@@ -329,6 +335,46 @@ class MainWindow(QMainWindowLog):
             self.task_thread = None
             self.current_task = None
 
+        if self.start_game_checkbox.isChecked():
+            game_running = find_game_window() is not None
+            if not game_running:
+                try:
+                    game_running = is_star_rail_process_running()
+                except OSError as error:
+                    CUS_LOGGER.error("无法检查崩坏：星穹铁道进程：%s", error, exc_info=True)
+                    QMessageBox.warning(self, "无法确认游戏状态", "无法检查游戏进程，本次不会尝试启动游戏。")
+                    return
+
+            if not game_running:
+                game_path = self.game_path_input.text().strip().strip('"')
+                is_global_game = is_global_star_rail_executable(game_path) if game_path else False
+                if not game_path:
+                    discovered_game = find_star_rail_executable()
+                    if discovered_game:
+                        game_path, is_global_game = discovered_game
+                        self.game_path_input.setText(game_path)
+                if (not os.path.isabs(game_path)
+                        or os.path.basename(game_path).casefold() != "starrail.exe"
+                        or not os.path.isfile(game_path)):
+                    CUS_LOGGER.error("未能自动找到游戏，请在进阶设置中填写有效的 StarRail.exe 完整路径。")
+                    QMessageBox.warning(
+                        self, "无法启动游戏",
+                        "未能自动找到游戏，请在进阶设置中填写有效的 StarRail.exe 完整路径。",
+                    )
+                    return
+                self.save_game_path_config()
+                try:
+                    subprocess.Popen([game_path], cwd=os.path.dirname(game_path))
+                except OSError as error:
+                    CUS_LOGGER.error("无法启动崩坏：星穹铁道：%s", error, exc_info=True)
+                    QMessageBox.warning(self, "无法启动游戏", f"启动 StarRail.exe 失败：{error}")
+                    return
+                if is_global_game:
+                    CUS_LOGGER.info("本次启动的是国际服崩坏·星穹铁道")
+                CUS_LOGGER.info("未检测到崩坏：星穹铁道，已尝试启动 StarRail.exe。")
+            else:
+                CUS_LOGGER.debug("已检测到崩坏：星穹铁道窗口或进程，跳过重复启动。")
+
         if self.scheduler is not None:
             self.scheduler.release_active()
 
@@ -449,6 +495,8 @@ class MainWindow(QMainWindowLog):
             "抢救模式：尽可能保留更多帧，结尾有概率出现异常帧", "rescue")
 
         self.opt = data = load_settings()
+        self.start_game_checkbox.setChecked(data.get("start_game_on_task", False))
+        self.game_path_input.setText(data.get("game_executable_path", ""))
         self.recording_checkBox.setChecked(data.get("recording_state", False))
         self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
         self.recording_time_input.setText(str(data.get("del_record_time", 14)))
@@ -612,6 +660,7 @@ class MainWindow(QMainWindowLog):
                 self.registered_hotkeys.append(key.lower())
 
     def update_dependent_controls_state(self):
+        self.game_path_input.setEnabled(self.start_game_checkbox.isChecked())
         debug_enabled = bool(self.opt.get("debug", False))
         recording_enabled = self.recording_checkBox2.isEnabled() and self.recording_checkBox2.isChecked()
         self.recording_time_input.setEnabled(recording_enabled)
@@ -631,7 +680,24 @@ class MainWindow(QMainWindowLog):
 
 
     def connect_dependency_signals(self):
+        self.start_game_checkbox.toggled.connect(self.update_dependent_controls_state)
         self.recording_checkBox2.toggled.connect(self.update_dependent_controls_state)
+        self.game_path_input.editingFinished.connect(self.save_game_path_config)
+
+
+    def save_game_path_config(self):
+        """路径有效时自动保存，保留合并写入避免覆盖其他设置。"""
+        game_path = self.game_path_input.text().strip().strip('"')
+        if (not os.path.isabs(game_path)
+                or os.path.basename(game_path).casefold() != "starrail.exe"
+                or not os.path.isfile(game_path)
+                or self.opt.get("game_executable_path") == game_path):
+            return
+        try:
+            self.update_settings({"game_executable_path": game_path})
+        except (OSError, ValueError) as error:
+            CUS_LOGGER.warning("崩铁路径自动保存失败：%s", error)
+            QMessageBox.warning(self, "保存失败", f"崩铁路径无法自动保存：{error}")
 
 
     def closeEvent(self, event):
@@ -993,6 +1059,8 @@ class MainWindow(QMainWindowLog):
     def save_general_config(self):
         try:
             self.update_settings({
+                "start_game_on_task": self.start_game_checkbox.isChecked(),
+                "game_executable_path": self.game_path_input.text().strip(),
                 "recording_state": self.recording_checkBox.isChecked(),
                 "recording_iron_blood": self.recording_checkBox2.isChecked(),
                 "del_record_time": int(self.recording_time_input.text()),
