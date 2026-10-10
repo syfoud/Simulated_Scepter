@@ -1,3 +1,4 @@
+import argparse
 import ctypes
 import json
 import os
@@ -5,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import time
+import hashlib
 
 import keyboard
 from PyQt5.QtGui import QFont
@@ -80,6 +82,59 @@ from logger_printer import QMainWindowLog
 HOTKEY_DEBOUNCE_SECONDS = 1.0
 # 程序启动时触发的清理延迟执行的毫秒数，让主界面先完成显示。
 CLEANUP_STARTUP_DELAY_MS = 1500
+STARTUP_TASK_DELAY_SECONDS = 5
+
+
+def parse_startup_args(argv=None):
+    """解析启动时可选的任务及其延迟时间。"""
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument(
+        "--start-task",
+        metavar="TASK",
+        help="启动后自动运行的任务 ID 或按钮名称，例如 IronBlood。",
+    )
+    parser.add_argument(
+        "--start-delay",
+        type=int,
+        default=STARTUP_TASK_DELAY_SECONDS,
+        metavar="SECONDS",
+        help=f"任务启动前等待的秒数（默认：{STARTUP_TASK_DELAY_SECONDS}）。",
+    )
+    args = parser.parse_args(argv)
+    if args.start_delay < 0:
+        parser.error("--start-delay 必须是大于或等于 0 的整数")
+
+    if args.start_task:
+        registry = KernelRegistry()
+        search_target = args.start_task.lower()
+        spec = next(
+            (item for item in registry.runnable() if search_target == item.id.lower()),
+            None,
+        )
+        if spec is None:
+            available = ", ".join(item.id for item in registry.runnable())
+            parser.error(f"未知任务 {args.start_task!r}；可用任务 ID：{available}")
+        args.start_task = spec.id
+    return args
+
+
+def acquire_instance_lock(mutex_name):
+    """按程序目录获取单实例锁，允许其他目录中的副本同时运行。"""
+    handle = ctypes.windll.kernel32.CreateMutexW(None, True, mutex_name)
+    if not handle:
+        raise ctypes.WinError()
+    if ctypes.windll.kernel32.GetLastError() == 183:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return None
+    return handle
+
+
+def show_instance_warning():
+    """在控制台提示同目录的程序实例已启动。"""
+    try:
+        print("当前程序目录下的权杖已经启动，请勿重复启动。")
+    except UnicodeEncodeError:
+        print("Simulated Scepter is already running in this directory; do not start it again.")
 
 
 class CleanupSettingsSection(QWidget):
@@ -266,7 +321,7 @@ class MainWindow(QMainWindowLog):
     hotkey_pressed = pyqtSignal(str)
     script_tool_result = pyqtSignal(str, object)
 
-    def __init__(self):
+    def __init__(self, start_task=None, start_delay=STARTUP_TASK_DELAY_SECONDS):
         super().__init__()
         # 任务管理相关属性
         self.current_task = None
@@ -306,6 +361,17 @@ class MainWindow(QMainWindowLog):
 
         # 程序启动后先让界面完成显示，再按配置执行程序启动时触发的清理
         QTimer.singleShot(CLEANUP_STARTUP_DELAY_MS, lambda: self.cleanup_at("program_start"))
+        if start_task is not None:
+            spec = self.registry.specs[start_task]
+            CUS_LOGGER.debug(
+                "将在等待 %s 秒后，自动启动内核 %s。",
+                start_delay,
+                spec.id,
+            )
+            QTimer.singleShot(
+                start_delay * 1000,
+                lambda: self.run_kernel(start_task),
+            )
 
     def create_task_engine(self, kernel_id, *, script=False):
         """创建内核实例，并把它绑到本次任务线程上。
@@ -1315,7 +1381,15 @@ class MainWindow(QMainWindowLog):
 **使用本软件即表示您已阅读并同意以上条款。**
 """
 
-def main(show):
+def main(show, startup_args=None):
+    root_path = os.path.normcase(os.path.realpath(PATHS["root"]))
+    mutex_name = f"Local\\Simulated_Scepter_{hashlib.sha256(root_path.encode('utf-8')).hexdigest()}"
+    mutex_handle = ctypes.windll.kernel32.OpenMutexW(0x00100000, False, mutex_name)
+    if mutex_handle:
+        ctypes.windll.kernel32.CloseHandle(mutex_handle)
+        show_instance_warning()
+        return
+
     def is_admin():
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()
@@ -1326,16 +1400,21 @@ def main(show):
     # 以管理员权限重新运行程序，使用pythonw避免命令行窗口
     def run_as_admin():
         try:
-            ctypes.windll.shell32.ShellExecuteW(
+            result = ctypes.windll.shell32.ShellExecuteW(
                 None,
                 "runas",
                 sys.executable,
-                __file__,
+                subprocess.list2cmdline(
+                    [os.path.abspath(__file__), *sys.argv[1:]]
+                ),
                 None,
                 show
             )
-            return True
-        except Exception:
+            if result <= 32:
+                CUS_LOGGER.error("请求管理员权限启动程序失败，ShellExecuteW 返回值：%s", result)
+            return result > 32
+        except Exception as error:
+            CUS_LOGGER.error("请求管理员权限启动程序失败：%s", error, exc_info=True)
             return False
 
 
@@ -1352,8 +1431,15 @@ def main(show):
             messagebox.showerror("权限错误", "此程序需要管理员权限才能正常运行。请右键点击程序并选择'以管理员身份运行'。")
             root.destroy()
     else:
-        app = QApplication(sys.argv)
-        window = MainWindow()
+        instance_lock = acquire_instance_lock(mutex_name)
+        if instance_lock is None:
+            show_instance_warning()
+            return
+        app = QApplication.instance() or QApplication(sys.argv)
+        window = MainWindow(
+            start_task=startup_args.start_task if startup_args else None,
+            start_delay=startup_args.start_delay if startup_args else STARTUP_TASK_DELAY_SECONDS,
+        )
         window.show()
         try:
             sys.exit(app.exec())
@@ -1361,6 +1447,7 @@ def main(show):
             print(f"异常退出，进程已结束,退出代码:{e.code}")
             input("按Enter键退出...")
 if __name__ == "__main__":
+    startup_args = parse_startup_args()
     fault_log_file = open("logs/crash_dump.txt", "w", encoding="utf-8")
     faulthandler.enable(file=fault_log_file)
-    main(1)
+    main(1, startup_args)
