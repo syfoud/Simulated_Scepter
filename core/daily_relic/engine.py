@@ -7,12 +7,15 @@
 import re
 import time
 
+import cv2 as cv
+
 from core.any_fate.engine import AnyFateUniverse
 from core.simulated.utils import set_forground
 from tool.GLOBAL import get_global_stop_flag, key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import clean_text
 from tool.storage import load_module_settings
+from tool.utils.image_tool import find_image_by_name
 
 
 # 各界面锚点：(特征文字, [左上x, 右下x, 左上y, 右下y])。
@@ -21,6 +24,13 @@ GUIDE_ANCHOR = ("每日实训", [103, 203, 65, 93])
 GUIDE_CLICK_BOX = [440, 533, 198, 227]
 TRAINING_ANCHOR = ("生存索引", [101, 201, 63, 96])
 DIFF_UNIVERSE_ANCHOR = ("差分宇宙", [56, 148, 14, 42])
+# 月卡（列车补给）弹窗
+MONTHLY_CARD_ANCHOR = ("列车补给", [880, 1039, 55, 97])
+MONTHLY_CARD_CLICK_POS = (900, 1000)
+# 出战前弹出的「当前编队中仍有角色位空缺」确认框；点「确认」继续。
+TEAM_EMPTY_TEXT = "编队"
+TEAM_EMPTY_BOX = [719, 1188, 512, 539]
+TEAM_EMPTY_CONFIRM_BOX = [1159, 1213, 655, 686]
 
 # 大地图特征：与 core/simulated/utils.py 的 is_run 使用同一检测位置和阈值。
 HOME_WORLD_POS = (0.0245, 0.5185)
@@ -73,6 +83,25 @@ DAILY_CLAIM_BOX = [411, 464, 811, 841]            # 每日实训栏的「领取�
 DAILY_TRAINING_ENTRY_BOX = [303, 409, 196, 234]   # 进入「每日实训」菜单。
 FINAL_CLOSE_BOX = [1589, 1637, 294, 327]          # 领取完成后的收尾按钮。
 
+# 合成奇巧零食相关位置。
+SNACK_TRIGGER_BOX = [315, 368, 340, 370]           # 触发合成检查的数字显示区。
+UNIVERSAL_CRAFT_BOX = [970, 1203, 478, 512]        # 「万能合成」入口。
+UNIVERSAL_CRAFT_GO_BOX = [1081, 1133, 811, 841]    # 「前往」按钮。
+CONSUMABLE_CRAFT_BOX = [101, 228, 62, 97]          # 「消耗品合成」分类。
+SNACK_SEARCH_AREA = [40, 520, 130, 950]            # 左侧消耗品列表区，snack 图标的搜索范围。
+SNACK_SCROLL_HOVER = (358, 434)                    # 滚动鼠标悬停位置（列表区中央）。
+SNACK_RESULT_BOX = [1024, 1172, 165, 205]          # 「奇巧零食」识别区。
+SNACK_CRAFT_BOX = [1157, 1213, 965, 1000]          # 「合成」按钮。
+SNACK_CONFIRM_BOX = [893, 1027, 366, 402]          # 「确认合成」识别区。
+SNACK_CONFIRM_CLICK_BOX = [1160, 1212, 683, 714]   # 「确认」按钮。
+SNACK_CLOSE_BOX = [875, 1045, 775, 806]            # 「点击空白处关闭」识别区。
+
+# 合成触发数值、滚动格数、匹配阈值与滚动次数上限。
+SNACK_CRAFT_TARGET = 400
+SNACK_SCROLL_TICKS = -3
+SNACK_MATCH_THRESHOLD = 0.85
+SNACK_SCROLL_ATTEMPT_LIMIT = 20
+
 # 挑战次数上限与单次开拓力消耗。
 MAX_RUNS = 6
 STAMINA_PER_RUN = 40
@@ -91,6 +120,8 @@ class DailyRelicKernel(AnyFateUniverse):
     状态含义：
         home_world      大地图；按 ESC 打开手机页面。仅处理一次。
         leave_confirm   误触 ESC 弹出的离开确认框；点取消恢复。
+        monthly_card    月卡（列车补给）弹窗；点击关闭。
+        team_empty      编队空缺确认框；点确认继续。
         phone           手机页面；点击「指南」。
         guide           指南页面；点击中央每日实训卡片。
         training        每日实训页面；进入内圈或外圈副本列表。
@@ -159,6 +190,10 @@ class DailyRelicKernel(AnyFateUniverse):
         self.ts.forward(self.screen)
         if self._text_in_res(LEAVE_CONFIRM_TEXT, LEAVE_CONFIRM_BOX):
             return "leave_confirm"
+        if self._text_in_res(*MONTHLY_CARD_ANCHOR):
+            return "monthly_card"
+        if self._text_in_res(TEAM_EMPTY_TEXT, TEAM_EMPTY_BOX):
+            return "team_empty"
         if not self._home_world_locked and self.check(
                 "big_world", *HOME_WORLD_POS, threshold=0.995):
             return "home_world"
@@ -186,6 +221,10 @@ class DailyRelicKernel(AnyFateUniverse):
             self._handle_home_world()
         elif state == "leave_confirm":
             self._handle_leave_confirm()
+        elif state == "monthly_card":
+            self._handle_monthly_card()
+        elif state == "team_empty":
+            self._handle_team_empty()
         elif state == "phone":
             self._handle_phone()
         elif state == "guide":
@@ -223,6 +262,18 @@ class DailyRelicKernel(AnyFateUniverse):
         self.pause(0.8)
         # 无论是否真误触，一旦见到该弹窗就锁定 home_world。
         self._home_world_locked = True
+
+    def _handle_monthly_card(self):
+        """月卡（列车补给）弹窗：点击画面中央关闭后继续。"""
+        key_mouse_manager.click(*MONTHLY_CARD_CLICK_POS)
+        key_mouse_manager.wait()
+        self.pause(0.8)
+
+    def _handle_team_empty(self):
+        """编队空缺确认弹窗：点「确认」继续出战。"""
+        self.click_box_center(TEAM_EMPTY_CONFIRM_BOX)
+        key_mouse_manager.wait()
+        self.pause(0.8)
 
     def _handle_phone(self):
         """手机页面：点击「指南」入口。"""
@@ -399,8 +450,10 @@ class DailyRelicKernel(AnyFateUniverse):
         """领取每日实训委托奖励。
 
         串行执行，不参与主状态机循环，避免干扰刷本流程。步骤：
-        等待大地图 → ESC → 委托 → 领取奖励 → ESC → 指南
-        →（若位于生存索引则进入每日实训）→ 循环领取 → 收尾按钮 → ESC ×2。
+        等待大地图 → ESC → 委托 → 领取奖励 → ESC ×2 → 指南
+        →（若位于生存索引则进入每日实训）→ 循环领取
+        →（数字为 400 时）合成奇巧零食
+        → 收尾按钮 → ESC ×2。
         """
         if not self._wait_home_world(timeout=15.0):
             if not self.stopping:
@@ -422,10 +475,15 @@ class DailyRelicKernel(AnyFateUniverse):
             return
         self.pause(0.5)
 
-        # 回到手机页面，进入指南。
+        # 领完奖励后连按两次 ESC 才能回到手机主页；两次之间留 0.3 秒。
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        self.pause(0.3)
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
         self.pause(0.8)
+
+        # 进入指南。
         if not self._wait_and_click("指南", PHONE_ANCHOR[1], timeout=5.0):
             if not self.stopping:
                 CUS_LOGGER.warning("未识别到「指南」入口，结束每日委托奖励领取")
@@ -448,6 +506,11 @@ class DailyRelicKernel(AnyFateUniverse):
             key_mouse_manager.wait()
             self.pause(0.3)
 
+        # 结算前若触发数字显示为 400，先合成奇巧零食再继续收尾。
+        self._maybe_craft_snack()
+        if self.stopping:
+            return
+
         # 收尾：点击收尾按钮并两次 ESC 退出。
         self.click_box_center(FINAL_CLOSE_BOX)
         key_mouse_manager.wait()
@@ -458,6 +521,116 @@ class DailyRelicKernel(AnyFateUniverse):
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
         self.pause(0.3)
+
+    # ---------- 合成奇巧零食 ----------
+
+    def _maybe_craft_snack(self):
+        """结算前若触发数字显示为 400，先合成奇巧零食再继续。
+
+        该数字达到 ``SNACK_CRAFT_TARGET`` 表示可合成消耗品；未达到时不
+        改变原流程。合成完成后由调用方继续推进结算。
+        """
+        value = self._read_int_in_box(SNACK_TRIGGER_BOX)
+        if value != SNACK_CRAFT_TARGET:
+            return
+        CUS_LOGGER.debug("触发数字为 %s，开始合成奇巧零食", value)
+
+        if not self._wait_for_anchor("万能合成", UNIVERSAL_CRAFT_BOX, timeout=5.0):
+            if not self.stopping:
+                CUS_LOGGER.warning("未识别到「万能合成」，跳过零食合成")
+            return
+        if not self._wait_and_click("前往", UNIVERSAL_CRAFT_GO_BOX, timeout=5.0):
+            if not self.stopping:
+                CUS_LOGGER.warning("未识别到「前往」，跳过零食合成")
+            return
+        self.pause(1.0)
+
+        if not self._wait_for_anchor("消耗品合成", CONSUMABLE_CRAFT_BOX, timeout=5.0):
+            if not self.stopping:
+                CUS_LOGGER.warning("未识别到「消耗品合成」，跳过零食合成")
+            return
+
+        if not self._scroll_until_snack():
+            if not self.stopping:
+                CUS_LOGGER.warning("未找到 snack 图标，跳过零食合成")
+            return
+        self.pause(0.5)
+
+        if not self._wait_for_anchor("奇巧零食", SNACK_RESULT_BOX, timeout=5.0):
+            if not self.stopping:
+                CUS_LOGGER.warning("未识别到「奇巧零食」，跳过零食合成")
+            return
+        self.click_box_center(SNACK_CRAFT_BOX)
+        key_mouse_manager.wait()
+        self.pause(0.5)
+
+        if not self._wait_for_anchor("确认合成", SNACK_CONFIRM_BOX, timeout=5.0):
+            if not self.stopping:
+                CUS_LOGGER.warning("未识别到「确认合成」，跳过零食合成")
+            return
+        self.click_box_center(SNACK_CONFIRM_CLICK_BOX)
+        key_mouse_manager.wait()
+        self.pause(0.5)
+
+        if not self._wait_for_anchor("点击空白处关闭", SNACK_CLOSE_BOX, timeout=5.0):
+            if not self.stopping:
+                CUS_LOGGER.warning("未识别到「点击空白处关闭」，跳过关闭动作")
+            return
+        # 检测到关闭提示后仅按两次 ESC 退回主界面，不点击提示区域。
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        self.pause(0.3)
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        self.pause(0.3)
+
+    def _scroll_until_snack(self):
+        """在左侧消耗品列表中滚动查找 snack 图标，找到后点击它。
+
+        鼠标停留在 ``SNACK_SCROLL_HOVER`` 上滚动滚轮向下逐屏浏览；每屏
+        只在 ``SNACK_SEARCH_AREA`` 范围内匹配一次，避免顶部或右侧其他
+        区域出现同名图标时误命中。
+
+        Returns:
+            True 表示找到并点击；False 表示超时或收到停止请求。
+        """
+        target = find_image_by_name("snack")
+        if target is None:
+            CUS_LOGGER.warning("未加载到 snack 图标资源")
+            return False
+        for _ in range(SNACK_SCROLL_ATTEMPT_LIMIT):
+            if self.stopping:
+                return False
+            pos = self._find_snack_in_list(target)
+            if pos is not None:
+                key_mouse_manager.click(*pos)
+                key_mouse_manager.wait()
+                return True
+            key_mouse_manager.scroll(SNACK_SCROLL_TICKS, *SNACK_SCROLL_HOVER)
+            key_mouse_manager.wait()
+            self.pause(0.5)
+        return False
+
+    def _find_snack_in_list(self, target):
+        """在 ``SNACK_SEARCH_AREA`` 范围内匹配 snack 图标。
+
+        Args:
+            target: snack 图标的模板图像。
+
+        Returns:
+            (x, y) 匹配中心的屏幕像素坐标；匹配度不足时返回 None。
+        """
+        self.get_screen()
+        left, right, top, bottom = SNACK_SEARCH_AREA
+        region = self.screen[top:bottom, left:right]
+        if region.size == 0 or region.shape[0] < target.shape[0] or region.shape[1] < target.shape[1]:
+            return None
+        result = cv.matchTemplate(region, target, cv.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv.minMaxLoc(result)
+        if max_val < SNACK_MATCH_THRESHOLD:
+            return None
+        h, w = target.shape[:2]
+        return (left + max_loc[0] + w // 2, top + max_loc[1] + h // 2)
 
     # ---------- 辅助 ----------
 

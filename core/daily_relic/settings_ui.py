@@ -83,7 +83,22 @@ class SkillOrderSection(QGroupBox):
         layout.addWidget(self.input)
 
     def collect(self):
-        return self.input.text().strip()
+        """返回秘技顺序；非法输入直接抛 ValueError 由保存层拦截。
+
+        Returns:
+            用户输入的 1~4 数字串；留空返回空串。
+
+        Raises:
+            ValueError: 输入包含 1~4 以外的字符，或数字有重复。
+        """
+        raw = self.input.text().strip()
+        if not raw:
+            return ""
+        if not all(c in "1234" for c in raw):
+            raise ValueError("秘技顺序只能包含 1/2/3/4")
+        if len(set(raw)) != len(raw):
+            raise ValueError("秘技顺序不能有重复数字")
+        return raw
 
 
 class DailyRelicSection(QWidget):
