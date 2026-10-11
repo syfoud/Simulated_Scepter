@@ -1,3 +1,5 @@
+import math
+
 from PyQt5 import QtCore, QtGui
 
 
@@ -15,6 +17,19 @@ def create_qt_icon(q_color, mode):
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
     match mode:
+        case "gear":
+            painter.setPen(QtGui.QPen(q_color, 1))
+            painter.setBrush(q_color)
+            points = []
+            for index in range(32):
+                angle = index * math.pi / 16
+                radius = 7 if index % 4 in (1, 2) else 5
+                points.append(QtCore.QPointF(8 + radius * math.cos(angle),
+                                            8 + radius * math.sin(angle)))
+            path = QtGui.QPainterPath()
+            path.addPolygon(QtGui.QPolygonF(points))
+            path.addEllipse(QtCore.QPointF(8, 8), 2.5, 2.5)
+            painter.drawPath(path)
         case "x":
             painter.setPen(QtGui.QPen(q_color, 2))
             painter.drawLine(3, 3, 13, 13)

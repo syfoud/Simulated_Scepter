@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <ui version="4.0">
  <class>MainWindow</class>
  <widget class="QMainWindow" name="MainWindow">
@@ -133,10 +133,10 @@
              </size>
             </property>
             <property name="styleSheet">
-             <string notr="true"/>
+             <string notr="true" />
             </property>
             <property name="text">
-             <string/>
+             <string />
             </property>
             <property name="scaledContents">
              <bool>false</bool>
@@ -174,7 +174,7 @@
              </size>
             </property>
             <property name="styleSheet">
-             <string notr="true"/>
+             <string notr="true" />
             </property>
             <property name="text">
              <string>版本号</string>
@@ -252,7 +252,7 @@
 border:none</string>
             </property>
             <property name="text">
-             <string/>
+             <string />
             </property>
            </widget>
           </item>
@@ -278,7 +278,7 @@ border:none</string>
 border:none</string>
             </property>
             <property name="text">
-             <string/>
+             <string />
             </property>
            </widget>
           </item>
@@ -304,7 +304,7 @@ border:none</string>
 border:none</string>
             </property>
             <property name="text">
-             <string/>
+             <string />
             </property>
            </widget>
           </item>
@@ -326,7 +326,7 @@ border:none</string>
           </size>
          </property>
          <property name="toolTip">
-          <string/>
+          <string />
          </property>
          <property name="autoFillBackground">
           <bool>false</bool>
@@ -436,7 +436,7 @@ border:none</string>
               </layout>
              </item>
              <item>
-              <layout class="QVBoxLayout" name="Lay_Tab1_Right" stretch="0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0">
+              <layout class="QVBoxLayout" name="Lay_Tab1_Right">
                <property name="spacing">
                 <number>6</number>
                </property>
@@ -554,7 +554,7 @@ border:none</string>
                       <bool>false</bool>
                      </property>
                      <property name="text">
-                      <string/>
+                      <string />
                      </property>
                     </widget>
                    </item>
@@ -660,19 +660,6 @@ border:none</string>
                 </widget>
                </item>
                <item>
-                <spacer name="verticalSpacer_2">
-                 <property name="orientation">
-                  <enum>Qt::Vertical</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>20</width>
-                   <height>40</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-               <item>
                 <widget class="Line" name="line_99">
                  <property name="orientation">
                   <enum>Qt::Horizontal</enum>
@@ -680,76 +667,96 @@ border:none</string>
                 </widget>
                </item>
                <item>
-                <spacer name="verticalSpacer">
-                 <property name="orientation">
-                  <enum>Qt::Vertical</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>20</width>
-                   <height>40</height>
-                  </size>
-                 </property>
-                </spacer>
+                <widget class="QWidget" name="kernel_buttons">
+                 <layout class="QVBoxLayout" name="kernel_button_layout">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                 </layout>
+                </widget>
                </item>
                <item>
-                <layout class="QHBoxLayout" name="horizontalLayout_2">
+                <layout class="QHBoxLayout" name="engine_layout" stretch="0,1,0">
                  <item>
-                  <widget class="QPushButton" name="run_simul_btn">
+                  <widget class="QLabel" name="engine_label">
+                   <property name="text">
+                    <string>内核</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QComboBox" name="engine_combo">
                    <property name="sizePolicy">
-                    <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                    <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
                      <horstretch>0</horstretch>
                      <verstretch>0</verstretch>
                     </sizepolicy>
                    </property>
-                   <property name="text">
-                    <string>运行模拟宇宙</string>
+                   <property name="toolTip">
+                    <string>选择脚本使用的运行内核</string>
                    </property>
                   </widget>
                  </item>
-                </layout>
-               </item>
-               <item>
-                <layout class="QHBoxLayout" name="horizontalLayout_3">
                  <item>
-                  <widget class="QPushButton" name="run_diver_btn">
-                   <property name="visible">
-                    <bool>false</bool>
+                  <widget class="QToolButton" name="engine_settings_btn">
+                   <property name="toolTip">
+                    <string>配置当前内核</string>
                    </property>
-                   <property name="text">
-                    <string>运行差分宇宙</string>
+                   <property name="minimumSize">
+                    <size>
+                     <width>30</width>
+                     <height>24</height>
+                    </size>
+                   </property>
+                   <property name="maximumSize">
+                    <size>
+                     <width>30</width>
+                     <height>16777215</height>
+                    </size>
                    </property>
                   </widget>
                  </item>
                 </layout>
                </item>
                <item>
-                <widget class="QPushButton" name="iron_blood_btn">
-                 <property name="text">
-                  <string>擢升铁血战士</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="any_fate_btn">
-                 <property name="text">
-                  <string>一般寰宇命途演算（毁灭原动力）</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="finger_snap_btn">
-                 <property name="text">
-                  <string>弹指一挥（灰度测试）</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QPushButton" name="currency_war_btn">
-                 <property name="text">
-                  <string>货币战争自动收集</string>
-                 </property>
-                </widget>
+                <layout class="QHBoxLayout" name="script_layout" stretch="0,1,0">
+                 <item>
+                  <widget class="QLabel" name="script_label">
+                   <property name="text">
+                    <string>脚本</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QComboBox" name="script_combo">
+                   <property name="sizePolicy">
+                    <sizepolicy hsizetype="Ignored" vsizetype="Fixed">
+                     <horstretch>0</horstretch>
+                     <verstretch>0</verstretch>
+                    </sizepolicy>
+                   </property>
+                   <property name="toolTip">
+                    <string>选择 actions 文件夹中的 JSON 动作脚本</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="run_script_btn">
+                   <property name="text">
+                    <string>运行脚本</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
                </item>
                <item>
                 <widget class="QPushButton" name="calibrate_btn">
@@ -773,6 +780,22 @@ border:none</string>
                 </widget>
                </item>
                <item>
+                <layout class="QHBoxLayout" name="script_tools_row">
+                 <item>
+                  <widget class="QPushButton" name="script_editor_btn">
+                   <property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                   <property name="text"><string>脚本编辑器</string></property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="schedule_btn">
+                   <property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Fixed"><horstretch>0</horstretch><verstretch>0</verstretch></sizepolicy></property>
+                   <property name="text"><string>定时计划</string></property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
                 <widget class="QPushButton" name="print_btn">
                  <property name="text">
                   <string>打印坐标 F7</string>
@@ -780,7 +803,7 @@ border:none</string>
                 </widget>
                </item>
                <item>
-                <widget class="QLineEdit" name="PrintEdit"/>
+                <widget class="QLineEdit" name="PrintEdit" />
                </item>
                <item>
                 <layout class="QHBoxLayout" name="horizontalLayout_15">
@@ -801,396 +824,24 @@ border:none</string>
                 </layout>
                </item>
                <item>
-                <widget class="QPushButton" name="clear_logs_btn">
-                 <property name="text">
-                  <string>清除日志</string>
+                <spacer name="verticalSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Vertical</enum>
                  </property>
-                </widget>
-               </item>
-               <item>
-                <layout class="QHBoxLayout" name="Lay_CurrentPlan_1">
-                 <property name="sizeConstraint">
-                  <enum>QLayout::SetDefaultConstraint</enum>
+                 <property name="sizeType">
+                  <enum>QSizePolicy::Expanding</enum>
                  </property>
-                 <property name="leftMargin">
-                  <number>5</number>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>20</width>
+                   <height>0</height>
+                  </size>
                  </property>
-                 <property name="topMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="rightMargin">
-                  <number>5</number>
-                 </property>
-                 <property name="bottomMargin">
-                  <number>0</number>
-                 </property>
-                </layout>
+                </spacer>
                </item>
               </layout>
              </item>
             </layout>
-           </item>
-          </layout>
-         </widget>
-         <widget class="QWidget" name="homeTab">
-          <attribute name="title">
-           <string>模拟宇宙设置</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="verticalLayout_2">
-           <property name="spacing">
-            <number>5</number>
-           </property>
-           <property name="leftMargin">
-            <number>0</number>
-           </property>
-           <property name="topMargin">
-            <number>10</number>
-           </property>
-           <property name="rightMargin">
-            <number>0</number>
-           </property>
-           <property name="bottomMargin">
-            <number>0</number>
-           </property>
-           <item>
-            <layout class="QVBoxLayout" name="verticalLayout_8">
-             <item>
-              <layout class="QVBoxLayout" name="verticalLayout_14">
-               <item>
-                <widget class="QCheckBox" name="recording_checkBox">
-                 <property name="text">
-                  <string>是否录制</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QVBoxLayout" name="verticalLayout">
-               <item>
-                <widget class="QLabel" name="label_6">
-                 <property name="text">
-                  <string>模拟宇宙设置</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Simul_bonus_checkbox">
-                 <property name="text">
-                  <string>沉浸奖励</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Simul_debug_checkbox">
-                 <property name="text">
-                  <string>调试模式</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Simul_speed_checkbox">
-                 <property name="text">
-                  <string>速通模式</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Simul_slow_checkbox">
-                 <property name="text">
-                  <string>慢速模式</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout">
-               <item>
-                <widget class="QLabel" name="label">
-                 <property name="text">
-                  <string>难度：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="Simul_difficulty_combo"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_14">
-               <item>
-                <widget class="QLabel" name="label_3">
-                 <property name="text">
-                  <string>命途：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="Simul_fate_combo"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_4">
-               <item>
-                <widget class="QLabel" name="label_4">
-                 <property name="text">
-                  <string>时区：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="Simul_timezone_combo"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_13">
-               <item>
-                <widget class="QLabel" name="label_5">
-                 <property name="text">
-                  <string>本轮运行次数：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLineEdit" name="Simul_max_run_input"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <spacer name="verticalSpacer_3">
-               <property name="orientation">
-                <enum>Qt::Vertical</enum>
-               </property>
-               <property name="sizeHint" stdset="0">
-                <size>
-                 <width>20</width>
-                 <height>40</height>
-                </size>
-               </property>
-              </spacer>
-             </item>
-             <item>
-              <layout class="QVBoxLayout" name="verticalLayout_12">
-               <item>
-                <widget class="QLabel" name="label_7">
-                 <property name="text">
-                  <string>差分宇宙设置</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Diver_debug_checkbox">
-                 <property name="text">
-                  <string>调试模式</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Diver_speed_checkbox">
-                 <property name="text">
-                  <string>速通模式</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Diver_weekly_checkbox">
-                 <property name="text">
-                  <string>周期演算</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QCheckBox" name="Diver_cpu_checkbox">
-                 <property name="text">
-                  <string>禁用GPU加速</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_18">
-               <item>
-                <widget class="QLabel" name="label_10">
-                 <property name="text">
-                  <string>难度：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="Diver_difficulty_combo"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_21">
-               <item>
-                <widget class="QLabel" name="label_11">
-                 <property name="text">
-                  <string>队伍体系：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="Diver_team_combo"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_19">
-               <item>
-                <widget class="QLabel" name="label_12">
-                 <property name="text">
-                  <string>存档数量：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="Diver_save_cnt_combo"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_20">
-               <item>
-                <widget class="QLabel" name="label_17">
-                 <property name="text">
-                  <string>时区：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QComboBox" name="Diver_timezone_combo"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_17">
-               <item>
-                <widget class="QLabel" name="label_18">
-                 <property name="text">
-                  <string>本轮运行次数：</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QLineEdit" name="Diver_max_run_input"/>
-               </item>
-              </layout>
-             </item>
-             <item>
-              <widget class="QPushButton" name="config_save_btn">
-               <property name="text">
-                <string>保存</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-         </layout>
-         </widget>
-         <widget class="QWidget" name="CurrencyWarTab">
-          <attribute name="title">
-           <string>货币战争设置</string>
-          </attribute>
-          <layout class="QVBoxLayout" name="verticalLayout_currency_war">
-           <property name="spacing">
-            <number>5</number>
-           </property>
-           <property name="leftMargin">
-            <number>0</number>
-           </property>
-           <property name="topMargin">
-            <number>10</number>
-           </property>
-           <property name="rightMargin">
-            <number>0</number>
-           </property>
-           <property name="bottomMargin">
-            <number>0</number>
-           </property>
-           <item>
-            <layout class="QFormLayout" name="formLayout_currency_war">
-             <item row="0" column="0">
-              <widget class="QLabel" name="Currency_exit_plane_label">
-               <property name="text">
-                <string>在何位面完成投资策略选择后立即退出：</string>
-               </property>
-              </widget>
-             </item>
-             <item row="0" column="1">
-              <widget class="QComboBox" name="Currency_exit_plane_combo"/>
-             </item>
-             <item row="1" column="0">
-              <widget class="QLabel" name="Currency_prior_exit_plane_label">
-               <property name="text">
-                <string>刷出必选投资环境时将退出位面调整为：</string>
-               </property>
-              </widget>
-             </item>
-             <item row="1" column="1">
-              <widget class="QComboBox" name="Currency_prior_exit_plane_combo"/>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <widget class="QCheckBox" name="Currency_exit_if_no_prior_checkbox">
-             <property name="text">
-              <string>未刷出必选投资环境时立即退出</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="Currency_priority_settings_btn">
-             <property name="text">
-              <string>自定义投资环境优先级</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="Currency_save_btn">
-             <property name="text">
-              <string>保存货币战争设置</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="Currency_settings_label">
-             <property name="text">
-              <string>TIPS:</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="Currency_settings_label">
-             <property name="text">
-              <string>金币和星徽大使叽米仅能在第二、三位面刷出；环保大使叽米仅能在第二位面刷出</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QLabel" name="Currency_settings_label">
-             <property name="text">
-              <string>检测到必选环境会直接选择，跳过刷新；若未刷出必选环境，则刷新</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="verticalSpacer_currency_war">
-             <property name="orientation">
-              <enum>Qt::Vertical</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>20</width>
-               <height>40</height>
-              </size>
-             </property>
-            </spacer>
            </item>
           </layout>
          </widget>
@@ -1215,250 +866,440 @@ border:none</string>
             <number>0</number>
            </property>
            <item>
-            <widget class="QStackedWidget" name="advanced_settings_stack">
-             <property name="currentIndex">
-              <number>0</number>
-             </property>
-             <widget class="QWidget" name="advanced_settings_main_page">
-              <layout class="QVBoxLayout" name="verticalLayout_advanced_settings_main_page">
-               <property name="leftMargin">
-                <number>0</number>
-               </property>
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <property name="rightMargin">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
-               <item>
-                <widget class="QScrollArea" name="advanced_settings_scroll_area">
-                 <property name="widgetResizable">
-                  <bool>true</bool>
+            <widget class="QWidget" name="advanced_settings_main_page">
+             <layout class="QVBoxLayout" name="verticalLayout_advanced_settings_main_page">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QScrollArea" name="advanced_settings_scroll_area">
+                <property name="widgetResizable">
+                 <bool>true</bool>
+                </property>
+                <widget class="QWidget" name="advanced_settings_scroll_contents">
+                 <property name="geometry">
+                  <rect>
+                   <x>0</x>
+                   <y>0</y>
+                   <width>780</width>
+                   <height>560</height>
+                  </rect>
                  </property>
-                 <widget class="QWidget" name="advanced_settings_scroll_contents">
-                  <property name="geometry">
-                   <rect><x>0</x><y>0</y><width>780</width><height>560</height></rect>
-                  </property>
-                  <layout class="QVBoxLayout" name="verticalLayout_13">
-                   <item>
-                    <widget class="QLabel" name="label_finger_snap_header">
-                     <property name="text">
-                      <string>铁血战士设置</string>
-                     </property>
-                     <property name="alignment">
-                      <set>Qt::AlignCenter</set>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="label_27">
-                     <property name="text">
-                      <string>高级用户功能</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="early_stop_checkbox">
-                     <property name="text">
-                      <string>是否早停</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_16">
-                     <item>
-                      <widget class="QLabel" name="label_19">
-                       <property name="text">
-                        <string>第一面至少需求数（默认14）</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="Iron_blood_first_plane_input"/>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_22">
-                     <item>
-                      <widget class="QLabel" name="label_22">
-                       <property name="text">
-                        <string>第二面至少需求数（默认31）</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="Iron_blood_second_plane_input"/>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_battle_weight">
-                     <item>
-                      <widget class="QLabel" name="label_battle_weight">
-                       <property name="text">
-                        <string>战斗格权重（默认1.2）</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="Iron_blood_battle_weight_input"/>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_min_weight">
-                     <item>
-                      <widget class="QLabel" name="label_min_weight">
-                       <property name="text">
-                        <string>第一面最低期望权重（默认8.0）</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="Iron_blood_first_plane_min_weight_input"/>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <widget class="QPushButton" name="Iron_blood_manual_settings_btn">
-                     <property name="text">
-                      <string>半自动手操设置</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="recording_checkBox2">
-                     <property name="text">
-                      <string>是否开启视频录制</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_24">
-                     <item>
-                      <widget class="QLabel" name="label_23">
-                       <property name="text">
-                        <string>视频保存需求数</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="recording_time_input"/>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <widget class="QPushButton" name="Aboutupdatelock">
-                     <property name="text">
-                      <string>关于高级用户功能解锁</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_25">
-                     <item>
-                      <widget class="QLabel" name="label_24">
-                       <property name="text">
-                        <string>运行次数（0代表无限）</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="Iron_blood_max_run_input"/>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <layout class="QHBoxLayout" name="horizontalLayout_interact_time">
-                     <item>
-                      <widget class="QLabel" name="label_interact_time">
-                       <property name="text">
-                        <string>单关交互最长时间（秒）</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLineEdit" name="Iron_blood_interact_time_input"/>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="pig_switch_2_role">
-                     <property name="text">
-                      <string>自定义遇猪切人</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <layout class="QFormLayout" name="formLayout_silver_wolf_switch">
-                     <item row="0" column="0">
-                      <widget class="QLabel" name="label_silver_wolf_switch">
-                       <property name="text">
-                        <string>切换至</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="0" column="1">
-                      <widget class="QComboBox" name="silver_wolf_switch_combo">
-                       <property name="toolTip">
-                        <string>若银狼位于非一号位，战斗扑满信标区域无秘技点时也会切换至所选位置抓扑满</string>
-                       </property>
-                      </widget>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="silver_wolf_enable">
-                     <property name="text">
-                      <string>银狼秘技(暂不支持三号与四号位)</string>
-                     </property>
-                     <property name="toolTip">
-                      <string>位于一号位时，切换至银狼并启用秘技,若开启遇猪切人会切换至所选位置(一号位银狼不建议开启自定义遇猪切人)
-位于非一号位且位于首领、精英、事件、奖励、事件虫群与携带祝福扑满的战斗区域时，切换至银狼并启用秘技</string>
-                     </property>
-                     <property name="checked">
-                      <bool>true</bool>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QCheckBox" name="auto_attack_breakable">
-                     <property name="text">
-                      <string>自动攻击可破坏物（实验性，可能影响近战角色寻路）</string>
-                     </property>
-                    </widget>
-                   </item>
+                 <layout class="QVBoxLayout" name="verticalLayout_13">
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout_14">
                     <item>
-                     <widget class="QPushButton" name="Iron_blood_save_btn">
+                     <widget class="QCheckBox" name="start_game_checkbox">
                       <property name="text">
-                       <string>保存铁血战士设置</string>
+                       <string>启动任务时，若崩坏：星穹铁道未启动，则尝试将其启动</string>
                       </property>
                      </widget>
                     </item>
-                   <item>
-                    <widget class="QPushButton" name="record_stats_btn">
-                     <property name="text">
-                      <string>查看轮回数据可视化统计</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <layout class="QVBoxLayout" name="verticalLayout_16">
+                    <item>
+                     <layout class="QHBoxLayout" name="horizontalLayout_game_path">
+                      <item>
+                       <widget class="QLabel" name="game_path_label">
+                        <property name="text">
+                         <string>崩铁安装位置（可留空自动检测；未检测到时请填写StarRail.exe完整路径，不支持云崩铁）</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item stretch="1">
+                       <widget class="QLineEdit" name="game_path_input" />
+                      </item>
+                     </layout>
+                    </item>
+                    <item>
+                     <widget class="QCheckBox" name="recording_checkBox">
+                      <property name="text">
+                       <string>模拟宇宙视频录制</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <widget class="QCheckBox" name="recording_checkBox2">
+                    <property name="text">
+                     <string>寰宇内核视频录制（铁血 / 命途 / 弹指）</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout" name="horizontalLayout_24">
+                    <item>
+                     <widget class="QLabel" name="label_23">
+                      <property name="FixedWidth">
+                       <number>112</number>
+                      </property>
+                      <property name="text">
+                       <string>视频保存需求数</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLineEdit" name="recording_time_input" />
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QHBoxLayout" name="horizontalLayout_video_convert">
+                    <item>
+                     <widget class="QLabel" name="video_convert_label">
+                      <property name="FixedWidth">
+                       <number>112</number>
+                      </property>
+                      <property name="text">
+                       <string>异常视频转换</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item stretch="1">
+                     <widget class="QComboBox" name="video_convert_mode_combo">
+                      <property name="toolTip">
+                       <string>选择异常录像的封装方式</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="video_convert_btn">
+                      <property name="FixedWidth">
+                       <number>96</number>
+                      </property>
+                      <property name="text">
+                       <string>转换</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="Aboutupdatelock">
+                    <property name="text">
+                     <string>关于高级用户功能解锁</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="record_stats_btn">
+                    <property name="text">
+                     <string>查看轮回数据可视化统计</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout_16">
+                    <item>
+                     <widget class="Line" name="line_103">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="label_25">
+                      <property name="text">
+                       <string>快捷键设置</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout" name="horizontalLayout_26">
+                      <item>
+                       <widget class="QLabel" name="label_stop_hotkey">
+                        <property name="text">
+                         <string>停止任务:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QLineEdit" name="stop_hotkey_input" />
+                      </item>
+                     </layout>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout" name="horizontalLayout_27">
+                      <item>
+                       <widget class="QLabel" name="label_test_hotkey">
+                        <property name="text">
+                         <string>截图测试:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QLineEdit" name="test_hotkey_input" />
+                      </item>
+                     </layout>
+                    </item>
+                    <item>
+                     <layout class="QHBoxLayout" name="horizontalLayout_28">
+                      <item>
+                       <widget class="QLabel" name="label_print_hotkey">
+                        <property name="text">
+                         <string>打印坐标:</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QLineEdit" name="print_hotkey_input" />
+                      </item>
+                     </layout>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="hotkey_save_btn">
+                      <property name="text">
+                       <string>保存快捷键设置</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="Line" name="line_hotkey">
+                      <property name="orientation">
+                       <enum>Qt::Horizontal</enum>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout_cleanup">
+                    <property name="spacing">
+                     <number>5</number>
+                    </property>
+                    <property name="leftMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="rightMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="bottomMargin">
+                     <number>0</number>
+                    </property>
+                    <item>
+                     <widget class="QLabel" name="Cleanup_label">
+                      <property name="text">
+                       <string>清理文件设置（鼠标悬浮可查看详细说明）</string>
+                      </property>
+                      <property name="toolTip">
+                       <string>清理规则：只会检查命名中带有时间格式的文件或文件夹，其他文件不会被清理。
+可为三类文件独立选择清理模式：
+1. 永不清理——不执行清理，数值与时间单位仍然显示但不可修改，清理按钮不可用。
+2. 手动清理——点击按钮时依据所设时间进行清理：
+ - 数值与单位代表一个时间段，保存时间超过该时间段的文件会被清理。
+ - 若数值为0，则清理全部相关文件。
+3. 周期清理——达到触发时机时，首先检查距离上次清理时间是否达到所设的时间周期：
+ - 若达到，则检查并清理全部相关文件；
+ - 若未达到，则不执行清理。
+ - 若数值为0，则每次达到触发时机都会自动执行清理。
+ - 可以看作每次都会清理全部文件的“手动清理”。
+4. 自动清理——达到触发时机时依据所设时间进行清理：
+ - 数值与单位代表一个时间段，保存时间超过该时间段的文件会被清理。
+ - 若数值为0，则触发时清理全部相关文件。
+ - 可以看作自动触发的“手动清理”。</string>
+                      </property>
+                      <property name="alignment">
+                       <set>Qt::AlignCenter</set>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <layout class="QGridLayout" name="gridLayout_cleanup">
+                      <item row="0" column="0">
+                       <widget class="QLabel" name="Cleanup_video_label">
+                        <property name="text">
+                         <string>视频文件</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="0" column="1">
+                       <widget class="QComboBox" name="Cleanup_video_mode_combo">
+                        <property name="fixedWidth">
+                         <number>120</number>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="0" column="2">
+                       <layout class="QHBoxLayout" name="horizontalLayout_cleanup_video">
+                        <item>
+                         <widget class="QPushButton" name="Cleanup_video_cleanup_btn">
+                          <property name="text">
+                           <string>清理视频文件</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QComboBox" name="Cleanup_video_trigger_combo" />
+                        </item>
+                        <item>
+                         <widget class="QLineEdit" name="Cleanup_video_value_input">
+                          <property name="fixedWidth">
+                           <number>60</number>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QComboBox" name="Cleanup_video_unit_combo">
+                          <property name="fixedWidth">
+                           <number>90</number>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </item>
+                      <item row="0" column="3">
+                       <widget class="QLabel" name="Cleanup_video_last_label">
+                        <property name="text">
+                         <string>上次清理：从未清理</string>
+                        </property>
+                        <property name="minimumWidth">
+                         <number>260</number>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="0">
+                       <widget class="QLabel" name="Cleanup_log_label">
+                        <property name="text">
+                         <string>日志文件</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="1">
+                       <widget class="QComboBox" name="Cleanup_log_mode_combo">
+                        <property name="fixedWidth">
+                         <number>120</number>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="2">
+                       <layout class="QHBoxLayout" name="horizontalLayout_cleanup_log">
+                        <item>
+                         <widget class="QPushButton" name="Cleanup_log_cleanup_btn">
+                          <property name="text">
+                           <string>清理日志文件</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QComboBox" name="Cleanup_log_trigger_combo" />
+                        </item>
+                        <item>
+                         <widget class="QLineEdit" name="Cleanup_log_value_input">
+                          <property name="fixedWidth">
+                           <number>60</number>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QComboBox" name="Cleanup_log_unit_combo">
+                          <property name="fixedWidth">
+                           <number>90</number>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </item>
+                      <item row="1" column="3">
+                       <widget class="QLabel" name="Cleanup_log_last_label">
+                        <property name="text">
+                         <string>上次清理：从未清理</string>
+                        </property>
+                        <property name="minimumWidth">
+                         <number>260</number>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="2" column="0">
+                       <widget class="QLabel" name="Cleanup_temp_label">
+                        <property name="text">
+                         <string>临时文件</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="2" column="1">
+                       <widget class="QComboBox" name="Cleanup_temp_mode_combo">
+                        <property name="fixedWidth">
+                         <number>120</number>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="2" column="2">
+                       <layout class="QHBoxLayout" name="horizontalLayout_cleanup_temp">
+                        <item>
+                         <widget class="QPushButton" name="Cleanup_temp_cleanup_btn">
+                          <property name="text">
+                           <string>清理临时文件</string>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QComboBox" name="Cleanup_temp_trigger_combo" />
+                        </item>
+                        <item>
+                         <widget class="QLineEdit" name="Cleanup_temp_value_input">
+                          <property name="fixedWidth">
+                           <number>60</number>
+                          </property>
+                         </widget>
+                        </item>
+                        <item>
+                         <widget class="QComboBox" name="Cleanup_temp_unit_combo">
+                          <property name="fixedWidth">
+                           <number>90</number>
+                          </property>
+                         </widget>
+                        </item>
+                       </layout>
+                      </item>
+                      <item row="2" column="3">
+                       <widget class="QLabel" name="Cleanup_temp_last_label">
+                        <property name="text">
+                         <string>上次清理：从未清理</string>
+                        </property>
+                        <property name="minimumWidth">
+                         <number>260</number>
+                        </property>
+                       </widget>
+                      </item>
+                     </layout>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="Cleanup_save_btn">
+                      <property name="text">
+                       <string>保存清理文件设置</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                  <item>
+                   <widget class="Line" name="line_cleanup">
+                    <property name="orientation">
+                     <enum>Qt::Horizontal</enum>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QWidget" name="debug_group">
+                    <layout class="QVBoxLayout" name="verticalLayout_debug_group">
                      <item>
-                      <widget class="Line" name="line_103">
-                       <property name="orientation">
-                        <enum>Qt::Horizontal</enum>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QLabel" name="label_25">
+                      <widget class="QLabel" name="debug_label">
                        <property name="text">
-                        <string>快捷键设置</string>
+                        <string>调试诊断设置</string>
                        </property>
                        <property name="alignment">
                         <set>Qt::AlignCenter</set>
@@ -1466,500 +1307,82 @@ border:none</string>
                       </widget>
                      </item>
                      <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_26">
-                       <item>
-                        <widget class="QLabel" name="label_stop_hotkey">
-                         <property name="text">
-                          <string>停止任务:</string>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <widget class="QLineEdit" name="stop_hotkey_input"/>
-                       </item>
-                      </layout>
-                     </item>
-                     <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_27">
-                       <item>
-                        <widget class="QLabel" name="label_test_hotkey">
-                         <property name="text">
-                          <string>截图测试:</string>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <widget class="QLineEdit" name="test_hotkey_input"/>
-                       </item>
-                      </layout>
-                     </item>
-                     <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_28">
-                       <item>
-                        <widget class="QLabel" name="label_print_hotkey">
-                         <property name="text">
-                          <string>打印坐标:</string>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <widget class="QLineEdit" name="print_hotkey_input"/>
-                       </item>
-                      </layout>
-                     </item>
-                     <item>
-                      <widget class="QPushButton" name="hotkey_save_btn">
+                      <widget class="QCheckBox" name="record_event_map_checkbox">
                        <property name="text">
-                        <string>保存快捷键设置</string>
+                        <string>事件/休整/交易地图录图模式</string>
                        </property>
                       </widget>
                      </item>
                      <item>
-                      <widget class="Line" name="line_hotkey">
+                      <widget class="QCheckBox" name="recording_keep_long_run_checkbox">
+                       <property name="text">
+                        <string>演算时间异常过长时保留视频</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <layout class="QHBoxLayout" name="horizontalLayout_30">
+                       <item>
+                        <widget class="QLabel" name="label_23">
+                         <property name="text">
+                          <string>演算时间异常过长视频保存阈值（分钟数/击杀数）（默认1.2）</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <widget class="QLineEdit" name="recording_keep_long_run_threshold_input" />
+                       </item>
+                      </layout>
+                     </item>
+                     <item>
+                      <widget class="QCheckBox" name="recording_label_checkbox">
+                       <property name="text">
+                        <string>进行视频录制时是否添加其它信息标签</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="Line" name="line_any_fate">
                        <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                        </property>
                       </widget>
                      </item>
                     </layout>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="label_any_fate_header">
-                     <property name="text">
-                      <string>寰宇蝗灾命途演算倾向</string>
-                     </property>
-                     <property name="alignment">
-                      <set>Qt::AlignCenter</set>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <layout class="QFormLayout" name="formLayout_any_fate">
-                     <item row="0" column="0">
-                      <widget class="QLabel" name="Any_fate_label">
-                       <property name="text">
-                        <string>命途</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item row="0" column="1">
-                      <widget class="QComboBox" name="Any_fate_combo"/>
-                     </item>
-                     <item row="1" column="0" colspan="2">
-                      <widget class="QPushButton" name="Any_fate_save_btn">
-                       <property name="text">
-                        <string>保存寰宇蝗灾命途演算倾向</string>
-                       </property>
-                      </widget>
-                     </item>
-                    </layout>
-                   </item>
-                   <item>
-                    <widget class="Line" name="line_hotkey">
-                     <property name="orientation">
-                      <enum>Qt::Horizontal</enum>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QWidget" name="debug_group">
-                     <layout class="QVBoxLayout" name="verticalLayout_debug_group">
-                      <item>
-                       <widget class="QLabel" name="debug_label">
-                        <property name="text">
-                         <string>调试模式设置</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <widget class="QCheckBox" name="debug_checkbox2">
-                        <property name="text">
-                         <string>调试模式</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <widget class="QCheckBox" name="record_event_map_checkbox">
-                        <property name="text">
-                         <string>事件/休整/交易地图录图模式</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <widget class="QCheckBox" name="recording_keep_long_run_checkbox">
-                        <property name="text">
-                         <string>演算时间异常过长时是否保存视频（仅影响铁血战士的录制保存行为）</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <layout class="QHBoxLayout" name="horizontalLayout_30">
-                        <item>
-                         <widget class="QLabel" name="label_23">
-                          <property name="text">
-                           <string>演算时间异常过长视频保存阈值（分钟数/击杀数）（默认1.2）</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item>
-                         <widget class="QLineEdit" name="recording_keep_long_run_threshold_input"/>
-                        </item>
-                       </layout>
-                      </item>
-                      <item>
-                       <widget class="QCheckBox" name="recording_label_checkbox">
-                        <property name="text">
-                         <string>进行视频录制时是否添加其它信息标签</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <widget class="QPushButton" name="debug_save_btn">
-                        <property name="text">
-                         <string>保存调试模式设置</string>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <widget class="Line" name="line_any_fate">
-                        <property name="orientation">
-                         <enum>Qt::Horizontal</enum>
-                        </property>
-                       </widget>
-                      </item>
-                     </layout>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QWidget" name="Finger_snap_group">
-                     <layout class="QVBoxLayout" name="verticalLayout_finger_snap_group">
-                      <item>
-                       <widget class="QLabel" name="label_finger_snap_header">
-                        <property name="text">
-                         <string>弹指一挥设置</string>
-                        </property>
-                        <property name="alignment">
-                         <set>Qt::AlignCenter</set>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <widget class="QLabel" name="Finger_snap_description_label">
-                        <property name="text">
-                         <string>弹指倒计时评估模型独立设置</string>
-                        </property>
-                        <property name="wordWrap">
-                         <bool>true</bool>
-                        </property>
-                       </widget>
-                      </item>
-                      <item>
-                       <layout class="QFormLayout" name="formLayout_finger_snap">
-                        <item row="0" column="0">
-                         <widget class="QLabel" name="Finger_snap_control_rollouts_label">
-                          <property name="text">
-                           <string>控制采样量</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="0" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_control_rollouts_input"/>
-                        </item>
-                        <item row="1" column="0">
-                         <widget class="QLabel" name="Finger_snap_evaluation_rollouts_label">
-                          <property name="text">
-                           <string>独立评价量</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="1" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_evaluation_rollouts_input"/>
-                        </item>
-                        <item row="2" column="0">
-                         <widget class="QLabel" name="Finger_snap_min_visits_label">
-                          <property name="text">
-                           <string>单动作最低样本</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="2" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_min_visits_input"/>
-                        </item>
-                        <item row="3" column="0">
-                         <widget class="QLabel" name="Finger_snap_epsilon_start_label">
-                          <property name="text">
-                           <string>初始探索率</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="3" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_epsilon_start_input"/>
-                        </item>
-                        <item row="4" column="0">
-                         <widget class="QLabel" name="Finger_snap_epsilon_end_label">
-                          <property name="text">
-                           <string>最终探索率</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="4" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_epsilon_end_input"/>
-                        </item>
-                        <item row="5" column="0">
-                         <widget class="QLabel" name="Finger_snap_seed_label">
-                          <property name="text">
-                           <string>MC 随机种子</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="5" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_seed_input"/>
-                        </item>
-                        <item row="6" column="0">
-                         <widget class="QLabel" name="Finger_snap_decision_mode_label">
-                          <property name="text">
-                           <string>决策依据</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="6" column="1">
-                         <widget class="QComboBox" name="Finger_snap_decision_mode_combo"/>
-                        </item>
-                        <item row="7" column="0">
-                         <widget class="QLabel" name="Finger_snap_win_rate_noise_floor_percent_label">
-                          <property name="text">
-                           <string>最低有效胜率 (%)</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="7" column="1">
-                          <widget class="QLineEdit" name="Finger_snap_win_rate_noise_floor_percent_input">
-                          <property name="toolTip">
-                           <string>低于此胜率的候选按0处理；0表示关闭过滤。例如0.2可过滤0.1401%的单次命中噪声。</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="8" column="0" colspan="2">
-                         <widget class="QCheckBox" name="Finger_snap_dp_early_stop_checkbox">
-                          <property name="text">
-                           <string>DP模式：理论上限不达标时早停</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="9" column="0" colspan="2">
-                          <widget class="QCheckBox" name="Finger_snap_win_rate_dp_early_stop_checkbox">
-                          <property name="text">
-                           <string>胜率模式：同时使用DP上限早停</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="10" column="0" colspan="2">
-                         <widget class="QCheckBox" name="Finger_snap_mc_dp_early_stop_checkbox">
-                          <property name="text">
-                           <string>纯MC模式：同时使用DP上限早停</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="11" column="0">
-                         <widget class="QLabel" name="Finger_snap_path_reward_bonus_label">
-                          <property name="text">
-                           <string>奖励节点补正</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="11" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_path_reward_bonus_input"/>
-                        </item>
-                        <item row="12" column="0">
-                          <widget class="QLabel" name="Finger_snap_path_event_bonus_label">
-                          <property name="text">
-                           <string>事件节点补正</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="12" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_path_event_bonus_input"/>
-                        </item>
-                        <item row="13" column="0">
-                         <widget class="QLabel" name="Finger_snap_path_trade_bonus_label">
-                          <property name="text">
-                           <string>交易节点补正</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="13" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_path_trade_bonus_input"/>
-                        </item>
-                        <item row="14" column="0">
-                          <widget class="QLabel" name="Finger_snap_path_adventure_bonus_label">
-                          <property name="text">
-                           <string>冒险节点补正</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="14" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_path_adventure_bonus_input"/>
-                        </item>
-                        <item row="15" column="0">
-                         <widget class="QLabel" name="Finger_snap_path_bugevent_bonus_label">
-                          <property name="text">
-                           <string>虫群事件节点补正</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="15" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_path_bugevent_bonus_input"/>
-                        </item>
-                        <item row="16" column="0">
-                         <widget class="QLabel" name="Finger_snap_plane1_target_label">
-                          <property name="text">
-                           <string>第一位面目标 CD</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="16" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_plane1_target_input"/>
-                        </item>
-                        <item row="17" column="0">
-                         <widget class="QLabel" name="Finger_snap_plane2_target_label">
-                          <property name="text">
-                           <string>第二位面目标 CD</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="17" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_plane2_target_input"/>
-                        </item>
-                        <item row="18" column="0">
-                         <widget class="QLabel" name="Finger_snap_plane3_target_label">
-                          <property name="text">
-                           <string>第三位面目标 CD</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="18" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_plane3_target_input"/>
-                        </item>
-                        <item row="19" column="0">
-                         <widget class="QLabel" name="Finger_snap_first_plane_threshold_label">
-                          <property name="text">
-                           <string>第一位面策略阈值</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="19" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_first_plane_threshold_input"/>
-                        </item>
-                        <item row="20" column="0">
-                         <widget class="QLabel" name="Finger_snap_record_keep_count_label">
-                          <property name="text">
-                           <string>弹指视频保留需求数</string>
-                          </property>
-                         </widget>
-                        </item>
-                        <item row="20" column="1">
-                         <widget class="QLineEdit" name="Finger_snap_record_keep_count_input"/>
-                        </item>
-                        <item row="21" column="0" colspan="2">
-                         <widget class="QPushButton" name="Finger_snap_save_btn">
-                          <property name="text">
-                           <string>保存弹指一挥设置</string>
-                          </property>
-                         </widget>
-                        </item>
-                       </layout>
-                      </item>
-                      <item>
-                       <widget class="Line" name="line_any_fate">
-                        <property name="orientation">
-                         <enum>Qt::Horizontal</enum>
-                        </property>
-                       </widget>
-                      </item>
-                     </layout>
-                    </widget>
-                   </item>
-                  </layout>
-                 </widget>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QPushButton" name="general_settings_save_btn">
+                    <property name="text">
+                     <string>保存通用设置</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <spacer name="verticalSpacer_currency_war">
+                    <property name="orientation">
+                     <enum>Qt::Vertical</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>20</width>
+                      <height>40</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                 </layout>
                 </widget>
-               </item>
-              </layout>
-             </widget>
-             <widget class="QWidget" name="iron_blood_manual_page">
-              <layout class="QVBoxLayout" name="verticalLayout_iron_blood_manual_page">
-               <property name="spacing">
-                <number>5</number>
-               </property>
-               <item>
-                <widget class="QLabel" name="label_iron_blood_manual_header">
-                 <property name="text">
-                  <string>半自动手操设置</string>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignCenter</set>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <layout class="QHBoxLayout" name="horizontalLayout_third_plane_pause">
-                 <item>
-                  <widget class="QLabel" name="label_third_plane_pause">
-                   <property name="text">
-                    <string>进入第三面时暂停 至少需求数（默认0不启用）</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLineEdit" name="Iron_blood_third_plane_pause_input"/>
-                 </item>
-                </layout>
-               </item>
-               <item>
-                <layout class="QHBoxLayout" name="horizontalLayout_boss_before_pause">
-                 <item>
-                  <widget class="QLabel" name="label_boss_before_pause">
-                   <property name="text">
-                    <string>进入最终首领格前暂停 至少需求数（默认0不启用）</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLineEdit" name="Iron_blood_boss_before_pause_input"/>
-                 </item>
-                </layout>
-               </item>
-               <item>
-                <spacer name="verticalSpacer_iron_blood_manual_page">
-                 <property name="orientation">
-                  <enum>Qt::Vertical</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>20</width>
-                   <height>40</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-               <item>
-                <widget class="QPushButton" name="Iron_blood_manual_back_btn">
-                 <property name="text">
-                  <string>返回后需点击保存设置</string>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </widget>
+               </widget>
+              </item>
+             </layout>
             </widget>
            </item>
           </layout>
          </widget>
          <widget class="QWidget" name="Tab5">
           <property name="styleSheet">
-           <string notr="true"/>
+           <string notr="true" />
           </property>
           <attribute name="title">
            <string>皮肤选择</string>
@@ -2102,7 +1525,7 @@ border:none</string>
                  <item>
                   <widget class="QLabel" name="SkinWidget_Label">
                    <property name="styleSheet">
-                    <string notr="true">font: 30pt &quot;ShouShuti&quot;;</string>
+                    <string notr="true">font: 30pt "ShouShuti";</string>
                    </property>
                    <property name="text">
                     <string>未完待续...</string>
@@ -2195,8 +1618,7 @@ border:none</string>
                 </sizepolicy>
                </property>
                <property name="text">
-                <string>假装出现了一个仪表盘
-</string>
+                <string>假装出现了一个仪表盘</string>
                </property>
                <property name="alignment">
                 <set>Qt::AlignCenter</set>
@@ -2279,8 +1701,7 @@ border:none</string>
              <item>
               <widget class="QLabel" name="Memory_panel">
                <property name="text">
-                <string>假装出现了一个仪表盘
-</string>
+                <string>假装出现了一个仪表盘</string>
                </property>
                <property name="alignment">
                 <set>Qt::AlignCenter</set>
@@ -2332,7 +1753,7 @@ border:none</string>
              <item>
               <widget class="QLabel" name="label_2">
                <property name="text">
-                <string/>
+                <string />
                </property>
               </widget>
              </item>
@@ -2352,8 +1773,7 @@ border:none</string>
              <item>
               <widget class="QLabel" name="cpu_panel">
                <property name="text">
-                <string>假装出现了一个仪表盘
-</string>
+                <string>假装出现了一个仪表盘</string>
                </property>
                <property name="alignment">
                 <set>Qt::AlignCenter</set>
@@ -2375,9 +1795,9 @@ border:none</string>
              </item>
             </layout>
            </item>
-         </layout>
+          </layout>
+         </widget>
         </widget>
-       </widget>
        </item>
       </layout>
       <zorder>tabWidget</zorder>
@@ -2396,7 +1816,7 @@ border:none</string>
   </action>
  </widget>
  <resources>
-  <include location="background.qrc"/>
+  <include location="background.qrc" />
  </resources>
  <connections>
   <connection>

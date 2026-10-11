@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from currency import SimulatedCurrency
+from core.currency.automation import SimulatedCurrency
 
 
 class CurrencyDifficultySelectionTest(unittest.TestCase):
@@ -34,7 +34,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
             forward=1,
         )
 
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_complete_selection_clears_drag_queue_and_updates_state(self, manager):
         currency = self.make_currency()
 
@@ -46,7 +46,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency.update_state.assert_called_once_with("startbattle")
         self.assertEqual(currency.state, "startbattle")
 
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_complete_selection_is_idempotent_after_state_advanced(self, manager):
         currency = self.make_currency("startbattle")
 
@@ -56,7 +56,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         manager.click.assert_not_called()
         currency.update_state.assert_not_called()
 
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_scroll_loop_stops_when_state_already_advanced(self, manager):
         currency = self.make_currency("startbattle")
         currency.get_screen = Mock()
@@ -68,7 +68,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency.is_one.assert_not_called()
         manager.click.assert_not_called()
 
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_detected_selection_uses_shared_completion_path(self, manager):
         currency = self.make_currency()
         currency.get_screen = Mock()
@@ -81,8 +81,8 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency.complete_difficulty_selection.assert_called_once_with()
         manager.click.assert_not_called()
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_each_step_finishes_before_next_ocr_check(self, manager, sleep):
         currency = self.make_currency()
         currency.get_screen = Mock()
@@ -96,8 +96,8 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         manager.wait.assert_called_once_with()
         sleep.assert_called_once_with(currency.DIFFICULTY_SETTLE_SECONDS)
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_step_selection_stops_at_hard_limit(self, manager, _sleep):
         currency = self.make_currency()
         currency.DIFFICULTY_MAX_STEPS = 2

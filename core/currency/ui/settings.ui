@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CurrencySettings</class>
+ <widget class="QWidget" name="CurrencySettings">
+  <layout class="QVBoxLayout" name="CurrencySettings_layout">
+   <item>
+    <layout class="QFormLayout" name="formLayout_currency_war">
+     <item row="0" column="0">
+      <widget class="QLabel" name="Currency_exit_plane_label">
+       <property name="text">
+        <string>在何位面完成投资策略选择后立即退出：</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="Currency_exit_plane_combo" />
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="Currency_prior_exit_plane_label">
+       <property name="text">
+        <string>刷出必选投资环境时将退出位面调整为：</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QComboBox" name="Currency_prior_exit_plane_combo" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="Currency_exit_if_no_prior_checkbox">
+     <property name="text">
+      <string>未刷出必选投资环境时立即退出</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="Currency_priority_settings_btn">
+     <property name="text">
+      <string>自定义投资环境优先级</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="Currency_settings_label">
+     <property name="text">
+      <string>TIPS:</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="Currency_settings_label">
+     <property name="text">
+      <string>金币和星徽大使叽米仅能在第二、三位面刷出；环保大使叽米仅能在第二位面刷出</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="Currency_settings_label">
+     <property name="text">
+      <string>检测到必选环境会直接选择，跳过刷新；若未刷出必选环境，则刷新</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

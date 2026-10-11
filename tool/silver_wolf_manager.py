@@ -67,9 +67,12 @@ class SilverWolfManager:
         - 黄泉：剩余秘技点 ≤ 1 时跳过
         - 白厄：剩余秘技点 ≤ 2 时跳过
 
+        复用主循环最近一次识别到的 self.parent.skill_num，避免在
+        use_e 触发时重新截图，导致同一时刻两次识别结果不一致，减少误判
+
         Returns:
             True 表示应跳过秘技直接平A；未开启银狼、未识别到银狼、
-            非黄泉/白厄、识别失败时返回 False，保持原行为。
+            非黄泉/白厄时返回 False，保持原行为。
         """
         if not self.parent.opt.get("silver_wolf_enable", False):
             return False
@@ -81,10 +84,7 @@ class SilverWolfManager:
             threshold = 2
         else:
             return False
-        skill_num = match_skill_numbers_in_region(self.parent.get_screen())
-        if skill_num is None:
-            return False
-        return skill_num <= threshold
+        return self.parent.skill_num <= threshold
 
     def activate(self):
         """判断银狼位置缓存，并在触发区内切换到 2/3/4 号位银狼。

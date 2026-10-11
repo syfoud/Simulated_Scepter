@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DivergentSettings</class>
+ <widget class="QWidget" name="DivergentSettings">
+  <layout class="QVBoxLayout" name="DivergentSettings_layout">
+   <item>
+    <layout class="QVBoxLayout" name="verticalLayout_12">
+     <item>
+      <widget class="QLabel" name="label_7">
+       <property name="text">
+        <string>差分宇宙设置</string>
+       </property>
+      </widget>
+     </item>
+
+     <item>
+      <widget class="QCheckBox" name="Diver_speed_checkbox">
+       <property name="text">
+        <string>速通模式</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="Diver_weekly_checkbox">
+       <property name="text">
+        <string>周期演算</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="Diver_cpu_checkbox">
+       <property name="text">
+        <string>禁用GPU加速</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_18">
+     <item>
+      <widget class="QLabel" name="label_10">
+       <property name="text">
+        <string>难度：</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="Diver_difficulty_combo" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_21">
+     <item>
+      <widget class="QLabel" name="label_11">
+       <property name="text">
+        <string>队伍体系：</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="Diver_team_combo" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_19">
+     <item>
+      <widget class="QLabel" name="label_12">
+       <property name="text">
+        <string>存档数量：</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="Diver_save_cnt_combo" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_20">
+     <item>
+      <widget class="QLabel" name="label_17">
+       <property name="text">
+        <string>时区：</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="Diver_timezone_combo" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_17">
+     <item>
+      <widget class="QLabel" name="label_18">
+       <property name="text">
+        <string>本轮运行次数：</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Diver_max_run_input" />
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

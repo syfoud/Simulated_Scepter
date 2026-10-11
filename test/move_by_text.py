@@ -8,7 +8,7 @@ import win32gui
 from tool.utils.get_win_rect import get_window_rect
 from tool.GLOBAL import key_mouse_manager
 from tool.screenshot import Screen
-from tool.simul.utils import set_forground
+from core.simulated.utils import set_forground
 from tool.utils.image_tool import find_image_in_folder, load_all_images_from_directory
 load_all_images_from_directory()
 event_mask = (find_image_in_folder("gray_image/",'MASK_MAP_INTERACT_BLACK') > 70)[:497]

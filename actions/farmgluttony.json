@@ -1,0 +1,145 @@
+[ {
+        "name": "星启模式",
+        "trigger":{
+            "text": "星启模式",
+            "box": [1027, 1117, 336, 364],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [900, 1000]
+            }
+        ]
+    },
+{
+        "name": "开始挑战",
+        "trigger":{
+            "text": "开始挑战",
+            "box": [1659, 1755, 576, 606],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1510, 529]
+            }
+        ]
+    },{
+        "name": "重新挑战",
+        "trigger":{
+            "text": "重新挑战",
+            "box": [1659, 1755, 576, 606],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1510, 529]
+            }
+        ]
+    },
+   {
+        "name": "前往挑战",
+        "trigger":{
+            "text": "前往挑战",
+            "box": [1593, 1693, 969, 998],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1650, 980]
+            }
+        ]
+    },
+   {
+        "name": "打怪",
+        "trigger":{
+            "text": "开篇其四",
+            "box": [55, 188, 14, 40],
+            "redundancy": 30
+        },
+        "actions":
+        [
+        {
+                "press": "w",
+                "time": 3
+            },
+            {
+                "press": "2",
+                "time": 0.8
+            },
+            {
+                "press": "e"
+            },
+            {
+                "press": "3",
+                "time": 0.8
+            },
+            {
+                "press": "e"
+            },
+            {
+                "sleep": 0.6
+            },
+            {
+                "press": "4",
+                "time": 0.8
+            },
+            {
+                "press": "e"
+            },
+            {
+                "press": "1",
+                "time": 0.8
+            },
+            {
+                "press": "e"
+            },{
+                "position": [1650, 980]
+            }
+        ]
+    },
+   {
+        "name": "退出",
+        "trigger":{
+            "text": "极乐颠倒",
+            "box": [813, 1063, 14, 45],
+            "redundancy": 30,
+            "interval": 3
+        },
+        "actions":
+        [
+        {
+                "press": "esc"
+            }
+        ]
+    },
+   {
+        "name": "返回虚构叙事",
+        "trigger":{
+            "text": "返回虚构叙事",
+            "box": [1151, 1297, 971, 998],
+            "redundancy": 30
+        },
+        "actions":
+        [
+        {
+                "position": [1200, 980]
+            }
+        ]
+    },
+    {
+        "name": "确认图片",
+        "trigger":{
+            "photo": "yes1",
+            "pos": {"x":0.5,"y":0.5},
+            "mask":"mask_end"
+        },
+        "actions":
+        [
+            "confirm_yes"
+        ]
+    }
+]

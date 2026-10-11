@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, call, patch
 
-from currency import SimulatedCurrency
+from core.currency.automation import SimulatedCurrency
 
 
 class CurrencyInteractionTests(unittest.TestCase):
@@ -24,8 +24,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         ]
         return currency
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_fallback_uses_first_and_last_priority_groups(self, manager, _sleep):
         for groups in [[["一级"], [], [], ["四级"]], [[], [], [], ["一级"]]]:
             with self.subTest(groups=groups):
@@ -41,8 +41,8 @@ class CurrencyInteractionTests(unittest.TestCase):
                 self.assertEqual(manager.click.call_args, call(438, 394))
                 currency.update_state.assert_called_once_with("1-1")
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_blue_ocean_selects_unique_extra_environment_and_confirms(
         self, manager, _sleep
     ):
@@ -63,8 +63,8 @@ class CurrencyInteractionTests(unittest.TestCase):
             allow_fail=True,
         )
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_blue_ocean_does_not_reselect_three_option_screen(
         self, manager, _sleep
     ):
@@ -76,8 +76,8 @@ class CurrencyInteractionTests(unittest.TestCase):
 
         manager.click.assert_not_called()
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_blue_ocean_advances_state_only_after_extra_choice(
         self, _manager, _sleep
     ):
@@ -100,8 +100,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.investment_tracker.reset.assert_called_once_with()
         currency.update_state.assert_called_once_with("1-1")
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_blue_ocean_failure_does_not_advance_state(self, _manager, _sleep):
         currency = self.make_currency()
         currency.envir = [["蓝海"], [], [], []]
@@ -121,8 +121,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.investment_tracker.reset.assert_not_called()
         currency.update_state.assert_not_called()
 
-    @patch("currency.time.sleep")
-    @patch("currency.key_mouse_manager")
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
     def test_refresh_retries_only_unchanged_middle_option(self, manager, _sleep):
         currency = self.make_currency()
         currency.recognize_options = Mock(

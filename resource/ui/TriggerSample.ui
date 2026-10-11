@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>TriggerSample</class>
+ <widget class="QDialog" name="TriggerSample">
+  <property name="windowTitle"><string>选择游戏画面标志</string></property>
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1600</width><height>900</height></rect></property>
+  <layout class="QVBoxLayout" name="main_layout">
+   <item><widget class="QLabel" name="instruction"><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><layout class="QHBoxLayout" name="sample_layout">
+    <item><widget class="QWidget" name="canvas_host"><layout class="QVBoxLayout" name="canvas_layout"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property></layout></widget></item>
+    <item><widget class="QListWidget" name="text_list"><property name="maximumSize"><size><width>260</width><height>16777215</height></size></property></widget></item>
+   </layout></item>
+   <item><widget class="QWidget" name="text_row"><layout class="QHBoxLayout" name="text_layout"><item><widget class="QLabel" name="text_label"><property name="text"><string>匹配文字（可修改）</string></property></widget></item><item><widget class="QLineEdit" name="match_text"/></item></layout></widget></item>
+   <item><widget class="QWidget" name="image_row"><layout class="QGridLayout" name="image_layout">
+    <item row="0" column="0"><widget class="QLabel" name="name_label"><property name="text"><string>图片名称</string></property></widget></item>
+    <item row="0" column="1" colspan="2"><widget class="QLineEdit" name="file_name"><property name="placeholderText"><string>文件名，可修改（PNG）</string></property></widget></item>
+    <item row="1" column="0"><widget class="QLabel" name="folder_label"><property name="text"><string>保存目录</string></property></widget></item>
+    <item row="1" column="1"><widget class="QLineEdit" name="save_folder"/></item>
+    <item row="1" column="2"><widget class="QPushButton" name="browse_btn"><property name="text"><string>选择目录…</string></property></widget></item>
+   </layout></widget></item>
+   <item><widget class="QLabel" name="selection_label"><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><layout class="QHBoxLayout" name="button_row"><item><widget class="QPushButton" name="use_btn"><property name="text"><string>使用此标志</string></property></widget></item><item><widget class="QPushButton" name="cancel_btn"><property name="text"><string>取消</string></property></widget></item></layout></item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

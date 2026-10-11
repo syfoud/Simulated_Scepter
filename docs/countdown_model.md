@@ -1,7 +1,7 @@
 # 弹指倒计时评估模型
 
 本文是当前生产实现的统一数学说明。规则与接口以
-`tool/countdown_evaluator.py`、`tool/countdown_dp.py` 和 `finger_snap.py` 为准。
+`tool/countdown_evaluator.py`、`tool/countdown_dp.py` 和 `core/finger_snap/engine.py` 为准。
 测试 GUI 与生产环境共用同一套评估后端；旧的典型图 W 表、三地图联合资源分配、
 DP 热启动 MC 等方案均不属于当前在线链路。
 

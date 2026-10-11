@@ -1,434 +1,419 @@
+import argparse
 import ctypes
+import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 
 import keyboard
-from PyQt5.QtGui import QFont, QKeySequence
+from PyQt5.QtGui import QFont
 
 from route import PATHS
 from tool import EXTRA
-from tool.countdown_config import (
-    DECISION_MODES, MC_SETTING_FIELDS, load_finger_snap_settings,
-    save_finger_snap_settings,
+from tool.action_script import run_script as run_action_script
+from tool.cleanup import (
+    CATEGORIES,
+    CATEGORY_BUTTONS,
+    MODE_NAMES,
+    MODES,
+    TRIGGER_NAMES,
+    TRIGGERS,
+    UNIT_NAMES,
+    UNITS,
+    CleanupConfig,
+    CleanupItem,
+    cleanup_manual,
+    finish_manual_cleanup,
+    last_cleanup_text,
+    load_cleanup_config,
+    run_cleanup,
+    validate_config,
+    write_config,
 )
-from tool.currency.settings import (
-    EXIT_PLANES,
-    load_currency_settings,
-    load_default_priority,
-    save_currency_settings,
-)
-from tool.GLOBAL import set_global_stop_flag
-from tool.log import log_emitter
+from tool.GLOBAL import get_global_stop_flag, set_global_stop_flag
+from tool.gui.advanced_features import show_unlock_dialog
+from tool.gui.schedule_dialog import ScheduleDialog, ScheduleTimer
+from tool.gui.script_editor import ScriptEditor
+from tool.log import CUS_LOGGER, log_emitter
+from tool.registry import KernelRegistry
+from tool.script_files import discover_scripts, read_script, script_key, script_path
+from tool.script_tools import capture_sample, debug_events
+from tool.settings import load_settings, update_settings
 from tool.thread import ThreadWithException
+from tool.utils.game_install import (
+    find_star_rail_executable,
+    is_global_star_rail_executable,
+)
+from tool.utils.game_process import is_star_rail_process_running
+from tool.utils.game_window import find_game_window
 from tool.utils.image_tool import find_image_by_name, load_all_images_from_directory
+from tool.window_recorder.video_remux import (
+    convert_to_standard_mp4,
+    convert_with_tail_trimmed,
+    needs_conversion,
+)
 
 load_all_images_from_directory()
 import faulthandler
 
-from PyQt5.QtCore import Qt, QSize, pyqtSignal, pyqtSlot, QEvent, QTimer
+from PyQt5.QtCore import QSignalBlocker, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QApplication,
-    QAbstractItemView,
+    QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QTextBrowser,
+    QToolButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from align_angle import main as align_angle_main
-from any_fate import AnyFateUniverse
-from currencywar import CurrencyWar
-from diver import DivergentUniverse
-from finger_snap import FingerSnap
-from iron_blood import IronBloodUniverse
 from logger_printer import QMainWindowLog
-from simul import SimulatedUniverse
-from tool.diver.config import config as config_diver
-from tool.simul.config import config as config_simul
 
 HOTKEY_DEBOUNCE_SECONDS = 1.0
+# 程序启动时触发的清理延迟执行的毫秒数，让主界面先完成显示。
+CLEANUP_STARTUP_DELAY_MS = 1500
+STARTUP_TASK_DELAY_SECONDS = 5
 
-class CurrencyPriorityListWidget(QListWidget):
-    def __init__(self):
-        super().__init__()
-        self.drop_indicator = None
-        self.drop_row = None
 
-    def dragMoveEvent(self, event):
-        source = event.source()
-        source_item = None
-
-        if isinstance(source, CurrencyPriorityListWidget):
-            source_item = source.currentItem()
-
-        target_item = self.itemAt(event.pos())
-
-        # 鼠标位于被拖动的 item 上时
-        if target_item is source_item and target_item is not None:
-            rect = self.visualItemRect(target_item)
-            row = self.row(target_item)
-
-            if event.pos().x() < rect.center().x():
-                self.drop_indicator = (
-                    rect.left(),
-                    rect.top(),
-                    rect.bottom(),
-                )
-                self.drop_row = row
+def parse_startup_args(argv=None):
+    """解析用于启动界面的可选脚本参数，选项名必须使用小写，参数不区分大小写。"""
+    args = argparse.Namespace(
+        start_task=False,
+        engine=None,
+        file=None,
+        start_delay=STARTUP_TASK_DELAY_SECONDS,
+        error=None,
+    )
+    seen = set()
+    values = sys.argv[1:] if argv is None else argv
+    try:
+        for value in values:
+            if value == "--start-task":
+                option = value
+                args.start_task = True
+            elif value.startswith("--engine:"):
+                option, _, option_value = value.partition(":")
+                if not option_value:
+                    raise ValueError("--engine: 后必须填写内核 ID")
+                args.engine = option_value
+            elif value.startswith("--file:"):
+                option, _, option_value = value.partition(":")
+                if not option_value:
+                    raise ValueError("--file: 后必须填写脚本名称")
+                args.file = option_value
+            elif value.startswith("--start-delay:"):
+                option, _, option_value = value.partition(":")
+                try:
+                    args.start_delay = int(option_value)
+                except ValueError as error:
+                    raise ValueError("--start-delay: 后必须填写非负整数") from error
+                if args.start_delay < 0:
+                    raise ValueError("--start-delay: 后必须填写非负整数")
             else:
-                self.drop_indicator = (
-                    rect.right(),
-                    rect.top(),
-                    rect.bottom(),
-                )
-                self.drop_row = row + 1
+                raise ValueError(f"不支持的启动参数：{value}")
 
-        # 鼠标位于其他 item 上时
-        elif target_item is not None:
-            rect = self.visualItemRect(target_item)
-            row = self.row(target_item)
+            if option in seen:
+                raise ValueError(f"参数重复：{option}")
+            seen.add(option)
 
-            if event.pos().x() < rect.center().x():
-                self.drop_indicator = (
-                    rect.left(),
-                    rect.top(),
-                    rect.bottom(),
-                )
-                self.drop_row = row
-            else:
-                self.drop_indicator = (
-                    rect.right(),
-                    rect.top(),
-                    rect.bottom(),
-                )
-                self.drop_row = row + 1
+        if not args.start_task and seen:
+            raise ValueError("--engine:、--file: 和 --start-delay: 必须与 --start-task 一起使用")
+    except ValueError as error:
+        args.error = str(error)
+        args.start_task = False
+    return args
 
-        # 鼠标位于列表空白区域
-        elif self.count():
-            last_item = self.item(self.count() - 1)
-            rect = self.visualItemRect(last_item)
 
-            self.drop_indicator = (
-                rect.right(),
-                rect.top(),
-                rect.bottom(),
-            )
-            self.drop_row = self.count()
+def resolve_startup_task(args):
+    """将命令行覆写值与设置文件合并为可运行的内核和脚本。"""
+    if not args.start_task:
+        return None
 
-        else:
-            self.drop_indicator = None
-            self.drop_row = 0
+    settings = load_settings()
+    registry = KernelRegistry()
+    configured_script = settings.get("script_file", "")
+    has_configured_script = isinstance(configured_script, str) and bool(configured_script)
+    if args.file is not None:
+        script_name = args.file
+    elif configured_script in (None, ""):
+        script_name = "insect.json"
+    elif has_configured_script:
+        script_name = configured_script
+    else:
+        raise ValueError("settings.json 中的 script_file 必须是脚本路径或名称")
 
-        self.viewport().update()
+    default_engine = settings.get("script_engine", "") if has_configured_script else "IronBlood"
+    engine_name = args.engine or default_engine
 
-        event.setDropAction(Qt.CopyAction)
-        event.accept()
+    if not isinstance(engine_name, str) or not engine_name:
+        raise ValueError("未设置可用内核；请在界面选择内核，或使用 --engine:ID 指定内核")
+    engine_key = engine_name.casefold()
+    spec = next(
+        (item for item in registry.runnable() if item.id.casefold() == engine_key),
+        None,
+    )
+    if spec is None:
+        available = ", ".join(item.id for item in registry.runnable())
+        raise ValueError(f"设置的内核不可用：{engine_name!r}；可用内核 ID：{available}")
 
-    def dragLeaveEvent(self, event):
-        self.drop_indicator = None
-        self.drop_row = None
-        self.viewport().update()
-        super().dragLeaveEvent(event)
+    if not isinstance(script_name, str) or not script_name:
+        raise ValueError("未设置可用脚本；请检查 settings.json 或使用 --file:SCRIPT 指定脚本")
 
-    def dropEvent(self, event):
-        source = event.source()
-
-        if not isinstance(source, CurrencyPriorityListWidget):
-            event.ignore()
-            return
-
-        source_item = source.currentItem()
-
-        if source_item is None or self.drop_row is None:
-            event.ignore()
-            return
-
-        source_row = source.row(source_item)
-        target_row = self.drop_row
-
-        # 如果来自同一个列表，需要修正删除原 item 后的索引
-        if source is self and source_row < target_row:
-            target_row -= 1
-
-        # 已经在目标位置，不做任何操作
-        if source is self and source_row == target_row:
-            self.drop_indicator = None
-            self.drop_row = None
-            self.viewport().update()
-
-            event.setDropAction(Qt.CopyAction)
-            event.accept()
-            return
-
-        # 完全由我们自己移动 item
-        item = source.takeItem(source_row)
-
-        if item is not None:
-            target_row = max(0, min(target_row, self.count()))
-            self.insertItem(target_row, item)
-            self.setCurrentItem(item)
-
-        self.drop_indicator = None
-        self.drop_row = None
-        self.viewport().update()
-
-        # 防止 Qt 再次执行 MoveAction
-        event.setDropAction(Qt.CopyAction)
-        event.accept()
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-
-        if self.drop_indicator is None:
-            return
-
-        x, top, bottom = self.drop_indicator
-
-        from PyQt5.QtGui import QPainter, QPen
-
-        painter = QPainter(self.viewport())
-        painter.setPen(QPen(Qt.black, 2))
-        painter.drawLine(x, top, x, bottom)
-
-class Priority0ListWidget(QListWidget):
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-
-        viewport = self.viewport()
-        assert viewport is not None
-
-        width = viewport.width()
-        self.setGridSize(QSize(width, 32))
-
-        if self.count():
-            item = self.item(0)
-            assert item is not None
-            item.setSizeHint(QSize(width, 32))
-
-class CurrencyPriorityDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        self.setWindowTitle("自定义投资环境优先级")
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowContextHelpButtonHint
-        )
-        self.resize(1050, 850)
-
-        self.priority_lists = []
-
-        main_layout = QVBoxLayout(self)
-
-        sections = [
-            ("必选环境", "prior_envir"),
+    scripts = discover_scripts(registry)
+    script_key_name = script_name.replace("\\", "/").casefold()
+    exact_matches = [path for path in scripts if script_key(path).casefold() == script_key_name]
+    if exact_matches:
+        matches = exact_matches
+    elif os.path.isabs(script_name) or "/" in script_name or "\\" in script_name:
+        path = script_path(script_name)
+        if not os.path.isfile(path):
+            raise ValueError(f"找不到脚本：{script_name}")
+        matches = [path]
+    else:
+        name = os.path.basename(script_name).casefold()
+        stem = os.path.splitext(name)[0]
+        matches = [
+            path for path in scripts
+            if path.name.casefold() == name or path.stem.casefold() == stem
         ]
 
-        for title, key in sections:
-            label = QLabel(title)
-            label.setAlignment(Qt.AlignCenter)
-            main_layout.addWidget(label)
+    if len(matches) > 1:
+        raise ValueError(f"脚本名称不唯一，请使用相对路径指定：{script_name}")
+    if matches:
+        path = matches[0]
+    else:
+        path = script_path(script_name)
+        if not os.path.isfile(path):
+            raise ValueError(f"找不到脚本：{script_name}")
 
-            list_widget = self.create_priority_list()
-            list_widget.priority_key = key
-            self.priority_lists.append(list_widget)
-            main_layout.addWidget(list_widget)
+    read_script(path)
+    return spec.id, str(path)
 
-        priority_0_label = QLabel("优先级0")
-        priority_0_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(priority_0_label)
 
-        priority_0_list = self.create_priority_0_list()
-        main_layout.addWidget(priority_0_list)
+def acquire_instance_lock(mutex_name):
+    """按程序目录获取单实例锁，允许其他目录中的副本同时运行。"""
+    handle = ctypes.windll.kernel32.CreateMutexW(None, True, mutex_name)
+    if not handle:
+        raise ctypes.WinError()
+    if ctypes.windll.kernel32.GetLastError() == 183:
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return None
+    return handle
 
-        sections = [
-            ("优先级1环境", "envir_1"),
-            ("优先级2环境", "envir_2"),
-            ("优先级3环境", "envir_3"),
-            ("优先级4环境", "envir_4"),
-        ]
 
-        for title, key in sections:
-            label = QLabel(title)
-            label.setAlignment(Qt.AlignCenter)
-            main_layout.addWidget(label)
+def show_instance_warning():
+    """在控制台提示同目录的程序实例已启动。"""
+    try:
+        print("当前程序目录下的权杖已经启动，请勿重复启动。")
+    except UnicodeEncodeError:
+        print("Simulated Scepter is already running in this directory; do not start it again.")
 
-            list_widget = self.create_priority_list()
-            list_widget.priority_key = key
-            self.priority_lists.append(list_widget)
-            main_layout.addWidget(list_widget)
 
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
+class CleanupSettingsSection(QWidget):
+    """自动清理设置区，负责显示三个清理对象的配置并收集用户改动。
 
-        self.restore_default_button = QPushButton("恢复默认")
-        self.save_button = QPushButton("保存")
+    界面控件由 UI.ui 的进阶设置页承载，本类只负责读写这些控件的值：清理
+    按钮发出清理请求，实际清理与参数校验由主窗口完成。
+    """
 
-        button_layout.addWidget(self.restore_default_button)
-        button_layout.addWidget(self.save_button)
+    cleanup_requested = pyqtSignal(str)  # 清理对象
 
-        button_layout.addStretch()
-        main_layout.addLayout(button_layout)
+    WIDGET_TYPES = {
+        "mode_combo": QComboBox,
+        "trigger_combo": QComboBox,
+        "value_input": QLineEdit,
+        "unit_combo": QComboBox,
+        "cleanup_btn": QPushButton,
+        "last_label": QLabel,
+    }
 
-        self.restore_default_button.clicked.connect(
-            self.restore_default
-        )
-        self.save_button.clicked.connect(
-            self.save_current
-        )
+    def __init__(self, page):
+        super().__init__(page)
 
-        self.load_current()
+        self.setVisible(False)
+        for field in self.WIDGET_TYPES:
+            setattr(self, field, {})
 
-    @staticmethod
-    def create_priority_list():
-        list_widget = CurrencyPriorityListWidget()
+        for category in CATEGORIES:
+            self._load_widgets(page, category)
 
-        list_widget.setViewMode(QListWidget.IconMode)
-        list_widget.setFlow(QListWidget.LeftToRight)
-        list_widget.setWrapping(True)
-        list_widget.setResizeMode(QListWidget.Adjust)
+            mode_combo = self.mode_combo[category]
+            for mode in MODES:
+                mode_combo.addItem(MODE_NAMES[mode], mode)
+            for trigger in TRIGGERS:
+                self.trigger_combo[category].addItem(TRIGGER_NAMES[trigger], trigger)
+            for unit in UNITS:
+                self.unit_combo[category].addItem(UNIT_NAMES[unit], unit)
+            self.cleanup_btn[category].setText(CATEGORY_BUTTONS[category])
 
-        list_widget.setDragEnabled(True)
-        list_widget.setAcceptDrops(True)
-        list_widget.setDropIndicatorShown(False)
-        list_widget.setDragDropMode(QAbstractItemView.DragDrop)
-        list_widget.setDefaultDropAction(Qt.MoveAction)
-
-        list_widget.setSelectionMode(
-            QAbstractItemView.SingleSelection
-        )
-        list_widget.setEditTriggers(
-            QAbstractItemView.NoEditTriggers
-        )
-
-        list_widget.setSpacing(5)
-        list_widget.setGridSize(QSize(175, 38))
-
-        list_widget.setMinimumHeight(75)
-        list_widget.setMaximumHeight(150)
-
-        return list_widget
-
-    @staticmethod
-    def create_priority_0_list():
-        list_widget = Priority0ListWidget()
-
-        list_widget.setViewMode(QListWidget.IconMode)
-        list_widget.setFlow(QListWidget.LeftToRight)
-        list_widget.setWrapping(False)
-        list_widget.setResizeMode(QListWidget.Adjust)
-
-        list_widget.setDragEnabled(False)
-        list_widget.setAcceptDrops(False)
-        list_widget.setDropIndicatorShown(False)
-        list_widget.setMovement(QListWidget.Static)
-
-        list_widget.setSelectionMode(
-            QAbstractItemView.NoSelection
-        )
-        list_widget.setEditTriggers(
-            QAbstractItemView.NoEditTriggers
-        )
-
-        list_widget.setSpacing(0)
-        list_widget.setGridSize(QSize(175, 32))
-        list_widget.setFixedHeight(42)
-
-        item = QListWidgetItem("水梦梦天下第一可爱！")
-        item.setSizeHint(QSize(0, 32))
-        item.setTextAlignment(Qt.AlignCenter)
-        item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
-
-        list_widget.addItem(item)
-
-        return list_widget
-
-    def load_current(self):
-        currency_settings = load_currency_settings()
-        priority = currency_settings["priority"]
-        self.populate_lists(priority)
-
-    def populate_lists(self, data):
-        for list_widget in self.priority_lists:
-            list_widget.clear()
-
-            for text in data.get(list_widget.priority_key, []):
-                item = QListWidgetItem(text)
-                item.setSizeHint(QSize(165, 32))
-                list_widget.addItem(item)
-
-    def collect_current(self):
-        data = {}
-
-        for list_widget in self.priority_lists:
-            data[list_widget.priority_key] = [
-                list_widget.item(index).text()
-                for index in range(list_widget.count())
-            ]
-
-        return data
-
-    def save_current(self):
-        data = self.collect_current()
-
-        try:
-            currency_settings = load_currency_settings()
-            currency_settings["priority"] = data
-            save_currency_settings(currency_settings)
-        except OSError as error:
-            QMessageBox.critical(
-                self,
-                "错误",
-                f"投资环境优先级保存失败：{error}",
+            mode_combo.currentIndexChanged.connect(
+                lambda _index, name=category: self._refresh_mode(name)
             )
-            return
-
-        QMessageBox.information(
-            self,
-            "提示",
-            "投资环境优先级已保存",
-        )
-
-    def restore_default(self):
-        default_priority = load_default_priority()
-        self.populate_lists(default_priority)
-
-        try:
-            currency_settings = load_currency_settings()
-            currency_settings["priority"] = default_priority
-            save_currency_settings(currency_settings)
-        except OSError as error:
-            QMessageBox.critical(
-                self,
-                "错误",
-                f"恢复默认失败：{error}",
+            self.cleanup_btn[category].clicked.connect(
+                lambda _checked=False, name=category: self.cleanup_requested.emit(name)
             )
-            return
 
-        QMessageBox.information(
-            self,
-            "提示",
-            "投资环境优先级已恢复默认",
-        )
+        self._fix_column_layout()
+        self.refresh_display()
+
+    def _load_widgets(self, page, category) -> None:
+        """取出某个清理对象在 UI.ui 中的全部控件。
+
+        Args:
+            page: 承载自动清理设置区的页面。
+            category: 清理对象，取 CATEGORIES 之一。
+
+        Raises:
+            RuntimeError: UI.ui 与代码版本不一致，缺少必需控件。
+        """
+        missing = []
+        for field, widget_type in self.WIDGET_TYPES.items():
+            widget = page.findChild(widget_type, f"Cleanup_{category}_{field}")
+            if widget is None:
+                missing.append(f"Cleanup_{category}_{field}")
+                continue
+            getattr(self, field)[category] = widget
+
+        if missing:
+            raise RuntimeError(
+                "界面文件 resource/ui/UI.ui 与当前代码版本不一致，缺少控件："
+                + "、".join(missing)
+                + "。请使用与代码相同版本的 UI.ui。"
+            )
+
+    def _fix_column_layout(self) -> None:
+        """统一操作/参数列各控件的高度与宽度。
+
+        清理模式与触发时机选择框、数值输入框、单位选择框、清理按钮会按模式
+        互换显示，这里统一它们的高度与宽度，切换模式时行高与列宽不再变化。
+        """
+        # 清理模式列容纳“永不清理”等模式名，操作/参数列容纳触发时机、数值与单位。
+        mode_width = 120
+        action_width = 150
+
+        for category in CATEGORIES:
+            button = self.cleanup_btn[category]
+            trigger_combo = self.trigger_combo[category]
+
+            # 按钮与触发时机选择框在同一位置交替显示，统一高度以稳定行高，使其美观。
+            row_height = button.sizeHint().height()
+            trigger_combo.setMinimumHeight(row_height)
+            trigger_combo.setSizePolicy(
+                QSizePolicy.Preferred, QSizePolicy.Fixed)
+
+            self.mode_combo[category].setFixedWidth(mode_width)
+            self.value_input[category].setFixedWidth(60)
+            self.unit_combo[category].setFixedWidth(action_width - 60)
+
+    def refresh_display(self, config=None) -> None:
+        """按自动清理配置刷新控件内容与可用状态。
+
+        Args:
+            config: 需要显示的配置；默认为重新读取配置文件。
+        """
+        if config is None:
+            config = load_cleanup_config()
+        for category in CATEGORIES:
+            item = config.item(category)
+            mode_combo = self.mode_combo[category]
+            trigger_combo = self.trigger_combo[category]
+            unit_combo = self.unit_combo[category]
+            mode_combo.setCurrentIndex(mode_combo.findData(item.mode))
+            trigger_combo.setCurrentIndex(trigger_combo.findData(item.trigger))
+            self.value_input[category].setText(str(item.value))
+            unit_combo.setCurrentIndex(unit_combo.findData(item.unit))
+            self.set_last_cleanup(category, item.last_cleanup)
+            self._refresh_mode(category)
+
+    def _refresh_mode(self, category: str) -> None:
+        """按当前清理模式切换操作/参数列的显示与可用状态。"""
+        mode = self.mode_combo[category].currentData()
+        if mode is None:
+            return
+        # 永不清理：按钮不可用；手动清理：按钮可用；周期/自动清理：改由触发时机选择。
+        self.cleanup_btn[category].setEnabled(mode != "never")
+        self.cleanup_btn[category].setVisible(mode in ("never", "manual"))
+        self.trigger_combo[category].setVisible(mode in ("periodic", "automatic"))
+        self.value_input[category].setEnabled(mode != "never")
+        self.unit_combo[category].setEnabled(mode != "never")
+
+    def collect_config(self) -> CleanupConfig:
+        """读取控件中的配置。
+
+        数值无法解析为整数时按 -1 处理，交给参数校验给出提示。
+
+        Returns:
+            当前界面上的自动清理配置。
+        """
+        items = {}
+        for category in CATEGORIES:
+            text = self.value_input[category].text().strip()
+            try:
+                value = int(text)
+            except ValueError:
+                value = -1
+            items[category] = CleanupItem(
+                mode=self.mode_combo[category].currentData(),
+                trigger=self.trigger_combo[category].currentData(),
+                value=value,
+                unit=self.unit_combo[category].currentData(),
+                last_cleanup=self.last_label[category].property("last_cleanup") or "",
+            )
+        return CleanupConfig(items=items)
+
+    def cleanup_value(self, category: str) -> tuple[int, str]:
+        """读取某个清理对象当前的数值与时间单位。
+
+        数值非法时按 0 处理，手动清理因此退化为清理全部符合规则的文件。
+
+        Args:
+            category: 清理对象，取 CATEGORIES 之一。
+
+        Returns:
+            (数值, 时间单位)。
+        """
+        text = self.value_input[category].text().strip()
+        try:
+            value = int(text)
+        except ValueError:
+            value = 0
+        if value < 0:
+            value = 0
+        return value, self.unit_combo[category].currentData()
+
+    def set_last_cleanup(self, category: str, cleaned_at: str) -> None:
+        """更新某个清理对象的上次清理时间文本。"""
+        label = self.last_label[category]
+        label.setProperty("last_cleanup", cleaned_at)
+        label.setText(last_cleanup_text(cleaned_at))
 
 
 class MainWindow(QMainWindowLog):
     calibration_finished = pyqtSignal(object)
     hotkey_pressed = pyqtSignal(str)
+    script_tool_result = pyqtSignal(str, object)
 
-    def __init__(self):
+    def __init__(self, startup_task=None, start_delay=STARTUP_TASK_DELAY_SECONDS):
         super().__init__()
         # 任务管理相关属性
         self.current_task = None
         self.task_thread = None
+        self._task_thread = None
+        # 异常视频封装的后台线程，避免重复触发
+        self._video_convert_thread = None
+        self.scheduler = None
+        self.editor_tasks = {}
+        self.script_tool_result.connect(lambda session, _result: self.editor_tasks.pop(session, None))
         self._task_monitor_timer = QTimer(self)
         self._task_monitor_timer.setInterval(100)
         self._task_monitor_timer.timeout.connect(self._check_task_thread)
@@ -448,25 +433,113 @@ class MainWindow(QMainWindowLog):
         log_emitter.find_path_state_signal.connect(self.set_find_path_state)
         log_emitter.kill_num_signal.connect(self.set_kill_num)
         log_emitter.fps_update_signal.connect(self.set_FPS)
+        log_emitter.cleanup_finished_signal.connect(self.refresh_cleanup_state)
+        log_emitter.video_convert_finished_signal.connect(self.on_video_convert_finished)
 
         # 检查是否首次启动并显示用户协议
         self.check_first_launch()
+
+        self.scheduler = ScheduleTimer(self.registry, self.launch_script, self.is_task_running, self.stop_task, self)
+
+        # 程序启动后先让界面完成显示，再按配置执行程序启动时触发的清理
+        QTimer.singleShot(CLEANUP_STARTUP_DELAY_MS, lambda: self.cleanup_at("program_start"))
+        if startup_task is not None:
+            engine_id, path = startup_task
+            spec = self.registry.specs[engine_id]
+            CUS_LOGGER.debug(
+                "将在等待 %s 秒后，使用内核 %s 运行脚本 %s。",
+                start_delay,
+                spec.id,
+                os.path.basename(path),
+            )
+            QTimer.singleShot(
+                start_delay * 1000,
+                lambda: self.run_startup_task(engine_id, path),
+            )
+
+    def create_task_engine(self, kernel_id, *, script=False):
+        """创建内核实例，并把它绑到本次任务线程上。
+
+        录制线程每轮检查所属任务线程是否还活着，任务结束就停止录制；
+        不绑定的话录制线程会变成孤儿，任务早就停了录像却一直在写。
+        """
+        engine = self.registry.create_engine(kernel_id, script=script)
+        task_thread = getattr(self, "_task_thread", None) or getattr(self, "task_thread", None)
+        # 没有录制能力的内核（例如通用脚本内核）没有 recorder；取不到任务线程时也不绑定
+        if task_thread is not None and getattr(engine, "recorder", None) is not None:
+            engine.recorder.task_owner = task_thread
+        return engine
 
     def start_task(self, task_func):
         """
         启动一个新任务
         """
+        if self.scheduler is not None and not self.scheduler.dispatching and (self.is_task_running() or self.scheduler.has_pending()):
+            self.scheduler.queue_task(lambda: self.start_task(task_func), task_func)
+            self.scheduler.poll()
+            return
+
         if self.task_thread is not None:
             if self.task_thread.is_alive():
                 raise RuntimeError("上一个任务仍在停止，请稍候")
             self.task_thread = None
             self.current_task = None
 
+        if self.start_game_checkbox.isChecked():
+            game_running = find_game_window() is not None
+            if not game_running:
+                try:
+                    game_running = is_star_rail_process_running()
+                except OSError as error:
+                    CUS_LOGGER.error("无法检查崩坏：星穹铁道进程：%s", error, exc_info=True)
+                    QMessageBox.warning(self, "无法确认游戏状态", "无法检查游戏进程，本次不会尝试启动游戏。")
+                    return
+
+            if not game_running:
+                game_path = self.game_path_input.text().strip().strip('"')
+                is_global_game = is_global_star_rail_executable(game_path) if game_path else False
+                if not game_path:
+                    discovered_game = find_star_rail_executable()
+                    if discovered_game:
+                        game_path, is_global_game = discovered_game
+                        self.game_path_input.setText(game_path)
+                if (not os.path.isabs(game_path)
+                        or os.path.basename(game_path).casefold() != "starrail.exe"
+                        or not os.path.isfile(game_path)):
+                    CUS_LOGGER.error("未能自动找到游戏，请在进阶设置中填写有效的 StarRail.exe 完整路径。")
+                    QMessageBox.warning(
+                        self, "无法启动游戏",
+                        "未能自动找到游戏，请在进阶设置中填写有效的 StarRail.exe 完整路径。",
+                    )
+                    return
+                self.save_game_path_config()
+                try:
+                    subprocess.Popen([game_path], cwd=os.path.dirname(game_path))
+                except OSError as error:
+                    CUS_LOGGER.error("无法启动崩坏：星穹铁道：%s", error, exc_info=True)
+                    QMessageBox.warning(self, "无法启动游戏", f"启动 StarRail.exe 失败：{error}")
+                    return
+                if is_global_game:
+                    CUS_LOGGER.info("本次启动的是国际服崩坏·星穹铁道")
+                CUS_LOGGER.info("未检测到崩坏：星穹铁道，已尝试启动 StarRail.exe。")
+            else:
+                CUS_LOGGER.debug("已检测到崩坏：星穹铁道窗口或进程，跳过重复启动。")
+
+        if self.scheduler is not None:
+            self.scheduler.release_active()
+
         set_global_stop_flag(False)
-        self.task_thread = ThreadWithException(target=task_func, name="主任务线程")
-        self.task_thread.start()
+        # 捕获本次任务的线程对象本身：录制要绑的是「这一个」任务线程，
+        # 而不是 self.task_thread 这个会被下一次任务覆盖的属性。
+        task_thread = ThreadWithException(target=task_func, name="主任务线程")
+        self.task_thread = task_thread
+        self._task_thread = task_thread
+        task_thread.start()
         # 更新任务状态标签为"运行中"
         self.Label_RunningState.setText("任务序列线程状态: 运行中")
+
+        # 任务开始后再执行任务启动时触发的清理，避免清理耗时拖后任务启动
+        self.cleanup_at("task_start")
 
         # 启动异步线程状态监控
         if not self._task_monitor_timer.isActive():
@@ -491,6 +564,9 @@ class MainWindow(QMainWindowLog):
 
         self.Label_RunningState.setText("任务序列线程状态: 未运行")
         self._task_monitor_timer.stop()
+
+        # 任务结束触发时机：此时任务线程已经退出，任务占用的文件已释放
+        self.cleanup_at("task_end")
 
     def is_task_running(self):
         """
@@ -546,203 +622,70 @@ class MainWindow(QMainWindowLog):
 
 
     def init_ui(self):
-        # 检查模型文件是否存在
-        self.check_model_file()
-
-        # 连接按钮信号
-        self.run_simul_btn.clicked.connect(self.run_simul)
-        self.run_diver_btn.clicked.connect(self.run_diver)
-        self.iron_blood_btn.clicked.connect(self.run_iron_blood)
-        self.any_fate_btn.clicked.connect(self.run_any_fate)
-        self.finger_snap_btn.clicked.connect(self.run_finger_snap)
-        self.currency_war_btn.clicked.connect(self.run_currency_war)
+        self.registry = KernelRegistry()
+        for module, error in self.registry.errors.items():
+            CUS_LOGGER.error("内核 %s 不可用：%s", module, error)
+        self.init_kernel_buttons()
+        self.init_script_controls()
+        self.script_editor_btn.clicked.connect(self.open_script_editor)
+        self.schedule_btn.clicked.connect(self.open_schedule)
+        self.engine_settings_btn.clicked.connect(
+            lambda: self.open_engine_settings(self.engine_combo.currentData()))
         self.calibrate_btn.clicked.connect(self.calibrate)
         self.test_btn.clicked.connect(self.test)
         self.print_btn.clicked.connect(self.test_2)
         self.stop_btn.clicked.connect(self.stop_task)
-        self.clear_logs_btn.clicked.connect(self.clear_logs)
-
-        # 初始化模拟宇宙配置界面
-        self.Simul_bonus_checkbox.setChecked(bool(config_simul.bonus))
-        self.Simul_debug_checkbox.setChecked(bool(config_simul.debug_mode))
-        self.Simul_speed_checkbox.setChecked(bool(config_simul.speed_mode))
-        self.Simul_slow_checkbox.setChecked(bool(config_simul.slow_mode))
-        self.Simul_difficulty_combo.addItems(["1", "2", "3", "4", "5"])
-        self.Simul_difficulty_combo.setCurrentText(str(config_simul.difficult))
-        self.Simul_fate_combo.addItems([
-            "存护", "记忆", "虚无", "丰饶", "巡猎", "毁灭", "欢愉", "繁育", "智识"
-        ])
-        self.Simul_fate_combo.setCurrentText(config_simul.fate)
-        self.Simul_timezone_combo.addItems(["Default", "Asia", "America", "Europe"])
-        self.Simul_timezone_combo.setCurrentText(config_simul.timezone)
-        self.Simul_max_run_input = QLineEdit(str(config_simul.max_run))
-
-        # 初始化差分宇宙配置界面
-        self.Diver_debug_checkbox.setChecked(bool(config_diver.debug_mode))
-        self.Diver_speed_checkbox.setChecked(bool(config_diver.speed_mode))
-        self.Diver_weekly_checkbox.setChecked(bool(config_diver.weekly_mode))
-        self.Diver_cpu_checkbox.setChecked(bool(config_diver.cpu_mode))
-        self.Diver_difficulty_combo.addItems(["1", "2", "3", "4", "5"])
-        self.Diver_difficulty_combo.setCurrentText(str(config_diver.difficult))
-        self.Diver_team_combo.addItems(["追击", "dot", "终结技", "击破", "盾反"])
-        self.Diver_save_cnt_combo.addItems(["0", "1", "2", "3", "4"])
-        self.Diver_save_cnt_combo.setCurrentText(str(config_diver.save_cnt))
-        self.Diver_timezone_combo.addItems(["Default", "Asia", "America", "Europe"])
-        self.Diver_timezone_combo.setCurrentText(config_diver.timezone)
-        self.Diver_max_run_input = QLineEdit(str(config_diver.max_run))
-
-        # 初始化货币战争配置界面
-        currency_settings = load_currency_settings()
-
-        for exit_plane in EXIT_PLANES:
-            self.Currency_exit_plane_combo.addItem(
-                f"第 {exit_plane} 位面",
-                exit_plane,
-            )
-
-        exit_plane_index = self.Currency_exit_plane_combo.findData(
-            currency_settings["exit_after_plane"]
-        )
-        self.Currency_exit_plane_combo.setCurrentIndex(exit_plane_index)
-
-        self.Currency_exit_if_no_prior_checkbox.setChecked(
-            currency_settings["exit_if_no_prior"]
-        )
-
-        self.Currency_prior_exit_plane_combo.addItem("不调整", None)
-        for exit_plane in EXIT_PLANES:
-            self.Currency_prior_exit_plane_combo.addItem(
-                f"第 {exit_plane} 位面",
-                exit_plane,
-            )
-
-        prior_exit_plane = currency_settings["prior_exit_plane"]
-        if prior_exit_plane is None:
-            self.Currency_prior_exit_plane_combo.setCurrentIndex(0)
-        else:
-            prior_exit_plane_index = self.Currency_prior_exit_plane_combo.findData(
-                prior_exit_plane
-            )
-            self.Currency_prior_exit_plane_combo.setCurrentIndex(prior_exit_plane_index)
-
-        SILVER_WOLF_SWITCH = (1, 2)
-        for silver_wolf_switch in SILVER_WOLF_SWITCH:
-            self.silver_wolf_switch_combo.addItem(
-                f"{silver_wolf_switch}号位",
-                silver_wolf_switch,
-            )
-
-        # 连接配置保存按钮
-        self.config_save_btn.clicked.connect(self.save_config)
-        self.Currency_save_btn.clicked.connect(self.save_currency_config)
-        self.Currency_priority_settings_btn.clicked.connect(self.open_currency_priority_settings)
-        self.debug_save_btn.clicked.connect(self.save_debug_config)
-        self.Iron_blood_save_btn.clicked.connect(self.save_iron_config)
+        self.general_settings_save_btn.clicked.connect(self.save_general_config)
         self.hotkey_save_btn.clicked.connect(self.save_hotkey_config)
-        self.Iron_blood_manual_settings_btn.clicked.connect(lambda: self.advanced_settings_stack.setCurrentWidget(self.iron_blood_manual_page))
-        self.Iron_blood_manual_back_btn.clicked.connect(lambda: self.advanced_settings_stack.setCurrentWidget(self.advanced_settings_main_page))
         self.record_stats_btn.clicked.connect(self.open_record_stats)
-        self.Any_fate_save_btn.clicked.connect(self.save_any_fate_config)
-        self.Finger_snap_save_btn.clicked.connect(self.save_finger_snap_config)
-        self.Aboutupdatelock.clicked.connect(self.show_unlock_dialog)
+        self.Aboutupdatelock.clicked.connect(lambda: show_unlock_dialog(self))
+        self.video_convert_btn.clicked.connect(self.start_video_convert)
+        self.video_convert_mode_combo.addItem("严格模式：自动删除末尾的不正常帧", "strict")
+        self.video_convert_mode_combo.addItem(
+            "抢救模式：尽可能保留更多帧，结尾有概率出现异常帧", "rescue")
 
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
-        if not os.path.exists(settings_path) and os.path.exists(example_path):
-            shutil.copy2(example_path, settings_path)
-        with EXTRA.FILE_LOCK:
-            with open(settings_path, encoding="UTF-8") as file:
-                data = json.load(file)
-
-        # 兼容旧版银狼秘技存储格式
-        settings_changed = False
-        silver_wolf_switch = data.get("silver_wolf_switch")
-        if silver_wolf_switch is None:
-            silver_wolf_switch = 1
-            data["silver_wolf_switch"] = silver_wolf_switch
-            settings_changed = True
-        elif isinstance(silver_wolf_switch, str):
-            silver_wolf_switch = {"一号位":1,"二号位":2}.get(silver_wolf_switch, 1)
-            data["silver_wolf_switch"] = silver_wolf_switch
-            settings_changed = True
-
-        # 如果配置发生变化，则写回 settings.json
-        if settings_changed:
-            with EXTRA.FILE_LOCK:
-                with open(settings_path, mode="w", encoding="UTF-8") as file:
-                    json.dump(data, file, ensure_ascii=False, indent=4)
-
+        self.opt = data = load_settings()
+        self.start_game_checkbox.setChecked(data.get("start_game_on_task", False))
+        self.game_path_input.setText(data.get("game_executable_path", ""))
         self.recording_checkBox.setChecked(data.get("recording_state", False))
-        self.early_stop_checkbox.setChecked(data.get("early_stop", False))
-        self.Iron_blood_first_plane_input.setText(str(data.get("first_plane", 14)))
-        self.Iron_blood_second_plane_input.setText(str(data.get("second_plane", 31)))
-        self.Iron_blood_battle_weight_input.setText(str(data.get("battle_weight", 1.2)))
-        self.Iron_blood_first_plane_min_weight_input.setText(str(data.get("first_plane_min_weight", 8.0)))
-        self.Iron_blood_third_plane_pause_input.setText(str(data.get("third_plane_pause_count", 0)))
-        self.Iron_blood_boss_before_pause_input.setText(str(data.get("boss_before_pause_count", 0)))
         self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
         self.recording_time_input.setText(str(data.get("del_record_time", 14)))
-        self.Iron_blood_max_run_input.setText(str(int(data.get("max_run_time", 0))))
-        self.Iron_blood_interact_time_input.setText(str(data.get("max_interact_time", 40)))
-        self.pig_switch_2_role.setChecked(data.get("pig_switch_2_role", False))
-        self.silver_wolf_enable.setChecked(data.get("silver_wolf_enable", False))
-        silver_wolf_switch_index = self.silver_wolf_switch_combo.findData(data["silver_wolf_switch"])
-        if silver_wolf_switch_index >= 0:
-            self.silver_wolf_switch_combo.setCurrentIndex(silver_wolf_switch_index)
-        self.auto_attack_breakable.setChecked(data.get("auto_attack_breakable", False))
-        self.debug_checkbox2.setChecked(data.get("debug", False))
         self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
-        self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", True))
+        self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", False))
         self.recording_keep_long_run_threshold_input.setText(str(data.get("recording_keep_long_run_threshold", 1.2)))
         self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
+        self.check_model_file()
 
-
-        # 初始化寰宇蝗灾命途演算倾向配置界面
-        self.Any_fate_combo.addItems([
-            "存护", "记忆", "虚无", "丰饶", "巡猎", "毁灭", "欢愉", "繁育", "智识"
-        ])
-        self.Any_fate_combo.setCurrentText(data.get("any_fate", "巡猎"))
-
-        finger_snap = load_finger_snap_settings()
-        for field in MC_SETTING_FIELDS:
-            getattr(self, f"Finger_snap_{field}_input").setText(str(finger_snap[field]))
-        for plane, target in enumerate(finger_snap["plane_targets"], 1):
-            getattr(self, f"Finger_snap_plane{plane}_target_input").setText(str(target))
-        for mode, label in DECISION_MODES.items():
-            self.Finger_snap_decision_mode_combo.addItem(label, mode)
-        self.Finger_snap_decision_mode_combo.setCurrentIndex(
-            self.Finger_snap_decision_mode_combo.findData(finger_snap["decision_mode"]))
-        self.Finger_snap_dp_early_stop_checkbox.setChecked(finger_snap["dp_early_stop"])
-        self.Finger_snap_win_rate_dp_early_stop_checkbox.setChecked(
-            finger_snap["win_rate_dp_early_stop"])
-        self.Finger_snap_mc_dp_early_stop_checkbox.setChecked(
-            finger_snap["mc_dp_early_stop"])
-        self.Finger_snap_first_plane_threshold_input.setText(
-            str(finger_snap.get("first_plane_threshold", 0.0)))
-        self.Finger_snap_record_keep_count_input.setText(
-            str(finger_snap.get("record_keep_count", 31)))
-
-        # 初始化快捷键配置输入框
-        hotkey_config = data.get("hotkeys", {})
-        self.stop_hotkey_input.setText(hotkey_config.get("stop", "f5"))
-        self.test_hotkey_input.setText(hotkey_config.get("test", "f6"))
-        self.print_hotkey_input.setText(hotkey_config.get("print", "f7"))
-
-        # 更新按钮文本显示当前快捷键
-        self.update_button_hotkey_text(hotkey_config)
-
-        # 由 eventFilter 在编辑动作生效前拦截；提示状态持久化在 settings.json
-        self._battle_weight_warning_shown = data.get("battle_weight_warning_shown", False)
-
-        # 设置控件的启用/禁用状态
+        self.cleanup_section = CleanupSettingsSection(self.advanced_settings_main_page)
+        self.cleanup_section.cleanup_requested.connect(self.cleanup_category)
+        self.Cleanup_save_btn.clicked.connect(self.save_cleanup_config)
+        hotkeys = data.get("hotkeys", {})
+        self.stop_hotkey_input.setText(hotkeys.get("stop", "f5"))
+        self.test_hotkey_input.setText(hotkeys.get("test", "f6"))
+        self.print_hotkey_input.setText(hotkeys.get("print", "f7"))
+        self.update_button_hotkey_text(hotkeys)
         self.update_dependent_controls_state()
-
-        # 连接信号以实现动态更新
         self.connect_dependency_signals()
+        tray = next((spec for spec in self.registry.runnable() if spec.tray), None)
+        if tray is None:
+            tray = next((spec for spec in self.registry.runnable() if spec.button), None)
+        self.restore_action.setEnabled(tray is not None)
+        if tray is not None:
+            self.restore_action.triggered.connect(lambda: self.run_kernel(tray.id))
 
-        assert self.restore_action is not None
-        self.restore_action.triggered.connect(self.run_iron_blood)
-
+    def open_engine_settings(self, engine):
+        """主窗口只选择配置入口，控件和保存逻辑由各独立模块管理。"""
+        try:
+            dialog = self.registry.create_settings(engine, self)
+        except Exception as error:
+            CUS_LOGGER.error("配置加载失败：%s", error, exc_info=True)
+            QMessageBox.critical(self, "配置加载失败", f"无法打开内核配置：{error}")
+            return
+        try:
+            if dialog.exec_() == QDialog.Accepted:
+                self.opt = load_settings()
+        finally:
+            dialog.deleteLater()
 
 
     def load_hotkey_config(self):
@@ -754,8 +697,8 @@ class MainWindow(QMainWindowLog):
         }
 
         try:
-            settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-            example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+            settings_path = os.path.join(PATHS["config"], "settings.json")
+            example_path = os.path.join(PATHS["example"], "settings_example.json")
             if not os.path.exists(settings_path) and os.path.exists(example_path):
                 shutil.copy2(example_path, settings_path)
             with EXTRA.FILE_LOCK:
@@ -785,22 +728,7 @@ class MainWindow(QMainWindowLog):
                 self.registered_hotkeys.append(key.lower())
 
     def update_settings(self, updates):
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
-
-        if not os.path.exists(settings_path) and os.path.exists(example_path):
-            shutil.copy2(example_path, settings_path)
-
-        with EXTRA.FILE_LOCK:
-            with open(settings_path, encoding="UTF-8") as file:
-                data = json.load(file)
-
-            data.update(updates)
-
-            with open(settings_path, mode="w", encoding="UTF-8") as file:
-                json.dump(data, file, ensure_ascii=False, indent=4)
-
-        self.opt = data
+        self.opt = update_settings(updates)
 
     def _on_hotkey_pressed(self, event, action):
         """
@@ -822,6 +750,8 @@ class MainWindow(QMainWindowLog):
         """
         快捷键信号的槽函数（运行在主线程）
         """
+        if action in {"test", "print"} and not bool(self.opt.get("debug", False)):
+            return
         if action == "stop":
             if self.is_task_running():
                 self.stop_btn.click()
@@ -880,305 +810,310 @@ class MainWindow(QMainWindowLog):
                 self.registered_hotkeys.append(key.lower())
 
     def update_dependent_controls_state(self):
-        early_stop_enabled = self.early_stop_checkbox.isChecked()
-        self.Iron_blood_first_plane_input.setEnabled(early_stop_enabled)
-        self.Iron_blood_second_plane_input.setEnabled(early_stop_enabled)
-        self.Iron_blood_battle_weight_input.setEnabled(early_stop_enabled)
-        self.Iron_blood_first_plane_min_weight_input.setEnabled(early_stop_enabled)
-        self.Iron_blood_third_plane_pause_input.setEnabled(early_stop_enabled)
-        self.Iron_blood_boss_before_pause_input.setEnabled(early_stop_enabled)
-        recording_enabled = self.recording_checkBox2.isChecked()
+        self.game_path_input.setEnabled(self.start_game_checkbox.isChecked())
+        debug_enabled = bool(self.opt.get("debug", False))
+        recording_enabled = self.recording_checkBox2.isEnabled() and self.recording_checkBox2.isChecked()
         self.recording_time_input.setEnabled(recording_enabled)
-        self.silver_wolf_switch_combo.setEnabled(
-            self.pig_switch_2_role.isChecked() or self.silver_wolf_enable.isChecked()
-        )
-        debug_enabled = self.debug_checkbox2.isChecked()
-        debug_and_recording = debug_enabled and recording_enabled
+        self.kernel_buttons.setVisible(not debug_enabled)
+        for widget in (
+            self.engine_label, self.engine_combo, self.engine_settings_btn,
+            self.script_label, self.script_combo, self.run_script_btn,
+            self.test_btn, self.print_btn, self.PrintEdit, self.PrintPhoto, self.PrintText,
+            self.label_test_hotkey, self.test_hotkey_input, self.label_print_hotkey, self.print_hotkey_input,
+        ):
+            widget.setVisible(debug_enabled)
         self.debug_group.setVisible(debug_enabled)
-        self.recording_keep_long_run_checkbox.setEnabled(debug_and_recording)
-        self.recording_keep_long_run_threshold_input.setEnabled(debug_and_recording)
-        self.recording_label_checkbox.setEnabled(debug_and_recording)
-        finger_snap_visible = debug_enabled or (0 <= time.localtime().tm_hour < 6)
-        self.finger_snap_btn.setVisible(finger_snap_visible)
-        self.Finger_snap_group.setVisible(finger_snap_visible)
+        for widget in (self.recording_keep_long_run_checkbox,
+                       self.recording_keep_long_run_threshold_input,
+                       self.recording_label_checkbox):
+            widget.setEnabled(debug_enabled and recording_enabled)
 
 
     def connect_dependency_signals(self):
-        self.debug_checkbox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
-        self.recording_checkBox2.stateChanged.connect(lambda: self.update_dependent_controls_state())
-        self.early_stop_checkbox.stateChanged.connect(lambda: self.update_dependent_controls_state())
-        self.pig_switch_2_role.stateChanged.connect(lambda: self.update_dependent_controls_state())
-        self.silver_wolf_enable.stateChanged.connect(lambda: self.update_dependent_controls_state())
+        self.start_game_checkbox.toggled.connect(self.update_dependent_controls_state)
+        self.recording_checkBox2.toggled.connect(self.update_dependent_controls_state)
+        self.game_path_input.editingFinished.connect(self.save_game_path_config)
 
-    def eventFilter(self, obj, event):
-        """
-        在战斗格权重首次被编辑前拦截本次操作
-        """
-        if (obj is self.Iron_blood_battle_weight_input
-            and not getattr(self, "_battle_weight_warning_shown", True)
-            and self.is_battle_weight_edit_event(event)):
-            self.show_battle_weight_warning()
-            return True
-        return super().eventFilter(obj, event)
 
-    @staticmethod
-    def is_battle_weight_edit_event(event):
-        """
-        识别会修改 QLineEdit 内容的常见用户操作
-        """
-        if event.type() in (QEvent.InputMethod, QEvent.Drop, QEvent.ContextMenu):
-            return True
-        if event.type() != QEvent.KeyPress:
-            return False
-
-        if event.key() in (Qt.Key_Backspace, Qt.Key_Delete):
-            return True
-        if event.matches(QKeySequence.Cut) or event.matches(QKeySequence.Paste):
-            return True
-        if event.matches(QKeySequence.Undo) or event.matches(QKeySequence.Redo):
-            return True
-
-        modifier_keys = Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier
-        return bool(event.text()) and not (event.modifiers() & modifier_keys)
-
-    def show_battle_weight_warning(self):
-        """
-        显示首次编辑确认提示
-        """
-        if self._battle_weight_warning_shown:
+    def save_game_path_config(self):
+        """路径有效时自动保存，保留合并写入避免覆盖其他设置。"""
+        game_path = self.game_path_input.text().strip().strip('"')
+        if (not os.path.isabs(game_path)
+                or os.path.basename(game_path).casefold() != "starrail.exe"
+                or not os.path.isfile(game_path)
+                or self.opt.get("game_executable_path") == game_path):
             return
-        self._battle_weight_warning_shown = True
-        self.save_battle_weight_warning_state()
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Warning)
-        msg.setWindowTitle("警告（本窗口仅会弹出一次）")
-        msg.setText("修改权重前请先阅读以下内容：\n\n"
-                    "1、权重原理：\n"
-                    "        在铁血战士程序中，“权重”表示某一类型的格子内遇到的战斗数量期望。不同类型的格子拥有不同的权重，例如战斗格默认为1.2（85%概率刷出单怪、10%概率刷出双怪、5%概率刷出三怪），精英格为1（必定单怪），交易格为0（必定无怪）等等，详见“常见问题与更新日志”。权杖会根据权重选择最优路径、骰子最佳替换节点。\n\n"
-                    "2、修改战斗格权重的影响：\n"
-                    "        本质是为了多战收益而增大断战风险。作者认为，提高战斗格的权重不能提高战斗数的分布，因为大数定律确保了这个数一定收敛于期望附近，改激进并不会对一局产生有益的帮助，只能有助于更早的重开。\n\n"
-                    "3、其他因素：\n"
-                    "        在没有骰子替换战斗的前提下，这个模型基本没有问题。但是，某个位置的期望还应该叠加上这条路径上自然产生的替换战斗的差分的期望。本模型尚未考虑该因素。\n\n"
-                    "        若尝试修改此项，需同时修改下方的“第一面最低期望权重”以匹配。计算方法：新权重 = 原权重 + 一面平均战斗格数量 × 战斗格权重变化量。可以尝试多种组合，比较轮回结果的进二面+三面概率，选择适合自己的最佳组合。")
-        ok_button = msg.button(QMessageBox.Ok)
-        if ok_button is not None:
-            ok_button.setText("我已知悉")
-        msg.setWindowFlags(Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint)
-        msg.setEscapeButton(None)
-        msg.exec_()
-
-    def save_battle_weight_warning_state(self):
-        """
-        将已提示状态写入现有配置，使其跨重启生效
-        """
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
         try:
-            with EXTRA.FILE_LOCK:
-                with open(settings_path, encoding="UTF-8") as file:
-                    data = json.load(file)
-                data["battle_weight_warning_shown"] = True
-                with open(settings_path, mode="w", encoding="UTF-8") as file:
-                    json.dump(data, file, ensure_ascii=False, indent=4)
-            self.opt = data
-        except (OSError, json.JSONDecodeError):
-            # 配置写入失败时仍避免在当前会话内重复阻断用户操作
-            pass
+            self.update_settings({"game_executable_path": game_path})
+        except (OSError, ValueError) as error:
+            CUS_LOGGER.warning("崩铁路径自动保存失败：%s", error)
+            QMessageBox.warning(self, "保存失败", f"崩铁路径无法自动保存：{error}")
+
 
     def closeEvent(self, event):
         """
         窗口关闭事件，清理键盘监听器
         """
+        self.scheduler.timer.stop()
         keyboard.unhook_all()
         super().closeEvent(event)
 
-    def clear_logs(self):
-        """
-        清除logs目录下的所有文件，跳过被占用的文件
-        """
-        try:
-            logs_dir = "logs"
-            if not os.path.exists(logs_dir):
-                QMessageBox.warning(self, "警告", "日志目录不存在")
-                return
-
-            failed_files = []
-            success_count = 0
-
-            # 删除logs目录下的所有文件和子目录
-            for filename in os.listdir(logs_dir):
-                file_path = os.path.join(logs_dir, filename)
-                try:
-                    if os.path.isfile(file_path) or os.path.islink(file_path):
-                        os.unlink(file_path)
-                    elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)
-                    success_count += 1
-                except Exception:
-                    failed_files.append(filename)
-
-            if failed_files:
-                QMessageBox.warning(
-                    self,
-                    "完成（部分失败）",
-                    f"成功删除 {success_count} 个文件/目录\n以下文件/目录删除失败:\n" + "\n".join(failed_files)
-                )
-            else:
-                QMessageBox.information(self, "成功", f"成功删除 {success_count} 个文件/目录")
-
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"清除日志失败: {str(e)}")
-
     def test(self):
-        def task():
-            su = SimulatedUniverse(
-                1,
-                int(config_simul.debug_mode),
-                int(config_simul.speed_mode),
-                int(config_simul.use_consumable),
-                int(config_simul.slow_mode),
-                int(config_simul.max_run),
-                bonus=config_simul.bonus
-            )
-            self.current_task = su
-            # 等待游戏窗口(可被中断)
-            su.save_screen()
-
-        try:
-            self.start_task(task)
-        except RuntimeError as e:
-            QMessageBox.warning(self, "警告", str(e))
-
-    def test_2(self):
-
-        def task():
-            su = SimulatedUniverse(
-                1,
-                int(config_simul.debug_mode),
-                int(config_simul.speed_mode),
-                int(config_simul.use_consumable),
-                int(config_simul.slow_mode),
-                int(config_simul.max_run),
-                bonus=config_simul.bonus
-            )
-            self.current_task = su
-            print_text = self.PrintEdit.text()
-            if self.PrintPhoto.isChecked():
-                su.click_target(find_image_by_name(print_text), 0.9, True, use_binary=False)
-            elif self.PrintText.isChecked():
-                su.click_text(print_text,click=False,find_all=True)
-            else:
-                su.click_text(print_text,click=True)
-
-        try:
-            self.start_task(task)
-        except RuntimeError as e:
-            QMessageBox.warning(self, "警告", str(e))
-
-    def run_simul(self):
-        def task():
-            su = SimulatedUniverse(
-                1,
-                int(config_simul.debug_mode),
-                int(config_simul.speed_mode),
-                int(config_simul.use_consumable),
-                int(config_simul.slow_mode),
-                int(config_simul.max_run),
-                bonus=config_simul.bonus
-            )
-            self.current_task = su
-            su.start()
-
-        try:
-            self.start_task(task)
-        except RuntimeError as r:
-            QMessageBox.warning(self, "警告", str(r))
-        except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
-
-    def run_diver(self):
-
-        def task():
-            su = DivergentUniverse(
-                int(config_diver.debug_mode),
-                int(config_diver.max_run),
-                int(config_diver.speed_mode)
-            )
-            self.current_task = su
-            su.start()
-
-        try:
-            self.start_task(task)
-        except RuntimeError as r:
-            QMessageBox.warning(self, "警告", str(r))
-        except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
-
-    def run_iron_blood(self):
-        def task():
-            su = IronBloodUniverse()
-            self.current_task = su
-            su.start()
-
-        try:
-            self.start_task(task)
-        except RuntimeError as r:
-            QMessageBox.warning(self, "警告", str(r))
-        except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
-
-    def run_any_fate(self):
-        def task():
-            su = AnyFateUniverse()
-            self.current_task = su
-            su.start()
-
-        try:
-            self.start_task(task)
-        except RuntimeError as r:
-            QMessageBox.warning(self, "警告", str(r))
-        except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
-
-    def run_finger_snap(self):
-        can_run = (
-            self.opt.get("debug", True)
-            and self.opt.get("recording_iron_blood", True)
-            and self.opt.get("record_add_label", True)
-        )
-        if not can_run:
-            QMessageBox.information(
-                self, "提示", "非开发人员，当前无测试资格，暂不支持运行")
+        kernel_id = self.engine_combo.currentData()
+        if kernel_id is None:
             return
 
         def task():
-            su = FingerSnap()
-            self.current_task = su
-            su.start()
+            self.current_task = self.create_task_engine(kernel_id)
+            self.current_task.save_screen()
 
         try:
             self.start_task(task)
-        except RuntimeError as r:
-            QMessageBox.warning(self, "警告", str(r))
-        except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
+        except RuntimeError as error:
+            QMessageBox.warning(self, "警告", str(error))
 
-    def run_currency_war (self):
-        def task ():
-            su = CurrencyWar()
-            self.current_task = su
-            su.start()
+    def test_2(self):
+        kernel_id = self.engine_combo.currentData()
+        if kernel_id is None:
+            return
+        print_text = self.PrintEdit.text()
+        photo, text_only = self.PrintPhoto.isChecked(), self.PrintText.isChecked()
+
+        def task():
+            self.current_task = su = self.create_task_engine(kernel_id)
+            if photo:
+                su.click_target(find_image_by_name(print_text), 0.9, True)
+            elif text_only:
+                su.click_text(print_text, click=False, find_all=True)
+            else:
+                su.click_text(print_text, click=True)
 
         try:
             self.start_task(task)
-        except RuntimeError as r:
-            QMessageBox.warning(self, "警告", str(r))
-        except Exception as e:
-            QMessageBox.critical(self, "错误", str(e))
+        except RuntimeError as error:
+            QMessageBox.warning(self, "警告", str(error))
+
+    def init_kernel_buttons(self):
+        """普通运行按钮及齿轮由模块声明，主 UI 仅提供容器。"""
+        self.kernel_rows = {}
+        for spec in sorted(self.registry.runnable(), key=lambda spec: spec.button_order):
+            if not spec.button:
+                continue
+            row = QWidget(self.kernel_buttons)
+            layout = QHBoxLayout(row)
+            layout.setContentsMargins(0, 0, 0, 0)
+            button = QPushButton(spec.button, row)
+            button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+            button.setToolTip(spec.description)
+            gear = QToolButton(row)
+            gear.setProperty("kernelSettings", True)
+            gear.setToolTip(f"{spec.description}配置")
+            gear.setFixedWidth(30)
+            gear.setMinimumHeight(24)
+            button.clicked.connect(lambda checked=False, key=spec.id: self.run_kernel(key))
+            gear.clicked.connect(lambda checked=False, key=spec.id: self.open_engine_settings(key))
+            layout.addWidget(button, 1)
+            layout.addWidget(gear)
+            self.kernel_button_layout.addWidget(row)
+            self.kernel_rows[spec.id] = (button, gear)
+        self.set_exit_and_minimized_btn_icon()
+
+    def init_script_controls(self):
+        """恢复模块 ID 和可迁移的脚本路径，发现阶段不导入运行代码。"""
+        for spec in self.registry.runnable():
+            self.engine_combo.addItem(spec.name, spec.id)
+            self.engine_combo.setItemData(self.engine_combo.count() - 1, spec.description, Qt.ToolTipRole)
+        available = self.engine_combo.count() > 0
+        for widget in (self.engine_combo, self.engine_settings_btn, self.test_btn, self.print_btn):
+            widget.setEnabled(available)
+        self.calibrate_btn.setEnabled(any(spec.calibration for spec in self.registry.runnable()))
+        self.run_script_btn.clicked.connect(self.run_script)
+        self.refresh_scripts()
+        engine_index = self.engine_combo.findData(self.opt.get("script_engine", ""))
+        if engine_index >= 0:
+            self.engine_combo.setCurrentIndex(engine_index)
+        saved = self.opt.get("script_file", "")
+        for index in range(self.script_combo.count()):
+            script = self.script_combo.itemData(index)
+            if script and (script_key(script) == saved
+                           or os.path.basename(script) == saved):
+                self.script_combo.setCurrentIndex(index)
+                break
+        self.engine_combo.currentIndexChanged.connect(self.save_script_selection)
+        self.script_combo.currentIndexChanged.connect(self.save_script_selection)
+
+    def save_script_selection(self):
+        """保存内核 ID 及脚本路径，项目内脚本随项目目录迁移。"""
+        updates = {"script_engine": self.engine_combo.currentData()}
+        script_path = self.script_combo.currentData()
+        if script_path is not None:
+            updates["script_file"] = script_key(script_path)
+        try:
+            self.update_settings(updates)
+        except (OSError, ValueError) as error:
+            CUS_LOGGER.error("保存脚本选项失败：%s", error)
+            QMessageBox.warning(self, "提示", f"保存脚本选项失败：{error}")
+
+    def refresh_scripts(self, selected=None):
+        """列出用户脚本和可用模块自带脚本，排除角色别名等数据文件。"""
+        chosen = selected or self.script_combo.currentData()
+        paths = discover_scripts(self.registry)
+        saved = self.opt.get("script_file", "")
+        candidate = script_path(chosen or saved) if chosen or saved else None
+        if candidate is not None and candidate not in paths:
+            try:
+                read_script(candidate)
+                paths.append(candidate)
+            except (OSError, ValueError):
+                candidate = None
+        with QSignalBlocker(self.script_combo):
+            self.script_combo.clear()
+            for path in paths:
+                self.script_combo.addItem(path.stem, str(path))
+                self.script_combo.setItemData(self.script_combo.count() - 1, script_key(path), Qt.ToolTipRole)
+            index = self.script_combo.findData(str(candidate)) if candidate else -1
+            if index >= 0:
+                self.script_combo.setCurrentIndex(index)
+            available = bool(paths)
+            if not available:
+                self.script_combo.addItem("actions 中没有可用脚本")
+        self.script_combo.setEnabled(available)
+        self.run_script_btn.setEnabled(available and self.engine_combo.count() > 0)
+
+    def run_script(self):
+        script_path = self.script_combo.currentData()
+        kernel_id = self.engine_combo.currentData()
+        if script_path is None or kernel_id is None:
+            QMessageBox.warning(self, "提示", "请选择可用的内核和 JSON 动作脚本。")
+            return
+        try:
+            self.launch_script(kernel_id, script_path)
+        except (OSError, ValueError, RuntimeError) as error:
+            QMessageBox.warning(self, "脚本无法启动", str(error))
+
+    def run_startup_task(self, kernel_id, path):
+        """运行启动参数解析出的脚本，并在 GUI 边界报告启动失败。"""
+        try:
+            self.launch_script(kernel_id, path)
+        except (OSError, ValueError, RuntimeError) as error:
+            CUS_LOGGER.error("启动任务失败：%s", error, exc_info=True)
+            QMessageBox.warning(self, "启动任务失败", str(error))
+
+    def launch_script(self, kernel_id, path):
+        """手动与计划任务共用入口；计划参数不修改当前下拉框选择。"""
+        spec = self.registry.specs.get(kernel_id)
+        if spec is None or not spec.factory:
+            raise ValueError("所选内核不可用")
+        read_script(path)
+        engine_name = spec.name
+        stop_key = self.load_hotkey_config()["stop"].upper()
+
+        def task():
+            self.current_task = su = self.create_task_engine(kernel_id, script=True)
+            CUS_LOGGER.info("使用%s内核运行脚本：%s；点击“停止任务”或按 %s 可终止。",
+                            engine_name, os.path.basename(path), stop_key)
+            run_action_script(su, path)
+
+        self.start_task(task)
+
+    def open_script_editor(self):
+        dialog = ScriptEditor(self.registry, self.script_combo.currentData(), self)
+        dialog.script_saved.connect(self.script_saved)
+        dialog.debug_kernel_combo.setCurrentIndex(dialog.debug_kernel_combo.findData(self.engine_combo.currentData()))
+        dialog.sample_requested.connect(self.capture_script_sample)
+        dialog.debug_requested.connect(self.debug_script_events)
+        dialog.stop_requested.connect(self.stop_editor_task)
+        self.script_tool_result.connect(dialog.receive_result)
+        try:
+            dialog.exec_()
+        finally:
+            dialog.deleteLater()
+
+    def capture_script_sample(self, session, kernel, recognize):
+        self.run_editor_task(session, kernel, lambda engine: {"sample": capture_sample(engine, recognize)},
+                             "识别文字取样" if recognize else "框选图片取样")
+
+    def debug_script_events(self, session, kernel, events, direct):
+        self.run_editor_task(session, kernel, lambda engine: {"message": debug_events(engine, events, direct)},
+                             "直接执行动作" if direct else "按触发条件调试")
+
+    def run_editor_task(self, session, kernel, operation, description):
+        def task():
+            engine = None
+            result = {"message": "操作已停止"}
+            try:
+                if find_game_window() is None:
+                    raise RuntimeError("未找到游戏窗口，请启动游戏后重新截取或调试")
+                self.current_task = engine = self.registry.create_engine(kernel, script=True)
+                if not engine._stop and not get_global_stop_flag():
+                    CUS_LOGGER.info("脚本编辑器开始%s，使用 %s 内核；按 %s 可停止。",
+                                    description, kernel, self.load_hotkey_config()["stop"].upper())
+                    result = operation(engine)
+                    if get_global_stop_flag():
+                        result = {"message": "操作已停止"}
+            except InterruptedError:
+                result = {"message": "操作已停止"}
+            except Exception as error:
+                result = {"error": str(error)}
+                CUS_LOGGER.error("脚本编辑器操作失败：%s", error, exc_info=True)
+            finally:
+                if engine is not None and not engine._stop:
+                    try:
+                        engine.stop()
+                    except Exception as error:
+                        result = {"error": f"运行资源释放失败：{error}"}
+                        CUS_LOGGER.error("脚本编辑器的运行资源释放失败：%s", error, exc_info=True)
+                self.script_tool_result.emit(session, result)
+
+        self.editor_tasks[session] = task
+        try:
+            self.start_task(task)
+        except RuntimeError as error:
+            self.script_tool_result.emit(session, {"error": str(error)})
+
+    def stop_editor_task(self, session):
+        task = self.editor_tasks.get(session)
+        if task is None:
+            return
+        if self.scheduler.cancel_task(task):
+            self.script_tool_result.emit(session, {"message": "排队任务已取消"})
+        elif self.task_thread is not None and self.task_thread.target is task:
+            try:
+                self.stop_task()
+            except Exception as error:
+                CUS_LOGGER.error("编辑器任务的停止请求未完成，继续等待线程退出：%s", error, exc_info=True)
+
+    def script_saved(self, path):
+        self.refresh_scripts(path)
+        self.save_script_selection()
+
+    def open_schedule(self):
+        dialog = ScheduleDialog(self.scheduler, self.registry, self)
+        try:
+            dialog.exec_()
+        finally:
+            dialog.deleteLater()
+
+    def run_kernel(self, kernel_id):
+        def task():
+            self.current_task = self.create_task_engine(kernel_id)
+            self.current_task.start()
+
+        try:
+            self.start_task(task)
+        except RuntimeError as error:
+            QMessageBox.warning(self, "警告", str(error))
+
 
     def calibrate(self):
+        spec = next((spec for spec in self.registry.runnable() if spec.calibration), None)
+        if spec is None:
+            return
+
         def task():
             try:
-                res = align_angle_main()
+                self.current_task = self.create_task_engine(spec.id)
+                res = align_angle_main(su=self.current_task)
                 self.calibration_finished.emit(res)
             except Exception as e:
                 self.calibration_finished.emit(e)
@@ -1197,88 +1132,70 @@ class MainWindow(QMainWindowLog):
             QMessageBox.warning(self, "失败", "校准失败，请重试。")
 
 
-    def save_config(self):
-        # 保存模拟宇宙配置
-        config_simul.bonus = int(self.Simul_bonus_checkbox.isChecked())
-        config_simul.debug_mode = int(self.Simul_debug_checkbox.isChecked())
-        config_simul.speed_mode = int(self.Simul_speed_checkbox.isChecked())
-        config_simul.slow_mode = int(self.Simul_slow_checkbox.isChecked())
-        config_simul.difficult = self.Simul_difficulty_combo.currentText()
-        config_simul.fate = self.Simul_fate_combo.currentText()
-        config_simul.timezone = self.Simul_timezone_combo.currentText()
-        try:
-            config_simul.max_run = int(self.Simul_max_run_input.text())
-        except ValueError:
-            pass
-
-        # 保存差分宇宙配置
-        config_diver.debug_mode = int(self.Diver_debug_checkbox.isChecked())
-        config_diver.speed_mode = int(self.Diver_speed_checkbox.isChecked())
-        config_diver.weekly_mode = int(self.Diver_weekly_checkbox.isChecked())
-        config_diver.cpu_mode = int(self.Diver_cpu_checkbox.isChecked())
-        config_diver.difficult = self.Diver_difficulty_combo.currentText()
-        config_diver.team = self.Diver_team_combo.currentText()
-        config_diver.timezone = self.Diver_timezone_combo.currentText()
-        config_diver.save_cnt = int(self.Diver_save_cnt_combo.currentText())
-        try:
-            config_diver.max_run = int(self.Diver_max_run_input.text())
-        except ValueError:
-            pass
-
-        # 保存配置到文件
-        config_simul.save()
-        config_diver.save()
-
-        QMessageBox.information(self, "提示", "模拟宇宙和差分宇宙配置已保存")
-
-    def save_currency_config(self):
-        try:
-            save_currency_settings(
-                {
-                    "exit_after_plane":
-                        self.Currency_exit_plane_combo.currentData(),
-                    "exit_if_no_prior":
-                        self.Currency_exit_if_no_prior_checkbox.isChecked(),
-                    "prior_exit_plane":
-                        self.Currency_prior_exit_plane_combo.currentData(),
-                }
-            )
-        except OSError as error:
-            QMessageBox.critical(
-                self,
-                "错误",
-                f"货币战争配置保存失败：{error}",
-            )
-            return
-        QMessageBox.information(self, "提示", "货币战争配置已保存")
-
-    def open_currency_priority_settings(self):
-        dialog = CurrencyPriorityDialog(self)
-        dialog.exec_()
-
     def open_record_stats(self):
-        os.startfile(PATHS["root"] + "\\resource\\html\\record_stats.html")
+        os.startfile(os.path.join(PATHS["html"], "record_stats.html"))
 
-    def save_iron_config(self):
-        self.update_settings({
-            "early_stop": self.early_stop_checkbox.isChecked(),
-            "first_plane": int(self.Iron_blood_first_plane_input.text()),
-            "second_plane": int(self.Iron_blood_second_plane_input.text()),
-            "battle_weight": float(self.Iron_blood_battle_weight_input.text()),
-            "first_plane_min_weight": float(self.Iron_blood_first_plane_min_weight_input.text()),
-            "third_plane_pause_count": int(self.Iron_blood_third_plane_pause_input.text()),
-            "boss_before_pause_count": int(self.Iron_blood_boss_before_pause_input.text()),
-            "recording_iron_blood": self.recording_checkBox2.isChecked(),
-            "del_record_time": int(self.recording_time_input.text()),
-            "max_run_time": int(self.Iron_blood_max_run_input.text()),
-            "max_interact_time": int(self.Iron_blood_interact_time_input.text()),
-            "pig_switch_2_role": self.pig_switch_2_role.isChecked(),
-            "silver_wolf_enable": self.silver_wolf_enable.isChecked(),
-            "silver_wolf_switch": self.silver_wolf_switch_combo.currentData(),
-            "auto_attack_breakable": self.auto_attack_breakable.isChecked(),
-        })
+    def start_video_convert(self):
+        """把 video 目录下尚未封装的录像按所选模式封装。
 
-        QMessageBox.information(self, "提示", "铁血战士配置已保存")
+        转换在后台线程逐个进行，界面保持可用；结束后由信号回到主线程恢复按钮并提示结果。
+        严格模式会先丢弃末尾无法解码的帧，抢救模式则尽可能保留更多帧。
+        """
+        if self._video_convert_thread is not None and self._video_convert_thread.is_alive():
+            return
+
+        video_dir = PATHS["video"]
+        if not os.path.isdir(video_dir):
+            QMessageBox.information(self, "异常视频封装", "未检测到需要封装的视频")
+            return
+
+        # 只处理仍是分片格式的录像：标准 mp4 已经可以正常跳转
+        pending = [os.path.join(video_dir, name)
+                   for name in sorted(os.listdir(video_dir))
+                   if needs_conversion(os.path.join(video_dir, name))]
+        if not pending:
+            QMessageBox.information(self, "异常视频封装", "未检测到需要封装的视频")
+            return
+
+        mode = self.video_convert_mode_combo.currentData()
+        self.video_convert_btn.setEnabled(False)
+        self.video_convert_btn.setText("转换中...")
+        self._video_convert_thread = ThreadWithException(
+            target=self._run_video_convert, kwargs={"paths": pending, "mode": mode},
+            name="异常视频封装", is_print=False)
+        self._video_convert_thread.start()
+
+    def _run_video_convert(self, paths, mode):
+        """后台线程：逐个封装，不删除原文件。"""
+        succeeded = failed = 0
+        for source in paths:
+            # 输出用「原文件名」+ 模式后缀，原文件保持不变
+            suffix = "-严格模式" if mode == "strict" else "-抢救模式"
+            base, ext = os.path.splitext(source)
+            target = f"{base}{suffix}{ext}"
+            try:
+                if mode == "strict":
+                    ok = convert_with_tail_trimmed(source, target, del_frames=False)
+                else:
+                    ok = convert_to_standard_mp4(
+                        source, check_source=False, check_output=False, target=target)
+            except Exception as error:
+                CUS_LOGGER.error(f"封装录像失败：{source}（{error}）")
+                ok = False
+            if ok:
+                succeeded += 1
+            else:
+                failed += 1
+        log_emitter.video_convert_finished_signal.emit(succeeded, failed)
+
+    def on_video_convert_finished(self, succeeded, failed):
+        """转换结束：恢复按钮并提示结果。"""
+        self.video_convert_btn.setText("转换")
+        self.video_convert_btn.setEnabled(True)
+        QMessageBox.information(
+            self, "异常视频封装",
+            f"转换成功：{succeeded}个文件，转换失败：{failed}个文件")
+
 
     def save_hotkey_config(self):
         hotkey_config = {
@@ -1297,67 +1214,89 @@ class MainWindow(QMainWindowLog):
 
         QMessageBox.information(self, "提示", "快捷键配置已保存")
 
-    def save_debug_config(self):
-        self.update_settings({
-            "debug": self.debug_checkbox2.isChecked(),
-            "record_event_map": self.record_event_map_checkbox.isChecked(),
-            "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),
-            "recording_keep_long_run_threshold": float(self.recording_keep_long_run_threshold_input.text()),
-            "record_add_label": self.recording_label_checkbox.isChecked(),
-        })
-
-        QMessageBox.information(self, "提示", "调试模式配置已保存")
-
-    def save_any_fate_config(self):
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
-        if not os.path.exists(settings_path) and os.path.exists(example_path):
-            shutil.copy2(example_path, settings_path)
-        with EXTRA.FILE_LOCK:
-            with open(settings_path, encoding="UTF-8") as file:
-                data = json.load(file)
-        data["any_fate"] = self.Any_fate_combo.currentText()
-        with EXTRA.FILE_LOCK:
-            with open(settings_path, mode="w", encoding="UTF-8") as file:
-                json.dump(data, file, ensure_ascii=False, indent=4)
-        self.opt = data
-        QMessageBox.information(self, "提示", "寰宇蝗灾命途演算倾向已保存")
-    def save_finger_snap_config(self):
+    def save_general_config(self):
         try:
-            values = {
-                "control_rollouts": int(self.Finger_snap_control_rollouts_input.text()),
-                "evaluation_rollouts": int(self.Finger_snap_evaluation_rollouts_input.text()),
-                "min_visits": int(self.Finger_snap_min_visits_input.text()),
-                "epsilon_start": float(self.Finger_snap_epsilon_start_input.text()),
-                "epsilon_end": float(self.Finger_snap_epsilon_end_input.text()),
-                "seed": int(self.Finger_snap_seed_input.text()),
-                "win_rate_noise_floor_percent": float(
-                    self.Finger_snap_win_rate_noise_floor_percent_input.text()),
-                "path_reward_bonus": float(self.Finger_snap_path_reward_bonus_input.text()),
-                "path_event_bonus": float(self.Finger_snap_path_event_bonus_input.text()),
-                "path_trade_bonus": float(self.Finger_snap_path_trade_bonus_input.text()),
-                "path_adventure_bonus": float(self.Finger_snap_path_adventure_bonus_input.text()),
-                "path_bugevent_bonus": float(self.Finger_snap_path_bugevent_bonus_input.text()),
-                "decision_mode": self.Finger_snap_decision_mode_combo.currentData(),
-                "dp_early_stop": self.Finger_snap_dp_early_stop_checkbox.isChecked(),
-                "win_rate_dp_early_stop": (
-                    self.Finger_snap_win_rate_dp_early_stop_checkbox.isChecked()),
-                "mc_dp_early_stop": (
-                    self.Finger_snap_mc_dp_early_stop_checkbox.isChecked()),
-                "plane_targets": [int(getattr(
-                    self, f"Finger_snap_plane{plane}_target_input").text())
-                    for plane in range(1, 4)],
-                "first_plane_threshold": float(
-                    self.Finger_snap_first_plane_threshold_input.text()),
-                "record_keep_count": int(
-                    self.Finger_snap_record_keep_count_input.text()),
-            }
-            save_finger_snap_settings(values)
-        except (TypeError, ValueError) as error:
-            QMessageBox.warning(self, "参数错误", f"弹指一挥参数无法保存：{error}")
+            self.update_settings({
+                "start_game_on_task": self.start_game_checkbox.isChecked(),
+                "game_executable_path": self.game_path_input.text().strip(),
+                "recording_state": self.recording_checkBox.isChecked(),
+                "recording_iron_blood": self.recording_checkBox2.isChecked(),
+                "del_record_time": int(self.recording_time_input.text()),
+                "record_event_map": self.record_event_map_checkbox.isChecked(),
+                "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),
+                "recording_keep_long_run_threshold": float(self.recording_keep_long_run_threshold_input.text()),
+                "record_add_label": self.recording_label_checkbox.isChecked(),
+            })
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, "保存失败", f"通用设置无法保存：{error}")
             return
-        QMessageBox.information(
-            self, "提示", "弹指一挥配置已独立保存；下次启动弹指任务时生效。")
+        QMessageBox.information(self, "提示", "通用设置已保存")
+
+
+    def save_cleanup_config(self):
+        """校验并保存自动清理设置，参数非法时拒绝写入配置文件。"""
+        config = self.cleanup_section.collect_config()
+
+        errors = validate_config(config)
+        if errors:
+            QMessageBox.warning(
+                self,
+                "参数错误",
+                "以下参数不合法，自动清理设置未保存：\n" + "\n".join(errors),
+            )
+            return
+
+        try:
+            write_config(config)
+        except OSError as error:
+            QMessageBox.critical(self, "错误", f"自动清理设置保存失败：{error}")
+            return
+
+        QMessageBox.information(self, "提示", "自动清理设置已保存")
+
+    def cleanup_category(self, category):
+        """响应用户点击清理按钮，按当前数值与时间单位清理一类文件。
+
+        Args:
+            category: 清理对象，取 CATEGORIES 之一。
+        """
+        value, unit = self.cleanup_section.cleanup_value(category)
+        config = self.cleanup_section.collect_config()
+        # 手动清理以界面上的数值与时间单位为期限，不受是否已保存影响。
+        config.items[category] = CleanupItem(
+            mode=config.item(category).mode,
+            trigger=config.item(category).trigger,
+            value=value,
+            unit=unit,
+            last_cleanup=config.item(category).last_cleanup,
+        )
+
+        result = cleanup_manual(config, category)
+        cleaned_at = finish_manual_cleanup(result)
+        self.cleanup_section.set_last_cleanup(category, cleaned_at)
+
+        QMessageBox.information(self, "清理结果", result.summary)
+
+    def cleanup_at(self, trigger):
+        """在某个触发时机执行周期清理与自动清理。
+
+        清理可能涉及大量文件的删除，放在后台线程执行，避免任务启动时阻塞
+        主界面；结果由 cleanup_finished_signal 回到主线程刷新显示。上一次
+        清理尚未结束时，run_cleanup 会跳过本次触发。
+
+        Args:
+            trigger: 触发时机，取 TRIGGERS 之一。
+        """
+        ThreadWithException(
+            target=run_cleanup,
+            kwargs={"trigger": trigger},
+            name=f"自动清理-{trigger}",
+            is_print=False,
+        ).start()
+
+    def refresh_cleanup_state(self, _results):
+        """按清理后的配置文件刷新上次清理时间显示。"""
+        self.cleanup_section.refresh_display()
 
     def set_FPS(self,TimePerFrame):
         Fps = 1.0 / float(TimePerFrame)
@@ -1534,147 +1473,17 @@ class MainWindow(QMainWindowLog):
 **使用本软件即表示您已阅读并同意以上条款。**
 """
 
-    def show_unlock_dialog(self):
-        """
-        显示高级用户功能解锁说明弹窗
-        """
-        dialog = QDialog(self)
-        dialog.setWindowTitle("高级用户功能解锁说明")
-        dialog.setModal(True)
-        dialog.resize(700, 550)
+def main(show, startup_args=None):
+    if startup_args is None:
+        startup_args = parse_startup_args([])
+    root_path = os.path.normcase(os.path.realpath(PATHS["root"]))
+    mutex_name = f"Local\\Simulated_Scepter_{hashlib.sha256(root_path.encode('utf-8')).hexdigest()}"
+    mutex_handle = ctypes.windll.kernel32.OpenMutexW(0x00100000, False, mutex_name)
+    if mutex_handle:
+        ctypes.windll.kernel32.CloseHandle(mutex_handle)
+        show_instance_warning()
+        return
 
-        # 设置窗口标志，确保弹窗置顶
-        dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-
-        layout = QVBoxLayout(dialog)
-
-        # 标题
-        title_label = QLabel("🔓 高级用户功能解锁")
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
-
-        # 分隔线
-        line1 = QLabel("─" * 50)
-        line1.setAlignment(Qt.AlignCenter)
-        layout.addWidget(line1)
-
-        # 说明内容文本框（带滚动条）
-        text_browser = QTextBrowser()
-        text_browser.setOpenExternalLinks(True)  # 允许点击链接
-
-        unlock_content = """
-# 如何解锁高级用户功能？
-
-## 📌 解锁方式
-
-为了获得高级用户功能的访问权限，您需要完成以下步骤：
-
-### 方式一：GitHub 免费 Star 支持（推荐）
-
-1. **访问本项目 GitHub 仓库**
-   - 项目地址：[https://github.com/syfoud/Simulated_Scepter](https://github.com/syfoud/Simulated_Scepter)
-
-2. **点击 Star 按钮**
-   - 在页面右上角找到 ⭐ Star 按钮
-   - 点击即可为项目点亮 Star
-
-3. **截图保存**
-   - 截取包含您的 GitHub 用户名（鼠标点击右上角头像即可显示）和 Star 状态的完整页面
-   - 确保截图中能清晰看到您已 Star 该项目
-
-### 方式二：赞助开发者
-
-如果您希望进一步支持项目开发，可以选择赞助：
-
-- **赞助方式**：请联系开发者获取赞助渠道（readme.md中有）
-- **赞助金额**：随意，一杯咖啡即可 ☕
-- **赞助福利**：优先技术支持 + 高级功能解锁
-
----
-
-## 📸 联系开发者或管理者
-
-完成上述任一方式后，请按以下步骤操作：
-
-### 步骤 1：准备截图
-- GitHub Star 截图 **或** 赞助凭证截图
-- 确保截图清晰可见
-
-### 步骤 2：加入 QQ 群（哪个群没满加哪个）
-- **QQ 一群**：1072802257
-- **QQ 二群**：870863632
-
-### 步骤 3：提交申请
-- 私聊联系开发者（通常在忙）或任意一位群管理员
-- 发送您的截图
-- 说明申请解锁高级功能
-
-### 步骤 4：使用密钥
-- 下载群文件加密压缩包（*群文件\模拟权杖本体&进阶功能&文档指引*目录下的**cipher(进阶功能扩展包).7z**）
-- 使用开发者或任意一位群管理员告知您的密钥解压
-- 将解压出的onnx文件放置于**程序主目录/resource/models/**目录下方
-- 重新启动本软件
----
-"""
-
-        text_browser.setMarkdown(unlock_content)
-        layout.addWidget(text_browser)
-
-        # 按钮区域
-        button_layout = QHBoxLayout()
-
-        github_btn = QPushButton("前往 GitHub")
-        close_btn = QPushButton("关闭")
-
-        # 设置按钮样式
-        github_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #24292e;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #1b1f23;
-            }
-        """)
-
-
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6c757d;
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #5a6268;
-            }
-        """)
-
-        button_layout.addWidget(github_btn)
-        button_layout.addWidget(close_btn)
-        layout.addLayout(button_layout)
-
-        # 按钮事件处理
-        def open_github():
-            import webbrowser
-            webbrowser.open("https://github.com/syfoud/Simulated_Scepter")  # 请替换为实际的 GitHub 地址
-
-
-        github_btn.clicked.connect(open_github)
-        close_btn.clicked.connect(dialog.close)
-
-        # 显示弹窗
-        dialog.exec_()
-def main(show):
     def is_admin():
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()
@@ -1685,16 +1494,21 @@ def main(show):
     # 以管理员权限重新运行程序，使用pythonw避免命令行窗口
     def run_as_admin():
         try:
-            ctypes.windll.shell32.ShellExecuteW(
+            result = ctypes.windll.shell32.ShellExecuteW(
                 None,
                 "runas",
                 sys.executable,
-                __file__,
+                subprocess.list2cmdline(
+                    [os.path.abspath(__file__), *sys.argv[1:]]
+                ),
                 None,
                 show
             )
-            return True
-        except Exception:
+            if result <= 32:
+                CUS_LOGGER.error("请求管理员权限启动程序失败，ShellExecuteW 返回值：%s", result)
+            return result > 32
+        except Exception as error:
+            CUS_LOGGER.error("请求管理员权限启动程序失败：%s", error, exc_info=True)
             return False
 
 
@@ -1711,15 +1525,42 @@ def main(show):
             messagebox.showerror("权限错误", "此程序需要管理员权限才能正常运行。请右键点击程序并选择'以管理员身份运行'。")
             root.destroy()
     else:
-        app = QApplication(sys.argv)
-        window = MainWindow()
+        instance_lock = acquire_instance_lock(mutex_name)
+        if instance_lock is None:
+            show_instance_warning()
+            return
+        app = QApplication.instance() or QApplication(sys.argv)
+        startup_task = None
+        startup_error = startup_args.error
+        if startup_error:
+            CUS_LOGGER.warning("启动参数无效，本次将正常启动程序但不执行自动任务：%s", startup_error)
+        else:
+            try:
+                startup_task = resolve_startup_task(startup_args)
+            except (OSError, ValueError) as error:
+                startup_error = str(error)
+                CUS_LOGGER.warning("启动任务配置无效，本次将正常启动程序但不执行自动任务：%s", error)
+        window = MainWindow(
+            startup_task=startup_task,
+            start_delay=startup_args.start_delay,
+        )
         window.show()
+        if startup_error:
+            QTimer.singleShot(
+                0,
+                lambda: QMessageBox.warning(
+                    window,
+                    "启动任务未执行",
+                    f"{startup_error}\n\n程序将正常启动，但本次不会执行自动任务。",
+                ),
+            )
         try:
             sys.exit(app.exec())
         except SystemExit as e:
             print(f"异常退出，进程已结束,退出代码:{e.code}")
             input("按Enter键退出...")
 if __name__ == "__main__":
+    startup_args = parse_startup_args()
     fault_log_file = open("logs/crash_dump.txt", "w", encoding="utf-8")
     faulthandler.enable(file=fault_log_file)
-    main(1)
+    main(1, startup_args)

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>IronBloodSettings</class>
+ <widget class="QWidget" name="IronBloodSettings">
+  <layout class="QVBoxLayout" name="IronBloodSettings_layout">
+
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_16">
+     <item>
+      <widget class="QLabel" name="label_19">
+       <property name="text">
+        <string>第一面至少需求数（默认14）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_first_plane_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_22">
+     <item>
+      <widget class="QLabel" name="label_22">
+       <property name="text">
+        <string>第二面至少需求数（默认31）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_second_plane_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_battle_weight">
+     <item>
+      <widget class="QLabel" name="label_battle_weight">
+       <property name="text">
+        <string>战斗格权重（默认1.2）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_battle_weight_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_min_weight">
+     <item>
+      <widget class="QLabel" name="label_min_weight">
+       <property name="text">
+        <string>第一面最低期望权重（默认8.0）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_first_plane_min_weight_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="label_iron_blood_manual_header">
+     <property name="text">
+      <string>半自动手操设置</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_third_plane_pause">
+     <item>
+      <widget class="QLabel" name="label_third_plane_pause">
+       <property name="text">
+        <string>进入第三面时暂停 至少需求数（默认0不启用）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_third_plane_pause_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_boss_before_pause">
+     <item>
+      <widget class="QLabel" name="label_boss_before_pause">
+       <property name="text">
+        <string>进入最终首领格前暂停 至少需求数（默认0不启用）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_boss_before_pause_input" />
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

@@ -1,6 +1,5 @@
 import base64
 import datetime
-import os
 
 import cv2
 import numpy
@@ -11,9 +10,9 @@ from PyQt5.QtGui import QTextCursor
 from PyQt5.QtWidgets import QApplication
 
 from load_ui import QMainWindowLoadUI
-from route import PATHS
 from tool import GLOBAL
-
+from pathlib import Path
+from route import PATHS
 
 class QMainWindowLog(QMainWindowLoadUI):
     signal_dialog = pyqtSignal(str, str)  # 标题, 正文
@@ -251,19 +250,13 @@ class QMainWindowLog(QMainWindowLoadUI):
 
     def check_model_file(self):
 
-        model_path = os.path.join(PATHS["root"], "resource", "models", "kesln.onnx")
-        model_exists = os.path.exists(model_path)
+        model_exists = (Path(PATHS["model"]) / "kesln.onnx").is_file()
+        self.Aboutupdatelock.setVisible(not model_exists)
 
         if not model_exists:
-            self.early_stop_checkbox.setEnabled(False)
-            self.Iron_blood_first_plane_input.setEnabled(False)
-            self.Iron_blood_second_plane_input.setEnabled(False)
-            self.Iron_blood_battle_weight_input.setEnabled(False)
             self.recording_checkBox2.setEnabled(False)
             self.recording_label_checkbox.setEnabled(False)
             self.recording_time_input.setEnabled(False)
             self.recording_keep_long_run_checkbox.setEnabled(False)
             return False
-        else:
-            self.Aboutupdatelock.setVisible(False)
         return True

@@ -1,10 +1,13 @@
 """隔离游戏与桌面依赖，验证自然结束时的资源释放。"""
 
 import ast
+import os
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+from route import PATHS
 
 
 def load_task(filename, class_name, methods, namespace):
@@ -34,6 +37,8 @@ class TaskCompletionTests(unittest.TestCase):
             "CUS_LOGGER": Mock(),
             "key_mouse_manager": self.manager,
             "time": SimpleNamespace(sleep=Mock(), time=lambda: 0),
+            "os": os,
+            "PATHS": PATHS,
         }
 
     def drain_queue(self):
@@ -45,7 +50,7 @@ class TaskCompletionTests(unittest.TestCase):
         self.pending.clear()
 
     def test_simul_completion_finishes_exit_action_and_releases_resources(self):
-        task = load_task("simul.py", "SimulatedUniverse", {"re_init", "stop"}, self.namespace)
+        task = load_task("core/simulated/engine.py", "SimulatedUniverse", {"re_init", "stop"}, self.namespace)
         task.end = task.record = task.bveerelbcpgyqan = True
         task._stop = False
         task.recorder = self.recorder
@@ -59,7 +64,7 @@ class TaskCompletionTests(unittest.TestCase):
         self.assertFalse(self.recorder.recording)
 
     def test_simul_next_round_keeps_resources_running(self):
-        task = load_task("simul.py", "SimulatedUniverse", {"re_init", "stop"}, self.namespace)
+        task = load_task("core/simulated/engine.py", "SimulatedUniverse", {"re_init", "stop"}, self.namespace)
         task.end = False
         task.init_map = Mock()
 
@@ -73,7 +78,7 @@ class TaskCompletionTests(unittest.TestCase):
             with self.subTest(end=end, screen=screen):
                 self.manager.running = self.recorder.recording = True
                 self.executed.clear()
-                task = load_task("diver.py", "DivergentUniverse", {"loop", "stop"}, self.namespace)
+                task = load_task("core/divergent/engine.py", "DivergentUniverse", {"loop", "stop"}, self.namespace)
                 task.end = end
                 task.record = task._u1a = True
                 task._stop = False

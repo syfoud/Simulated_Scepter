@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock, call, patch
 
-from currency import SimulatedCurrency
+from core.currency.automation import SimulatedCurrency
 
 
 class CurrencyActionDispatchTests(unittest.TestCase):
@@ -32,8 +32,8 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         }
         return currency
 
-    @patch("currency.find_image_by_name", return_value="image")
-    @patch("currency.time.time", return_value=100)
+    @patch("core.common.engine.find_image_by_name", return_value="image")
+    @patch("core.common.engine.time.time", return_value=100)
     def test_dispatch_contract(self, _time, _image):
         for trigger in self.triggers:
             for last_result in (None, 0, 1):
@@ -74,8 +74,8 @@ class CurrencyActionDispatchTests(unittest.TestCase):
                         )
                         currency.check.assert_not_called()
 
-    @patch("currency.find_image_by_name", return_value="image")
-    @patch("currency.time.time", return_value=100)
+    @patch("core.common.engine.find_image_by_name", return_value="image")
+    @patch("core.common.engine.time.time", return_value=100)
     def test_cooldown_noop(self, _time, _image):
         for trigger in self.triggers:
             with self.subTest(trigger=trigger):
@@ -90,7 +90,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
                 self.assertEqual(currency.action_history, ["choice"])
                 self.assertEqual(currency.action_time, 95)
 
-    @patch("currency.find_image_by_name", return_value="image")
+    @patch("core.common.engine.find_image_by_name", return_value="image")
     def test_unmatched_trigger(self, _image):
         for trigger in self.triggers:
             for wrong_state in (False, True):
@@ -109,7 +109,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
                     currency._on_static_action_completed.assert_not_called()
                     self.assertEqual(currency.action_history, [])
 
-    @patch("currency.find_image_by_name", return_value="image")
+    @patch("core.common.engine.find_image_by_name", return_value="image")
     def test_once_trigger_not_repeated_until_text_disappears(self, _image):
         """回归：弹窗文字持续存在时 once 事件只执行一次，且不阻塞其他事件。"""
         currency = self.make_currency({**self.triggers[0], "once": True})
@@ -142,9 +142,9 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         ]
         self.assertEqual(currency.run_static(), ("choice", 1))
 
-    @patch("currency.cv2.imwrite")
-    @patch("currency.CUS_LOGGER")
-    @patch("currency.time.time", side_effect=[0, 5, 11, 15, 17])
+    @patch("core.currency.automation.cv2.imwrite")
+    @patch("core.currency.automation.CUS_LOGGER")
+    @patch("core.common.engine.time.time", side_effect=[0, 5, 11, 15, 17])
     def test_loop_reports_screen_text_when_nothing_matches(self, _time, logger, imwrite):
         """回归：整屏无命中超过10秒时，记录屏幕文字并留一张截图备查。"""
         currency = object.__new__(SimulatedCurrency)
@@ -181,9 +181,9 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         )
         imwrite.assert_called_once()
 
-    @patch("currency.cv2.imwrite")
-    @patch("currency.CUS_LOGGER")
-    @patch("currency.time.time", side_effect=[0, 5, 11, 15, 17])
+    @patch("core.currency.automation.cv2.imwrite")
+    @patch("core.currency.automation.CUS_LOGGER")
+    @patch("core.common.engine.time.time", side_effect=[0, 5, 11, 15, 17])
     def test_loop_skips_report_while_in_battle(self, _time, logger, imwrite):
         """回归：战斗中长时间无触发属正常，不做记录也不存图。"""
         currency = object.__new__(SimulatedCurrency)

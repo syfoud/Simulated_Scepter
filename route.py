@@ -20,17 +20,28 @@ def build_paths(root):
     # 定义一个辅助函数来构建路径
     return {
         "root": root,
-        "config": os.path.join(root, "config"),
+        "core": os.path.join(root, "core"),
+        # 配置、备份、示例配置文件
+        "config": os.path.join(root, "config", "config"),
+        "backup": os.path.join(root, "config", "backup"),
+        "example": os.path.join(root, "config", "example"),
+        # 日志文件
         "logs": os.path.join(root, "logs"),
-        "plugins": os.path.join(root, "plugins"),
         # 资源文件
+        "csv": os.path.join(root, "resource", "csv"),
+        "event": os.path.join(root, "resource", "event"),
         "font": os.path.join(root, "resource", "font"),
-        "logo": os.path.join(root, "resource", "logo"),
-        "model": os.path.join(root, "resource", "model"),
+        "html": os.path.join(root, "resource", "html"),
         "image": os.path.join(root, "resource", "imgs"),
+        "logo": os.path.join(root, "resource", "logo"),
+        "model": os.path.join(root, "resource", "models"),
         "theme": os.path.join(root, "resource", "theme"),
         "ui": os.path.join(root, "resource", "ui"),
-        "db": os.path.join(root, "resource", "db")
+        # 临时文件
+        "temp": os.path.join(root, "temp"),
+        # 录制视频文件
+        "video": os.path.join(root, "video")
+
     }
 
 
@@ -58,11 +69,9 @@ def ensure_directory_exists(path):
 
 def check_paths():
     """检测所有路径是否存在"""
-    paths = [
-        "\\logs",
-    ]
+    paths = [PATHS["logs"],PATHS["config"]]
     for path in paths:
-        ensure_directory_exists(PATHS["root"] + path)
+        ensure_directory_exists(path)
 
 
 # 创建所有缺失的目录

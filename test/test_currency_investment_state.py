@@ -1,6 +1,6 @@
 import unittest
 
-from tool.currency.investment_state import (
+from core.currency.investment_state import (
     InvestmentSelectionTracker,
     SelectionKind,
 )

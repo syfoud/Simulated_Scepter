@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ScheduleDialog</class>
+ <widget class="QDialog" name="ScheduleDialog">
+  <property name="windowTitle"><string>定时计划[*]</string></property>
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1000</width><height>700</height></rect></property>
+  <layout class="QVBoxLayout" name="main_layout">
+   <item><widget class="QLabel" name="description"><property name="text"><string>使用本机时间，仅在程序运行时触发。任务默认依次排队；当前计划允许中断时，后续任务会请求停止它，并等待线程退出。关闭程序期间错过的计划不补跑。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><widget class="QTableWidget" name="plan_table"><property name="minimumSize"><size><width>0</width><height>180</height></size></property><property name="selectionBehavior"><enum>QAbstractItemView::SelectRows</enum></property><property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property><property name="editTriggers"><set>QAbstractItemView::NoEditTriggers</set></property></widget></item>
+   <item><layout class="QHBoxLayout" name="plan_toolbar">
+    <item><widget class="QPushButton" name="new_btn"><property name="text"><string>新建计划</string></property></widget></item>
+    <item><widget class="QPushButton" name="toggle_btn"><property name="text"><string>启用 / 停用</string></property></widget></item>
+    <item><widget class="QPushButton" name="remove_btn"><property name="text"><string>删除计划</string></property></widget></item>
+   </layout></item>
+   <item><widget class="QGroupBox" name="edit_group"><property name="title"><string>计划配置（保存后生效）</string></property>
+    <layout class="QFormLayout" name="form_layout">
+     <item row="0" column="0"><widget class="QLabel" name="name_label"><property name="text"><string>计划名称</string></property></widget></item>
+     <item row="0" column="1"><widget class="QLineEdit" name="name_input"/></item>
+     <item row="1" column="0"><widget class="QLabel" name="engine_label"><property name="text"><string>内核</string></property></widget></item>
+     <item row="1" column="1"><widget class="QComboBox" name="engine_combo"/></item>
+     <item row="2" column="0"><widget class="QLabel" name="script_label"><property name="text"><string>脚本</string></property></widget></item>
+     <item row="2" column="1"><layout class="QHBoxLayout" name="script_row"><item><widget class="QComboBox" name="script_combo"><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Fixed"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property></widget></item><item><widget class="QPushButton" name="browse_btn"><property name="text"><string>选择文件…</string></property></widget></item></layout></item>
+     <item row="3" column="0"><widget class="QLabel" name="time_label"><property name="text"><string>执行时间</string></property></widget></item>
+     <item row="3" column="1"><widget class="QDateTimeEdit" name="time_input"><property name="displayFormat"><string>yyyy-MM-dd HH:mm:ss</string></property><property name="calendarPopup"><bool>true</bool></property></widget></item>
+     <item row="4" column="0"><widget class="QLabel" name="repeat_label"><property name="text"><string>重复方式</string></property></widget></item>
+     <item row="4" column="1"><widget class="QComboBox" name="repeat_combo"><property name="toolTip"><string>每周同一时间按执行时间所选日期的星期几、时分秒重复。已过期的重复计划会推进到下一次对应时间。</string></property></widget></item>
+     <item row="5" column="1"><widget class="QCheckBox" name="enabled_check"><property name="text"><string>启用计划</string></property><property name="checked"><bool>true</bool></property></widget></item>
+     <item row="6" column="1"><widget class="QCheckBox" name="interruptible_check"><property name="text"><string>允许因其他任务准备执行而强制停止</string></property><property name="toolTip"><string>此选项控制当前计划是否允许被后续到期计划或手动运行任务中断；默认关闭，后续任务等待它结束。</string></property></widget></item>
+    </layout>
+   </widget></item>
+   <item><widget class="QLabel" name="status_label"><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><layout class="QHBoxLayout" name="save_row"><item><widget class="QPushButton" name="save_btn"><property name="text"><string>保存计划</string></property></widget></item><item><widget class="QPushButton" name="close_btn"><property name="text"><string>关闭</string></property></widget></item></layout></item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

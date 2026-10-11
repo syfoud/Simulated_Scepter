@@ -17,6 +17,19 @@ GREEN_HALO_SATURATION_MIN = 50
 GREEN_HALO_VALUE_MIN = 100
 GREEN_HALO_RATIO_THRESHOLD = 0.02
 
+# 42x42 的四个队伍栏头像裁剪区域（1920x1080 窗口下实测校准）。
+# 每项为 (x1, y1, x2, y2)，单位像素；依次从这四个区域截出头像作为
+# 模板，用于定位角色在选路/选目标界面中当前所在的节点。
+ROLE_SLOT_RECTS = (
+    (55, 66, 97, 108),    # 1P
+    (55, 158, 97, 200),   # 2P
+    (55, 250, 97, 292),   # 3P
+    (55, 343, 97, 385),   # 4P
+)
+# 队伍栏头像与地图图标之间的固定缩放比例：4 张不同截图、不同操控角色
+# 校准显示最优缩放均落在 0.88~0.92，统一取 0.90；游戏 UI 缩放改变时需要
+# 重新校准。
+ROLE_TPL_SCALE = 0.90
 
 def _green_halo_ratio(roi):
     """Return the share of bright green pixels used by an infected-node halo."""
@@ -148,20 +161,8 @@ def match_multiple_targets(processed_image, mode=1, threshold=0.5, color_image=N
 
     return results
 
-def get_battle_weight(default=1.2):
-    '''
-    用于读取配置文件中的战斗格权重，默认值为1.2
-    '''
-    settings_path = os.path.join(PATHS["root"], "config", "config", "settings.json")
-    try:
-        with open(settings_path, "r", encoding="UTF-8") as f:
-            data = json.load(f)
-        return float(data.get("battle_weight", default))
-    except Exception:
-        return float(default)
-
 def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, max_dy=120.0,
-                          plane=1, chaoyan_seen=False):
+                          plane=1, chaoyan_seen=False, battle_weight=1.2):
     """构建一个只能向右走（右 / 右上 / 右下）的有向图并返回节点与边。
 
     Args:
@@ -172,6 +173,7 @@ def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, m
         max_dy: 最大允许的垂直偏移（像素）
         plane: 当前位面(1/2/3)，事件遇战概率随位面不同
         chaoyan_seen: 本轮是否已进过「超验之镜」（事件/奖励共用、不可重复），影响事件与奖励遇战权重
+        battle_weight: 当前内核配置的战斗格期望，调用方负责读取配置。
     Returns:
         nodes: 节点字典列表，包含键：idx,name,cx,cy,w,h,weight,orig
         edges: 字典 idx -> 子节点 idx 列表
@@ -188,7 +190,6 @@ def build_rightward_graph(matches, start=None, max_gap=90.0, max_overlap=40.0, m
     event_weight = ({1: 0.31, 2: 0.34, 3: 0.36} if chaoyan_seen
                     else {1: 0.33, 2: 0.36, 3: 0.36}).get(plane, 0.36)
     reward_weight = 0.2 if chaoyan_seen else 0.4
-    battle_weight = get_battle_weight(1.2) # 读取配置中的战斗格权重
     weight_map = {
         'event': event_weight, 'wait': 0, 'trade': 0, 'trade2': 0, 'adventure': 0,
         'reward': reward_weight, 'reward2': reward_weight, 'battle': battle_weight, 'elite': 1,
@@ -459,41 +460,98 @@ def evaluate_best_single_replacement(nodes, edges, start_idx, t=0.2):
 
     return best_path, best_weight, best_end_idx, best_replace_idx, float(best_delta), float(best_discounted_delta)
 
+def compute_start_point_from_crop(image, mode=2, th=0.85, return_details=False,
+                                   preferred_slot=None):
+    """通过队伍栏头像匹配定位角色当前所在节点。
 
-def compute_start_point_from_crop(image, mode=2, th=0.9,
-                                  return_details=False):
-    """通过裁剪图像并将裁剪区域与完整图像进行模板匹配来计算起点。
+    mode=2（选路/选目标界面）：从队伍栏 4 个固定位置裁出 42x42 头像，
+    按 ROLE_TPL_SCALE 缩放后，在 head_mask 限定的地图区域内搜索；
+    preferred_slot 指定的槽位优先尝试，任一槽位命中即返回。
+    mode=3（中途打开地图界面）：沿用原有灰度 + head_mask2 流程。
 
     Args:
-        image: 原始图像（BGR 或灰度）
-        mode: 2=正常执行位面(小裁剪区缩小), 3=中途打开地图界面(大裁剪区放大)
-        th: 匹配阈值
+        image: 原始 BGR 截图。
+        mode: 2=选路/选目标界面；3=中途打开地图界面。
+        th: 匹配阈值，低于该值视为未识别到角色。
+        return_details: 为 True 时额外返回匹配细节，供 GUI 复用原图裁片。
+        preferred_slot: 优先尝试的槽位（1~4）。由调用方传入当前操控角色位，
+            可用时优先尝试该槽位，未命中再按 1~4 顺序扫描其余槽位。
 
     Returns:
-        默认返回匹配位置的中心坐标 (cx, cy)，失败则返回 None。
-        return_details=True 时返回 ``(center, details)``，其中 details
-        带有实际用于匹配的起点头像裁剪框，供 GUI 直接复用该原图裁片。
+        默认返回匹配位置中心 (cx, cy)；失败返回 None。
+        return_details=True 时返回 (center, details)，失败返回 (None, None)。
     """
     if image is None:
         return (None, None) if return_details else None
-    if mode == 2:
-        crop_list = [[55, 63, 92, 104], [58, 159, 94, 199]]#1p与2p角色的位置
-    else:
-        crop_list = [[1003, 929, 1035, 965]]
 
-    for crop_coords in crop_list:
-        x1, y1, x2, y2 = crop_coords
-        tpl = image[y1:y2, x1:x2].copy()
+    if mode == 2:
+        mask = find_image_in_folder('gray_image/', 'head_mask')
+        # head_mask 只圈定地图面板区域，其余像素全是 0。把 image 与 mask
+        # 同步裁剪到 mask 有效范围的 bounding box，matchTemplate 只在
+        # 这块小图上进行，比在 1920x1080 全图上稍微快点；max_loc 相对裁剪后
+        # 的 search，返回坐标需加回 (mx1, my1)。
+        mask_gray = (cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+                     if mask.ndim == 3 else mask)
+        ys, xs = np.where(mask_gray > 0)
+        my1, my2 = int(ys.min()), int(ys.max()) + 1
+        mx1, mx2 = int(xs.min()), int(xs.max()) + 1
+        search = cv2.bitwise_and(
+            image[my1:my2, mx1:mx2], image[my1:my2, mx1:mx2],
+            mask=mask_gray[my1:my2, mx1:mx2])
+
+        # preferred_slot 优先尝试；其余槽位按 1~4 顺序遍历，命中即返回。
+        slots_order = list(range(1, len(ROLE_SLOT_RECTS) + 1))
+        if preferred_slot in slots_order:
+            slots_order.remove(preferred_slot)
+            slots_order.insert(0, preferred_slot)
+
+        for slot in slots_order:
+            sx1, sy1, sx2, sy2 = ROLE_SLOT_RECTS[slot - 1]
+            tpl = image[sy1:sy2, sx1:sx2]
+            if tpl.size == 0:
+                continue
+            tw = max(8, int(round(tpl.shape[1] * ROLE_TPL_SCALE)))
+            th_px = max(8, int(round(tpl.shape[0] * ROLE_TPL_SCALE)))
+            if tw >= search.shape[1] or th_px >= search.shape[0]:
+                continue
+            scaled = cv2.resize(tpl, (tw, th_px),
+                                interpolation=cv2.INTER_AREA)
+            res = cv2.matchTemplate(search, scaled, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+            CUS_LOGGER.debug(f'角色{slot}P匹配 得分={max_val:.3f}')
+            if max_val <= th:
+                continue
+
+            cx = mx1 + max_loc[0] + tw / 2.0
+            cy = my1 + max_loc[1] + th_px / 2.0
+            CUS_LOGGER.debug(
+                f'角色起始位置：{slot}P 得分={max_val:.3f} '
+                f'中心=({cx:.1f},{cy:.1f})')
+            center = (float(cx), float(cy))
+            if return_details:
+                return center, {
+                    'crop_rect': ROLE_SLOT_RECTS[slot - 1],
+                    'match_score': float(max_val),
+                    'matched_size': (tw, th_px),
+                    'slot': slot,
+                }
+            return center
+
+        CUS_LOGGER.warning('角色起始位置：所有槽位均无有效匹配')
+        return (None, None) if return_details else None
+
+    # mode == 3：中途打开地图界面，头像位于画面中下方，沿用原有灰度 + 掩码流程
+    for crop_rect in ((1003, 929, 1035, 965),):
+        x1, y1, x2, y2 = crop_rect
+        tpl = image[y1:y2, x1:x2]
+        if tpl.size == 0:
+            continue
         tpl_gray = cv2.cvtColor(tpl, cv2.COLOR_BGR2GRAY)
-        if mode == 2:
-            new_w = int(tpl_gray.shape[1] * 0.91)
-            new_h = int(tpl_gray.shape[0] * 0.91)
-        else:
-            new_w = int(tpl_gray.shape[1] * 1.19)
-            new_h = int(tpl_gray.shape[0] * 1.19)
+        new_w = int(tpl_gray.shape[1] * 1.19)
+        new_h = int(tpl_gray.shape[0] * 1.19)
         tpl_gray = cv2.resize(tpl_gray, (new_w, new_h))
-        search_gray = cv2.cvtColor(image.copy(), cv2.COLOR_BGR2GRAY)
-        mask = find_image_in_folder('gray_image/', 'head_mask') if mode==2 else find_image_in_folder('gray_image/', 'head_mask2')
+        search_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        mask = find_image_in_folder('gray_image/', 'head_mask2')
         res = cv2.matchTemplate(
             cv2.bitwise_and(search_gray, search_gray, mask=mask), tpl_gray,
             cv2.TM_CCOEFF_NORMED)
@@ -501,12 +559,12 @@ def compute_start_point_from_crop(image, mode=2, th=0.9,
         mx, my = max_loc
         cx = mx + tpl_gray.shape[1] / 2.0
         cy = my + tpl_gray.shape[0] / 2.0
-        CUS_LOGGER.debug(f'角色匹配 crop={crop_coords} 得分={max_val:.3f}')
+        CUS_LOGGER.debug(f'角色匹配 crop={crop_rect} 得分={max_val:.3f}')
         if max_val > th:
             center = (float(cx), float(cy))
             if return_details:
                 return center, {
-                    'crop_rect': tuple(crop_coords),
+                    'crop_rect': tuple(crop_rect),
                     'match_score': float(max_val),
                     'matched_size': (int(tpl_gray.shape[1]),
                                      int(tpl_gray.shape[0])),
@@ -752,7 +810,7 @@ def display_matches(image, matches, path=None, highlight_idx=None, save_path=Non
     # cv2.waitKey(wait_ms);
     # cv2.destroyAllWindows()
     if save_path:
-        cv2.imwrite(PATHS["root"]+"/temp/"+datetime.now().strftime("%Y%m%d_%H%M%S")+".png", vis)
+        cv2.imwrite(PATHS["temp"]+datetime.now().strftime("%Y%m%d_%H%M%S")+".png", vis)
 
 
 def detect_infectable_nodes(color_image, matches, pad=20, cyan_ratio_threshold=0.20,
@@ -813,7 +871,7 @@ def detect_infectable_nodes(color_image, matches, pad=20, cyan_ratio_threshold=0
 
 
 def save_analysis_map_debug(image, matches, start=None, tag="",
-                            save_dir="/temp/analysis_map/"):
+                            save_dir=os.path.join(PATHS["temp"], "analysis_map")):
     """把识图各接口的结果框回原图，并连同原图一起保存，用于排查识别问题。
 
     覆盖的接口结果：
@@ -827,16 +885,14 @@ def save_analysis_map_debug(image, matches, start=None, tag="",
         matches: match_multiple_targets 返回的匹配列表
         start: 起点坐标 (cx, cy)
         tag: 文件名附加标签（如 mode 或阶段）
-        save_dir: 保存目录（相对 PATHS["root"] 或绝对路径）
+        save_dir: 完整保存路径
     """
     if image is None:
         return
-    directory = (save_dir if save_dir.startswith(PATHS["root"])
-                 else PATHS["root"] + save_dir)
-    os.makedirs(directory, exist_ok=True)
+    os.makedirs(save_dir, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     tag = f"_{tag}" if tag else ""
-    cv2.imwrite(os.path.join(directory, f"{stamp}{tag}_raw.png"), image)
+    cv2.imwrite(os.path.join(save_dir, f"{stamp}{tag}_raw.png"), image)
 
     vis = image.copy()
     for i, m in enumerate(matches):
@@ -886,7 +942,7 @@ def save_analysis_map_debug(image, matches, start=None, tag="",
         cv2.putText(vis, "start", (sx + 14, sy - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
-    cv2.imwrite(os.path.join(directory, f"{stamp}{tag}_annotated.png"), vis)
+    cv2.imwrite(os.path.join(save_dir, f"{stamp}{tag}_annotated.png"), vis)
 
 
         #使用作弊100%能替换节点，重投在1与2位面1/5概率能替换节点，第三位面1/3概率能替换节点，还可以什么都不做

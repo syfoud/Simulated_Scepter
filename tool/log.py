@@ -34,12 +34,24 @@ logs_path.mkdir(exist_ok=True, parents=True)
 
 current_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M")
 
+
+def current_log_file() -> str:
+    """返回本次运行正在写入的日志文件名。
+
+    Returns:
+        形如 log_年-月-日-时-分.txt 的文件名，与 logs 目录下的实际文件同名。
+    """
+    return f"log_{current_time_str}.txt"
+
+
 class LogEmitter(QObject):
     """用于跨线程发送日志信号的Qt对象"""
     show_error_signal = pyqtSignal(str, str)  # (标题, 内容)
     find_path_state_signal = pyqtSignal(str)  # (路径状态文本)
     kill_num_signal = pyqtSignal(str)  # (路径状态文本)
     fps_update_signal = pyqtSignal(float)  # (FPS值)
+    cleanup_finished_signal = pyqtSignal(object)  # (本次清理结果列表)
+    video_convert_finished_signal = pyqtSignal(int, int)  # (成功数, 失败数)
 
 
 log_emitter = LogEmitter()

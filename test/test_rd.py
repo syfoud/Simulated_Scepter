@@ -2,7 +2,7 @@ import numpy as np
 import cv2 as cv
 from importing import load_img
 load_img()
-from tool.simul.utils import get_dis
+from core.simulated.utils import get_dis
 from tool.utils.minimap_util import get_minimap, re_get_position, MINIMAP_RADIUS, POSITION_SEARCH_SCALE
 
 red = [47, 47, 232]

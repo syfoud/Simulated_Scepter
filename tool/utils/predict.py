@@ -42,7 +42,7 @@ AIM_ENEMY_DIM_CENTER_RED_MIN = 135
 AIM_ENEMY_DIM_CENTER_RED_STD_MAX = 2.0
 AIM_ENEMY_DIM_OUTER_LUMA_STD_MAX = 16.5
 AIM_ENEMY_DIM_FAR_RED_STD_MIN = 10.5
-mask_interact = find_image_in_folder('gray_image/', 'MASK_MAP_INTERACT.png')
+mask_interact = find_image_in_folder('gray_image/', 'MASK_MAP_INTERACT')
 circles_enemy = {
     radius: create_circle(radius - 1, radius)
     for radius in set(

@@ -1,0 +1,45 @@
+name: PR 标题自动分类
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 根据标题设置唯一分类标签
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const rules = [
+              { pattern: /\b(?:bug|fix(?:es|ed)?)\b/i, labels: ['Bug Fix / Bug 修复'] },
+              { pattern: /\bfeat(?:ure)?\b/i, labels: ['Feature / 增加功能'] },
+              { pattern: /\bperf(?:ormance)?\b/i, labels: ['Performance / 性能优化'] },
+              { pattern: /\brefactor(?:ing)?\b/i, labels: ['Refactor / 代码重构'] },
+              { pattern: /\bdocs?(?:umentation)?\b/i, labels: ['Documentation / 文档更新'] },
+              { pattern: /\b(?:chore|build)\b/i, labels: ['Chore & Build / 构建与工具链'] },
+            ];
+            const rule = rules.find(({ pattern }) => pattern.test(title));
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const current = context.payload.pull_request.labels.map(({ name }) => name);
+            const repositoryLabels = await github.paginate(github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 });
+            const selected = rule?.labels.find((name) => repositoryLabels.some((label) => label.name === name));
+            const managed = rules.flatMap(({ labels }) => labels);
+
+            // 标题被修改时清理本 workflow 上次设置的分类标签，保留人工添加的其他标签。
+            for (const label of managed) {
+              if (repositoryLabels.some((item) => item.name === label) && current.includes(label) && label !== selected) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label });
+              }
+            }
+
+            if (selected && !current.includes(selected)) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [selected] });
+            }

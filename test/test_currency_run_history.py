@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tool.currency.run_history import (
+from core.currency.run_history import (
     CurrencyRunHistory,
     get_newly_unlocked_investment,
 )

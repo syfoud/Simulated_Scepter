@@ -22,12 +22,13 @@ def get_angle(su):
 def main(ang=[1,1,3], su=None):
     key_mouse_manager.start()
     if su is None:
-        from tool.simul.utils import UniverseUtils
-        su = UniverseUtils()
-    if 'Diver' in su.__class__.__name__:
-        from tool.diver.config import config
-    else:
-        from tool.simul.config import config
+        from tool.registry import KernelRegistry
+        registry = KernelRegistry()
+        spec = next((spec for spec in registry.runnable() if spec.calibration), None)
+        if spec is None:
+            raise ValueError("没有可用于校准的内核")
+        su = registry.create_engine(spec.id)
+    config = su.config
     CUS_LOGGER.info("开始校准")
     key_mouse_manager.multi = 1
     init_ang = get_angle(su)

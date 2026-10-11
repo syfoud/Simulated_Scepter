@@ -595,6 +595,20 @@
       if (rec) map.set(rec.round, rec);
     }
 
+    if (map.size > 0) {
+      const rounds = Array.from(map.keys());
+      const min = Math.min(...rounds);
+      const max = Math.max(...rounds);
+      for (let r = min; r <= max; r++) {
+        if (!map.has(r)) {
+          map.set(r, {
+            round: r, value: 0, duration: null,
+            planes: [0, 0, 0], missing: true, openingExpectation: null, raw: "缺失数据(自动补全)"
+          });
+        }
+      }
+    }
+
     return {
       records: Array.from(map.values()).sort((a, b) => a.round - b.round),
       moduleType: moduleType || 'unknown'
@@ -659,24 +673,26 @@
 
   function classifyRecords(records, type) {
     if (type === 'tie') {
-      let zero = 0, one = 0, two = 0, three = 0;
+      let zero = 0, one = 0, two = 0, three = 0, missing = 0;
       for (const r of records) {
+        if (r.missing) { missing++; continue; }
         const k = r.value;
         if (k === 0) zero++;
         else if (k >= 1 && k <= 13) one++;
         else if (k >= 14 && k <= 30) two++;
         else if (k > 30) three++;
       }
-      return { zero, one, two, three, total: records.length };
+      return { zero, one, two, three, missing, total: records.length };
     } else {
-      let low = 0, normal = 0, high = 0;
+      let low = 0, normal = 0, high = 0, missing = 0;
       for (const r of records) {
+        if (r.missing) { missing++; continue; }
         const v = r.value;
         if (v < 18) low++;
         else if (v >= 18 && v <= 60) normal++;
         else if (v > 60) high++;
       }
-      return { low, normal, high, total: records.length };
+      return { low, normal, high, missing, total: records.length };
     }
   }
 
@@ -1556,7 +1572,7 @@
     return `
       <div class="chart-section">
         <div class="chart-warning-banner">不要将 权重设置不同 的轮回记录同时导入，否则以下数据无参考价值！</div>
-        <h2 class="chart-header">开局期望-击杀数 分布图 <small>（仅适配权杖 v1.3.1 及以后版本的记录）</small></h2>
+        <h2 class="chart-header">开局期望-击杀数 分布图 <small>（仅适配权杖 v1.4.0 及以后版本的记录）</small></h2>
         <div class="chart-layout">
           <div class="chart-left">
             <div class="chart-count" id="chartCount">可识别记录数：<strong>0</strong>条</div>
@@ -1590,7 +1606,7 @@
         </div>
       </div>
       <div class="chart-section">
-        <h2 class="chart-header">不同情况的概率 随 选定期望值 的变化图 <small>（仅适配权杖 v1.3.1 及以后版本的记录）</small></h2>
+        <h2 class="chart-header">不同情况的概率 随 选定期望值 的变化图 <small>（仅适配权杖 v1.4.0 及以后版本的记录）</small></h2>
         <div class="chart-layout">
           <div class="chart-left">
             <div class="chart-count" id="lineChartCount">可识别记录数：<strong>0</strong>条</div>
@@ -1627,39 +1643,54 @@
   }
 
   function buildTieSummaryTable(fileStats) {
+    // 1. 先检查所有文件中是否存在缺失
+    let totalMissing = 0;
+    let totalAll = 0;
+    let totalZero = 0, totalOne = 0, totalTwo = 0, totalThree = 0;
+
+    for (const fs of fileStats) {
+      const s = fs.stat;
+      totalMissing += s.missing;
+      totalAll += s.total;
+      totalZero += s.zero;
+      totalOne += s.one;
+      totalTwo += s.two;
+      totalThree += s.three;
+    }
+
+    const hasMissing = totalMissing > 0;
+
+    // 2. 动态拼接表头
     let html = `<table><thead><tr>
       <th>文件名</th>
-      <th class="num">总记录数</th>
-      <th class="num">未战斗 (0)</th>
+      <th class="num">总记录数</th>`;
+    if (hasMissing) html += `<th class="num">缺失</th>`;
+    html += `<th class="num">未战斗 (0)</th>
       <th class="num">一面 (1~13)</th>
       <th class="num">二面 (14~30)</th>
       <th class="num">三面 (&gt;30)</th>
     </tr></thead><tbody>`;
 
-    let totalZero = 0, totalOne = 0, totalTwo = 0, totalThree = 0, totalAll = 0;
-
+    // 3. 动态拼接每一行
     for (const fs of fileStats) {
       const s = fs.stat;
-      totalZero += s.zero;
-      totalOne += s.one;
-      totalTwo += s.two;
-      totalThree += s.three;
-      totalAll += s.total;
-
       html += `<tr>
         <td class="file-name" title="${escapeHtml(fs.name)}">${escapeHtml(fs.name)}</td>
-        <td class="num">${s.total}</td>
-        <td class="num"><span class="pct p-zero">${s.zero}</span> (${(s.zero/s.total*100||0).toFixed(2)}%)</td>
+        <td class="num">${s.total}</td>`;
+      if (hasMissing) html += `<td class="num"><span class="pct p-miss">${s.missing}</span> (${(s.missing/s.total*100||0).toFixed(2)}%)</td>`;
+      html += `<td class="num"><span class="pct p-zero">${s.zero}</span> (${(s.zero/s.total*100||0).toFixed(2)}%)</td>
         <td class="num"><span class="pct p-one">${s.one}</span> (${(s.one/s.total*100||0).toFixed(2)}%)</td>
         <td class="num"><span class="pct p-two">${s.two}</span> (${(s.two/s.total*100||0).toFixed(2)}%)</td>
         <td class="num"><span class="pct p-three">${s.three}</span> (${(s.three/s.total*100||0).toFixed(2)}%)</td>
       </tr>`;
     }
 
+    // 4. 动态拼接总计行
     html += `<tr class="row-total">
       <td>📌 总计</td>
-      <td class="num">${totalAll}</td>
-      <td class="num"><span class="pct p-zero">${totalZero}</span> (${(totalZero/totalAll*100||0).toFixed(2)}%)</td>
+      <td class="num">${totalAll}</td>`;
+    if (hasMissing) html += `<td class="num"><span class="pct p-miss">${totalMissing}</span> (${(totalMissing/totalAll*100||0).toFixed(2)}%)</td>`;
+    html += `<td class="num"><span class="pct p-zero">${totalZero}</span> (${(totalZero/totalAll*100||0).toFixed(2)}%)</td>
       <td class="num"><span class="pct p-one">${totalOne}</span> (${(totalOne/totalAll*100||0).toFixed(2)}%)</td>
       <td class="num"><span class="pct p-two">${totalTwo}</span> (${(totalTwo/totalAll*100||0).toFixed(2)}%)</td>
       <td class="num"><span class="pct p-three">${totalThree}</span> (${(totalThree/totalAll*100||0).toFixed(2)}%)</td>
@@ -1668,36 +1699,51 @@
   }
 
   function buildTanSummaryTable(fileStats) {
+    // 1. 先检查所有文件中是否存在缺失
+    let totalMissing = 0;
+    let totalAll = 0;
+    let totalLow = 0, totalNormal = 0, totalHigh = 0;
+
+    for (const fs of fileStats) {
+      const s = fs.stat;
+      totalMissing += s.missing;
+      totalAll += s.total;
+      totalLow += s.low;
+      totalNormal += s.normal;
+      totalHigh += s.high;
+    }
+
+    const hasMissing = totalMissing > 0;
+
+    // 2. 动态拼接表头
     let html = `<table><thead><tr>
       <th>文件名</th>
-      <th class="num">总记录数</th>
-      <th class="num">低倒计时 (&lt;18)</th>
+      <th class="num">总记录数</th>`;
+    if (hasMissing) html += `<th class="num">缺失</th>`;
+    html += `<th class="num">低倒计时 (&lt;18)</th>
       <th class="num">普通倒计时 (18~60)</th>
       <th class="num">高倒计时 (&gt;60)</th>
     </tr></thead><tbody>`;
 
-    let totalLow = 0, totalNormal = 0, totalHigh = 0, totalAll = 0;
-
+    // 3. 动态拼接每一行
     for (const fs of fileStats) {
       const s = fs.stat;
-      totalLow += s.low;
-      totalNormal += s.normal;
-      totalHigh += s.high;
-      totalAll += s.total;
-
       html += `<tr>
         <td class="file-name" title="${escapeHtml(fs.name)}">${escapeHtml(fs.name)}</td>
-        <td class="num">${s.total}</td>
-        <td class="num"><span class="pct p-low">${s.low}</span> (${(s.low/s.total*100||0).toFixed(2)}%)</td>
+        <td class="num">${s.total}</td>`;
+      if (hasMissing) html += `<td class="num"><span class="pct p-miss">${s.missing}</span> (${(s.missing/s.total*100||0).toFixed(2)}%)</td>`;
+      html += `<td class="num"><span class="pct p-low">${s.low}</span> (${(s.low/s.total*100||0).toFixed(2)}%)</td>
         <td class="num"><span class="pct p-normal">${s.normal}</span> (${(s.normal/s.total*100||0).toFixed(2)}%)</td>
         <td class="num"><span class="pct p-high">${s.high}</span> (${(s.high/s.total*100||0).toFixed(2)}%)</td>
       </tr>`;
     }
 
+    // 4. 动态拼接总计行
     html += `<tr class="row-total">
       <td>📌 总计</td>
-      <td class="num">${totalAll}</td>
-      <td class="num"><span class="pct p-low">${totalLow}</span> (${(totalLow/totalAll*100||0).toFixed(2)}%)</td>
+      <td class="num">${totalAll}</td>`;
+    if (hasMissing) html += `<td class="num"><span class="pct p-miss">${totalMissing}</span> (${(totalMissing/totalAll*100||0).toFixed(2)}%)</td>`;
+    html += `<td class="num"><span class="pct p-low">${totalLow}</span> (${(totalLow/totalAll*100||0).toFixed(2)}%)</td>
       <td class="num"><span class="pct p-normal">${totalNormal}</span> (${(totalNormal/totalAll*100||0).toFixed(2)}%)</td>
       <td class="num"><span class="pct p-high">${totalHigh}</span> (${(totalHigh/totalAll*100||0).toFixed(2)}%)</td>
     </tr></tbody></table>`;

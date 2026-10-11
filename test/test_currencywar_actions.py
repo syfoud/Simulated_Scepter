@@ -3,14 +3,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from currency import SimulatedCurrency
-from tool.currency.run_history import RUN_END_ACTION, RUN_START_ACTION
+from core.currency.automation import SimulatedCurrency
+from core.currency.run_history import RUN_END_ACTION, RUN_START_ACTION
 
 
 class CurrencyWarActionsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        config_path = Path(__file__).resolve().parents[1] / "actions" / "currencywar.json"
+        config_path = Path(__file__).resolve().parents[1] / "core" / "currency" / "actions" / "currencywar.json"
         with config_path.open(encoding="utf-8") as config_file:
             cls.actions = json.load(config_file)
 

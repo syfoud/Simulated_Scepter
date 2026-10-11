@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>RuntimeSettings</class>
+ <widget class="QWidget" name="RuntimeSettings">
+  <layout class="QVBoxLayout" name="RuntimeSettings_layout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_25">
+     <item>
+      <widget class="QLabel" name="label_24">
+       <property name="text">
+        <string>运行次数（0代表无限）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_max_run_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_interact_time">
+     <item>
+      <widget class="QLabel" name="label_interact_time">
+       <property name="text">
+        <string>单关交互最长时间（秒）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_interact_time_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="pig_switch_2_role">
+     <property name="text">
+      <string>自定义遇猪切人</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <layout class="QFormLayout" name="formLayout_silver_wolf_switch">
+     <item row="0" column="0">
+      <widget class="QLabel" name="label_silver_wolf_switch">
+       <property name="text">
+        <string>切换至</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="silver_wolf_switch_combo">
+       <property name="toolTip">
+        <string>若银狼位于非一号位，战斗扑满信标区域无秘技点时也会切换至所选位置抓扑满</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="silver_wolf_enable">
+     <property name="text">
+      <string>银狼秘技(鼠标停留可查看介绍)</string>
+     </property>
+     <property name="toolTip">
+      <string>位于一号位时，切换至银狼并启用秘技,若开启遇猪切人会切换至所选位置(一号位银狼不建议开启自定义遇猪切人)
+位于非一号位且位于首领、精英、事件、奖励、事件虫群与携带祝福扑满的战斗区域时，切换至银狼并启用秘技</string>
+     </property>
+     <property name="checked">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="auto_attack_breakable">
+     <property name="text">
+      <string>自动攻击可破坏物（实验性，可能影响近战角色寻路）</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="advanced_label">
+     <property name="text">
+      <string>高级用户功能</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="early_stop_checkbox">
+     <property name="text">
+      <string>是否早停</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="Aboutupdatelock">
+     <property name="text">
+      <string>关于高级用户功能解锁</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

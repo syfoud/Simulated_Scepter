@@ -1,6 +1,6 @@
 import unittest
 
-from tool.currency.investment_selection import choose_fallback_investment
+from core.currency.investment_selection import choose_fallback_investment
 
 
 class InvestmentFallbackSelectionTests(unittest.TestCase):

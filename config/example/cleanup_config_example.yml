@@ -1,0 +1,25 @@
+# 自动清理设置的默认配置，程序读取正式配置时用它覆盖非法参数。
+# mode 可取 never/manual/periodic/automatic，trigger 可取 program_start/task_start/task_end，
+# unit 可取 year/month/day/hour/minute，value 为大于等于 0 的整数，
+# last_cleanup 由程序在清理触发后写入，格式为 YYYY-MM-DD HH:MM:SS，从未清理时为空。
+
+video:
+  mode: manual
+  trigger: program_start
+  value: 3
+  unit: day
+  last_cleanup: ""
+
+log:
+  mode: manual
+  trigger: program_start
+  value: 3
+  unit: day
+  last_cleanup: ""
+
+temp:
+  mode: manual
+  trigger: program_start
+  value: 3
+  unit: day
+  last_cleanup: ""

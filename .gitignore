@@ -11,6 +11,7 @@ test.*
 config/backup/
 cache/
 save/
+video/
 temp/
 resources/imgs/bigmap.jpg
 resources/imgs/bwmap.jpg
@@ -38,6 +39,10 @@ config/config/info.yml
 config/config/info_old.yml
 config/config/settings.json
 config/config/currency_config.yml
+config/config/cleanup_config.yml
+config/config/schedules.json
+core/*/config/settings.json
+core/*/config/settings.yml
 version.txt
 *.exe
 test.py

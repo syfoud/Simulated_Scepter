@@ -46,6 +46,18 @@ class Screen:
         self.bmp = self.gdi.CreateCompatibleBitmap(self.srcdc, self.width, self.height)
         self.gdi.SelectObject(self.memdc, self.bmp)
 
+    def close(self):
+        """释放当前截图器持有的 GDI 资源。"""
+        if self.memdc:
+            self.gdi.DeleteDC(self.memdc)
+            self.memdc = None
+        if self.bmp:
+            self.gdi.DeleteObject(self.bmp)
+            self.bmp = None
+        if self.srcdc:
+            ctypes.WinDLL("user32").ReleaseDC(0, self.srcdc)
+            self.srcdc = None
+
     def grab(self, x, y):
         with lock:
             for attempt in range(10):

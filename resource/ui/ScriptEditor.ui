@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ScriptEditor</class>
+ <widget class="QDialog" name="ScriptEditor">
+  <property name="windowTitle"><string>脚本编辑器[*]</string></property>
+  <property name="geometry"><rect><x>0</x><y>0</y><width>1080</width><height>780</height></rect></property>
+  <layout class="QVBoxLayout" name="main_layout">
+   <item><layout class="QHBoxLayout" name="file_toolbar">
+    <item><widget class="QComboBox" name="file_combo"><property name="sizePolicy"><sizepolicy hsizetype="Ignored" vsizetype="Fixed"><horstretch>1</horstretch><verstretch>0</verstretch></sizepolicy></property></widget></item>
+    <item><widget class="QPushButton" name="new_btn"><property name="text"><string>新建</string></property></widget></item>
+    <item><widget class="QPushButton" name="open_btn"><property name="text"><string>打开…</string></property></widget></item>
+    <item><widget class="QPushButton" name="save_btn"><property name="text"><string>保存</string></property></widget></item>
+    <item><widget class="QPushButton" name="save_as_btn"><property name="text"><string>另存为…</string></property></widget></item>
+    <item><widget class="QPushButton" name="validate_btn"><property name="text"><string>校验</string></property></widget></item>
+   </layout></item>
+   <item><widget class="QLabel" name="path_label"><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><widget class="QTabWidget" name="tabs">
+    <widget class="QWidget" name="visual_tab">
+     <attribute name="title"><string>动作与参数</string></attribute>
+     <layout class="QHBoxLayout" name="visual_layout">
+      <item><widget class="QWidget" name="event_panel">
+       <property name="maximumSize"><size><width>250</width><height>16777215</height></size></property>
+       <layout class="QVBoxLayout" name="event_layout">
+        <item><widget class="QLabel" name="event_label"><property name="text"><string>事件（按列表顺序识别）</string></property></widget></item>
+        <item><widget class="QListWidget" name="event_list"/></item>
+        <item><layout class="QHBoxLayout" name="event_toolbar">
+         <item><widget class="QPushButton" name="add_event_btn"><property name="text"><string>添加</string></property></widget></item>
+         <item><widget class="QPushButton" name="clone_event_btn"><property name="text"><string>复制</string></property></widget></item>
+         <item><widget class="QPushButton" name="remove_event_btn"><property name="text"><string>删除</string></property></widget></item>
+        </layout></item>
+        <item><layout class="QHBoxLayout" name="event_order">
+         <item><widget class="QPushButton" name="event_up_btn"><property name="text"><string>上移</string></property></widget></item>
+         <item><widget class="QPushButton" name="event_down_btn"><property name="text"><string>下移</string></property></widget></item>
+        </layout></item>
+       </layout>
+      </widget></item>
+      <item><layout class="QVBoxLayout" name="detail_layout">
+       <item><layout class="QHBoxLayout" name="name_row">
+        <item><widget class="QLabel" name="name_label"><property name="text"><string>事件名称</string></property></widget></item>
+        <item><widget class="QLineEdit" name="event_name"/></item>
+       </layout></item>
+       <item><widget class="QLabel" name="trigger_label"><property name="text"><string>触发条件：text 为识别文字；photo 为图片；state_only 为纯状态判断</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+       <item><layout class="QHBoxLayout" name="sample_toolbar">
+        <item><widget class="QPushButton" name="sample_text_btn"><property name="text"><string>从游戏画面选择文字…</string></property></widget></item>
+        <item><widget class="QPushButton" name="sample_image_btn"><property name="text"><string>从游戏画面框选图片…</string></property></widget></item>
+       </layout></item>
+       <item><widget class="QWidget" name="trigger_host"><layout class="QVBoxLayout" name="trigger_layout"/></widget></item>
+       <item><widget class="QLabel" name="steps_label"><property name="text"><string>命中后依次执行的动作</string></property></widget></item>
+       <item><layout class="QHBoxLayout" name="step_toolbar">
+        <item><widget class="QComboBox" name="step_type"/></item>
+        <item><widget class="QPushButton" name="add_step_btn"><property name="text"><string>添加动作</string></property></widget></item>
+        <item><widget class="QPushButton" name="remove_step_btn"><property name="text"><string>删除动作</string></property></widget></item>
+        <item><widget class="QPushButton" name="step_up_btn"><property name="text"><string>上移</string></property></widget></item>
+        <item><widget class="QPushButton" name="step_down_btn"><property name="text"><string>下移</string></property></widget></item>
+       </layout></item>
+       <item><layout class="QHBoxLayout" name="step_detail">
+        <item><widget class="QListWidget" name="step_list"><property name="maximumSize"><size><width>240</width><height>16777215</height></size></property></widget></item>
+        <item><widget class="QWidget" name="step_host"><layout class="QVBoxLayout" name="step_layout"/></widget></item>
+       </layout></item>
+      </layout></item>
+     </layout>
+    </widget>
+    <widget class="QWidget" name="source_tab">
+     <attribute name="title"><string>JSON 源码</string></attribute>
+     <layout class="QVBoxLayout" name="source_layout"><item><widget class="QPlainTextEdit" name="source_edit"><property name="lineWrapMode"><enum>QPlainTextEdit::NoWrap</enum></property></widget></item></layout>
+    </widget>
+   </widget></item>
+   <item><layout class="QHBoxLayout" name="debug_toolbar">
+    <item><widget class="QLabel" name="debug_kernel_label"><property name="text"><string>调试内核</string></property></widget></item>
+    <item><widget class="QComboBox" name="debug_kernel_combo"/></item>
+    <item><widget class="QComboBox" name="debug_scope_combo"/></item>
+    <item><widget class="QPushButton" name="debug_trigger_btn"><property name="text"><string>按触发条件调试</string></property><property name="toolTip"><string>取当前游戏画面，执行一轮触发判断，命中时执行动作。</string></property></widget></item>
+    <item><widget class="QPushButton" name="debug_direct_btn"><property name="text"><string>直接执行动作</string></property><property name="toolTip"><string>忽略触发条件、状态条件和重复限制，按所选范围顺序执行一次动作。</string></property></widget></item>
+    <item><widget class="QPushButton" name="debug_stop_btn"><property name="text"><string>停止调试 / 截图</string></property></widget></item>
+   </layout></item>
+   <item><widget class="QLabel" name="status_label"><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><widget class="QLabel" name="help_label"><property name="text"><string>调试执行当前编辑内容，无需先保存。调试会操作游戏，可通过上方停止按钮或主窗口停止热键终止。保存脚本不会启动任务。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

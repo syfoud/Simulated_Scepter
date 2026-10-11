@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AnyFateSettings</class>
+ <widget class="QWidget" name="AnyFateSettings">
+  <layout class="QVBoxLayout" name="AnyFateSettings_layout">
+   <item>
+    <layout class="QFormLayout" name="formLayout_any_fate">
+     <item row="0" column="0">
+      <widget class="QLabel" name="Any_fate_label">
+       <property name="text">
+        <string>命途</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QComboBox" name="Any_fate_combo" />
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources />
+ <connections />
+</ui>

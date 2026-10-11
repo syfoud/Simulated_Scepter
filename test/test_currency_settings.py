@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from tool.currency.settings import (
+from core.currency.settings import (
     DEFAULT_EXIT_PLANE,
     EXIT_PLANES,
     load_currency_settings,

@@ -27,11 +27,11 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
         self.opt = None
 
-        uic.loadUi(PATHS["ui"] + '\\UI.ui', self)
+        uic.loadUi(os.path.join(PATHS["ui"], "UI.ui"), self)
 
         self.setWindowTitle("ω- u13.exe - 本软件免费且开源")
 
-        self.setWindowIcon(QIcon(PATHS["logo"] + "\\圆角-FetDeathWing-256x-AllSize.ico"))
+        self.setWindowIcon(QIcon(os.path.join(PATHS["logo"], "圆角-FetDeathWing-256x-AllSize.ico")))
 
         self.Title_Version.setText(EXTRA.VERSION)
 
@@ -42,33 +42,15 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.tray_icon = None
         self.init_tray_icon()
 
-        settings_path = PATHS["root"] + "\\config\\config\\settings.json"
-        example_path = PATHS["root"] + "\\config\\config\\settings_example.json"
+        settings_path = os.path.join(PATHS["config"], "settings.json")
+        example_path = os.path.join(PATHS["example"], "settings_example.json")
         if not os.path.exists(settings_path) and os.path.exists(example_path):
             shutil.copy2(example_path, settings_path)
         self.json_to_opt(settings_path)
         self.skin_set()
         self.font_set()
 
-        self.run_diver_btn.setVisible(False)
         self.tabWidget.setTabVisible(self.tabWidget.indexOf(self.Tab6), False)
-        self.label_7.setVisible(False)
-        self.Diver_debug_checkbox.setVisible(False)
-        self.Simul_debug_checkbox.setVisible(False)
-        self.debug_checkbox2.setVisible(False)
-        self.Diver_speed_checkbox.setVisible(False)
-        self.Diver_weekly_checkbox.setVisible(False)
-        self.Diver_cpu_checkbox.setVisible(False)
-        self.label_10.setVisible(False)
-        self.Diver_difficulty_combo.setVisible(False)
-        self.label_11.setVisible(False)
-        self.Diver_team_combo.setVisible(False)
-        self.label_12.setVisible(False)
-        self.Diver_save_cnt_combo.setVisible(False)
-        self.label_17.setVisible(False)
-        self.Diver_timezone_combo.setVisible(False)
-        self.label_18.setVisible(False)
-        self.Diver_max_run_input.setVisible(False)
 
         self.Button_MostMinimized.clicked.connect(self.minimize_to_tray)
 
@@ -146,12 +128,14 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.Button_Exit.setIcon(create_qt_icon(q_color=q_color, mode="x"))
         self.Button_Minimized.setIcon(create_qt_icon(q_color=q_color, mode="-"))
         self.Button_MostMinimized.setIcon(create_qt_icon(q_color=q_color, mode="v"))
+        for button in self.findChildren(QtWidgets.QToolButton):
+            if button is self.engine_settings_btn or button.property("kernelSettings"):
+                button.setIcon(create_qt_icon(q_color=q_color, mode="gear"))
 
 
     def set_image_resource(self):
 
-        cus_path = PATHS["root"] + "\\resource\\logo\\圆角-FetDeathWing-450x.png"
-        cus_path = cus_path.replace("\\", "/")
+        cus_path = os.path.join(PATHS["logo"], "圆角-FetDeathWing-450x.png")
 
         pixmap = QtGui.QPixmap(cus_path).scaled(
             40,
@@ -163,8 +147,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.Title_Logo.setFixedSize(40, 40)
         self.Title_Logo.setScaledContents(True)
 
-        cus_path = PATHS["ui"] + "\\background.png"
-        cus_path = cus_path.replace("\\", "/")
+        cus_path = os.path.join(PATHS["ui"], "background.png").replace(os.sep, "/")
         style_sheet = f"""
             #SkinWidget{{
             background-image: url({cus_path});
@@ -234,7 +217,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
     def init_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
-        self.tray_icon.setIcon(QIcon(PATHS["logo"] + "\\圆角-FetDeathWing-256x-AllSize.ico"))
+        self.tray_icon.setIcon(self.windowIcon())
         self.tray_icon.setToolTip("ω- u13.exe - 正在后台运行")
 
         tray_menu = QMenu()

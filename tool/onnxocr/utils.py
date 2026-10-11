@@ -6,7 +6,6 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from tool.diver.config import config
 
 # 获取项目根目录，如果上层目录为 _internal 则跳转到更上层
 current_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -249,7 +248,7 @@ def infer_args():
     parser.add_argument("--page_num", type=int, default=0)
     parser.add_argument("--det_algorithm", type=str, default='DB')
     parser.add_argument("--det_model_dir", type=str, default=abspath + 'resource/models/v3_det.onnx')
-    parser.add_argument("--det_limit_side_len", type=float, default=config.accuracy)
+    parser.add_argument("--det_limit_side_len", type=float, default=1440)
     parser.add_argument("--det_limit_type", type=str, default='max')
     parser.add_argument("--det_box_type", type=str, default='quad')
 

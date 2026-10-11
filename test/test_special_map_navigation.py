@@ -12,8 +12,8 @@ from tool.utils.image_tool import load_all_images_from_directory
 ROOT = Path(__file__).resolve().parents[1]
 load_all_images_from_directory(str(ROOT / "resource" / "imgs"))
 
-IronBloodUniverse = importlib.import_module("iron_blood").IronBloodUniverse
-SimulatedUniverse = importlib.import_module("simul").SimulatedUniverse
+IronBloodUniverse = importlib.import_module("core.iron_blood.engine").IronBloodUniverse
+SimulatedUniverse = importlib.import_module("core.simulated.engine").SimulatedUniverse
 
 
 class SpecialMapTargetParsingTest(unittest.TestCase):
@@ -139,9 +139,9 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
         manager = Mock()
 
         with (
-            patch("tool.simul.utils.key_mouse_manager", manager),
-            patch("tool.simul.utils.sprint"),
-            patch("tool.simul.utils.match_skill_numbers_in_region", return_value=None),
+            patch("core.simulated.utils.key_mouse_manager", manager),
+            patch("core.simulated.utils.sprint"),
+            patch("core.simulated.utils.match_skill_numbers_in_region", return_value=None),
         ):
             universe.get_path_with_big_map()
 
@@ -217,7 +217,7 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
         fallback = Mock()
         manager = Mock()
 
-        with patch("iron_blood.key_mouse_manager", manager):
+        with patch("core.iron_blood.engine.key_mouse_manager", manager):
             universe.record_special_map_or_navigate(fallback)
             universe.record_special_map_or_navigate(fallback)
 
@@ -263,7 +263,7 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
 
         with patch.object(
             SimulatedUniverse, "init_map", side_effect=reset_big_map
-        ) as native_init, patch("iron_blood.key_mouse_manager", Mock()):
+        ) as native_init, patch("core.iron_blood.engine.key_mouse_manager", Mock()):
             universe.record_special_map_or_navigate(Mock())
 
         native_init.assert_called_once_with()
@@ -290,9 +290,9 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
 
         latest = ("map.jpg", 424.0, 588.8, 31, 207.0, 277.0, "target.jpg")
         with (
-            patch("iron_blood.find_latest_modified_file", return_value=latest),
-            patch("iron_blood.cv.imread", return_value=np.zeros((80, 98), dtype=np.uint8)),
-            patch("iron_blood.key_mouse_manager", Mock()),
+            patch("core.iron_blood.engine.find_latest_modified_file", return_value=latest),
+            patch("core.iron_blood.engine.cv.imread", return_value=np.zeros((80, 98), dtype=np.uint8)),
+            patch("core.iron_blood.engine.key_mouse_manager", Mock()),
         ):
             return universe.map_data_load(
                 create=create,
@@ -341,8 +341,8 @@ class HertaInteractionTest(unittest.TestCase):
         universe = self.make_universe(global_herta_match=False)
         manager = Mock()
 
-        with patch("simul.time.time", return_value=100), patch(
-            "simul.key_mouse_manager", manager
+        with patch("core.simulated.engine.time.time", return_value=100), patch(
+            "core.simulated.engine.key_mouse_manager", manager
         ):
             result = universe.do_interaction()
 
@@ -354,8 +354,8 @@ class HertaInteractionTest(unittest.TestCase):
         universe = self.make_universe(quit_time=90)
         manager = Mock()
 
-        with patch("simul.time.time", return_value=100), patch(
-            "simul.key_mouse_manager", manager
+        with patch("core.simulated.engine.time.time", return_value=100), patch(
+            "core.simulated.engine.key_mouse_manager", manager
         ):
             result = universe.do_interaction()
 

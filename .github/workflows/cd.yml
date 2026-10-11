@@ -1,9 +1,7 @@
 name: 自动打包并发布release
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
     branches:
       - master
 
@@ -26,11 +24,10 @@ permissions:
 
 jobs:
   prepare:
-    # pull_request 只有真正 merge 后才执行
-    # workflow_dispatch 始终执行
+    # push（PR 合并后触发）与 workflow_dispatch 都执行
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.event.pull_request.merged == true
+      github.event_name == 'push'
 
     runs-on: windows-latest
 
@@ -43,7 +40,7 @@ jobs:
     steps:
       - name: Determine release version
         id: version
-        shell: powershell
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
@@ -52,39 +49,250 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          Write-Host "Checking latest release..."
+          # 该 tag 在远端是否已经存在
+          # 用 git 协议直查，不经过 REST API，因此不会读到陈旧的列表快照
+          function Test-TagExists {
+            param([string]$Tag)
+
+            $refs = git ls-remote --tags "https://github.com/$($env:REPOSITORY).git" "refs/tags/$Tag"
+
+            if ($LASTEXITCODE -ne 0) {
+              # 查不动就当「不存在」：兜底失败不应该让整个打包流程停下来
+              Write-Warning "Could not list remote tags; skipping the duplicate-tag check."
+
+              return $false
+            }
+
+            foreach ($ref in @($refs)) {
+              # 完全匹配 refs/tags/v1.0.0，避免把 refs/tags/v1.0.0-rc1 误判为已存在
+              if ($ref.Trim() -match "\srefs/tags/$([regex]::Escape($Tag))$") {
+                return $true
+              }
+            }
+
+            return $false
+          }
+
+          # 只把「正式 Release」（非 draft、非 prerelease）作为比较基准
+          # 注意：gh release list 的 --json 不支持 body 字段（只有
+          # createdAt/isDraft/isImmutable/isLatest/isPrerelease/name/publishedAt/tagName），
+          # 传了会静默拿不到内容；正文需要时一律用 gh release view --json body 单独取
+          function Get-PublishedReleases {
+            $json = gh release list `
+              --repo $env:REPOSITORY `
+              --limit 100 `
+              --json tagName,isDraft,isPrerelease,publishedAt
+
+            if ([string]::IsNullOrWhiteSpace($json)) {
+              return @()
+            }
+
+            $parsed = $json | ConvertFrom-Json
+
+            if ($null -eq $parsed) {
+              return @()
+            }
+
+            return @(
+              $parsed |
+                Where-Object {
+                  $_.isDraft -eq $false -and
+                  $_.isPrerelease -eq $false -and
+                  $_.tagName -match '^v\d+\.\d+\.\d+$'
+                }
+            )
+          }
+
+          # 解析 Release Notes 中已经列出的 PR 编号
+          function Get-NotePullRequestNumbers {
+            param([string]$Notes)
+
+            $numbers = @()
+
+            if ([string]::IsNullOrWhiteSpace($Notes)) {
+              return $numbers
+            }
+
+            # 本 workflow 写入的隐藏标记，优先使用
+            $markerMatch = [regex]::Match($Notes, 'cd-notes-prs:\s*([0-9,\s]+)')
+
+            if ($markerMatch.Success) {
+              return @(
+                $markerMatch.Groups[1].Value -split ',' |
+                  ForEach-Object { $_.Trim() } |
+                  Where-Object { $_ -match '^\d+$' } |
+                  ForEach-Object { [int]$_ }
+              )
+            }
+
+            # 没有标记时（手工编辑过、或 GitHub 自动生成的 Notes）按条目结尾的 (#123) 解析
+            foreach ($line in ($Notes -split "`r?`n")) {
+              $lineMatch = [regex]::Match($line, '\(\[#(\d+)\]\([^)]*\)\)\s*$')
+
+              if (-not $lineMatch.Success) {
+                $lineMatch = [regex]::Match($line, '\(#(\d+)\)\s*$')
+              }
+
+              if ($lineMatch.Success) {
+                $numbers += [int]$lineMatch.Groups[1].Value
+              }
+            }
+
+            return $numbers
+          }
+
+          # 收集「已记录过的 PR」之后新 merge 进来的 PR，并渲染成 Release Notes
+          function Get-ReleaseNotesFromMergedPullRequests {
+            param(
+              [int[]]$AlreadyNoted = @(),
+              [DateTimeOffset]$SinceDate,
+              [string]$VersionLabel,
+              [bool]$GroupByCategory = $false
+            )
+
+            $mergedPrsJson = gh pr list `
+              --repo $env:REPOSITORY `
+              --state merged `
+              --limit 1000 `
+              --json number,title,author,mergedAt,url,headRefName,labels
+
+            if ([string]::IsNullOrWhiteSpace($mergedPrsJson)) {
+              return ""
+            }
+
+            # 注意：ConvertFrom-Json 的结果不要再套一层 @()
+            # 否则整个数组会被当成一个元素，Where-Object 里的 $_ 会变成数组本身
+            $mergedPrs = ConvertFrom-Json -InputObject $mergedPrsJson
+
+            $changedPrs = @(
+              $mergedPrs |
+                Where-Object {
+                  $null -ne $_ -and
+                  $_.GetType().Name -eq 'PSCustomObject' -and
+                  $_.mergedAt -ne $null -and
+                  $alreadyNoted -notcontains $_.number -and
+                  # 版本号回写用的 PR（分支名 version-change-vX.Y.Z）是打包流程自己产生的，
+                  # 与本次发布的内容无关，不能出现在 Release Notes 里
+                  $_.headRefName -notmatch '^version-change-v' -and
+                  -not ($_.labels.name -match '^(?i:chore|build|构建与工具链|chore & build / 构建与工具链)$') -and
+                  ([DateTimeOffset]::Parse($_.mergedAt) -gt $SinceDate)
+                } |
+                Sort-Object {
+                  [DateTimeOffset]::Parse($_.mergedAt)
+                }
+            )
+
+            if ($changedPrs.Count -eq 0) {
+              return ""
+            }
+
+            $noteEntries = @()
+
+            foreach ($pr in $changedPrs) {
+              $labelNames = @($pr.labels | ForEach-Object { $_.name })
+              $category = "其他"
+
+              if ($labelNames -match '^(?i:bug|bug fix|fix|bug 修复|bug fix / bug 修复)$' -or $pr.title -match '(?i)\bfix(?:es|ed)?\b') {
+                $category = "BUG 修复"
+              }
+              elseif ($pr.title -match '(?i)\bperf(?:ormance)?\b' -or $labelNames -match '^(?i:performance|perf|性能优化|performance / 性能优化)$') {
+                $category = "改进"
+              }
+              elseif ($pr.title -match '(?i)\bfeat(?:ure)?\b' -or $labelNames -match '^(?i:feature|feat|新功能|enhancement|feature / 增加功能)$') {
+                $category = "新功能"
+              }
+              elseif ($labelNames -match '^(?i:improvement|改进)$') {
+                $category = "改进"
+              }
+
+              # 作者写成普通的 Markdown 链接（指向作者主页）：
+              # 不用「@名字」，否则 GitHub 会把它当成 mention
+              if ($null -ne $pr.author -and -not [string]::IsNullOrWhiteSpace($pr.author.login)) {
+                $authorLogin = $pr.author.login
+                $authorUrl = "https://github.com/$authorLogin"
+
+                $entry = "- $($pr.title) ([#$($pr.number)]($($pr.url))) [$authorLogin]($authorUrl)"
+              }
+              else {
+                $entry = "- $($pr.title) ([#$($pr.number)]($($pr.url)))"
+              }
+
+              $noteEntries += [PSCustomObject]@{ Category = $category; Text = $entry }
+            }
+
+            # 大版本 Notes 分组展示；patch Notes 保持原有的按时间排列格式。
+            $notesLines = @()
+
+            if ($GroupByCategory) {
+              foreach ($category in @("BUG 修复", "新功能", "改进", "其他")) {
+                $entries = @($noteEntries | Where-Object { $_.Category -eq $category })
+
+                if ($entries.Count -gt 0) {
+                  $notesLines += "### $category"
+                  $notesLines += $entries | ForEach-Object { $_.Text }
+                  $notesLines += ""
+                }
+              }
+            }
+            else {
+              $notesLines = @($noteEntries | ForEach-Object { $_.Text })
+            }
+
+            # 隐藏的 HTML 注释：记录本次 Notes 覆盖了哪些 PR
+            # GitHub 页面不会渲染它，下一次打包用它精确计算增量
+            $coveredNumbers = ($changedPrs | ForEach-Object { $_.number }) -join ','
+
+            $notesLines += ""
+            $notesLines += "<!-- cd-notes-prs: $coveredNumbers -->"
+
+            return ($notesLines -join "`n")
+          }
+
+          $publishedReleases = Get-PublishedReleases
 
           # 获取当前最新正式 Release
-          $latestReleaseJson = gh release list `
-            --repo $env:REPOSITORY `
-            --limit 100 `
-            --json tagName,isDraft,isPrerelease
-
-          $latestReleases = $latestReleaseJson | ConvertFrom-Json
-
-          $latestRelease = $latestReleases |
-            Where-Object {
-              $_.isDraft -eq $false -and
-              $_.isPrerelease -eq $false -and
-              $_.tagName -match '^v\d+\.\d+\.\d+$'
-            } |
-            Select-Object -First 1
+          $latestRelease = $publishedReleases | Select-Object -First 1
 
           if ($null -eq $latestRelease) {
-            Write-Host "No existing release was found."
-
             if ($env:EVENT_NAME -eq "workflow_dispatch") {
               $version = $env:INPUT_VERSION
             }
             else {
-              # 理论上仓库已有 Release
-              # 如果没有 Release，则自动发布从 1.0.0 开始
+              # 没有 Release 时自动发布从 1.0.0 开始
               $version = "1.0.0"
+            }
+
+            if ($version -notmatch '^\d+\.\d+\.\d+$') {
+              throw "Invalid version '$version'. Expected format: number.number.number (e.g. 1.3.0)."
+            }
+
+            # 兜底：列表里看不到正式 Release 不代表远端没有同名 tag
+            # （例如刚发布完 Release 又立刻触发一次，可能读到陈旧的列表快照）
+            $guard = 0
+
+            while ((Test-TagExists "v$version") -and $guard -lt 100) {
+              if ($env:EVENT_NAME -eq "workflow_dispatch") {
+                throw "Release v$version already exists. Pick a higher version."
+              }
+
+              $autoParts = $version.Split('.')
+              $nextPatch = [int]$autoParts[2] + 1
+              $version = "$($autoParts[0]).$($autoParts[1]).$nextPatch"
+              $guard = $guard + 1
+            }
+
+            if ($guard -ge 100) {
+              throw "Could not find a free version after 100 attempts (last tried v$version)."
             }
 
             $previousVersion = ""
             $majorMinorChanged = "false"
-            $releaseNotes = ""
+
+            # 没有任何历史 Release 时，把所有已 merge 的 PR 都列出来
+            $releaseNotes = Get-ReleaseNotesFromMergedPullRequests `
+              -AlreadyNoted @() `
+              -SinceDate ([DateTimeOffset]::MinValue) `
+              -VersionLabel $version
           }
           else {
             $previousVersion = $latestRelease.tagName -replace '^v', ''
@@ -126,18 +334,37 @@ jobs:
               if (-not $isGreater) {
                 throw "Invalid version '$version'. Must be greater than the current release '$previousVersion'."
               }
+
+              # 同一个 tag 不能重复发布：发布阶段会先删掉已有 Release，那会抹掉它原来的 note
+              if (Test-TagExists "v$version") {
+                throw "Release v$version already exists. Pick a higher version."
+              }
             }
             else {
-              # PR merge 自动触发时，当前 Release 的 patch + 1
+              # master push 自动触发时，当前 Release 的 patch + 1
               $patch = $previousPatch + 1
               $version = "$previousMajor.$previousMinor.$patch"
+
+              # 兜底：算出来的 tag 若在远端已存在就继续进位，
+              # 避免因陈旧的 release 列表算出已存在的版本，进而误删已有 Release
+              $guard = 0
+
+              while ((Test-TagExists "v$version") -and $guard -lt 100) {
+                $patch = $patch + 1
+                $version = "$previousMajor.$previousMinor.$patch"
+                $guard = $guard + 1
+              }
+
+              if ($guard -ge 100) {
+                throw "Could not find a free version after 100 attempts (last tried v$version)."
+              }
             }
 
             $parts = $version.Split('.')
             $major = [int]$parts[0]
             $minor = [int]$parts[1]
 
-            # major 或 minor 任意一个发生变化都视为需要重新生成 Release Notes 的版本升级
+            # major 或 minor 任意一个发生变化都视为需要汇总 Notes 的版本升级
             if (
               $major -ne $previousMajor -or
               $minor -ne $previousMinor
@@ -148,96 +375,112 @@ jobs:
               $majorMinorChanged = "false"
             }
 
-            $releaseNotes = ""
+            # Notes 的起点固定为「上一轮该版本线的 .0 版本」
+            # 例如当前是 1.4.x，起点就是 v1.3.0，因此 1.4.0 会汇总 1.3.0 至今的所有 PR；
+            # 同一版本线内的 patch 更新起点同样是 v1.3.0，但已发布 Notes 记录过的 PR 会被排除
+            $baselineTag = "v$previousMajor.$previousMinor.0"
+            $baselineLabel = $baselineTag
 
-            if ($majorMinorChanged -eq "true") {
-              Write-Host "Major/minor version update detected."
-              Write-Host "Previous release: $previousVersion"
-              Write-Host "New release: $version"
+            $baselineRelease = $publishedReleases |
+              Where-Object { $_.tagName -eq $baselineTag } |
+              Select-Object -First 1
 
-              # 找到与当前 Release 相同 major/minor 的最新 Release
-              $previousMajorMinorReleases = $latestReleases |
+            if ($null -eq $baselineRelease) {
+              # 该版本线的 .0 版本不存在时，退回到该版本线里最早的 Release
+              $baselineRelease = $publishedReleases |
                 Where-Object {
-                  $_.isDraft -eq $false -and
-                  $_.isPrerelease -eq $false -and
                   $_.tagName -match "^v$previousMajor\.$previousMinor\.\d+$"
-                }
-
-              $previousMajorMinorRelease = $previousMajorMinorReleases |
+                } |
                 Sort-Object {
                   [int](($_.tagName -replace "^v$previousMajor\.$previousMinor\.", ""))
-                } -Descending |
+                } |
                 Select-Object -First 1
 
-              if ($null -eq $previousMajorMinorRelease) {
-                Write-Host "Could not find the previous major/minor release."
-                Write-Host "No automatic PR list will be generated."
-              }
-              else {
-                $previousMajorMinorTag = $previousMajorMinorRelease.tagName
-
-                Write-Host "Previous major/minor release: $previousMajorMinorTag"
-
-                # 获取该 Release 的发布时间
-                $previousReleaseInfoJson = gh release view `
-                  $previousMajorMinorTag `
-                  --repo $env:REPOSITORY `
-                  --json publishedAt
-
-                $previousReleaseInfo = $previousReleaseInfoJson | ConvertFrom-Json
-                $previousReleaseDate = [DateTimeOffset]::Parse($previousReleaseInfo.publishedAt)
-
-                Write-Host "Collecting merged PRs after $previousReleaseDate..."
-
-                # 获取所有已 merge PR
-                $mergedPrsJson = gh pr list `
-                  --repo $env:REPOSITORY `
-                  --state merged `
-                  --limit 1000 `
-                  --json number,title,mergedAt
-
-                $mergedPrs = $mergedPrsJson | ConvertFrom-Json
-
-                $changedPrs = $mergedPrs |
-                  Where-Object {
-                    $_.mergedAt -ne $null -and
-                    ([DateTimeOffset]::Parse($_.mergedAt) -gt $previousReleaseDate)
-                  } |
-                  Sort-Object {
-                    [DateTimeOffset]::Parse($_.mergedAt)
-                  }
-
-                if ($changedPrs.Count -gt 0) {
-                  $notesLines = @(
-                    "## What's Changed"
-                    ""
-                  )
-
-                  foreach ($pr in $changedPrs) {
-                    $notesLines += "- $($pr.title) (#$($pr.number))"
-                  }
-
-                  $releaseNotes = $notesLines -join "`n"
-                }
-                else {
-                  Write-Host "No merged PRs were found after the previous major/minor release."
-                }
+              if ($null -ne $baselineRelease) {
+                $baselineTag = $baselineRelease.tagName
               }
             }
+
+            # 已写过的 PR：确定本次 Notes 要从哪些 PR 开始列
+            #
+            # 大版本汇总（major/minor 有变）时，只排除 baseline（该版本线的 .0 版本）自己写过的 PR，
+            # 也就是「从 .0 至今新增的全部 PR」；中间各个 patch 版本的 Notes 不算数，
+            # 否则 1.4.0 会因为 1.0.1~1.0.3 各自记录过 PR 而汇总为空。
+            #
+            # patch 更新（同版本线）时，要排除该版本线里所有已发布 Notes 记录过的 PR，
+            # 这样这次只会列出真正新增的 PR。
+            #
+            # 注意：gh release list 不支持 --json body（拿不到正文），正文一律用 gh release view 取
+            $alreadyNoted = @()
+
+            # 大版本汇总时 baseline 一定存在（就取当前 Release 本身），但仍做一次判空保护
+            if (($majorMinorChanged -eq "true") -and ($null -ne $baselineRelease)) {
+              $baselineReleaseJson = gh release view `
+                $baselineTag `
+                --repo $env:REPOSITORY `
+                --json body
+
+              $alreadyNoted = @(Get-NotePullRequestNumbers -Notes (($baselineReleaseJson | ConvertFrom-Json).body))
+            }
+            else {
+              $lineReleases = @(
+                $publishedReleases |
+                  Where-Object {
+                    $_.tagName -match "^v$previousMajor\.$previousMinor\.\d+$"
+                  }
+              )
+
+              foreach ($lineRelease in $lineReleases) {
+                $lineReleaseJson = gh release view `
+                  $lineRelease.tagName `
+                  --repo $env:REPOSITORY `
+                  --json body
+
+                $alreadyNoted += @(Get-NotePullRequestNumbers -Notes (($lineReleaseJson | ConvertFrom-Json).body))
+              }
+            }
+
+            $alreadyNoted = @($alreadyNoted | Sort-Object -Unique)
+
+            if ($null -eq $baselineRelease) {
+              $baselineTag = "(none)"
+              $baselineDate = [DateTimeOffset]::MinValue
+            }
+            else {
+              $baselineTag = $baselineRelease.tagName
+
+              if ([string]::IsNullOrWhiteSpace($baselineRelease.publishedAt)) {
+                $baselineDate = [DateTimeOffset]::MinValue
+              }
+              else {
+                # 往前多取 5 分钟作为安全窗口：
+                # publishedAt 是「打包完成并发布」的时刻，若某个 PR 刚好在上一次打包期间 merge，
+                # 它的 mergedAt 会早于 publishedAt，但那次 Notes 是在更早的 prepare 阶段生成的，
+                # 所以它没有被记录进去；安全窗口把它捞回来，已记录过的由 alreadyNoted 去重
+                $baselineDate = [DateTimeOffset]::Parse($baselineRelease.publishedAt).AddMinutes(-5)
+              }
+            }
+
+            $releaseNotes = Get-ReleaseNotesFromMergedPullRequests `
+              -AlreadyNoted $alreadyNoted `
+              -SinceDate $baselineDate `
+              -VersionLabel $version `
+              -GroupByCategory ($majorMinorChanged -eq "true")
           }
 
-          Write-Host "Release version: $version"
-          Write-Host "Previous version: $previousVersion"
-          Write-Host "Major/minor changed: $majorMinorChanged"
-
           # 写入 GitHub Actions outputs
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "previous_version=$previousVersion" >> $env:GITHUB_OUTPUT
-          "major_minor_changed=$majorMinorChanged" >> $env:GITHUB_OUTPUT
+          # 注意：Windows PowerShell 5.1 的 >> / Add-Content 默认写 UTF-16LE，
+          # 会让 runner 无法解析 step output，因此必须显式指定 utf8 编码
+          $outputLines = @(
+            "version=$version"
+            "previous_version=$previousVersion"
+            "major_minor_changed=$majorMinorChanged"
+            "release_notes<<EOF"
+            $releaseNotes
+            "EOF"
+          )
 
-          "release_notes<<EOF" >> $env:GITHUB_OUTPUT
-          $releaseNotes >> $env:GITHUB_OUTPUT
-          "EOF" >> $env:GITHUB_OUTPUT
+          $outputLines | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
   build:
     needs: prepare
@@ -258,6 +501,61 @@ jobs:
       - name: Sync dependencies
         run: uv sync
 
+      # 打包前先把版本号写进工作区的源码：EXTRA.py 会被 PyInstaller 打进 exe，
+      # 版本号是运行时读取的，所以必须先改再打包，exe 里才会是新版本号。
+      # 这一步只改打包环境里的文件、不提交（提交在 release 任务发布成功后进行）。
+      - name: Write version into source
+        shell: powershell
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $version = $env:VERSION
+
+          $targets = @(
+            @{
+              Path    = "pyproject.toml"
+              Pattern = '(?m)^(\s*version\s*=\s*")[^"]*(")'
+            },
+            @{
+              Path    = "tool\EXTRA.py"
+              Pattern = '(?m)^(\s*VERSION\s*=\s*")[^"]*(")'
+            },
+            @{
+              # uv.lock 里项目自己那条也带版本号，必须一起改：uv 会拿它和 pyproject.toml 比对，
+              # 不一致时任何 uv 命令都会把它重写（本地就会冒出莫名其妙的 diff），
+              # 将来若给 CI 加上 uv sync --locked 还会直接构建失败。
+              # 锁文件里每个依赖也有 version，所以匹配必须锚定在项目自己那个块内 ——
+              # 下面的「只能有 1 处匹配」检查就是防止这里匹配错位置的保险。
+              Path    = "uv.lock"
+              Pattern = '(?ms)(\[\[package\]\]\r?\nname = "auto-difficult-achievement"\r?\nversion = ")[^"]*(")'
+            }
+          )
+
+          foreach ($target in $targets) {
+            $file = $target.Path
+
+            if (-not (Test-Path -LiteralPath $file)) {
+              throw "Version file not found: $file"
+            }
+
+            $bytes = [System.IO.File]::ReadAllBytes($file)
+            $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+
+            $text = [System.IO.File]::ReadAllText($file)
+            $matches = @([regex]::Matches($text, $target.Pattern))
+
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one version definition in $file but found $($matches.Count)."
+            }
+
+            $updated = [regex]::Replace($text, $target.Pattern, { param($m) $m.Groups[1].Value + $version + $m.Groups[2].Value })
+
+            # 原文件有 BOM 就保留 BOM，没有就不加
+            [System.IO.File]::WriteAllText($file, $updated, (New-Object System.Text.UTF8Encoding($hasBom)))
+          }
+
       - name: Build with PyInstaller
         run: |
           uv run pyinstaller SimSce.spec
@@ -276,6 +574,10 @@ jobs:
 
           Copy-Item "dist/SimSce/*" $releaseDir -Recurse -Force
           Copy-Item "actions" $releaseDir -Recurse -Force
+          robocopy "core" "$releaseDir/core" /E /NP /NDL /NFL /XD __pycache__ /XF settings.json settings.yml
+          if ($LASTEXITCODE -ge 8) {
+            throw "Copying core modules failed: $LASTEXITCODE"
+          }
           Copy-Item "config" $releaseDir -Recurse -Force
           Copy-Item "doc" $releaseDir -Recurse -Force
           Copy-Item "resource" $releaseDir -Recurse -Force
@@ -284,6 +586,7 @@ jobs:
           Copy-Item "README.md" $releaseDir -Force
           Copy-Item "README_CHT.md" $releaseDir -Force
           Copy-Item "README_ENG.md" $releaseDir -Force
+          exit 0
 
       - name: Create ZIP
         shell: powershell
@@ -313,9 +616,17 @@ jobs:
 
     permissions:
       contents: write
-      pull-requests: read
+      # 分支保护时需要通过 PR 提交版本号，所以还需要 pull-requests: write
+      pull-requests: write
 
     steps:
+      # actions/checkout 会把 GITHUB_TOKEN 写进本地 git config（persist-credentials 默认 true），
+      # 后面 Sync version 步骤里的 git commit / git push 因此自带认证
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
       - name: Download build artifact
         uses: actions/download-artifact@v4
         with:
@@ -342,16 +653,10 @@ jobs:
           $tag = "v$version"
           $asset = "release/SimSce-v$version.zip"
 
-          Write-Host "Preparing release $tag"
-
           # 直接删除旧 Release + tag，创建一个完全新的 Release
           # 删除动作放在 build 完成以后，避免新的 workflow 在 build 阶段读取不到当前 Release
 
           if ($majorMinorChanged -eq "true") {
-            Write-Host "Major/minor update detected."
-            Write-Host "Previous release: v$previousVersion"
-            Write-Host "New release: $tag"
-
             $previousTag = "v$previousVersion"
 
             $previousReleaseExists = $true
@@ -366,17 +671,10 @@ jobs:
             }
 
             if ($previousReleaseExists) {
-              Write-Host "Deleting previous release $previousTag..."
-
               gh release delete $previousTag `
                 --repo $env:REPOSITORY `
                 --cleanup-tag `
                 --yes
-
-              Write-Host "Previous release and tag removed."
-            }
-            else {
-              Write-Host "Previous release $previousTag does not exist."
             }
           }
 
@@ -395,9 +693,6 @@ jobs:
           }
 
           if ($targetReleaseExists) {
-            Write-Host "Release $tag already exists."
-            Write-Host "Removing it before creating the new release."
-
             gh release delete $tag `
               --repo $env:REPOSITORY `
               --cleanup-tag `
@@ -407,29 +702,314 @@ jobs:
           # 创建全新的 Release
 
           if ([string]::IsNullOrWhiteSpace($releaseNotes)) {
-            Write-Host "Creating release without generated PR notes."
-
             gh release create $tag `
               $asset `
               --title $tag `
               --repo $env:REPOSITORY
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "GitHub Release creation failed."
+            }
           }
           else {
-            Write-Host "Creating release with merged PR titles."
-
             # 将多行 Release Notes 写入临时文件，避免 PowerShell 多行字符串通过命令行传递时出现转义问题
             $notesFile = Join-Path $env:RUNNER_TEMP "release-notes.md"
 
-            Set-Content `
-              -Path $notesFile `
-              -Value $releaseNotes `
-              -Encoding UTF8
+            # 必须是「不带 BOM 的 UTF-8」：BOM 会出现在 Release 正文开头（一个看不见的字符）
+            $notesText = ($releaseNotes -replace "`r`n", "`n").TrimEnd("`n") + "`n"
+
+            [System.IO.File]::WriteAllText($notesFile, $notesText, (New-Object System.Text.UTF8Encoding($false)))
 
             gh release create $tag `
               $asset `
               --title $tag `
               --notes-file $notesFile `
               --repo $env:REPOSITORY
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "GitHub Release creation failed."
+            }
           }
 
-          Write-Host "Release $tag created successfully."
+      # Release 发布成功后再回写版本号，避免推一个没发布成功的版本号
+      - name: Sync version into source files
+        id: version
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $version = $env:VERSION
+
+          # 每次版本号变更都开一个新分支 + 新 PR（分支名带版本号，互不干扰）
+          $branch = "version-change-v$version"
+
+          # 默认不创建 PR：内容没变化时直接结束
+          "pr=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          # 三处版本号：pyproject.toml 的 [project] version、tool/EXTRA.py 的 VERSION、uv.lock 里项目自己那条
+          # 只替换版本号本身，不动引号/空格等原有写法
+          $targets = @(
+            @{
+              Path    = "pyproject.toml"
+              Pattern = '(?m)^(\s*version\s*=\s*")[^"]*(")'
+            },
+            @{
+              Path    = "tool\EXTRA.py"
+              Pattern = '(?m)^(\s*VERSION\s*=\s*")[^"]*(")'
+            },
+            @{
+              # 只在项目自己那个块内替换；锁文件里每个依赖也有 version 行
+              Path    = "uv.lock"
+              Pattern = '(?ms)(\[\[package\]\]\r?\nname = "auto-difficult-achievement"\r?\nversion = ")[^"]*(")'
+            }
+          )
+
+          $changed = @()
+
+          foreach ($target in $targets) {
+            $file = $target.Path
+
+            if (-not (Test-Path -LiteralPath $file)) {
+              throw "Version file not found: $file"
+            }
+
+            $bytes = [System.IO.File]::ReadAllBytes($file)
+            $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+
+            $text = [System.IO.File]::ReadAllText($file)
+            $matches = @([regex]::Matches($text, $target.Pattern))
+
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one version definition in $file but found $($matches.Count)."
+            }
+
+            $updated = [regex]::Replace($text, $target.Pattern, { param($m) $m.Groups[1].Value + $version + $m.Groups[2].Value })
+
+            if ($updated -eq $text) {
+              continue
+            }
+
+            # 原文件有 BOM 就保留 BOM，没有就不加：只在版本号上做最小改动
+            [System.IO.File]::WriteAllText($file, $updated, (New-Object System.Text.UTF8Encoding($hasBom)))
+
+            $changed += $file
+          }
+
+          if ($changed.Count -eq 0) {
+            Write-Host "Version files already up to date. Nothing to commit."
+            exit 0
+          }
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # 只暂存这两个文件，避免把构建产物等意外带进来
+          # 路径必须用正斜杠，git 在 Windows 上不接受反斜杠
+          foreach ($file in $changed) {
+            git add -- (($file -replace '\\', '/'))
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to stage $file."
+            }
+          }
+
+          # [skip ci]：提交信息与 PR 标题都带上，避免任何事件再触发一次 CI
+          git commit --message "chore: bump version to v$version [skip ci]"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to commit the version bump."
+          }
+
+          # master 开启了分支保护，所以固定走「推分支 + 开 PR」，不去尝试直推
+          git switch --create $branch
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create branch $branch."
+          }
+
+          # 分支名带版本号，正常情况下每次都是新分支；凭据由 actions/checkout 写入本地 git config
+          git -c advice.detachedHead=false push --porcelain --set-upstream origin $branch
+
+          if ($LASTEXITCODE -ne 0) {
+            # 该分支已存在（例如上一次运行中断后重跑）时，强制覆盖成「最新 master + 本次版本号」
+            Write-Host "Regular push failed; force-updating $branch instead."
+
+            git -c advice.detachedHead=false push --porcelain --force --set-upstream origin $branch
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to push branch $branch."
+            }
+          }
+
+          "pr=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "branch=$branch" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          Write-Host "Version $version pushed to $branch; opening a pull request."
+
+      # 分支保护下 master 不接受直接推送，因此版本号一律以 PR 形式提交
+      #
+      # 关于令牌：GITHUB_TOKEN 能否创建 PR 由仓库策略决定
+      # （Settings → Actions → General → Workflow permissions →
+      #  Allow GitHub Actions to create and approve pull requests）。
+      # 若该开关打不开（或受组织策略限制），配置一个名为 VERSION_BUMP_TOKEN 的
+      # secret（PAT / GitHub App 安装令牌，需 contents:write + pull-requests:write），
+      # 下面的步骤会自动优先使用它，无需改动其它地方。
+      - name: Open version bump pull request
+        if: steps.version.outputs.pr == 'true'
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP_TOKEN: ${{ secrets.VERSION_BUMP_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          BRANCH: ${{ steps.version.outputs.branch }}
+          # 说明文字放在 env 里：PowerShell 脚本正文必须保持 ASCII
+          # （runner 把 run 块写成无 BOM 的 UTF-8 临时脚本，中文 Windows 上
+          #   PowerShell 5.1 会按 GBK 读取，正文里的非 ASCII 字符串会导致解析失败）
+          PR_BODY: |
+            打包并发布 Release 后自动回写的版本号。
+            master 开启了分支保护，因此以 PR 形式提交。
+          CLOSE_COMMENT: |
+            已被更高版本的版本号 PR 取代，自动关闭。
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          # 有 VERSION_BUMP_TOKEN 就优先用它（GITHUB_TOKEN 可能被策略禁止创建 PR）
+          if (-not [string]::IsNullOrWhiteSpace($env:BUMP_TOKEN)) {
+            $env:GH_TOKEN = $env:BUMP_TOKEN
+            Write-Host "Using VERSION_BUMP_TOKEN to open the pull request."
+          }
+          else {
+            Write-Host "VERSION_BUMP_TOKEN is not set; falling back to GITHUB_TOKEN."
+          }
+
+          $version = $env:VERSION
+          $title = "chore: bump version to v$version [skip ci]"
+          $prBody = $env:PR_BODY
+
+          # 把 "x.y.z" 解析成三段数字；不合法就返回 $null
+          # （不能靠 try/catch：PS 5.1 里 ForEach-Object 块内的转换错误不会被外层捕获）
+          function ConvertTo-VersionParts {
+            param([string]$Value)
+
+            if ($Value -notmatch '^\d+\.\d+\.\d+$') {
+              return $null
+            }
+
+            return @($Value.Split('.') | ForEach-Object { [int]$_ })
+          }
+
+          $headPrefix = "version-change-v"
+
+          # gh pr list 的 --jq 里做不了字符串截取，分支名在本地解析
+          $thisParts = ConvertTo-VersionParts ($env:BRANCH -replace "^$headPrefix", "")
+
+          # 同一个分支上可能已经有开着的 PR（例如上一次运行中断后重跑）：
+          # 分支刚刚被更新过，所以直接更新它的标题与正文，不重复开
+          $existing = gh pr list `
+            --repo $env:REPOSITORY `
+            --head $env:BRANCH `
+            --state open `
+            --json number `
+            --jq 'length'
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to list pull requests."
+          }
+
+          if ([int]$existing -gt 0) {
+            Write-Host "A pull request for $($env:BRANCH) is already open; updating its title."
+
+            gh pr edit $env:BRANCH `
+              --repo $env:REPOSITORY `
+              --title $title `
+              --body $prBody
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to update the version bump pull request."
+            }
+          }
+          else {
+            # 标题里的 [skip ci] 用于跳过 PR 触发的 CI（提交信息里的那个只对 push 事件生效）
+            gh pr create `
+              --repo $env:REPOSITORY `
+              --base $env:DEFAULT_BRANCH `
+              --head $env:BRANCH `
+              --title $title `
+              --body $prBody
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create the pull request. Enable 'Allow GitHub Actions to create and approve pull requests' in the repository Actions settings, or configure the VERSION_BUMP_TOKEN secret."
+            }
+
+            Write-Host "Pull request created for $($env:BRANCH)."
+          }
+
+          # 收尾：把被本次取代的旧版本号 PR 关掉，避免它们堆积成互相冲突的 PR
+          # （每个旧 PR 改的是同样那两行版本号，后合并的必然冲突）
+          $openJson = gh pr list `
+            --repo $env:REPOSITORY `
+            --state open `
+            --limit 100 `
+            --json number,headRefName
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Could not list the open pull requests; skipping the stale bump cleanup."
+            exit 0
+          }
+
+          $openPrs = @()
+          $parsedOpen = $openJson | ConvertFrom-Json
+
+          if ($null -ne $parsedOpen) {
+            $openPrs = @($parsedOpen)
+          }
+
+          foreach ($openPr in $openPrs) {
+            $otherRef = [string]$openPr.headRefName
+
+            if ($otherRef -eq $env:BRANCH) {
+              continue
+            }
+
+            if (-not $otherRef.StartsWith($headPrefix)) {
+              continue
+            }
+
+            # 只关掉版本号更小的那些；分支名不规范时解析结果为空，直接跳过
+            $otherParts = ConvertTo-VersionParts ($otherRef -replace "^$headPrefix", "")
+
+            if ($null -eq $thisParts -or $null -eq $otherParts) {
+              continue
+            }
+
+            if ($thisParts.Count -ne 3 -or $otherParts.Count -ne 3) {
+              continue
+            }
+
+            $older =
+              ($otherParts[0] -lt $thisParts[0]) -or
+              ($otherParts[0] -eq $thisParts[0] -and $otherParts[1] -lt $thisParts[1]) -or
+              ($otherParts[0] -eq $thisParts[0] -and $otherParts[1] -eq $thisParts[1] -and $otherParts[2] -lt $thisParts[2])
+
+            if (-not $older) {
+              continue
+            }
+
+            Write-Host "Closing superseded version bump PR #$($openPr.number) ($otherRef)."
+
+            gh pr close $openPr.number `
+              --repo $env:REPOSITORY `
+              --delete-branch `
+              --comment $env:CLOSE_COMMENT
+
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Could not close PR #$($openPr.number); continuing."
+            }
+          }

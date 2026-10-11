@@ -38,7 +38,7 @@ class KeyMouseManager:
         # 用于支持强制操作中断睡眠
         self.sleep_start_time = None
         self.sleep_duration = 0
-        self.ending = False
+        self.ending = True
 
     def set_config(self, config):
         """
@@ -80,7 +80,9 @@ class KeyMouseManager:
         CUS_LOGGER.info("启动键鼠管理器线程")
         if not self.running:
             self.running = True
-            self.operation_queue.clear()
+            with self.queue_lock:
+                self.operation_queue.clear()
+                self.ending = True
             self.worker_thread = ThreadWithException(target=self._worker, daemon=True,name="键鼠管理")
             self.worker_thread.start()
 
@@ -118,15 +120,16 @@ class KeyMouseManager:
             with self.queue_lock:
                 if self.operation_queue:
                     operation = self.operation_queue.popleft()
+                    self.ending = False
 
             if operation == "stop":
                 # None作为停止信号
                 break
 
             if operation != "stop" and operation is not None:
-                self.ending = False
                 self._execute_operation(operation)
-                self.ending = True
+                with self.queue_lock:
+                    self.ending = True
             else:
                 # 队列为空，短暂休眠
                 time.sleep(0.01)
@@ -330,16 +333,16 @@ class KeyMouseManager:
 
     def wait(self):
         """
-        等待直到操作队列为空
-        如果当前队列为空则直接返回，否则等待直至队列为空
+        等待操作队列及正在执行的动作全部完成，停止时提前返回。
         """
         while True:
-            # 如果队列为空或者只有"stop"信号，则返回
-            if not self.running:
-                return
-            if not len(self.operation_queue) and self.ending:
-                return
             with self.queue_lock:
+                if not self.running:
+                    return
+                if self.worker_thread is not None and not self.worker_thread.is_alive():
+                    raise RuntimeError("键鼠管理器线程异常退出，动作未能完成，请查看错误日志")
+                if not self.operation_queue and self.ending:
+                    return
                 if len(self.operation_queue) == 1 and self.operation_queue[0] == "stop":
                     return
             # 等待一小段时间再检查

@@ -4,6 +4,7 @@
 """
 
 import os
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -15,6 +16,8 @@ from tool.log import CUS_LOGGER
 _image_cache: dict = {}
 # 存储图像目录路径
 _image_directory: str = ""
+# 显式文件路径独立缓存，以文件修改时间和大小失效，避免不同目录的同名图像串用。
+_path_cache: dict = {}
 
 
 def load_all_images_from_directory(directory_path: str = None) -> dict[str, bool]:
@@ -43,6 +46,7 @@ def load_all_images_from_directory(directory_path: str = None) -> dict[str, bool
 
     # 清空之前的缓存
     _image_cache.clear()
+    _path_cache.clear()
 
     # 递归构建嵌套字典结构
     def build_nested_dict(root_path):
@@ -231,12 +235,25 @@ def find_image_by_name(image_identifier: str) -> np.ndarray | None:
     根据文件名（带或不带后缀）查找图像
 
     Args:
-        image_identifier: 图像标识符，可以是带后缀的文件名('run.jpg')或不带后缀的名称('run')
+        image_identifier: 文件名（可省略后缀）、相对于图像目录的路径，或外部文件绝对路径。
 
     Returns:
         np.ndarray: 图像数据，如果找不到返回None
     """
     global _image_cache
+
+    if "/" in image_identifier or "\\" in image_identifier:
+        path = Path(image_identifier.replace("\\", "/"))
+        if not path.is_absolute():
+            # 保留已有脚本中 folder/name 省略扩展名的缓存查询规则。
+            if not path.suffix:
+                return find_image_in_folder(path.parent.as_posix(), path.name)
+            if not _image_directory:
+                from route import PATHS
+                path = Path(PATHS["image"]) / path
+            else:
+                path = Path(_image_directory) / path
+        return _load_image_path(path)
 
     # 分离文件名和扩展名
     name_part, ext_part = os.path.splitext(image_identifier)
@@ -272,6 +289,27 @@ def find_image_by_name(image_identifier: str) -> np.ndarray | None:
             CUS_LOGGER.error(f"磁盘中未找到图像记忆切片: {image_identifier}")
 
     return result
+
+
+def _load_image_path(path):
+    """加载指定文件；重复匹配复用缓存，覆盖或删除文件后不返回旧图像。"""
+    path = path.resolve()
+    try:
+        stat = path.stat()
+        stamp = (stat.st_mtime_ns, stat.st_size)
+        cached = _path_cache.get(path)
+        if cached is not None and cached[0] == stamp:
+            return cached[1].copy()
+        mode = cv2.IMREAD_GRAYSCALE if "gray_image" in path.parts else cv2.IMREAD_COLOR
+        image = cv2.imdecode(np.frombuffer(path.read_bytes(), np.uint8), mode)
+        if image is None:
+            raise ValueError("文件不是有效图像")
+        _path_cache[path] = (stamp, image)
+        return image.copy()
+    except (OSError, ValueError, cv2.error) as error:
+        _path_cache.pop(path, None)
+        CUS_LOGGER.error("加载图像记忆切片失败 %s：%s", path, error)
+        return None
 
 
 def _load_image_from_disk(image_identifier: str) -> np.ndarray | None:
@@ -375,6 +413,7 @@ def clear_image_cache():
     global _image_cache
     cache_size = len(_image_cache)
     _image_cache.clear()
+    _path_cache.clear()
     CUS_LOGGER.info(f"已焚化图像记忆切片缓存，释放了 {cache_size} 个图像记忆切片")
 
 

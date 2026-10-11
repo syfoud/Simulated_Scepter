@@ -9,24 +9,19 @@ class CurrencyGuiUiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.root = ET.parse(UI_PATH).getroot()
+        cls.currency = ET.parse(Path(__file__).resolve().parents[1] / "core/currency/ui/settings.ui").getroot()
 
-    def test_currency_settings_has_dedicated_tab(self):
-        tab = self.root.find(".//widget[@name='CurrencyWarTab']")
-
-        self.assertIsNotNone(tab)
-        self.assertEqual(tab.find("./attribute[@name='title']/string").text, "货币战争设置")
+    def test_currency_settings_are_independent_of_main_tabs(self):
+        self.assertIsNone(self.root.find(".//widget[@name='CurrencyWarTab']"))
+        self.assertIsNotNone(self.root.find(".//widget[@name='kernel_buttons']"))
 
     def test_currency_settings_uses_choice_and_save_controls(self):
-        tab = self.root.find(".//widget[@name='CurrencyWarTab']")
+        tab = self.currency
 
         self.assertIsNotNone(
             tab.find(".//widget[@class='QComboBox'][@name='Currency_exit_plane_combo']")
         )
-        save_button = tab.find(
-            ".//widget[@class='QPushButton'][@name='Currency_save_btn']"
-        )
-        self.assertIsNotNone(save_button)
-        self.assertEqual(save_button.find("./property[@name='text']/string").text, "保存货币战争设置")
+        self.assertIsNotNone(tab.find(".//widget[@name='Currency_priority_settings_btn']"))
 
 
 if __name__ == "__main__":

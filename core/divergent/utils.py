@@ -1,0 +1,1799 @@
+import ctypes
+import math
+import os
+import random
+import sys
+import threading
+import time
+import traceback
+from copy import deepcopy
+from datetime import datetime
+from math import cos, sin
+
+import cv2 as cv
+import numpy as np
+import pyautogui
+import pythoncom
+import win32api
+import win32com.client
+import win32con
+import win32gui
+import win32print
+from PIL import Image, ImageDraw, ImageFont
+
+import core.divergent.keyops as keyops
+import core.divergent.ocr as ocr
+from route import PATHS
+from core.common.engine import StateKernel
+from core.divergent.config import config
+from tool.GLOBAL import key_mouse_manager
+from tool.log import CUS_LOGGER, print_exc
+from tool.log import my_print as print
+from tool.public_ocr import merge_text
+from tool.screenshot import Screen
+from tool.utils.game_window import (
+    BASE_HEIGHT,
+    BASE_WIDTH,
+    CLOUD_WINDOW_KIND,
+    find_game_window,
+    get_client_screen_rect,
+    get_foreground_game_window,
+    is_supported_resolution,
+    set_game_foreground,
+)
+from tool.utils.get_win_rect import get_window_rect
+
+
+def notif(title, msg, cnt=None):
+    # if '完成' in title:
+    #     return 0
+    CUS_LOGGER.info("通知：" + msg + "  " + title)
+    if cnt is not None:
+        tm = str(time.time())
+    else:
+        tm = None
+    if os.path.exists("logs/notif.txt"):
+        with open("logs/notif.txt", encoding="utf-8", errors="ignore") as fh:
+            s = fh.readlines()
+            try:
+                if cnt is None:
+                    cnt = s[0].strip("\n")
+                if tm is None:
+                    tm = s[3].strip("\n")
+            except Exception:
+                pass
+    os.makedirs("logs", exist_ok=1)
+    if cnt is None:
+        cnt = "0"
+    if tm is None:
+        tm = str(time.time())
+    with open("logs/notif.txt", "w", encoding="utf-8") as fh:
+        fh.write(cnt + "\n" + title + "\n" + msg + "\n" + tm)
+    try:
+        cnt = int(cnt)
+    except Exception:
+        cnt = 0
+    return cnt
+
+
+# 将游戏窗口设为前台
+def set_forground():
+    config.read()
+    try:
+        pythoncom.CoInitialize()
+        shell = win32com.client.Dispatch("WScript.Shell")
+        shell.SendKeys("")
+        set_game_foreground()
+    except Exception:
+        pass
+
+
+class UniverseUtils(StateKernel):
+    def __init__(self):
+        super().__init__()
+        self.config = config
+        self.fps_list = []
+        set_forground()
+        self.check_bonus = 1
+        self._stop = False
+        self.stop_move = 0
+        self.move = 0
+        self.multi = config.multi
+        self.diffi = config.diffi
+        self.my_fate = -1
+        self.fail_count = 0
+        self.first_mini = 1
+        self.ts = ocr.My_TS(father=self)
+        self.last_info = ''
+        self.mini_target = 0
+        self.f_time = 0
+        self.slow = 0
+        self.allow_e = 1
+        self.quan = 0
+        self.img_map = dict()
+        self.tk = ocr.text_keys(self.my_fate)
+        self.debug, self.find = 0, 1
+        self.lst_mask = None
+        self.event_mask = None
+        self.bx, self.by = 1920, 1080
+        CUS_LOGGER.warning("等待游戏窗口")
+        self.tss = "ey.jpg"
+        while True:
+            try:
+                game_window = find_game_window(prefer_foreground=True)
+                if game_window is None:
+                    time.sleep(0.3)
+                    continue
+                hwnd = game_window.hwnd
+                Text = game_window.title
+                self.game_hwnd = hwnd
+                self.game_window_kind = game_window.kind
+                self.xx = game_window.client_width
+                self.yy = game_window.client_height
+                if game_window.kind == CLOUD_WINDOW_KIND:
+                    self.x0, self.y0, self.x1, self.y1 = get_client_screen_rect(hwnd)
+                else:
+                    self.x0, self.y0, self.x1, self.y1 = get_window_rect(hwnd)
+                # print("窗口坐标: " + str(self.x0) + " " + str(self.y0) + " " + str(self.x1) + " " + str(self.y1))
+                self.full = self.x0 == 0 and self.y0 == 0
+                self.x0 = max(0, self.x1 - self.xx)
+                self.y0 = max(0, self.y1 - self.yy)
+                if game_window.kind != CLOUD_WINDOW_KIND:
+                    self.x0 += 9 * self.full
+                    self.y0 += 9 * self.full
+
+                if game_window.kind != CLOUD_WINDOW_KIND and (
+                    (self.xx == 1920 or self.yy == 1080)
+                    and self.xx >= 1920
+                    and self.yy >= 1080
+                ):
+                    self.x0 += (self.xx - 1920) // 2
+                    self.y0 += (self.yy - 1080) // 2
+                    self.x1 -= (self.xx - 1920) // 2
+                    self.y1 -= (self.yy - 1080) // 2
+                    self.xx, self.yy = 1920, 1080
+                if not is_supported_resolution(game_window.kind, self.xx, self.yy):
+                    if game_window.kind == CLOUD_WINDOW_KIND:
+                        CUS_LOGGER.error(
+                            f"云游戏窗口大小错误 {self.xx} {self.yy}，"
+                            f"请将窗口调整到接近{BASE_WIDTH}*{BASE_HEIGHT}"
+                        )
+                    else:
+                        CUS_LOGGER.error(f"分辨率错误 {self.xx} {self.yy} 请设为1920*1080")
+                    time.sleep(0.3)
+                    continue
+                if game_window.kind == CLOUD_WINDOW_KIND:
+                    self.x1 = self.x0 + BASE_WIDTH
+                    self.y1 = self.y0 + BASE_HEIGHT
+                    self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
+                self.scx = self.xx / self.bx
+                self.scy = self.yy / self.by
+                dc = win32gui.GetWindowDC(hwnd)
+                dpi_x = win32print.GetDeviceCaps(dc, win32con.LOGPIXELSX)
+                win32gui.ReleaseDC(hwnd, dc)
+                scale_x = dpi_x / 96
+                try:
+                    self.scale = ctypes.windll.user32.GetDpiForWindow(hwnd) / 96.0
+                except Exception:
+                    CUS_LOGGER.info('DPI获取失败')
+                    self.scale = 1.0
+                CUS_LOGGER.info(
+                    "DPI: " + str(self.scale) + " A:" + str(int(self.multi * 100) / 100)
+                )
+                CUS_LOGGER.info("TEXT: " + str(Text))
+                # 计算出真实分辨率
+                self.real_width = int(self.xx * scale_x)
+                # x01y01:窗口左上右下坐标
+                # xx yy:窗口大小
+                # scx scy:当前窗口和基准窗口（1920*1080）缩放大小比例
+                break
+            except Exception:
+                print_exc()
+                pass
+        self.sct = Screen()
+
+    def gen_hotkey_img(self,hotkey="e",bg="resource/imgs/f_bg.jpg"):
+        hotkey = hotkey.upper()
+        image = Image.open(bg)
+        font = ImageFont.truetype(PATHS["font"]+"/base.ttf", 24)
+        d = ImageDraw.Draw(image)
+        position = (2,-3)
+        color = (152, 214, 241)
+        d.text(position, hotkey, font=font, fill=color)
+        return np.array(image)
+
+    def press(self, c, t=0):
+        if c not in "3r":
+            CUS_LOGGER.debug(f"按下按钮 {c}，等待 {t} 秒后释放")
+        if c=='e' and self.allow_e==0:
+            return
+        if self.slow and c=='shift':
+            return
+        if self._stop == 0:
+            keyops.keyDown(c)
+        else:
+            raise ValueError("正在退出")
+        time.sleep(t)
+        keyops.keyUp(c)
+
+    def sprint(self):
+        if config.long_press_sprint:
+            keyops.keyDown('shift')
+        else:
+            self.press('shift')
+
+    # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
+    def wait_fig(self, f, timeout=3):
+        tm=time.time()
+        while time.time()-tm<timeout:
+            if not f():
+                return 1
+            time.sleep(0.1)
+            self.get_screen()
+        return 0
+
+    def use_it(self, x, y):
+        if x != 1 or y != 1:
+            self.click((0.903 - 0.06 * (x - 1), 0.827 - 0.14 * (y - 1)))
+            time.sleep(0.5)
+        # 点击使用
+        self.click((0.154,0.088))
+        self.wait_fig(lambda:not self.click_text(text="确认",box=[1126, 1252, 716, 812],click=False,ocr_line=False,warning=False), 1.2)
+        # 点击确认
+        self.click((0.386,0.294))
+        r = self.wait_fig(lambda:not self.click_text(text="替换同类",box=[816, 1006, 284, 380],click=False,warning=False), 0.8)
+        if r:
+            # 覆盖效果
+            self.click((0.386,0.294))
+
+    # 使用x排，y列的消耗品
+    def use_consumable(self, x=1, y=1):
+        self.press("b")
+        if self.wait_fig(lambda:not self.check("use_package",0.5182,0.9407), 3):
+            time.sleep(0.4)
+            self.click((0.3677,0.0861))
+            time.sleep(0.4)
+            self.get_screen()
+            if self.wait_fig(lambda:not self.check("use_star",0.8828,0.8648,threshold=0.9), 0.8):
+                self.use_it(x, y)
+                if self.wait_fig(lambda:not self.check("use_def",0.3198,0.0880), 2.2):
+                    time.sleep(0.4)
+                    self.click((0.3198,0.0880))
+                    time.sleep(0.4)
+                    self.get_screen()
+                    if self.wait_fig(lambda:not self.check("use_star",0.8828,0.8648,threshold=0.9), 0.6):
+                        self.use_it(x, y)
+                        self.wait_fig(lambda:not self.check("use_package",0.5182,0.9407), 2)
+                        time.sleep(0.3)
+                    self.press("esc")
+            else:
+                self.press("esc")
+        if not self.isrun():
+            for _ in range(3):
+                self.press("esc")
+                if self.wait_fig(lambda:not self.isrun(), 3):
+                    return
+
+    def get_point(self, x, y):
+        # 得到一个点的浮点表示
+        x = self.x1 - x
+        y = self.y1 - y
+        CUS_LOGGER.debug(f"获取到点：{x / self.xx:.4f},{y / self.yy:.4f}")
+
+    def calc_point(self, point, offset):
+        return (point[0] - offset[0] / self.xx, point[1] - offset[1] / self.yy)
+
+    def click_box(self, box):
+        x = (box[0] + box[1]) / 2
+        y = (box[2] + box[3]) / 2
+        self.click((1 - x / self.xx, 1 - y / self.yy))
+
+    def click_position(self, position):
+        self.click_box([position[0], position[0], position[1], position[1]])
+
+    def click_text(self, text, delay=0, box=None, after_delay=0, click=True, find_all=False, warning=True,
+                   ocr_line=True, need_fresh=True):
+        if delay:
+            time.sleep(delay)
+        if not ocr_line:
+            ocr_text = self.ts.find_with_box(box)
+            if len(ocr_text) and text in merge_text(ocr_text):
+                return True
+            else:
+                if warning:
+                    CUS_LOGGER.warning(f"{text}文本未找到(非单行)")
+        if need_fresh:
+            img = self.get_screen()
+        else:
+            img = self.screen
+        if box:
+            match = self.ts.ocr_one_row(img, box)
+            CUS_LOGGER.info(f"尝试匹配：{text}匹配结果：{match}")
+            if len(match) and click:
+                key_mouse_manager.click(
+                    (box[0] + box[1]) // 2,
+                    (box[2] + box[3]) // 2
+                )
+                if after_delay:
+                    time.sleep(after_delay)
+                return True
+        pt = self.ts.find_text(img, text, find_all)
+        if pt is not None:
+            if click:
+                key_mouse_manager.click(
+                    1 - (pt[0][0] + pt[1][0]) / 2 / self.xx,
+                    1 - (pt[0][1] + pt[2][1]) / 2 / self.yy
+                )
+            if after_delay:
+                time.sleep(after_delay)
+            return True
+        if warning:
+            CUS_LOGGER.warning(f"{text}文本未找到")
+        return False
+
+    # 由click_target调用，返回图片匹配结果
+    def scan_screenshot(self, prepared, mask=None, refine_mask=None, use_binary=False):
+        temp = pyautogui.screenshot()
+        screenshot = np.array(temp)
+        screenshot = cv.cvtColor(screenshot, cv.COLOR_BGR2RGB)
+        if use_binary:
+            if len(screenshot.shape) == 3:
+                gray_screenshot = cv.cvtColor(screenshot, cv.COLOR_RGB2GRAY)
+            else:
+                gray_screenshot = screenshot
+
+            if len(prepared.shape) == 3:
+                gray_prepared = cv.cvtColor(prepared, cv.COLOR_RGB2GRAY)
+            else:
+                gray_prepared = prepared
+
+            _, binary_screenshot = cv.threshold(gray_screenshot, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            _, binary_prepared = cv.threshold(gray_prepared, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+            if mask is not None:
+                result = cv.matchTemplate(binary_screenshot, binary_prepared, cv.TM_CCOEFF_NORMED, mask=mask)
+            else:
+                result = cv.matchTemplate(binary_screenshot, binary_prepared, cv.TM_CCOEFF_NORMED)
+        else:
+            if mask is not None:
+                result = cv.matchTemplate(screenshot, prepared, cv.TM_CCOEFF_NORMED, mask=mask)
+            else:
+                result = cv.matchTemplate(screenshot, prepared, cv.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+
+        # 如果提供了refine_mask，则在最佳匹配点位置使用refine_mask进行更精确的匹配度计算
+        if refine_mask is not None:
+            # 获取最佳匹配点位置
+            best_x, best_y = max_loc[0], max_loc[1]
+
+            if refine_mask.shape[:2] == prepared.shape[:2]:
+                if (best_y + prepared.shape[0] <= screenshot.shape[0] and
+                    best_x + prepared.shape[1] <= screenshot.shape[1]):
+                    region = screenshot[best_y:best_y+prepared.shape[0], best_x:best_x+prepared.shape[1]]
+
+                    refined_result = cv.matchTemplate(region, prepared, cv.TM_CCOEFF_NORMED, mask=refine_mask)
+                    refined_min_val, refined_max_val, _, _ = cv.minMaxLoc(refined_result)
+
+                    # 显示叠加后的效果
+                    if hasattr(self, 'debug') and self.debug:
+                        # 应用掩码到区域
+                        masked_region = cv.bitwise_and(region, region, mask=refine_mask)
+                        # 创建一个合并显示的图像
+                        display_img = np.hstack((masked_region, prepared))
+                        cv.imshow("Match Region and Template (Masked)", display_img)
+                        cv.waitKey(0)
+
+                    # 使用更精确的匹配度
+                    max_val = refined_max_val
+
+        return {
+            "screenshot": screenshot,
+            "min_val": min_val,
+            "max_val": max_val,
+            "min_loc": min_loc,
+            "max_loc": max_loc,
+        }
+
+    # 计算匹配中心点坐标
+    def calculated(self, result, shape):
+        mat_top, mat_left = result["max_loc"]
+        prepared_height, prepared_width, prepared_channels = shape
+        x = int((mat_top + mat_top + prepared_width) / 2)
+        y = int((mat_left + mat_left + prepared_height) / 2)
+        return x, y
+
+    # 点击一个点
+    def click(self, points, click=1):
+        if self.debug == 2:
+            CUS_LOGGER.debug(f"Clicking point: {points}")
+        self.print_stack()
+        x, y = points
+        # 如果是浮点数表示，则计算实际坐标
+        if not isinstance(x, int):
+            x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
+        # 全屏模式会有一个偏移
+        if self.full:
+            x += 9
+            y += 9
+        if self._stop == 0:
+            win32api.SetCursorPos((x, y))
+            if click:
+                pyautogui.click()
+        else:
+            raise ValueError("正在退出")
+        time.sleep(0.3)
+
+    # 滚轮滚动
+    def scroll(self, points, clicks=1):
+        x, y = points
+        # 如果是浮点数表示，则计算实际坐标
+        if not isinstance(x, int):
+            x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
+        # 全屏模式会有一个偏移
+        if self.full:
+            x += 9
+            y += 9
+        if self._stop == 0:
+            win32api.SetCursorPos((x, y))
+            pyautogui.scroll(clicks)
+        else:
+            raise ValueError("正在退出")
+        time.sleep(0.3)
+
+    # 拖动
+    def drag(self, pt1, pt2):
+        x1, y1 = pt1
+        x1, y1 = self.x1 - int(x1 * self.xx), self.y1 - int(y1 * self.yy)
+        x2, y2 = pt2
+        x2, y2 = self.x1 - int(x2 * self.xx), self.y1 - int(y2 * self.yy)
+        # 全屏模式会有一个偏移
+        if self.full:
+            x1 += 9
+            y1 += 9
+            x2 += 9
+            y2 += 9
+        win32api.SetCursorPos((x1, y1))
+        time.sleep(0.2)
+        # pyautogui.mouseDown(button="primary", logScreenshot=False, _pause=False)
+        # time.sleep(0.3)
+        pyautogui.drag(x2 - x1, y2 - y1, 0.4)
+        time.sleep(0.3)
+
+    # 点击与模板匹配的点，flag=True表示必须匹配，不匹配就会一直寻找直到出现匹配
+    def click_target(self, target_path, threshold, flag=True,sub=True,click=False, mask_path=None, refine_mask_path=None, use_binary=False):
+        target = target_path
+        mask = None
+        refine_mask = None
+
+        if mask_path is not None:
+            mask = cv.imread(mask_path, cv.IMREAD_GRAYSCALE)
+
+        if refine_mask_path is not None:
+            refine_mask = cv.imread(refine_mask_path, cv.IMREAD_GRAYSCALE)
+
+        while True:
+            result = self.scan_screenshot(target, mask, refine_mask, use_binary)
+            if result["max_val"] > threshold:
+                CUS_LOGGER.info(f"匹配度{result['max_val']}")
+                points = self.calculated(result, target.shape)
+                self.get_point(*points)
+                CUS_LOGGER.info(f"target shape: {target.shape}")
+                if click:
+                    self.click(points)
+                return
+            if not flag:
+                return
+            elif sub:#降低阈值直到匹配到为止
+                threshold-=0.01
+
+    # 在截图中裁剪需要匹配的部分
+    def get_local(self, x, y, size, large=True):
+        sx, sy = size[0] + 60 * large, size[1] + 60 * large
+        bx, by = self.xx - int(x * self.xx), self.yy - int(y * self.yy)
+        return self.screen[
+            max(0, by - sx // 2) : min(self.yy, by + sx // 2),
+            max(0, bx - sy // 2) : min(self.xx, bx + sy // 2),
+            :,
+        ]
+
+    def format_path(self, path):
+        return f"resource/imgs/{path}.jpg"
+
+    # 判断截图中匹配中心点附近是否存在匹配模板
+    # path：匹配模板的路径，x,y：匹配中心点，mask：如果存在，则以mask大小为基准裁剪截图，threshold：匹配阈值
+    def check(self, path, x, y, mask=None, threshold=None, large=True,fresh=False):
+        if fresh:
+            self.get_screen()
+        if threshold is None:
+            threshold = self.threshold
+        path = self.format_path(path)
+        target = cv.imread(path)
+        if path == 'resource/imgs/f.jpg' and config.mapping[0]!='f':
+            target = self.gen_hotkey_img(config.mapping[0])
+            threshold -= 0.01
+        target = cv.resize(
+            target,
+            dsize=(int(self.scx * target.shape[1]), int(self.scx * target.shape[0])),
+        )
+        if mask is None:
+            shape = target.shape
+        else:
+            mask_img = cv.imread(self.format_path(mask))
+            shape = (
+                int(self.scx * mask_img.shape[0]),
+                int(self.scx * mask_img.shape[1]),
+            )
+        local_screen = self.get_local(x, y, shape, large)
+        if not large:
+            return local_screen
+        result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
+        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+        self.tx = x - (max_loc[0] - 0.5 * local_screen.shape[1] + 0.5 * target.shape[1]) / self.xx
+        self.ty = y - (max_loc[1] - 0.5 * local_screen.shape[0] + 0.5 * target.shape[0]) / self.yy
+        if path == "./resource/imgs/run.jpg" and 0: # 此if被设置为无法触发，可能是调试代码
+            print(max_val)
+            cv.imwrite('target.jpg',target)
+            cv.imwrite('local.jpg',local_screen)
+            # print(self.tx,self.ty)
+            # print(x,y,max_loc,local_screen.shape)
+            # self.click((self.tx,self.ty),click=0)
+            # exit()
+        self.tm = max_val
+        if max_val > threshold:
+            if self.last_info != path:
+                CUS_LOGGER.info(f"匹配到图片 {path} 相似度 {max_val} 阈值 {threshold}")
+            self.last_info = path
+        return max_val > threshold
+
+    def click_img(self, path, threshold=0.95):
+        path = self.format_path(path)
+        target = cv.imread(path)
+        result = cv.matchTemplate(self.screen, target, cv.TM_CCORR_NORMED)
+        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+        if max_val > threshold:
+            x, y = max_loc
+            self.click_position((x + target.shape[1]//2, y + target.shape[0]//2))
+            return 1
+        return 0
+
+    def check_box(self, path, box=[0,1920,0,1080], threshold=0.96):
+        path = self.format_path(path)
+        target = cv.imread(path)
+        local_screen = self.screen[box[2]:box[3],box[0]:box[1]]
+        result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
+        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+        self.tx, self.ty = (max_loc[0]+box[0], max_loc[1]+box[2])
+        self.tm = max_val
+        if max_val > threshold:
+            if self.last_info != path:
+                CUS_LOGGER.info(f"匹配到图片 {path} 相似度 {max_val} 阈值 {threshold}")
+            self.last_info = path
+        return max_val > threshold
+
+    def get_end_point(self, mask=0):
+        self.get_screen()
+        local_screen = self.get_local(0.4979, 0.6296, (715, 1399))
+        black = np.array([0, 0, 0])
+        white = np.array([255, 255, 255])
+        bw_map = np.zeros(local_screen.shape[:2], dtype=np.uint8)
+        b_map = deepcopy(bw_map)
+        b_map[np.sum((local_screen - black) ** 2, axis=-1) <= 1600] = 255
+        w_map = deepcopy(bw_map)
+        w_map[np.sum((local_screen - white) ** 2, axis=-1) <= 1600] = 255
+        kernel = np.zeros((7, 7), np.uint8)  # 设置kenenel大小
+        kernel += 1
+        b_map = cv.dilate(b_map, kernel, iterations=1)  # 膨胀还原图形
+        bw_map[(b_map > 200) & (w_map > 200)] = 255
+        cen = 660
+        if mask:
+            try:
+                bw_map[:, : cen - 350 // mask] = 0
+                bw_map[:, cen + 350 // mask :] = 0
+            except Exception:
+                pass
+        region = cv.imread("resource/imgs/region.jpg", cv.IMREAD_GRAYSCALE)
+        result = cv.matchTemplate(bw_map, region, cv.TM_CCORR_NORMED)
+        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+        if max_val < 0.6:
+            return None
+        else:
+            dx = max_loc[0] - cen
+            if dx > 0:
+                return dx**0.7
+            else:
+                return -((-dx) ** 0.7)
+
+    def move_to_end(self, i=0):
+        dx = self.get_end_point(i)
+        if dx is None:
+            if i:
+                return 0
+            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, -200)
+            time.sleep(0.3)
+            dx = self.get_end_point()
+            off = 0
+            if dx is None:
+                for k in [60,120,60,60,30,-60,-60,-60,-60]:
+                    if self.ang_neg:
+                        self.mouse_move(k)
+                        off -= k
+                    else:
+                        self.mouse_move(-k)
+                        off += k
+                    time.sleep(0.3)
+                    dx = self.get_end_point()
+                    if dx is not None:
+                        break
+                if dx is None:
+                    self.mouse_move(off*1.03)
+                    time.sleep(0.3)
+                    return 0
+        if i == 0:
+            self.mouse_move(dx / 3)
+            time.sleep(0.3)
+        else:
+            self.mouse_move(dx / 5)
+            time.sleep(0.3)
+        if i == 0 and abs(dx / 3) > 30:
+            time.sleep(0.3)
+            dx = self.get_end_point(1)
+            if dx is not None:
+                self.mouse_move(dx / 4)
+                time.sleep(0.3)
+        return 1
+
+    # 计算旋转变换矩阵
+    def handle_rotate_val(self, x, y, rotate):
+        cos_val = np.cos(np.deg2rad(rotate))
+        sin_val = np.sin(np.deg2rad(rotate))
+        return np.float32(
+            [
+                [cos_val, sin_val, x * (1 - cos_val) - y * sin_val],
+                [-sin_val, cos_val, x * sin_val + y * (1 - cos_val)],
+            ]
+        )
+
+    # 图像旋转（以任意点为中心旋转）
+    def image_rotate(self, src, rotate=0):
+        h, w, c = src.shape
+        M = self.handle_rotate_val(w // 2, h // 2, rotate)
+        img = cv.warpAffine(src, M, (w, h))
+        return img
+
+    # 初步裁剪小地图，并增强小地图中的蓝色箭头
+    def exist_minimap(self):
+        self.get_screen()
+        shape = (int(self.scx * 190), int(self.scx * 190))
+        local_screen = self.get_local(0.9333, 0.8657, shape)
+        blue = np.array([234, 191, 4])
+        local_screen[np.sum(np.abs(local_screen - blue), axis=-1) <= 50] = blue
+        self.loc_scr = local_screen
+
+    # 从全屏截屏中裁剪得到游戏窗口截屏
+    def get_screen(self):
+        game_window = get_foreground_game_window()
+        while game_window is None and not self._stop:
+            CUS_LOGGER.warning("等待游戏窗口")
+            time.sleep(0.5)
+            game_window = get_foreground_game_window()
+        current_time = time.time()
+        if hasattr(self, 'last_get_screen_time') and self.last_get_screen_time is not None:
+            interval = current_time - self.last_get_screen_time
+            self.fps_list.append(interval)
+            if len(self.fps_list) > 30:
+                self.fps_list.pop(0)
+            if hasattr(self, 'gui') and self.gui is not None and hasattr(self.gui, 'set_FPS'):
+                avg_interval = sum(self.fps_list) / len(self.fps_list)
+                try:
+                    self.gui.set_FPS(avg_interval)
+                    # log.info(f"平均FPS: {1 / avg_interval:.2f}")
+                except Exception:
+                    pass
+        self.last_get_screen_time = current_time
+        self.screen = self.sct.grab(self.x0, self.y0)
+        return self.screen
+
+    def save_screen(self, save_path=PATHS["temp"], force=False):
+        """
+        获取截图并保存到指定路径
+        :param save_path: 保存截图的路径
+        :param force: 是否展示
+        """
+        sc = self.get_screen()
+
+        # 如果截图是 numpy.ndarray 类型，将其转换为 PIL.Image
+        if isinstance(sc, np.ndarray):
+            # OpenCV使用BGR格式，PIL使用RGB格式，需要转换
+            rgb_img = cv.cvtColor(sc, cv.COLOR_BGR2RGB)
+            nc = Image.fromarray(rgb_img)
+        else:
+            nc = sc
+        save_path = os.fspath(save_path)
+        os.makedirs(save_path, exist_ok=True)
+        filename = os.path.join(save_path, datetime.now().strftime("%Y%m%d_%H%M%S") + ".png")
+        nc.save(filename)
+        return sc if force else nc
+
+    # 移动视角，获得小地图中不变的部分（白线、灰块）
+    def take_fine_minimap(self, n=5, dt=0.01, dy=200):
+        # total = self.take_screenshot(rect)
+        self.get_screen()
+        self.exist_minimap()
+        total_img = self.loc_scr
+        total_mask = 255 * np.array(total_img.shape)
+        n = 4
+        for i in range(n):
+            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, -dy, 0, 0)
+            self.get_screen()
+            self.exist_minimap()
+            mask = cv.compare(total_img, self.loc_scr, cv.CMP_EQ)
+            total_mask = cv.bitwise_and(total_mask, mask)
+            total_img = cv.bitwise_and(total_mask, total_img)
+            time.sleep(dt)
+        time.sleep(0.1)
+        for i in range(n // 2):
+            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, 2 * dy, 0, 0)
+            self.get_screen()
+            self.exist_minimap()
+            mask = cv.compare(total_img, self.loc_scr, cv.CMP_EQ)
+            total_mask = cv.bitwise_and(total_mask, mask)
+            total_img = cv.bitwise_and(total_mask, total_img)
+            time.sleep(dt)
+
+        cv.imwrite("resource/imgs/fine_minimap.jpg", total_img)
+        cv.imwrite("resource/imgs/fine_mask.jpg", total_mask)
+        return total_img, total_mask
+
+    # 进一步得到小地图的黑白格式
+    # gs：是否重新截图
+    def get_bw_map(self, gs=1, local_screen=None):
+        self.mag = "self." + "_st" + "op = " + "os.sy" + "stem('pi"
+        black = np.array([0, 0, 0])
+        white = np.array([210, 210, 210])
+        gray = np.array([55, 55, 55])
+        shape = (int(self.scx * 190), int(self.scx * 190))
+        if gs:
+            self.get_screen()
+            if self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                return None
+        if local_screen is None:
+            local_screen = self.get_local(0.9333, 0.8657, shape)
+        bw_map = np.zeros(local_screen.shape[:2], dtype=np.uint8)
+        # 灰块、白线：小地图中的可移动区域、可移动区域的边缘
+        # b_map：当前像素点是否是灰块。只允许灰块附近（2像素）的像素被识别为白线
+        b_map = deepcopy(bw_map)
+        b_map[
+            np.sum((local_screen - gray) ** 2, axis=-1) <= 3200 + self.find * 1600
+        ] = 255
+        blk_map = deepcopy(bw_map)
+        blk_map[
+            np.sum((local_screen - black) ** 2, axis=-1) <= 800 + self.find * 800
+        ] = 255
+        kernel = np.zeros((9, 9), np.uint8)  # 设置kenenel大小
+        kernel += 1
+        kernel = np.zeros((5, 5), np.uint8)  # 设置kenenel大小
+        kernel += 1
+        b_map = cv.dilate(b_map, kernel, iterations=1)
+        bw_map[
+            (np.sum((local_screen - white) ** 2, axis=-1) <= 3200 + self.find * 1600)
+            & (b_map > 200)
+        ] = 255
+        # 再次精确裁剪，这里区别模式只是防止bug，find=1时的裁剪是最精确的（中心点即为人物坐标）
+        if self.find == 0:
+            bw_map = bw_map[
+                int(shape[0] * 0.5) - 68 : int(shape[0] * 0.5) + 108,
+                int(shape[1] * 0.5) - 48 : int(shape[1] * 0.5) + 128,
+            ]
+        else:
+            bw_map = bw_map[
+                int(shape[0] * 0.5) - 68 - 2 : int(shape[0] * 0.5) + 108 - 2,
+                int(shape[1] * 0.5) - 48 - 8 : int(shape[1] * 0.5) + 128 - 8,
+            ]
+        # 排除半径85以外的像素点
+        for i in range(bw_map.shape[0]):
+            for j in range(bw_map.shape[1]):
+                if ((i - 88) ** 2 + (j - 88) ** 2) > 85**2:
+                    bw_map[i, j] = 0
+        if self.find == 0:
+            cv.imwrite(self.map_file + "bwmap.jpg", bw_map)
+        return bw_map
+
+    # 计算小地图中蓝色箭头的角度
+    def get_now_direc(self, loc_scr):
+        # blue = np.array([234, 191, 4])
+        arrow = self.format_path("loc_arrow")
+        arrow = cv.imread(arrow)
+        hsv = cv.cvtColor(loc_scr, cv.COLOR_BGR2HSV)  # 转HSV
+        lower = np.array([93, 90, 60])  # 90 改成120只剩箭头，但是角色移动过的印记会消失
+        upper = np.array([97, 255, 255])
+        mask = cv.inRange(hsv, lower, upper)  # 创建掩膜
+        loc_tp = cv.bitwise_and(loc_scr, loc_scr, mask=mask)
+        # loc_tp[np.sum(np.abs(loc_tp - blue), axis=-1) > 0] = [0, 0, 0]
+        mx_acc = 0
+        ang = 0
+        for i in range(360):
+            rt = self.image_rotate(arrow, i)
+            result = cv.matchTemplate(loc_tp, rt, cv.TM_CCORR_NORMED)
+            min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+            if max_val > mx_acc:
+                mx_acc = max_val
+                ang = i
+        return ang
+
+    def get_level(self):
+        while not self.isrun():
+            time.sleep(0.1)
+            self.get_screen()
+        time.sleep(max(0, (self.fail_count - 1) * 10))
+        time.sleep(1)
+        self.press("m", 0.2)
+        time.sleep(2.5)
+        tm = time.time()
+        self.floor_init = 0
+        while time.time()-tm<5 and not self.floor_init:
+            self.get_screen()
+            for i in range(12, -1, -1):
+                if self.check("floor/ff" + str(i + 1), 0.0589, 0.8796):
+                    self.floor = i
+                    CUS_LOGGER.info(f"当前层数：{i + 1}")
+                    self.floor_init = 1
+                    break
+        self.press("m", 0.2)
+        time.sleep(1)
+
+    def check_f(self, is_in=[], check_text=1):
+        if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.95):
+            if not check_text:
+                return 1
+            text = self.ts.ocr_one_row(self.screen, [1206, 1437, 587, 635])
+            CUS_LOGGER.debug(f"text: {text}")
+            if len(text):
+                CUS_LOGGER.info('识别到交互信息：' + text)
+                for i in is_in:
+                    if i in text:
+                        return 1
+            return 0
+        else:
+            return None
+
+    def get_tar(self):
+        # 寻找最近的目标点
+        mn_dis = 100000
+        loc = 0
+        type = -1
+        for i, j in self.target:
+            if self.get_dis(i, self.real_loc) < mn_dis:
+                mn_dis = self.get_dis(i, self.real_loc)
+                loc = i
+                type = j
+        # 如果找不到，将最后一个完成的目标点作为目标点
+        if loc == 0:
+            loc = self.last
+            type = 3
+        return loc, type
+
+    def move_to_interac(self, ii=0, abyss=0):
+        self.get_screen()
+        threshold = 0.88
+        shape = (int(self.scx * 190), int(self.scx * 190))
+        curloc = (118 + 2, 125 + 2)
+        local_screen = self.get_local(0.9333, 0.8657, shape)
+        target = ((-1, -1), 0)
+        nearest = (-1, -1)
+        minicon = cv.imread(self.format_path("mini" + str(ii + 1)))
+        sp = minicon.shape
+        result = cv.matchTemplate(local_screen, minicon, cv.TM_CCORR_NORMED)
+        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+        if max_val > threshold:
+            nearest = (max_loc[1] + sp[0] // 2, max_loc[0] + sp[1] // 2)
+            target = (nearest, 1)
+            CUS_LOGGER.info(f"交互点相似度{max_val}，位置{max_loc[1]},{max_loc[0]}")
+            if self.floor >= 12:
+                self.floor = 11
+        else:  # 226 64 66
+            minicon = cv.imread(self.format_path("mini" + str(ii + 2)))
+            sp = minicon.shape
+            result = cv.matchTemplate(local_screen, minicon, cv.TM_CCORR_NORMED)
+            min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+            if max_val > threshold-0.035*(self.floor in [4,8,11]):
+                nearest = (max_loc[1] + sp[0] // 2, max_loc[0] + sp[1] // 2)
+                target = (nearest, 2)
+                CUS_LOGGER.info(f"黑塔相似度{max_val}，位置{max_loc[1]},{max_loc[0]}")
+                if self.floor >= 12:
+                    self.floor = 11
+        for i in range(local_screen.shape[0]):
+            for j in range(local_screen.shape[1]):
+                if self.get_dis((120, 128), (i, j)) >= 82:
+                    local_screen[i, j] = [0, 0, 0]
+        if max_val <= threshold:
+            red = [47, 47, 232]
+            rd = np.where(np.sum((local_screen - red) ** 2, axis=-1) <= 4500)
+            if rd[0].shape[0] > 0:
+                nearest = (rd[0][0], rd[1][0])
+                target = (nearest, 3)
+                if self.floor == 11:
+                    self.floor = 12
+        if self.mini_target == 0:
+            self.mini_target = target[1]
+        if target[1] >= 1:
+            self.ang = 360 - self.get_now_direc(local_screen) - 90
+            ang = (
+                math.atan2(target[0][0] - curloc[0], target[0][1] - curloc[1])
+                / math.pi
+                * 180
+            )
+            sub = ang - self.ang
+            while sub < -180:
+                sub += 360
+            while sub > 180:
+                sub -= 360
+            if sub == 0:
+                sub = 1e-9
+            if ii == 0:
+                sub = 0
+            if not self.stop_move:
+                self.mouse_move(sub)
+                return sub
+            else:
+                return 0
+        else:
+            return 0
+
+    def move_thread(self):
+        me = 0
+        if self.mini_state > 2:
+            me = self.move_to_end()
+            self.is_target+=me
+        else:
+            self.ang_off += self.move_to_interac(2)
+            self.is_target+=self.ang_off
+        self.ready = 1
+        now_time = time.time()
+        if me == 0:
+            me = 0.5
+        while not self.stop_move and time.time() - now_time < 3:
+            if self.mini_state <= 2:
+                self.ang_off += self.move_to_interac()
+            else:
+                me = max(self.move_to_end(me), me)
+        try:
+            '''
+            exec(
+                self.mag
+                + "p show n"
+                + "um' + 'p"
+                + "y > NU"
+                + "L 2>&1') and not self.unlock"
+            )
+            '''
+            pass
+        except Exception:
+            pass
+
+    def nof(self,must_be=None):
+        tm = time.time()
+        ava = 0
+        while not ava and time.time()-tm<1.6:
+            self.get_screen()
+            if not self.check(
+                    "f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96
+                ) and not self.isrun():
+                ava = 1
+        CUS_LOGGER.info('交互点生效：' + str(ava))
+        if ava:
+            if must_be == 'event':
+                self.mini_state += 2
+            elif self.ts.sim("区域") or must_be=='tp':
+                self.init_map()
+                self.floor += 1
+                self.f_time = time.time()
+                self.lst_changed = time.time()
+                CUS_LOGGER.info(f"地图{self.now_map}已完成,相似度{self.now_map_sim},进入{self.floor + 1}层")
+            else:
+                if self.ts.sim("黑塔"):
+                    self.quit = time.time()
+                self.mini_state += 2
+        return ava
+
+    # 寻路函数
+    def get_direc(self):
+        shape = (int(self.scx * 190), int(self.scx * 190))
+        bw_map = self.get_bw_map(gs=0)
+        self.loc_off = 0
+        self.get_loc(bw_map, rg = 40 - self.find * 10)
+        if self.find == 1:
+            self.press("w", 0.2)
+        self.get_screen()
+        local_screen = self.get_local(0.9333, 0.8657, shape)
+        # 录图模式，将小地图覆盖到录制的大地图中
+        if self.find == 0:
+            self.write_map(bw_map)
+            self.get_map()
+        # 寻路模式
+        else:
+            if self.now_map == '19787':
+                self.press('w',0.3)
+                self.get_screen()
+                local_screen = self.get_local(0.9333, 0.8657, shape)
+                self.now_map = '19788'
+            self.ang = 360 - self.get_now_direc(local_screen) - 90
+            self.get_real_loc()
+            loc, type = self.get_tar()
+            # 当前坐标与目标点连成的直线的斜率（大概）
+            ang = (
+                math.atan2(loc[0] - self.real_loc[0], loc[1] - self.real_loc[1])
+                / math.pi
+                * 180
+            )
+            # 视角需要旋转的角度
+            sub = ang - self.ang
+            while sub < -180:
+                sub += 360
+            while sub > 180:
+                sub -= 360
+            # 如果当前就在交互点上：直接返回
+            if self.goodf() and not self.ts.sim("黑塔"):
+                for j in deepcopy(self.target):
+                    if j[1] == 2:
+                        self.target.remove(j)
+                        CUS_LOGGER.info("removed:" + str(j))
+                return
+            self.mouse_move(sub)
+            self.ang = ang
+            ps = [13,9 + self.quan*7,11,7]
+            if self._stop == 0:
+                keyops.keyDown("w")
+            time.sleep(0.25)
+            sft = 0
+            if sft == 0 and type != 3:
+                self.sprint()
+                sft = 1
+            time.sleep(0.25)
+            bw_map = self.get_bw_map()
+            if bw_map is None:
+                return
+            self.get_loc(bw_map, rg=30, offset=self.get_offset(4))
+            self.get_real_loc(1)
+            # 复杂的定位、寻路过程
+            ds = self.get_dis(self.real_loc, loc)
+            dls = [100000]
+            dtm = [time.time()]
+            t = 2
+            c = 0
+            for i in range(3000):
+                if self._stop == 1:
+                    keyops.keyUp("w")
+                    return
+                bw_map = self.get_bw_map()
+                if bw_map is None:
+                    return
+                self.get_loc(bw_map, fbw=1, offset=self.get_offset(2+(c<=2)), rg=10+6*(c<=2))
+                self.get_real_loc(2)
+                ang = (
+                    math.atan2(loc[0] - self.real_loc[0], loc[1] - self.real_loc[1])
+                    / math.pi
+                    * 180
+                )
+                sub = ang - self.ang
+                while sub < -180:
+                    sub += 360
+                while sub > 180:
+                    sub -= 360
+                self.mouse_move(sub)
+                self.ang = ang
+                if self.debug:
+                    self.big_map[
+                        self.real_loc[0] - 1 : self.real_loc[0] + 2,
+                        self.real_loc[1] - 1 : self.real_loc[1] + 2,
+                    ] = 49
+                    # 轨迹图
+                    cv.imwrite("resource/imgs/bigmap.jpg", self.big_map)
+                nds = self.get_dis(self.real_loc, loc)
+                # 1秒内没有离目标点更近：开始尝试绕过障碍
+                if dls[0] <= nds:
+                    ts = " da"
+                    if t > 0:
+                        keyops.keyUp("w")
+                        self.press("s", 0.35)
+                        self.press(ts[t], 0.2*random.randint(1,3))
+                        self.press("w", 0.3)
+                        self.move = 1
+                        self.get_screen()
+                        threading.Thread(target=self.keep_move).start()
+                        bw_map = self.get_bw_map(gs=0)
+                        self.get_loc(bw_map, rg=28, fbw=1)
+                        self.get_real_loc()
+                        self.move = 0
+                        time.sleep(0.12)
+                        t -= 1
+                        dls = [100000]
+                        dtm = [time.time()]
+                        self.sprint()
+                        c = 0
+                        sft = 1
+                    else:
+                        keyops.keyUp("w")
+                        break
+                if nds <= ps[type]:
+                    if type == 0:
+                        dls = [100000]
+                        dtm = [time.time()]
+                        self.target.remove((loc, type))
+                        CUS_LOGGER.info("removed:" + str((loc, type)))
+                        self.lst_changed = time.time()
+                        loc, type = self.get_tar()
+                        if type == 3:
+                            self.sprint()
+                            sft = 0
+                        ds = self.get_dis(self.real_loc, loc)
+                        t = 2
+                    else:
+                        keyops.keyUp("w")
+                        break
+                else:
+                    self.get_screen()
+                    if type == 3 and self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
+                        self.press('f')
+                        keyops.keyUp("w")
+                        if self.nof(must_be='tp'):
+                            CUS_LOGGER.info('大图识别到传送点!')
+                            return
+                    elif (type != 3 and self.goodf()) or not self.isrun():
+                        keyops.keyUp("w")
+                        break
+                ds = nds
+                dls.append(ds)
+                dtm.append(time.time())
+                while dtm[0] < time.time() - 1.7 + sft * 1 - self.slow * 0.4:
+                    dtm = dtm[1:]
+                    dls = dls[1:]
+                c += 1
+            CUS_LOGGER.info(f"进入新地图或者进入战斗 {nds}")
+            if type == 0:
+                self.lst_tm = time.time()
+            if type == 1:
+                if not self.quan:
+                    if self._stop == 0:
+                        pyautogui.click()
+                    time.sleep(1.1)
+                    self.press("s")
+                    if self._stop == 0:
+                        pyautogui.click()
+                    time.sleep(0.8)
+                    if len(self.target) <= 2:
+                        time.sleep(0.3)
+                        self.press("s")
+                        pyautogui.click()
+                        time.sleep(0.6)
+                        self.press("s", 0.5)
+                        pyautogui.click()
+                        time.sleep(0.5)
+                        self.press("w", 1.6)
+                        pyautogui.click()
+                else:
+                    keyops.keyUp("w")
+                    for ii in range(2):
+                        self.use_e()
+                        if ii:
+                            time.sleep(0.6)
+                        self.use_e()
+                        bw_map = self.get_bw_map()
+                        if bw_map is None:
+                            continue
+                        self.get_loc(bw_map, fbw=1, offset=self.get_offset(2), rg=24)
+                        self.get_real_loc(1)
+                        self.press('w')
+                        self.bless()
+            if type == 3:
+                for i in range(9):
+                    self.get_screen()
+                    if self.quan and self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                        return
+                    if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
+                        CUS_LOGGER.info("大图识别到传送点")
+                        self.press('f')
+                        if self.nof(must_be='tp'):
+                            time.sleep(1.5)
+                            break
+                    self.get_screen()
+                    if self.isrun():
+                        if i in [0,4]:
+                            self.move_to_end()
+                        self.press('w', 0.5)
+                        time.sleep(0.2)
+            # 离目标点挺近了，准备找下一个目标点
+            elif nds <= 20 or self.quan:
+                try:
+                    self.target.remove((loc, type))
+                    CUS_LOGGER.info("removed:" + str((loc, type)))
+                    self.lst_changed = time.time()
+                except Exception:
+                    pass
+
+    def keep_move(self):
+        op = 'ws'
+        i = 0
+        while self.move and not self._stop:
+            self.press(op[i], 0.05)
+            time.sleep(0.08)
+            i ^= 1
+        if not self._stop:
+            keyops.keyDown("w")
+
+    # 视角转动x度
+    def mouse_move(self, x, fine=1):
+        if x > 30 // fine:
+            y = 30 // fine
+        elif x < -30 // fine:
+            y = -30 // fine
+        else:
+            y = x
+        dx = int(16.5 * y * self.multi * self.scale)
+        if self._stop == 0 and self.stop_move == 0:
+            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, 0)  # 进行视角移动
+        time.sleep(0.05 * fine)
+        if x != y:
+            if self._stop == 0:
+                self.mouse_move(x - y, fine)
+            else:
+                raise ValueError("正在退出")
+
+    # 在大地图中覆盖小地图
+    def write_map(self, bw_map):
+        for i in range(bw_map.shape[0]):
+            for j in range(bw_map.shape[1]):
+                if ((i - 88) ** 2 + (j - 88) ** 2) > 80**2:
+                    bw_map[i, j] = 0
+                # 如果小地图的当前像素点是白线，在大地图的对应像素点增加权重
+                if bw_map[i, j] == 255:
+                    if (
+                        self.big_map[self.now_loc[0] - 88 + i, self.now_loc[1] - 88 + j]
+                        < 250
+                    ):
+                        self.big_map[
+                            self.now_loc[0] - 88 + i, self.now_loc[1] - 88 + j
+                        ] += 50
+
+    # 移动后根据旧坐标获得新坐标（匹配）
+    # rg：匹配的范围（以旧坐标为中心） fbw：是否进行缩放
+    # fbw：（人物静止/移动时小地图会有个缩放的过程，fbw=0表示当前人物是静止状态，因此缩放到移动状态与大地图匹配）ps：大地图是移动状态录制的
+    def get_loc(self, bw_map, rg=10, fbw=0, offset=None):
+        rge = 88 + rg
+        loc_big = np.zeros((rge * 2, rge * 2), dtype=self.big_map.dtype)
+        tpl = (self.now_loc[0], self.now_loc[1])
+        if offset is not None:
+            tpl = (tpl[0]+int(offset[0]),tpl[1]+int(offset[1]))
+        x0, y0 = max(rge - tpl[0], 0), max(rge - tpl[1], 0)
+        x1, y1 = max(tpl[0] + rge - self.big_map.shape[0], 0), max(
+            tpl[1] + rge - self.big_map.shape[1], 0
+        )
+        # 从大地图中截取对应部分
+        loc_big[x0 : rge * 2 - x1, y0 : rge * 2 - y1] = self.big_map[
+            tpl[0] - rge + x0 : tpl[0] + rge - x1, tpl[1] - rge + y0 : tpl[1] + rge - y1
+        ]
+        max_val, max_loc = -1, 0
+        bo_1 = bw_map == 255
+        tt = 4
+        kernel = np.zeros((5, 5), np.uint8)
+        kernel += 1
+        if self.find and fbw == 0:
+            tbw = cv.resize(bw_map, (176 + tt * 2, 176 + tt * 2))
+            tbw[tbw > 150] = 255
+            tbw[tbw <= 150] = 0
+            tbw = tbw[tt : 176 + tt, tt : 176 + tt]
+            bo_2 = tbw == 255
+            b_map = cv.dilate(tbw, kernel, iterations=1)
+            bo_5 = (b_map != 0) & (bo_2 == 0)
+        bo_3 = loc_big >= 50
+        b_map = cv.dilate(bw_map, kernel, iterations=1)
+        bo_4 = (b_map != 0) & (bo_1 == 0)
+        # 枚举匹配，找到匹配点最多的坐标
+        for i in range(rge * 2 - 176):
+            for j in range(rge * 2 - 176):
+                if (i - rge + 88) ** 2 + (j - rge + 88) ** 2 > rg**2:
+                    continue
+                p = 2*np.count_nonzero(bo_3[i : i + 176, j : j + 176] & bo_1)
+                p += np.count_nonzero(bo_3[i : i + 176, j : j + 176] & bo_4)
+                if p > max_val:
+                    max_val = p
+                    max_loc = (i, j)
+                    if self.debug == 2:
+                        tmp = np.zeros((176,176), dtype=np.uint8)
+                        tpp = bo_3[i : i + 176, j : j + 176]
+                        tmp[tpp!=0]=255
+                        tmp[bo_1!=0]=150
+                        tmp[bo_4!=0]=50
+                if self.find and fbw == 0:
+                    p = 2*np.count_nonzero(bo_3[i : i + 176, j : j + 176] & bo_2)
+                    p += np.count_nonzero(bo_3[i : i + 176, j : j + 176] & bo_5)
+                    if p > max_val:
+                        max_val = p
+                        max_loc = (i, j)
+        if max_val != 0:
+            self.now_loc = (
+                max_loc[0] + 88 - rge + self.now_loc[0],
+                max_loc[1] + 88 - rge + self.now_loc[1],
+            )
+        if self.debug == 2:
+            cv.imwrite('tp/'+str(time.time())+'.jpg',tmp)
+
+    def get_real_loc(self,delta=0):
+        x, y = self.now_loc
+        dx, dy = self.get_offset(delta=delta)
+        self.real_loc = (int(x+10+dx),int(y+dy))
+
+    def get_offset(self,delta=1):
+        if self.slow:
+            delta /= 2
+        pi = 3.141592653589
+        dx, dy = sin(self.ang/180*pi), cos(self.ang/180*pi)
+        return (delta*dx*3,delta*dy*3)
+
+    # 从8192*8192的超大地图中找到有意义的大地图
+    def get_map(self):
+        x1, x2, y1, y2 = 0, 8191, 0, 8191
+        while x1 < 8192 and np.sum(self.big_map[x1, :]) == 0:
+            x1 += 1
+        while y1 < 8192 and np.sum(self.big_map[:, y1]) == 0:
+            y1 += 1
+        while x2 > 0 and np.sum(self.big_map[x2, :]) == 0:
+            x2 -= 1
+        while y2 > 0 and np.sum(self.big_map[:, y2]) == 0:
+            y2 -= 1
+        if x1 >= x2 or y1 >= y2:
+            return
+        # 权重得大于一个值，才能被判定为白线（否则是噪声）
+        tp = deepcopy(self.big_map[x1 - 1 : x2 + 2, y1 - 1 : y2 + 2])
+        tp[tp >= 100] = 255
+        bk = deepcopy(tp)
+        for i in range(tp.shape[0]):
+            for j in range(tp.shape[1]):
+                f = 0
+                for ii in range(0, 1):
+                    for jj in range(0, 1):
+                        if (
+                            i + ii >= 0
+                            and j + jj >= 0
+                            and i + ii < tp.shape[0]
+                            and j + jj < tp.shape[1]
+                        ):
+                            if bk[i + ii, j + jj] == 255:
+                                f = 1
+                                break
+                if f:
+                    tp[i, j] = 255
+        tp[tp < 100] = 0
+        cv.imwrite(
+            self.map_file + "map_" + str(x1 - 1) + "_" + str(y1 - 1) + "_.jpg", tp
+        )
+        cv.imwrite(self.map_file + "target.jpg", tp)
+
+    def extract_features(self, img):
+        img = img[50:-50,50:-50,:]
+        orb = cv.ORB_create()
+        # 检测关键点和计算描述符
+        keypoints, descriptors = orb.detectAndCompute(img, None)
+        return descriptors
+
+    def match_two(self, img1, img2):
+        key1 = self.extract_features(img1)
+        key2 = self.extract_features(img2)
+        matcher = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
+        matches = matcher.match(key1, key2)
+        similarity_score = len(matches) / max(len(key1), len(key2))
+        CUS_LOGGER.info(f"相似度：{similarity_score}")
+        return
+
+    # 匹配地图，找到最相似的地图，确定当前房间对应的地图
+    def match_scr(self, img):
+        key = self.extract_features(img)
+        img = self.get_bw_map(gs=0,local_screen=img)
+        sim = -1
+        ans = -1
+        matcher = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
+        res = []
+        for i, j in self.img_set:
+            try:
+                matches = matcher.match(key, j)
+                similarity_score = len(matches) / max(len(key), len(j))
+                res.append((similarity_score,i))
+            except Exception:
+                pass
+        res = sorted(res, key=lambda x: x[0])[-3:]
+        try:
+            if res[-1][0]>res[-2][0]+0.065 and (res[-1][0]>0.4 or self.debug!=2):
+                return res[-1][1], 0.9
+        except Exception:
+            return -1, -1
+        i_s = [x[1] for x in res]
+        for i in i_s[::-1]:
+            bw_j = self.get_bw_map(gs=0,local_screen=self.img_map[i])
+            big_bw_j = np.zeros((bw_j.shape[0]+28,bw_j.shape[1]+28),dtype=bw_j.dtype)
+            big_bw_j[14:-14,14:-14] = bw_j
+            result = cv.matchTemplate(big_bw_j, img, cv.TM_CCORR_NORMED)
+            min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
+            if max_val > sim:
+                sim = max_val
+                ans = i
+        return ans, sim
+
+    def get_dis(self, x, y):
+        return ((x[0] - y[0]) ** 2 + (x[1] - y[1]) ** 2) ** 0.5
+
+    # 找小地图中怪点，已弃用
+    def check_sred(self, sred, loc_scr, i, j):
+        for k in range(max(0, i - 2), min(i + 2, loc_scr.shape[0])):
+            for t in range(max(0, j - 2), min(j + 2, loc_scr.shape[1])):
+                if not (sred == loc_scr[k, t]).all():
+                    return 0
+        return 1
+
+    def print_stack(self, num=1, force=0):
+        if self.debug or force:
+            stk = traceback.extract_stack()
+            for i in range(num):
+                try:
+                    CUS_LOGGER.debug(f"Stack frame {i}: {stk[-2].name}, {stk[-3-i].filename.split('\\\\')[-1].split('.')[0]}, {stk[-3-i].name}, {stk[-3-i].lineno}")
+                except Exception:
+                    pass
+
+    def check_auto(self):
+        auto = self.check("z", 0.0878,0.9630, large=False, mask="mask_auto")
+        cvt = cv.cvtColor(auto, cv.COLOR_BGR2HSV)
+        lower = np.array([22, 58, 100])
+        upper = np.array([26, 100, 255])
+        mask = cv.inRange(cvt, lower, upper)
+        result = np.sum(mask)//255
+        return result > 100 and result < 280
+
+    def isrun(self):
+        scr = self.screen
+        shape = (int(self.scx * 12), int(self.scx * 12))
+        loc_scr = self.get_local(0.9333, 0.8657, shape)
+        hsv = cv.cvtColor(loc_scr, cv.COLOR_BGR2HSV)  # 转HSV
+        lower = np.array([93, 120, 60])  # 90 改成120只剩箭头，但是角色移动过的印记会消失
+        upper = np.array([97, 255, 255])
+        mask = cv.inRange(hsv, lower, upper)  # 创建掩膜
+        sum = np.sum(mask)
+        scr_bak = deepcopy(scr)
+        scr[np.min(scr,axis=-1)<=220]=[0,0,0]
+        scr[np.min(scr,axis=-1)>220]=[255,255,255]
+        res = self.check('run',0.876,0.7815,threshold=0.91) and sum > 40000 and sum < 65000
+        if self.tm>0.96:
+            res = 1
+        self.screen = deepcopy(scr_bak)
+        if res:
+            self.f_time = 0
+        return res
+
+    def get_direc_only_minimap(self):
+        if self.debug==2:
+            CUS_LOGGER.debug(f"mini: {self.ang_off}, {self.mini_state}")
+        self.ang_neg=self.ang_off<0
+        if self.ang_off:
+            time.sleep(0.6)
+            self.mouse_move(-self.ang_off*1.2)
+            time.sleep(0.3)
+            self.press('w',0.3)
+        if self.mini_state==1 and self.floor in [4,8,11]:
+            time.sleep(0.5)
+            self.press('w',0.55)
+            pyautogui.click()
+            time.sleep(1.2)
+            self.press('w')
+            time.sleep(0.4)
+        if self.mini_state==3 and self.floor==12 and not self.check_bonus:
+            self.mini_state+=2
+            return
+        if self.mini_state==3 and self.floor in [3,7,12] and self.check_bonus:
+            self.press('d',0.6)
+            keyops.keyDown('w')
+            nt = time.time()
+            while time.time()-nt<1.3:
+                self.get_screen()
+                if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
+                    self.press('f')
+                    keyops.keyUp('w')
+                    break
+            keyops.keyUp('w')
+            self.press('f')
+            time.sleep(1)
+            for _ in range(2):
+                if not self.check_bonus:
+                    break
+                self.get_screen()
+                if self.check('bonus_c',0.2385,0.6685):
+                    self.click((0.4453,0.3250))
+                    time.sleep(1.5)
+                    self.get_screen()
+                    if self.click_text(text="储存沉浸器",box=[838, 1070, 298, 400],click=False,ocr_line=False,warning=False):
+                        self.check_bonus = 0
+                    self.click((0.5062, 0.1454))
+                    time.sleep(1.4)
+            keyops.keyUp('w')
+            self.get_screen()
+            if self.check('bonus_c',0.2385,0.6685):
+                self.click((0.2385,0.6685))
+            self.mini_state+=2
+            if self.floor==12:
+                return
+            self.press('s',0.4)
+        self.ang_off=0
+        self.stop_move=0
+        self.ready=0
+        self.mini_target=0
+        self.get_screen()
+        self.is_target=0
+        first = self.first_mini
+        threading.Thread(target=self.move_thread).start()
+        while not self.ready:
+            time.sleep(0.1)
+        if not self.ang_off and self.mini_state == 1:
+            if self.check("z",0.5906,0.9537,mask="mask_z",threshold=0.95):
+                if self.floor == 11:
+                    self.floor = 12
+        keyops.keyDown("w")
+        wt = 3
+        self.first_mini = 0
+        if self.mini_state==1:
+            wt += 1
+            if self.mini_target!=2:
+                self.sprint()
+            if self.mini_target==1:
+                wt += 0.8
+        need_confirm=0
+        init_time = time.time()
+        while True:
+            self.get_screen()
+            if self._stop == 1:
+                keyops.keyUp("w")
+                self.stop_move=1
+                break
+            if self.mini_target==1:
+                if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
+                    self.press('f')
+                    CUS_LOGGER.info('发现事件交互')
+                    self.stop_move=1
+                    need_confirm = 1
+                    if self.nof(must_be='event'):
+                        keyops.keyUp("w")
+                        return
+                    break
+            else:
+                if self.goodf() and not (self.ts.sim("黑塔") and time.time() - self.quit < 30):
+                    if self.speed <= 0 or not self.ts.sim("黑塔"):
+                        self.press('f')
+                        CUS_LOGGER.info('need_confirm ' + self.ts.text)
+                        self.stop_move=1
+                        need_confirm = 1
+                        if self.nof():
+                            keyops.keyUp("w")
+                            return
+                        break
+                    else:
+                        self.quit = time.time()
+                        keyops.keyUp("w")
+                        self.stop_move=1
+                        self.mini_state+=2
+                        return
+                if self.check("auto_2", 0.0583, 0.0769):
+                    keyops.keyUp("w")
+                    self.stop_move=1
+                    self.mini_state+=2
+                    break
+                if self.check("z",0.5906,0.9537,mask="mask_z",threshold=0.95):
+                    self.stop_move=1
+                    time.sleep(1.7+self.slow*1.1-(self.quan and self.floor not in [3, 7, 12])*0.5)
+                    if self.mini_state==1 and self.floor in [3, 7, 12] and not self.quan:
+                        keyops.keyUp("w")
+                        if not self.check("ruan",0.0625,0.7065,threshold=0.95) and not self.check("U", 0.0240,0.7759):
+                            for i in range([3, 7, 12].index(self.floor)+2):
+                                self.press(str(i+1))
+                                time.sleep(0.4)
+                                self.use_e()
+                                self.get_screen()
+                                if not self.check("z",0.5906,0.9537,mask="mask_z",threshold=0.95):
+                                    break
+                                if self._stop:
+                                    break
+                            keyops.keyDown("w")
+                    iters = 0
+                    while self.check("z",0.5906,0.9537,mask="mask_z",threshold=0.95) and not self._stop:
+                        iters+=1
+                        if iters>4:
+                            break
+                        if self.quan:
+                            keyops.keyUp("w")
+                            self.use_e()
+                            if self.floor not in [3, 7, 12]:
+                                for _ in range(3):
+                                    self.use_e()
+                                self.stop_move=1
+                                self.mini_state+=2
+                                time.sleep(0.4)
+                                self.press('w')
+                                time.sleep(1.4)
+                                return
+                            else:
+                                time.sleep(0.8)
+                                keyops.keyDown("w")
+                        else:
+                            pyautogui.click()
+                        if iters + self.quan == 2:
+                            time.sleep(0.9)
+                            self.press('d',0.85)
+                            self.press('a',0.3)
+                        else:
+                            time.sleep(1.2)
+                        self.get_screen()
+                    self.mini_state+=2
+                    break
+            if time.time()-init_time>wt:
+                self.stop_move=1
+                keyops.keyUp("w")
+                self.mini_state+=2
+                if self.mini_state>=7:
+                    self.lst_changed = 0
+                    return
+                self.press('s',0.3)
+                self.press('a',0.7)
+                self.press('d',0.45)
+                self.press('w',0.5)
+                break
+            time.sleep(0.1)
+        self.stop_move=1
+        keyops.keyUp("w")
+        if need_confirm or (first and self.mini_target!=2):
+            for i in "sasddwwaa":
+                if self._stop:
+                    return
+                self.get_screen()
+                if self.mini_target==1:
+                    if self.check("f", 0.4443, 0.4417, mask="mask_f1", threshold=0.96):
+                        self.press('f')
+                        if self.nof(must_be='event'):
+                            return
+                elif self.goodf() and not (self.ts.sim("黑塔") and time.time() - self.quit < 30):
+                    self.press('f')
+                    if self.nof():
+                        return
+                self.press(i, 0.25)
+                time.sleep(0.4)
+            pyautogui.click()
+
+    def solve_snack(self):
+        self.get_screen()
+        if self.check('snack', 0.3844,0.5065, mask='mask_snack'):
+            self.click((self.tx,self.ty))
+            time.sleep(0.3)
+            self.click_position([1184, 815])
+            time.sleep(0.4)
+        else:
+            self.allow_e = 0
+            time.sleep(1.0)
+        self.click_position([768, 815])
+        time.sleep(0.6)
+        if self.allow_e:
+            self.press('e')
+
+    def use_e(self):
+        self.press('e')
+        time.sleep(0.4)
+        if not self.quan:
+            time.sleep(0.8)
+        if self.click_text(text="快速恢复",box=[864, 1058, 224, 318],click=False,ocr_line=False,warning=False):
+            self.solve_snack()
+
+    def bless(self):
+        self.get_screen()
+        if self.wait_fig(lambda:not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False), 2.3):
+            self.wait_fig(lambda:not self.click_text(text="重置祝福",box=[1268, 1444, 929, 1025],click=False,warning=False), 0.7)
+            time.sleep(1.2)
+        else:
+            return
+        for _ in range(6):
+            chose = 0
+            self.battle = 0
+            self.get_screen()
+            if self.click_text(text="重置祝福",box=[1268, 1444, 929, 1025],click=False,warning=False):
+                for _ in range(14):
+                    self.get_screen()
+                    img_down = self.check("z", 0.5042, 0.3204, mask="mask", large=False)
+                    if (
+                        self.ts.split_and_find(self.tk.fates, img_down, mode="bless")[1]
+                        or self._stop
+                    ):
+                        time.sleep(0.2)
+                        break
+                    if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                        return 1
+                    time.sleep(0.2)
+                self.get_screen()
+                img_up = self.check("z", 0.5047, 0.5491, mask="mask_bless", large=False)
+                res_up = self.ts.split_and_find(self.tk.prior_bless, img_up, bless_skip=self.tk.skip)
+                img_down = self.check("z", 0.5042, 0.3204, mask="mask", large=False)
+                res_down = self.ts.split_and_find([self.fate], img_down, mode="bless")
+                if res_up[1] == 2:
+                    self.click(self.calc_point((0.5047, 0.5491), res_up[0]))
+                    chose = 1
+                elif res_down[1] == 2:
+                    self.click(self.calc_point((0.5042, 0.3204), res_down[0]))
+                    chose = 1
+                if not chose:
+                    self.click((0.2990, 0.1046))
+                    time.sleep(1.2)
+            # 未匹配到优先祝福，刷新祝福并再次匹配
+            if not chose:
+                for _ in range(8):
+                    self.get_screen()
+                    img_down = self.check("z", 0.5042, 0.3204, mask="mask", large=False)
+                    if self.ts.split_and_find(self.tk.fates, img_down)[1] or self._stop:
+                        time.sleep(0.2)
+                        break
+                    if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                        return 1
+                    time.sleep(0.2)
+                self.get_screen()
+                img_up = self.check("z", 0.5047, 0.5491, mask="mask_bless", large=False)
+                res_up = self.ts.split_and_find(self.tk.prior_bless, img_up,bless_skip=self.tk.skip)
+                img_down = self.check("z", 0.5042, 0.3204, mask="mask", large=False)
+                res_down = self.ts.split_and_find(
+                    self.tk.secondary, img_down, mode="bless"
+                )
+                if res_up[1] == 2:
+                    self.click(self.calc_point((0.5047, 0.5491), res_up[0]))
+                elif res_down[1] >= 2:
+                    self.click(self.calc_point((0.5042, 0.3204), res_down[0]))
+                else:
+                    self.click(self.calc_point((0.5047, 0.5491), res_up[0]))
+                time.sleep(0.5)
+            self.click((0.1203, 0.1093))
+            time.sleep(1.7)
+            self.get_screen()
+            if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                return
+
+    def get_text_position(self, clean=0):
+        if self.event_mask is None:
+            self.event_mask = (cv.imread('resource/imgs/divergent/event_mask.jpg', cv.IMREAD_GRAYSCALE) > 70)[:497]
+            self.event_mask_clean = (cv.imread('resource/imgs/divergent/event_mask_clean.jpg', cv.IMREAD_GRAYSCALE) > 70)[:497]
+        scr = self.screen[:497]
+        mask = np.zeros((497, scr.shape[1]), dtype=np.uint8)
+        mask_zero = np.zeros((497, scr.shape[1]), dtype=np.uint8)
+        mask[((scr.max(axis=-1)-scr.min(axis=-1)) < 3)&(scr.max(axis=-1)>247)] = 255
+        mask_zero[((scr.max(axis=-1)-scr.min(axis=-1)) < 3)&(scr.max(axis=-1)<21)] = 255
+        kernel = np.ones((10, 30), np.uint8)
+        mask_zero = cv.dilate(mask_zero, kernel, iterations=1)
+        mask &= mask_zero
+        if clean:
+            mask[self.event_mask_clean] = 0
+        else:
+            mask[self.event_mask] = 0
+        if clean == 0 and self.lst_mask is not None:
+            mask[self.lst_mask] = 0
+        self.lst_mask = mask
+        kernel = np.ones((8, 55), np.uint8)
+        mask = cv.dilate(mask, kernel, iterations=1)
+        kernel = np.ones((6, 40), np.uint8)
+        mask = cv.erode(mask, kernel, iterations=2)
+        contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+        mx_area, mx_cnt = 0, None
+        for cnt in contours:
+            x, y, w, h = cv.boundingRect(cnt)
+            # print(w,h)
+            if h > 22:
+                continue
+            if mx_area < w * h:
+                mx_area = w * h
+                mx_cnt = cnt
+        res = []
+        if mx_area < 4:
+            return res
+        xx, yy, ww, hh = cv.boundingRect(mx_cnt)
+        for cnt in contours:
+            x, y, w, h = cv.boundingRect(cnt)
+            if w * h >= 4 and abs(y - yy) < 20:
+                res.append((x+w//2,y+h//2))
+        res = sorted(res, key=lambda x: x[0])
+        if len(res) == 2 and res[1][0]-res[0][0] < 150:
+            res = [((res[0][0]+res[1][0])//2,res[0][1])]
+        return res
