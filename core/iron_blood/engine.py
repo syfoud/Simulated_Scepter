@@ -15,7 +15,7 @@ from tool.public_ocr import merge_text
 from core.simulated.config import config
 from core.simulated.text_key import text_keys
 from tool.utils.Error import NoBossError, NoMatchError
-from tool.utils.analysis_map import evaluate_best_single_replacement
+from tool.utils.analysis_map import evaluate_best_single_replacement, select_pig_target
 from tool.utils.image_tool import find_image_by_name
 from tool.utils.ocr_num import (
     extract_number,
@@ -232,16 +232,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 return
             except NoBossError:
                 return
-            path_ids = {n['idx'] for n in self.path}
-            start_cx = self.start_nodes['cx']
-            def has_pig(n):
-                return ((n.get('orig') or {}).get('corner_marker') or {}).get('name') in ('pig1', 'pig2')
-            # 第一优先级：path上最靠前的pig节点；第二优先级：不在path且在起点右侧的最靠左pig节点
-            target_node = (
-                next((n for n in self.path if has_pig(n)), None)
-                or min((n for n in self.nodes if n['idx'] not in path_ids and has_pig(n) and n['cx'] >= start_cx),
-                       key=lambda n: n['cx'], default=None)
-            )
+            target_node = select_pig_target(self.nodes, self.edges, self.start_nodes['idx'], self.path)
             if target_node is not None:
                 x, y = int(target_node["cx"]), int(target_node["cy"])
                 key_mouse_manager.click(x, y)

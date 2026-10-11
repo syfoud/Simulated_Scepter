@@ -80,6 +80,11 @@ def match_multiple_targets(processed_image, mode=1, threshold=0.5, color_image=N
     processed_image = cv2.GaussianBlur(processed_image.copy(), (5, 5), 0)
     processed_image = cv2.Canny(processed_image, 100, 200)
 
+    # mode 决定使用哪套节点图模板（gray_image/node{mode}/），对应游戏里两种节点图画面：
+    #   1 = 「进入位面」总览画面（刚进位面时看到的整张节点图）；
+    #   2/3 = 「选择生效目标」「选择移动目标」画面（3 为第三位面，模板与 2 相同）。
+    # node1 与 node2 是同一套图标的两种渲染尺度（「选择」画面比「进入位面」画面大约 1.2 倍），不能混用；
+    # 角标模板（pig*/reinforce*/alienation*）按「选择」画面尺度采集，在「进入位面」画面上会匹配偏弱。
     if mode == 1:
         kind_list = ['event', 'wait', 'trade', 'adventure', 'reward', 'battle', 'elite', 'bugevent', 'bugbattle',
                      'head', 'boss']
@@ -587,6 +592,67 @@ CORNER_MARKER_DEFS = [
     {'name': 'alienation1', 'threshold': 0.9},
     {'name': 'alienation2', 'threshold': 0.9},
 ]
+
+
+# ---- 扑满信标替换 ----
+# 「毁灭·战争崇拜」只替换祝福扑满（蓝，pig1/pig2）的信标：奇物扑满（金，pig3/pig4）
+# 是刻意设计为不替换的，精英区域无论带哪种扑满信标也不替换。
+# 信标只会出现在战斗/精英/战斗·虫群三类区域，其它区域关联到角标一律视为误识别。
+# 故可替换区域只有战斗格与战斗·虫群，战斗格优先。
+PIG_AREA_RANK = {'battle': 0, 'bugbattle': 1}
+
+
+def has_blessing_pig_marker(node):
+    """节点是否带祝福扑满（蓝）信标，即可被「毁灭·战争崇拜」替换的信标。
+
+    Args:
+        node: build_rightward_graph 返回的节点字典
+
+    Returns:
+        节点带祝福扑满信标时为 True；奇物扑满（金）与起点节点（orig 为 None）为 False。
+    """
+    corner_marker = (node['orig'] or {}).get('corner_marker')
+    return bool(corner_marker) and corner_marker['name'] in ('pig1', 'pig2')
+
+
+def select_pig_target(nodes, edges, start_idx, path):
+    """为「毁灭·战争崇拜」挑选要替换掉祝福扑满信标的区域。
+
+    节点图只能朝正右/右上/右下走，位于起点左侧、或与所有前驱的水平空隙/垂直偏移
+    都超出建图限制的区域永远走不进去，按 compute_all_max_steps 的 -1 步数排除。
+
+    挑选顺序：
+    1. path 上的祝福扑满信标，取离起点最近的一个：path 由 max_weight_path 返回，
+       按起点到终点排列，第一个即最近；
+    2. path 上没有时，按 PIG_AREA_RANK 的区域优先级挑选（战斗格优先于战斗·虫群），
+       同优先级取离起点最近的。
+
+    Args:
+        nodes: build_rightward_graph 返回的节点列表
+        edges: 邻接表字典 idx -> 子节点 idx 列表
+        start_idx: 起点索引
+        path: max_weight_path 返回的最佳路径节点列表
+
+    Returns:
+        要替换的节点字典；没有可替换的祝福扑满信标时返回 None。
+    """
+    for pos, node in enumerate(path):
+        if node['name'] in PIG_AREA_RANK and has_blessing_pig_marker(node):
+            CUS_LOGGER.debug("战争崇拜替换：最佳路径第%s步的祝福扑满节点%s优先替换", pos, node['idx'])
+            return node
+
+    steps = compute_all_max_steps(nodes, edges, start_idx)
+    candidates = [n for n in nodes
+                  if steps[n['idx']] >= 0 and n['name'] in PIG_AREA_RANK and has_blessing_pig_marker(n)]
+    if not candidates:
+        return None
+    start = next(n for n in nodes if n['idx'] == start_idx)
+    # 同级按离起点的平方距离取最近，平方比较省去开方且顺序一致
+    target = min(candidates, key=lambda n: (PIG_AREA_RANK[n['name']],
+                                            (n['cx'] - start['cx']) ** 2 + (n['cy'] - start['cy']) ** 2))
+    CUS_LOGGER.debug("战争崇拜替换：最佳路径无可替换信标，可达候选%s个，选中最优先的节点%s(%s)",
+                     len(candidates), target['idx'], target['name'])
+    return target
 
 
 def detect_corner_markers(color_image, matches, marker_defs=None, max_dist=80.0):

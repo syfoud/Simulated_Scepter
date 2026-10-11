@@ -25,6 +25,7 @@ from tool.utils.analysis_map import (
     detect_corner_markers,
     display_matches,
     evaluate_best_single_replacement,
+    has_blessing_pig_marker,
     match_multiple_targets,
     max_weight_path, build_rightward_graph2,
 )
@@ -199,8 +200,7 @@ class AnyFateUniverse(SimulatedUniverse):
         """当前节点是否为祝福扑满。"""
         if self.start_nodes is None:
             return False
-        corner_marker = (self.start_nodes.get('orig') or {}).get('corner_marker')
-        return bool(corner_marker) and corner_marker.get('name') in ('pig1', 'pig2')
+        return has_blessing_pig_marker(self.start_nodes)
 
     def switch_to_configured_role(self):
         """按 silver_wolf_switch 配置切换到指定角色位。"""
