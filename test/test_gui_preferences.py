@@ -64,7 +64,7 @@ class GuiPreferencesTests(unittest.TestCase):
         self.logger = Mock()
         self.dialogs = Mock()
         self.script_runner = Mock()
-        self.enterContext(patch.dict(PATHS, {"root": str(self.root), "config": str(self.config), "example": str(self.root / "example"), "core": str(self.core), "backup": str(self.root / "backup")}))
+        self.enterContext(patch.dict(PATHS, {"root": str(self.root), "user": str(self.config), "core": str(self.core), "backup": str(self.root / "backup")}))
         self.gui = self.make_gui()
 
     def make_gui(self):
@@ -86,8 +86,8 @@ class GuiPreferencesTests(unittest.TestCase):
             "script_key": script_key, "script_path": script_path,
             "update_settings": update_settings,
             "EXTRA": SimpleNamespace(FILE_LOCK=threading.Lock()),
-            "PATHS": {"root": str(self.root), "config": str(self.config),
-                      "example": str(self.root / "example"), "core": str(self.core), "backup": str(self.root / "backup")},
+            "PATHS": {"root": str(self.root), "user": str(self.config),
+                      "core": str(self.core), "backup": str(self.root / "backup")},
         })
         for widget in window.findChildren(QWidget) + window.findChildren(QLayout):
             if widget.objectName():

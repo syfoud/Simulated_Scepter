@@ -2,9 +2,7 @@ import argparse
 import bisect
 import csv
 import datetime
-import json
 import os
-import shutil
 import time
 import traceback
 from collections import defaultdict
@@ -20,7 +18,8 @@ import win32con
 import core.divergent.keyops as keyops
 from route import PATHS
 from tool.storage import resource_path
-from tool import EXTRA, GLOBAL
+from tool.settings import load_settings
+from tool import GLOBAL
 from core.divergent.config import config
 from core.divergent.keyops import KeyController
 from core.divergent.utils import UniverseUtils, set_forground
@@ -117,13 +116,7 @@ class DivergentUniverse(UniverseUtils):
         self.update_count()
         CUS_LOGGER.info(f"开始运行:初始计数：{self.count}")
         # set_debug(debug > 0)
-        settings_path = os.path.join(PATHS["config"], "settings.json")
-        example_path = os.path.join(PATHS["example"], "settings_example.json")
-        if not os.path.exists(settings_path) and os.path.exists(example_path):
-            shutil.copy2(example_path, settings_path)
-        with EXTRA.FILE_LOCK:
-            with open(settings_path, encoding="UTF-8") as file:
-                data = json.load(file)
+        data = load_settings()
         self.record = data.get("recording_state", True)
         self.recorder = WindowRecorder(output_path=PATHS["video"], fps=30, window_title="崩坏：星穹铁道",
                                        window_class_name="UnityWndClass", see_time=True, offsets=[10, 50, 10, 10], simul_instance=self, task_owner=task_owner)

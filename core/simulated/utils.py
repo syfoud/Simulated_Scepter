@@ -890,7 +890,7 @@ class UniverseUtils(StateKernel):
         1. 地图图像数据(big_map)保存为PNG图像文件
         2. 其他地图相关属性保存为JSON文件
 
-        备份文件保存在项目目录下的config/backup文件夹中。
+        备份文件保存在项目目录下的user/backup文件夹中。
         """
         try:
             # 确保备份目录存在（相对于项目根目录）

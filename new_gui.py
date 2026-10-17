@@ -1,9 +1,7 @@
 import argparse
 import ctypes
 import hashlib
-import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -12,7 +10,6 @@ import keyboard
 from PyQt5.QtGui import QFont
 
 from route import PATHS
-from tool import EXTRA
 from tool.action_script import run_script as run_action_script
 from tool.cleanup import (
     CATEGORIES,
@@ -704,7 +701,7 @@ class MainWindow(QMainWindowLog):
             dialog.deleteLater()
 
     def load_hotkey_config(self):
-        """从 settings.json 加载快捷键配置"""
+        """从用户配置读取快捷键，缺失项使用默认值。"""
         default_config = {
             "stop": "f5",
             "test": "f6",
@@ -712,20 +709,14 @@ class MainWindow(QMainWindowLog):
         }
 
         try:
-            settings_path = os.path.join(PATHS["config"], "settings.json")
-            example_path = os.path.join(PATHS["example"], "settings_example.json")
-            if not os.path.exists(settings_path) and os.path.exists(example_path):
-                shutil.copy2(example_path, settings_path)
-            with EXTRA.FILE_LOCK:
-                with open(settings_path, encoding="UTF-8") as file:
-                    data = json.load(file)
-
+            data = load_settings()
             hotkey_config = data.get("hotkeys", default_config)
+            if not isinstance(hotkey_config, dict):
+                hotkey_config = dict(default_config)
 
             # 确保所有必需的快捷键都存在
-            for key in ["stop", "test", "print"]:
-                if key not in hotkey_config:
-                    hotkey_config[key] = default_config[key]
+            for key in default_config:
+                hotkey_config.setdefault(key, default_config[key])
 
             return hotkey_config
         except Exception as e:

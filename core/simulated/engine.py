@@ -14,7 +14,8 @@ import yaml
 from tool.public_ocr import load_actions
 from route import PATHS
 from tool.storage import config_path, resource_path
-from tool import EXTRA, GLOBAL
+from tool.settings import load_settings
+from tool import GLOBAL
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
 from core.simulated.config import config
@@ -124,13 +125,7 @@ class SimulatedUniverse(UniverseUtils):
                 self.img_map[file]= image
 
         CUS_LOGGER.debug(f"加载地图完成，共 {len(self.img_map)} 张")
-        settings_path = os.path.join(PATHS["config"], "settings.json")
-        example_path = os.path.join(PATHS["example"], "settings_example.json")
-        if not os.path.exists(settings_path) and os.path.exists(example_path):
-            shutil.copy2(example_path, settings_path)
-        with EXTRA.FILE_LOCK:
-            with open(settings_path, encoding="UTF-8") as file:
-                data = json.load(file)
+        data = load_settings()
 
         config_file = config_path(__file__)
         example_file = resource_path(__file__, "config/default.yml")
@@ -1122,7 +1117,7 @@ class SimulatedUniverse(UniverseUtils):
         1. 从PNG图像文件恢复地图图像数据(big_map)
         2. 从JSON文件恢复其他地图相关属性
 
-        备份文件从项目目录下的config/backup文件夹中读取。
+        备份文件从项目目录下的user/backup文件夹中读取。
         """
         try:
             # 从磁盘读取 big_map 图像文件

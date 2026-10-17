@@ -44,7 +44,7 @@ def config_path(source):
     section = parser["config"]
     path = resource_path(source, section["file"])
     default = resource_path(source, section["default"])
-    legacy = Path(PATHS["config"]) / section["legacy"]
+    legacy = Path(PATHS["user"]) / section["legacy"]
     with EXTRA.FILE_LOCK:
         if path.exists():
             return path

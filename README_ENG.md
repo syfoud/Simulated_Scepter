@@ -77,18 +77,18 @@ If this world cannot bring salvation, then bring it destruction... (restart imme
 ![image](doc/retry.png)
 ## Map Frequency Analysis
 ```plaintext
-sqlite3 config/backup/map_visits.db "SELECT * FROM map_visits ORDER BY visit_count DESC;"
+sqlite3 user/backup/map_visits.db "SELECT * FROM map_visits ORDER BY visit_count DESC;"
 ```
 
 ## Node Log Query
 ```plaintext
-sqlite3 config/backup/node_log.db "SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
+sqlite3 user/backup/node_log.db "SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
 ```
 
 ## Event Log Query (emergency)
 ```plaintext
-sqlite3 config/backup/emergency.db "SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
-sqlite3 config/backup/emergency.db "DELETE FROM node_log;"
+sqlite3 user/backup/emergency.db "SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
+sqlite3 user/backup/emergency.db "DELETE FROM node_log;"
 ```
 
 ## Uninstall

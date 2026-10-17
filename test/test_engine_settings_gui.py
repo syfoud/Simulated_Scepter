@@ -40,14 +40,14 @@ class EngineSettingsGuiTests(unittest.TestCase):
         self.models = Path(folder.name) / "models"
         self.models.mkdir()
         (self.models / "kesln.onnx").write_bytes(b"UI authorization fixture")
-        data = json.loads((Path(PATHS["example"]) / "settings_example.json").read_text(encoding="utf-8"))
+        data = json.loads((Path(PATHS["root"]) / "resource" / "settings_default.json").read_text(encoding="utf-8"))
         data.update({"early_stop": False, "other": {"keep": True}, "any_fate": "巡猎"})
         self.settings.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         self.core = copy_core(Path(folder.name) / "core")
         for module, legacy in (("simulated", "info_old.yml"), ("divergent", "info.yml"),
                                ("currency", "currency_config.yml")):
             (self.config / legacy).write_bytes((self.core / module / "config/default.yml").read_bytes())
-        self.enterContext(patch.dict(PATHS, {"config": str(self.config), "model": str(self.models), "core": str(self.core), "backup": str(Path(folder.name) / "backup")}))
+        self.enterContext(patch.dict(PATHS, {"user": str(self.config), "model": str(self.models), "core": str(self.core), "backup": str(Path(folder.name) / "backup")}))
 
         self.registry = KernelRegistry()
         self.paths = {}

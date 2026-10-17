@@ -26,7 +26,7 @@ class OcrSettingsGuiTests(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.file = Path(folder.name) / "settings.json"
         self.file.write_text(json.dumps({"other": {"keep": True}}), encoding="utf-8")
-        self.enterContext(patch.dict(PATHS, {"config": folder.name}))
+        self.enterContext(patch.dict(PATHS, {"user": folder.name}))
         self.first = device.Adapter(0, "同型号显卡", "first-luid", "pci:first")
         self.second = device.Adapter(2, "同型号显卡", "second-luid", "pci:second")
         self.enterContext(patch.object(ocr_settings, "list_adapters", return_value=[self.first, self.second]))

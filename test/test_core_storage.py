@@ -25,7 +25,7 @@ class CoreStorageTests(unittest.TestCase):
         self.core = copy_core(self.root / "core")
         self.config = self.root / "legacy"
         self.config.mkdir()
-        self.enterContext(patch.dict(PATHS, {"core": str(self.core), "config": str(self.config),
+        self.enterContext(patch.dict(PATHS, {"core": str(self.core), "user": str(self.config),
                                            "backup": str(self.root / "backup")}))
 
     def source(self, module):

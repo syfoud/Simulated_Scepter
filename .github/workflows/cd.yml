@@ -584,7 +584,6 @@ jobs:
           if ($LASTEXITCODE -ge 8) {
             throw "Copying core modules failed: $LASTEXITCODE"
           }
-          Copy-Item "config" $releaseDir -Recurse -Force
           Copy-Item "doc" $releaseDir -Recurse -Force
           Copy-Item "resource" $releaseDir -Recurse -Force
 
