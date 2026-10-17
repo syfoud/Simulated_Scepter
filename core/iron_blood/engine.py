@@ -1,9 +1,8 @@
 import datetime
+import json
 import os
 import shutil
 import time
-
-import yaml
 
 from route import PATHS
 from tool.storage import load_module_settings, resource_path
@@ -45,9 +44,9 @@ class IronBloodUniverse(AnyFateUniverse):
         # 保存开局期望。-5 表示本局还没走到开局节点图识别，直接开局的局会以这个值写入记录
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
         # 铁血战士使用毁灭专属事件优先级
-        event_iron_blood = resource_path(__file__, "config/event_iron_blood.yml")
+        event_iron_blood = resource_path(__file__, "config/event_iron_blood.json")
         with open(event_iron_blood, encoding="utf-8", errors="ignore") as f:
-            self.event_prior = yaml.safe_load(f)["event"]
+            self.event_prior = json.load(f)["event"]
 
     def restart_recording(self):
         if self.record and self.cut_video and self.YKItDYvq3FpnOYx:

@@ -1,7 +1,7 @@
 # GUI 弹指一挥参数说明
 
 这些参数位于调试模式选择 `FingerSnap` 后的齿轮配置窗口，保存在
-`core/finger_snap/config/settings.json` 的 `finger_snap_model` 节点中。点击“保存”后写入配置；已经运行中的弹指任务不会重建模型，新值从下一次启动弹指任务起生效。
+`user/core_settings/finger_snap.json` 的 `finger_snap_model` 节点中。点击“保存”后写入配置；已经运行中的弹指任务不会重建模型，新值从下一次启动弹指任务起生效。
 
 ## 1. 默认配置
 

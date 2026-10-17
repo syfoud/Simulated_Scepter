@@ -1,0 +1,43 @@
+{
+    "config": {
+        "angle": 1.0,
+        "difficulty": 5,
+        "team": "终结技",
+        "speed_mode": 0,
+        "debug_mode": 0,
+        "weekly_mode": 0,
+        "cpu_mode": 0,
+        "skill": [
+            "白厄",
+            "黄泉"
+        ],
+        "save": 1,
+        "timezone": "Default",
+        "max_run": 34,
+        "accuracy": 1440,
+        "enable_portal_prior": 0,
+        "portal_prior": {
+            "商店": 1,
+            "财富": 1,
+            "战斗": 2,
+            "遭遇": 2,
+            "奖励": 3,
+            "事件": 3
+        }
+    },
+    "key_mapping": [
+        "f",
+        "m",
+        "shift",
+        "v",
+        "e",
+        "w",
+        "a",
+        "s",
+        "d",
+        "1",
+        "2",
+        "3",
+        "4"
+    ]
+}

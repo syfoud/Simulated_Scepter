@@ -50,7 +50,7 @@ def next_run(when, now, repeat):
 
 class ScheduleBook:
     def __init__(self, path=None):
-        self.path = Path(path or Path(PATHS["config"]) / "schedules.json")
+        self.path = Path(path or Path(PATHS["user"]) / "schedules.json")
         self.plans = []
         if self.path.exists():
             data = json.loads(self.path.read_text(encoding="utf-8"))

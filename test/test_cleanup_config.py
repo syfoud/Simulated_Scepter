@@ -1,10 +1,10 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import yaml
-
+from route import PATHS
 from tool import cleanup as cleanup_config
 from tool.cleanup import (
     CATEGORIES,
@@ -27,42 +27,44 @@ def make_item(**overrides) -> CleanupItem:
     return CleanupItem(**values)
 
 
-def write_yaml(path: Path, content: str) -> None:
-    path.write_text(content, encoding="utf-8")
+def write_settings(path: Path, content) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(content, ensure_ascii=False, indent=4), encoding="utf-8")
+
 
 class CleanupConfigTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
-        self.path = Path(self.temp_dir.name) / "cleanup_config.yml"
-        self.example_path = Path(self.temp_dir.name) / "cleanup_config_example.yml"
-        write_yaml(
-            self.example_path,
-            "video:\n"
-            "  mode: manual\n"
-            "  trigger: program_start\n"
-            "  value: 7\n"
-            "  unit: day\n"
-            "  last_cleanup: \"\"\n"
-            "log:\n"
-            "  mode: manual\n"
-            "  trigger: program_start\n"
-            "  value: 7\n"
-            "  unit: day\n"
-            "  last_cleanup: \"\"\n"
-            "temp:\n"
-            "  mode: manual\n"
-            "  trigger: program_start\n"
-            "  value: 7\n"
-            "  unit: day\n"
-            "  last_cleanup: \"\"\n",
+        self.root = Path(self.temp_dir.name) / "app"
+        self.path = Path(self.temp_dir.name) / "gui_settings.json"
+        self.default_path = self.root / "resource" / "gui_settings_default.json"
+        write_settings(
+            self.default_path,
+            {
+                "debug": False,
+                "cleanup": {
+                    category: {
+                        "mode": "manual",
+                        "trigger": "program_start",
+                        "value": 7,
+                        "unit": "day",
+                        "last_cleanup": "",
+                    }
+                    for category in CATEGORIES
+                },
+            },
         )
+        self.addCleanup(patch.stopall)
+        patch.dict(PATHS, {"root": str(self.root)}).start()
 
-    def load(self):
-        with patch.object(cleanup_config, "EXAMPLE_PATH", str(self.example_path)):
-            return load_cleanup_config(self.path)
+    def load(self) -> CleanupConfig:
+        return load_cleanup_config(self.path)
 
-    def test_missing_file_uses_example_defaults(self):
+    def write_cleanup(self, section) -> None:
+        write_settings(self.path, {"cleanup": section})
+
+    def test_missing_file_uses_default_values(self):
         config = self.load()
 
         for category in CATEGORIES:
@@ -74,14 +76,16 @@ class CleanupConfigTests(unittest.TestCase):
             self.assertEqual(item.last_cleanup, "", category)
 
     def test_invalid_parameters_fall_back_one_by_one(self):
-        write_yaml(
-            self.path,
-            "video:\n"
-            "  mode: automatic\n"
-            "  trigger: task_end\n"
-            "  value: -10\n"
-            "  unit: banana\n"
-            "  last_cleanup: \"2026-09-24 05:45:00\"\n",
+        self.write_cleanup(
+            {
+                "video": {
+                    "mode": "automatic",
+                    "trigger": "task_end",
+                    "value": -10,
+                    "unit": "banana",
+                    "last_cleanup": "2026-09-24 05:45:00",
+                }
+            }
         )
 
         item = self.load().item("video")
@@ -93,17 +97,17 @@ class CleanupConfigTests(unittest.TestCase):
         self.assertEqual(item.last_cleanup, "2026-09-24 05:45:00")
 
     def test_zero_value_is_valid(self):
-        write_yaml(self.path, "log:\n  value: 0\n")
+        self.write_cleanup({"log": {"value": 0}})
 
         self.assertEqual(self.load().item("log").value, 0)
 
     def test_boolean_value_is_invalid(self):
-        write_yaml(self.path, "log:\n  value: true\n")
+        self.write_cleanup({"log": {"value": True}})
 
         self.assertEqual(self.load().item("log").value, 7)
 
     def test_missing_and_mistyped_fields_use_defaults(self):
-        write_yaml(self.path, "temp:\n  mode: never\n  value: 5\n")
+        self.write_cleanup({"temp": {"mode": "never", "value": 5}})
 
         item = self.load().item("temp")
 
@@ -116,27 +120,32 @@ class CleanupConfigTests(unittest.TestCase):
     def test_invalid_last_cleanup_is_cleared(self):
         for value in ("2026-09-24", "2026-09-24 05:45", "不是时间", 12345, None):
             with self.subTest(value=value):
-                write_yaml(self.path, f"video:\n  last_cleanup: {value!r}\n")
+                self.write_cleanup({"video": {"last_cleanup": value}})
                 self.assertEqual(self.load().item("video").last_cleanup, "")
 
-    def test_broken_yaml_uses_example_for_every_field(self):
-        write_yaml(self.path, "video: [\n")
+    def test_broken_json_uses_defaults(self):
+        self.path.write_text('{"cleanup": {\n', encoding="utf-8")
 
-        item = self.load().item("video")
+        config = self.load()
 
-        self.assertEqual(item.mode, "manual")
-        self.assertEqual(item.value, 7)
-        self.assertEqual(item.last_cleanup, "")
+        self.assertEqual(config.item("video").mode, "manual")
+        self.assertEqual(config.item("video").value, 7)
+        self.assertEqual(config.item("video").last_cleanup, "")
 
-    def test_non_mapping_document_uses_example(self):
-        write_yaml(self.path, "- video\n- log\n")
+    def test_non_mapping_document_uses_defaults(self):
+        write_settings(self.path, ["video", "log"])
 
         self.assertEqual(self.load().item("video").value, 7)
 
-    def test_unreadable_example_keeps_builtin_defaults(self):
-        broken_example = Path(self.temp_dir.name) / "missing_example.yml"
+    def test_cleanup_section_not_mapping_uses_defaults(self):
+        write_settings(self.path, {"cleanup": ["video"]})
 
-        with patch.object(cleanup_config, "EXAMPLE_PATH", str(broken_example)):
+        self.assertEqual(self.load().item("video").value, 7)
+
+    def test_unreadable_default_keeps_builtin_defaults(self):
+        missing_root = Path(self.temp_dir.name) / "missing_app"
+
+        with patch.dict(PATHS, {"root": str(missing_root)}):
             config = load_cleanup_config(self.path)
 
         self.assertEqual(config.item("video").mode, "manual")
@@ -154,10 +163,9 @@ class CleanupConfigTests(unittest.TestCase):
             )
             for category in CATEGORIES
         })
-        with patch.object(cleanup_config, "EXAMPLE_PATH", str(self.example_path)):
-            cleanup_config.write_config(config, self.path)
-            written = update_last_cleanup("log", "2026-09-24 05:45:00", self.path)
-            loaded = load_cleanup_config(self.path)
+        cleanup_config.write_config(config, self.path)
+        written = update_last_cleanup("log", "2026-09-24 05:45:00", self.path)
+        loaded = load_cleanup_config(self.path)
 
         self.assertTrue(written)
         self.assertEqual(loaded.item("log").last_cleanup, "2026-09-24 05:45:00")
@@ -171,14 +179,34 @@ class CleanupConfigTests(unittest.TestCase):
         config = CleanupConfig(items={name: make_item() for name in CATEGORIES})
 
         cleanup_config.write_config(config, self.path)
-        values = yaml.safe_load(self.path.read_text(encoding="utf-8"))
+        values = json.loads(self.path.read_text(encoding="utf-8"))
 
-        self.assertEqual(list(values), list(CATEGORIES))
+        self.assertEqual(list(values), ["cleanup"])
+        self.assertEqual(list(values["cleanup"]), list(CATEGORIES))
         for category in CATEGORIES:
             self.assertEqual(
-                list(values[category]),
+                list(values["cleanup"][category]),
                 ["mode", "trigger", "value", "unit", "last_cleanup"],
             )
+
+    def test_write_keeps_unrelated_settings(self):
+        write_settings(
+            self.path,
+            {
+                "debug": True,
+                "hotkeys": {"stop": "f8"},
+                "cleanup": {category: {} for category in CATEGORIES},
+            },
+        )
+
+        cleanup_config.write_config(
+            CleanupConfig(items={name: make_item() for name in CATEGORIES}), self.path
+        )
+        values = json.loads(self.path.read_text(encoding="utf-8"))
+
+        self.assertTrue(values["debug"])
+        self.assertEqual(values["hotkeys"], {"stop": "f8"})
+        self.assertEqual(values["cleanup"]["video"]["value"], 3)
 
 
 if __name__ == "__main__":

@@ -24,9 +24,9 @@ class OcrSettingsGuiTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        self.file = Path(folder.name) / "settings.json"
+        self.file = Path(folder.name) / "gui_settings.json"
         self.file.write_text(json.dumps({"other": {"keep": True}}), encoding="utf-8")
-        self.enterContext(patch.dict(PATHS, {"config": folder.name}))
+        self.enterContext(patch.dict(PATHS, {"user": folder.name}))
         self.first = device.Adapter(0, "同型号显卡", "first-luid", "pci:first")
         self.second = device.Adapter(2, "同型号显卡", "second-luid", "pci:second")
         self.enterContext(patch.object(ocr_settings, "list_adapters", return_value=[self.first, self.second]))
@@ -42,8 +42,8 @@ class OcrSettingsGuiTests(unittest.TestCase):
         return dialog
 
     def test_auto_displays_actual_mapping_and_cancel_does_not_write(self):
-        before = self.file.read_bytes()
         dialog = self.dialog()
+        before = self.file.read_bytes()
         self.assertEqual(dialog.device_combo.currentData(), "auto")
         self.assertIn("second-luid", dialog.device_detail.text())
         self.assertIn("DXGI 2", dialog.device_detail.text())
@@ -58,7 +58,8 @@ class OcrSettingsGuiTests(unittest.TestCase):
         dialog.buttons.button(QDialogButtonBox.Save).click()
         self.assertEqual(dialog.result(), QDialog.Accepted)
         saved = json.loads(self.file.read_text(encoding="utf-8"))
-        self.assertEqual(saved, {"other": {"keep": True}, "ocr_device": self.first.key})
+        self.assertEqual(saved["ocr_device"], self.first.key)
+        self.assertEqual(saved["other"], {"keep": True})
         self.assertEqual(self.dialog().device_combo.currentData(), self.first.key)
 
     def test_cpu_can_be_saved_even_when_enumeration_fails(self):
@@ -72,8 +73,8 @@ class OcrSettingsGuiTests(unittest.TestCase):
 
     def test_unavailable_selection_is_preserved_and_save_refused(self):
         self.file.write_text('{"ocr_device":"removed"}', encoding="utf-8")
-        before = self.file.read_bytes()
         dialog = self.dialog()
+        before = self.file.read_bytes()
         self.assertEqual(dialog.device_combo.currentData(), "removed")
         self.assertIn("重新选择", dialog.device_detail.text())
         with patch.object(QMessageBox, "warning") as warning:

@@ -46,13 +46,12 @@ class CleanupServiceTestBase(unittest.TestCase):
             "logs": str(root / "logs"),
             "temp": str(root / "temp"),
         }
-        self.config_path = root / "cleanup_config.yml"
-        self.example_path = root / "cleanup_config_example.yml"
+        self.config_path = root / "gui_settings.json"
 
         self.addCleanup(patch.stopall)
         patch.object(service, "PATHS", self.paths).start()
-        patch.object(cleanup_config, "CONFIG_PATH", self.config_path).start()
-        patch.object(cleanup_config, "EXAMPLE_PATH", self.example_path).start()
+        # 默认配置路径指向临时用户配置，避免读写程序目录下的 user/gui_settings.json。
+        patch.object(service, "ensure_settings", lambda: self.config_path).start()
 
         for key in ("video", "logs", "temp"):
             os.makedirs(self.paths[key], exist_ok=True)

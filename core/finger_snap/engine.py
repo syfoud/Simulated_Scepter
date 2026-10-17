@@ -1,8 +1,7 @@
+import json
 import os
 import shutil
 import time
-
-import yaml
 
 from route import PATHS
 from tool.storage import resource_path
@@ -69,10 +68,10 @@ class FingerSnap(AnyFateUniverse):
         self._pending_cheat_effect = None
         self._target_decided = False
         CUS_LOGGER.info("令她感伤的是，永恒的生命没能让她积累无穷的智慧，反倒是那些曾被她视作珍瑰的事物，开始变得模糊，一去不返。。。")
-        event_finger_snap = resource_path(__file__, "config/event_finger_snap.yml")
+        event_finger_snap = resource_path(__file__, "config/event_finger_snap.json")
 
         with open(event_finger_snap, encoding="utf-8", errors="ignore") as f:
-            self.event_prior = yaml.safe_load(f)["event"]
+            self.event_prior = json.load(f)["event"]
     def restart_recording(self):
         if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
             need_del=(self.del_record_time and self.del_record_time>self.countdown) and not self.ruanmei2
@@ -293,7 +292,7 @@ class FingerSnap(AnyFateUniverse):
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return
         self.try_analysis_map(1)
-        self.save_screen(save_path=os.path.join(PATHS["temp"], f"map{self.plane_floor}"))
+        self.save_screen(save_path=os.path.join(PATHS["temp"], "map"))
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count = 0

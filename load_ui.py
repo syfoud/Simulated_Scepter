@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
@@ -11,6 +10,7 @@ from PyQt5.QtWidgets import QMenu, QSystemTrayIcon
 from route import PATHS
 from tool import EXTRA
 from tool.scripts.createicon import create_qt_icon
+from tool.settings import ensure_settings
 
 ZOOM_RATE = None
 
@@ -42,11 +42,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.tray_icon = None
         self.init_tray_icon()
 
-        settings_path = os.path.join(PATHS["config"], "settings.json")
-        example_path = os.path.join(PATHS["example"], "settings_example.json")
-        if not os.path.exists(settings_path) and os.path.exists(example_path):
-            shutil.copy2(example_path, settings_path)
-        self.json_to_opt(settings_path)
+        self.json_to_opt(str(ensure_settings()))
         self.skin_set()
         self.font_set()
 

@@ -37,7 +37,6 @@ def normalize_finger_snap_settings(values=None):
     targets = values.get("plane_targets", CAMPAIGN_DEFAULT_TARGETS)
     if not isinstance(targets, (list, tuple)) or len(targets) != 3:
         raise ValueError("三个位面必须各有一个目标 CD")
-    legacy_step = values.get("path_bonus_step")
     decision_mode = str(values.get("decision_mode", DECISION_WIN_RATE))
     if decision_mode not in DECISION_MODES:
         raise ValueError(f"未知决策依据: {decision_mode}")
@@ -51,16 +50,11 @@ def normalize_finger_snap_settings(values=None):
         win_rate_noise_floor_percent=values.get(
             "win_rate_noise_floor_percent",
             defaults.win_rate_noise_floor_percent),
-        path_reward_bonus=values.get(
-            "path_reward_bonus", defaults.path_reward_bonus if legacy_step is None else float(legacy_step) * 5),
-        path_event_bonus=values.get(
-            "path_event_bonus", defaults.path_event_bonus if legacy_step is None else float(legacy_step) * 4),
-        path_trade_bonus=values.get(
-            "path_trade_bonus", defaults.path_trade_bonus if legacy_step is None else float(legacy_step) * 3),
-        path_adventure_bonus=values.get(
-            "path_adventure_bonus", defaults.path_adventure_bonus if legacy_step is None else float(legacy_step) * 2),
-        path_bugevent_bonus=values.get(
-            "path_bugevent_bonus", defaults.path_bugevent_bonus if legacy_step is None else float(legacy_step)),
+        path_reward_bonus=values.get("path_reward_bonus", defaults.path_reward_bonus),
+        path_event_bonus=values.get("path_event_bonus", defaults.path_event_bonus),
+        path_trade_bonus=values.get("path_trade_bonus", defaults.path_trade_bonus),
+        path_adventure_bonus=values.get("path_adventure_bonus", defaults.path_adventure_bonus),
+        path_bugevent_bonus=values.get("path_bugevent_bonus", defaults.path_bugevent_bonus),
     ).normalized()
     return asdict(mc) | {
         "decision_mode": decision_mode,

@@ -692,9 +692,9 @@ class UniverseUtils(StateKernel):
         self.screen = self.sct.grab(self.x0, self.y0)
         return self.screen
 
-    def save_screen(self, save_path=PATHS["temp"], force=False):
+    def save_screen(self, save_path=None, force=False):
         """
-        获取截图并保存到指定路径
+        获取截图并保存到指定路径（默认保存到temp/screenshot/）
         :param save_path: 保存截图的路径
         :param force: 是否展示
         """
@@ -707,7 +707,7 @@ class UniverseUtils(StateKernel):
             nc = Image.fromarray(rgb_img)
         else:
             nc = sc
-        save_path = os.fspath(save_path)
+        save_path = os.fspath(save_path or os.path.join(PATHS["temp"], "screenshot"))
         os.makedirs(save_path, exist_ok=True)
         filename = os.path.join(save_path, datetime.now().strftime("%Y%m%d_%H%M%S") + ".png")
         nc.save(filename)
@@ -739,8 +739,11 @@ class UniverseUtils(StateKernel):
             total_img = cv.bitwise_and(total_mask, total_img)
             time.sleep(dt)
 
-        cv.imwrite("resource/imgs/fine_minimap.jpg", total_img)
-        cv.imwrite("resource/imgs/fine_mask.jpg", total_mask)
+        debug_dir = os.path.join(PATHS["temp"], "debug")
+        os.makedirs(debug_dir, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        cv.imwrite(os.path.join(debug_dir, f"fine_minimap_{stamp}.png"), total_img)
+        cv.imwrite(os.path.join(debug_dir, f"fine_mask_{stamp}.png"), total_mask)
         return total_img, total_mask
 
     # 进一步得到小地图的黑白格式
@@ -1086,7 +1089,12 @@ class UniverseUtils(StateKernel):
                         self.real_loc[1] - 1 : self.real_loc[1] + 2,
                     ] = 49
                     # 轨迹图
-                    cv.imwrite("resource/imgs/bigmap.jpg", self.big_map)
+                    debug_dir = os.path.join(PATHS["temp"], "debug")
+                    os.makedirs(debug_dir, exist_ok=True)
+                    cv.imwrite(
+                        os.path.join(debug_dir, f"bigmap_{datetime.now():%Y%m%d_%H%M%S_%f}.png"),
+                        self.big_map,
+                    )
                 nds = self.get_dis(self.real_loc, loc)
                 # 1秒内没有离目标点更近：开始尝试绕过障碍
                 if dls[0] <= nds:

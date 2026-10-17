@@ -1,9 +1,7 @@
 import argparse
 import ctypes
 import hashlib
-import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -12,7 +10,6 @@ import keyboard
 from PyQt5.QtGui import QFont
 
 from route import PATHS
-from tool import EXTRA
 from tool.action_script import run_script as run_action_script
 from tool.cleanup import (
     CATEGORIES,
@@ -150,7 +147,7 @@ def resolve_startup_task(args):
     elif has_configured_script:
         script_name = configured_script
     else:
-        raise ValueError("settings.json 中的 script_file 必须是脚本路径或名称")
+        raise ValueError("gui_settings.json 中的 script_file|检查 gui_settings.json 必须是脚本路径或名称")
 
     default_engine = settings.get("script_engine", "") if has_configured_script else "IronBlood"
     engine_name = args.engine or default_engine
@@ -167,7 +164,7 @@ def resolve_startup_task(args):
         raise ValueError(f"设置的内核不可用：{engine_name!r}；可用内核 ID：{available}")
 
     if not isinstance(script_name, str) or not script_name:
-        raise ValueError("未设置可用脚本；请检查 settings.json 或使用 --file:SCRIPT 指定脚本")
+        raise ValueError("未设置可用脚本；请gui_settings.json 中的 script_file|检查 gui_settings.json 或使用 --file:SCRIPT 指定脚本")
 
     scripts = discover_scripts(registry)
     script_key_name = script_name.replace("\\", "/").casefold()
@@ -704,7 +701,7 @@ class MainWindow(QMainWindowLog):
             dialog.deleteLater()
 
     def load_hotkey_config(self):
-        """从 settings.json 加载快捷键配置"""
+        """从用户配置读取快捷键，缺失项使用默认值。"""
         default_config = {
             "stop": "f5",
             "test": "f6",
@@ -712,20 +709,14 @@ class MainWindow(QMainWindowLog):
         }
 
         try:
-            settings_path = os.path.join(PATHS["config"], "settings.json")
-            example_path = os.path.join(PATHS["example"], "settings_example.json")
-            if not os.path.exists(settings_path) and os.path.exists(example_path):
-                shutil.copy2(example_path, settings_path)
-            with EXTRA.FILE_LOCK:
-                with open(settings_path, encoding="UTF-8") as file:
-                    data = json.load(file)
-
+            data = load_settings()
             hotkey_config = data.get("hotkeys", default_config)
+            if not isinstance(hotkey_config, dict):
+                hotkey_config = dict(default_config)
 
             # 确保所有必需的快捷键都存在
-            for key in ["stop", "test", "print"]:
-                if key not in hotkey_config:
-                    hotkey_config[key] = default_config[key]
+            for key in default_config:
+                hotkey_config.setdefault(key, default_config[key])
 
             return hotkey_config
         except Exception as e:
@@ -934,7 +925,7 @@ class MainWindow(QMainWindowLog):
         self.set_exit_and_minimized_btn_icon()
 
     def init_script_controls(self):
-        """恢复模块 ID 和可迁移的脚本路径，发现阶段不导入运行代码。"""
+        """恢复模块 ID 和已保存的脚本路径，发现阶段不导入运行代码。"""
         for spec in self.registry.runnable():
             self.engine_combo.addItem(spec.name, spec.id)
             self.engine_combo.setItemData(self.engine_combo.count() - 1, spec.description, Qt.ToolTipRole)
@@ -950,8 +941,7 @@ class MainWindow(QMainWindowLog):
         saved = self.opt.get("script_file", "")
         for index in range(self.script_combo.count()):
             script = self.script_combo.itemData(index)
-            if script and (script_key(script) == saved
-                           or os.path.basename(script) == saved):
+            if script and script_key(script) == saved:
                 self.script_combo.setCurrentIndex(index)
                 break
         self.engine_combo.currentIndexChanged.connect(self.save_script_selection)

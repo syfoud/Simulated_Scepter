@@ -21,7 +21,6 @@ dependencies = [
     "pytz>=2026.1.post1",
     "pyuac>=0.0.3",
     "pywin32>=311",
-    "pyyaml>=6.0.3",
     "scipy>=1.17.1",
     "shapely>=2.1.2",
 ]

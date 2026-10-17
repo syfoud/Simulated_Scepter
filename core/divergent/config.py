@@ -1,12 +1,8 @@
 import json
 import os
-import shutil
-import sys
-
-import yaml
 
 from route import PATHS
-from tool.storage import config_path, resource_path, save_yaml_values
+from tool.storage import config_path, save_json_values
 from tool.log import CUS_LOGGER
 
 
@@ -38,7 +34,7 @@ class Config:
         self.origin_key = ['f','m','shift','v','e','w','a','s','d','1','2','3','4']
         self.mapping = self.origin_key
         self.max_run = 34
-        with open(PATHS["root"]+'/actions/character.json', encoding='utf-8') as file:
+        with open(os.path.join(PATHS["root"], "actions", "character.json"), encoding='utf-8') as file:
             self.match = json.load(file)
         self.read()
 
@@ -84,45 +80,28 @@ class Config:
 
 
     def read(self):
-        path = config_path(__file__)
-        example_path = resource_path(__file__, "config/default.yml")
-        if not os.path.exists(path):
-            if os.path.exists(example_path):
-                shutil.copy2(example_path, path)
-            else:
-                self.save()
-                return
-
-        if os.path.exists(path):
-            with open(path, encoding="utf-8", errors='ignore') as f:
-                config = yaml.safe_load(f)['config']
-                try:
-                    self.angle = str(config['angle'])
-                    self.difficult = config['difficulty']
-                    self.team = config['team']
-                    self.speed_mode = config['speed_mode']
-                    self.debug_mode = config['debug_mode']
-                    self.weekly_mode = config['weekly_mode']
-                    self.cpu_mode = config['cpu_mode']
-                    self.update_skill(config['skill'])
-                    self.timezone = config['timezone']
-                    self.max_run = config['max_run']
-                    self.save_cnt = config['save']
-                    self.accuracy = config['accuracy']
-                    self.enable_portal_prior = config['enable_portal_prior']
-                    self.portal_prior = config['portal_prior']
-                except Exception:
-                    pass
-            with open(path, encoding="utf-8", errors='ignore') as f:
-                try:
-                    self.mapping = yaml.safe_load(f)['key_mapping']
-                except Exception:
-                    pass
-        else:
-            self.save()
+        """读取用户配置；缺失字段已由存储层按默认配置补齐。"""
+        with open(config_path(__file__), encoding="utf-8") as file:
+            data = json.load(file)
+        config = data['config']
+        self.angle = str(config['angle'])
+        self.difficult = config['difficulty']
+        self.team = config['team']
+        self.speed_mode = config['speed_mode']
+        self.debug_mode = config['debug_mode']
+        self.weekly_mode = config['weekly_mode']
+        self.cpu_mode = config['cpu_mode']
+        self.update_skill(config['skill'])
+        self.timezone = config['timezone']
+        self.max_run = config['max_run']
+        self.save_cnt = config['save']
+        self.accuracy = config['accuracy']
+        self.enable_portal_prior = config['enable_portal_prior']
+        self.portal_prior = config['portal_prior']
+        self.mapping = data['key_mapping']
 
     def save(self):
-        save_yaml_values(__file__, {
+        save_json_values(__file__, {
                 "config": {
                     "angle": float(self.angle),
                     "difficulty": self.diffi,

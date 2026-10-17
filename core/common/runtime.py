@@ -1,5 +1,6 @@
 """通用内核的窗口、识别与 JSON 脚本运行入口。"""
 
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -114,7 +115,7 @@ class ScriptKernel(StateKernel):
 
     def save_screen(self, save_path=None, force=False, not_now=False):
         screen = self.screen if not_now else self.get_screen()
-        folder = Path(save_path or PATHS["temp"])
+        folder = Path(save_path or os.path.join(PATHS["temp"], "screenshot"))
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"{datetime.now():%Y%m%d_%H%M%S_%f}.png"
         if not cv.imwrite(str(path), screen):

@@ -21,10 +21,9 @@ def build_paths(root):
     return {
         "root": root,
         "core": os.path.join(root, "core"),
-        # 配置、备份、示例配置文件
-        "config": os.path.join(root, "config", "config"),
-        "backup": os.path.join(root, "config", "backup"),
-        "example": os.path.join(root, "config", "example"),
+        # 用户文件
+        "user": os.path.join(root, "user"),
+        "backup": os.path.join(root, "user", "backup"),
         # 日志文件
         "logs": os.path.join(root, "logs"),
         # 资源文件
@@ -69,7 +68,8 @@ def ensure_directory_exists(path):
 
 def check_paths():
     """检测所有路径是否存在"""
-    paths = [PATHS["logs"],PATHS["config"]]
+    # backup 位于 user 下，创建 backup 会一并创建 user。
+    paths = [PATHS["logs"], PATHS["backup"]]
     for path in paths:
         ensure_directory_exists(path)
 

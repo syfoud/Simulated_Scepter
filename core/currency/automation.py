@@ -1,6 +1,4 @@
-import json
 import os
-import shutil
 import time
 
 import cv2
@@ -10,7 +8,8 @@ import pyautogui
 from tool.public_ocr import load_actions, merge_text
 from route import PATHS
 from tool.storage import resource_path
-from tool import EXTRA, GLOBAL
+from tool.settings import load_settings
+from tool import GLOBAL
 from core.currency.config import config
 from core.currency.investment_selection import choose_fallback_investment
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
@@ -93,13 +92,7 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.debug (f"开始运行,初始计数：{self.count}")
         self.last_interact_time = time.time ()
 
-        settings_path = os.path.join(PATHS["config"], "settings.json")
-        example_path = os.path.join(PATHS["example"], "settings_example.json")
-        if not os.path.exists(settings_path) and os.path.exists(example_path):
-            shutil.copy2(example_path, settings_path)
-        with EXTRA.FILE_LOCK:
-            with open(settings_path, encoding="UTF-8") as file:
-                data = json.load(file)
+        data = load_settings()
 
         currency_settings = load_currency_settings()
 

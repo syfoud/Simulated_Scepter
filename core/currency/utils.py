@@ -463,9 +463,9 @@ class CurrencyUtils(StateKernel):
         else:
             CUS_LOGGER.warning('……那我偏偏，绝不顺从……')
         return ava
-    def save_screen(self, save_path=PATHS["temp"], force=False, not_now=False):
+    def save_screen(self, save_path=None, force=False, not_now=False):
         """
-        获取截图并保存到指定路径
+        获取截图并保存到指定路径（默认保存到temp/screenshot/）
         :param save_path: 保存截图的路径
         :param force: 是否展示
         """
@@ -473,6 +473,7 @@ class CurrencyUtils(StateKernel):
             sc=self.screen
         else:
             sc = self.get_screen()
+        save_path = save_path or os.path.join(PATHS["temp"], "screenshot")
         os.makedirs(save_path, exist_ok=True)
         filename = os.path.join(save_path, datetime.now().strftime("%Y%m%d_%H%M%S") + ".png")
         cv.imwrite(filename,sc)

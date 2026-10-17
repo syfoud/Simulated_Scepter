@@ -169,7 +169,7 @@ class CountdownProductionTests(unittest.TestCase):
 
     def test_every_decision_mode_resolves_its_real_early_stop_key(self):
         settings = load_finger_snap_settings(Path(__file__).parents[1]
-                                             / "config/config/settings_example.json")
+                                             / "resource/gui_settings_default.json")
         self.assertEqual(
             {"dp_early_stop", "win_rate_dp_early_stop", "mc_dp_early_stop"},
             {EARLY_STOP_FIELDS[mode] for mode in (

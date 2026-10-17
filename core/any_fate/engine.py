@@ -5,7 +5,6 @@ import sqlite3
 import time
 
 import cv2 as cv
-import yaml
 
 from route import PATHS
 from tool.settings import load_settings
@@ -96,9 +95,9 @@ class AnyFateUniverse(SimulatedUniverse):
         self.default_json_path = str(resource_path(__file__, "actions/insect.json"))
         self.default_json = load_actions(self.default_json_path)
 
-        event_any_fate = resource_path(__file__, "config/event_any_fate.yml")
+        event_any_fate = resource_path(__file__, "config/event_any_fate.json")
         with open(event_any_fate, encoding="utf-8", errors="ignore") as f:
-            self.event_prior = yaml.safe_load(f)["event"]
+            self.event_prior = json.load(f)["event"]
         self.steps=None
         self.nodes=None
         self.replace_idx=None

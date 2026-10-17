@@ -1,9 +1,6 @@
-import os
-import shutil
+import json
 
-import yaml
-from route import PATHS
-from tool.storage import config_path, resource_path
+from tool.storage import config_path
 
 
 class text_keys:
@@ -38,28 +35,16 @@ class text_keys:
                            '阈下知觉', '纹状皮层', '跳跃传导', '齿轮啮合的王座', '导线弯绕的指环', '能量变距的权杖',
                            '偏时引燃的炬火', '延迟衍射的烛光', '金属斑驳的华盖', '线圈编制的罗琦', '管道交错的桂冠']
         self.secondary = ['巡猎', '毁灭', '丰饶']
-        try:
-            config_file = config_path(__file__)
-            example_file = resource_path(__file__, "config/default.yml")
-            if not os.path.exists(config_file):
-                if os.path.exists(example_file):
-                    shutil.copy2(example_file, config_file)
-
-            if os.path.exists(config_file):
-                with open(config_file, encoding="utf-8",errors='ignore') as f:
-                    config = yaml.safe_load(f)['prior']
-                with open(config_file, encoding="utf-8",errors='ignore') as f:
-                    try:
-                        self.secondary = yaml.safe_load(f)['config']['secondary_fate']
-                    except Exception:
-                        pass
-                for i,j in enumerate(config):
-                    if i>1:
-                        self.blesses[i-2] = config[j]
-                    elif i==0:
-                        self.strange = config[j]
-        except Exception:
-            pass
+        config_file = config_path(__file__)
+        with open(config_file, encoding="utf-8") as f:
+            values = json.load(f)
+        config = values['prior']
+        self.secondary = values['config']['secondary_fate']
+        for i, j in enumerate(config):
+            if i > 1:
+                self.blesses[i - 2] = config[j]
+            elif i == 0:
+                self.strange = config[j]
         self.prior_bless += self.blesses[fate]
         self.skip = 1
         for s in self.prior_bless:

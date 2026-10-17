@@ -1,13 +1,11 @@
-"""模块资源定位与旧配置迁移，配置只保留一个写入来源。"""
+"""模块资源定位与配置补全，配置只保留一个写入来源。"""
 
 import configparser
+import copy
 import json
 import os
-import shutil
 import tempfile
 from pathlib import Path
-
-import yaml
 
 from route import PATHS
 from tool import EXTRA
@@ -25,8 +23,18 @@ def resource_path(source, relative):
     return path
 
 
+def user_path(relative):
+    """模块用户配置统一放在程序目录的 user 文件夹下。"""
+    folder = Path(PATHS["user"]).resolve()
+    path = (folder / relative).resolve()
+    if not path.is_relative_to(folder):
+        raise ValueError(f"用户配置路径越界：{relative}")
+    return path
+
+
 def write_data(path, text):
     """在同一目录写临时文件并替换，写入失败不会截断原配置。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=".config-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as file:
@@ -36,46 +44,41 @@ def write_data(path, text):
         Path(temporary).unlink(missing_ok=True)
 
 
+def read_json(path):
+    """读取 JSON 配置；文件不存在时返回空字典。"""
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def merge_defaults(values, defaults):
+    """递归补齐默认配置缺失的字段；已有值（含用户清空的列表）保持不变。"""
+    if not isinstance(defaults, dict):
+        return values
+    merged = copy.deepcopy(values) if isinstance(values, dict) else {}
+    for key, default in defaults.items():
+        if key in merged:
+            merged[key] = merge_defaults(merged[key], default)
+        else:
+            merged[key] = copy.deepcopy(default)
+    return merged
+
+
 def config_path(source):
-    """首次使用时迁移旧文件；已有模块配置始终优先，不重复覆盖。"""
+    """返回模块用户配置路径，缺失字段用模块默认配置补齐。"""
     folder = module_path(source)
     parser = configparser.ConfigParser(interpolation=None)
     parser.read_string((folder / "module.ini").read_text(encoding="utf-8"))
     section = parser["config"]
-    path = resource_path(source, section["file"])
+    path = user_path(section["file"])
     default = resource_path(source, section["default"])
-    legacy = Path(PATHS["config"]) / section["legacy"]
+    if not default.is_file():
+        raise FileNotFoundError(f"缺少模块默认配置：{default}")
     with EXTRA.FILE_LOCK:
-        if path.exists():
-            return path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if section.get("keys"):
-            values = json.loads(default.read_text(encoding="utf-8"))
-            old = json.loads(legacy.read_text(encoding="utf-8")) if legacy.is_file() else {}
-            keys = [key.strip() for key in section["keys"].split(",")]
-            values.update({key: old[key] for key in keys if key in old})
-            slot = values.get("silver_wolf_switch")
-            if "silver_wolf_switch" in values and (slot is None or isinstance(slot, str)):
-                values["silver_wolf_switch"] = {
-                    "一号位": 1, "二号位": 2, "三号位": 3, "四号位": 4,
-                }.get(slot, 1)
-            # 先备份并写入新文件，成功后才移除旧全局配置中的模块字段。
-            if legacy.is_file() and any(key in old for key in keys):
-                backup = Path(PATHS["backup"]) / "before_core" / legacy.name
-                backup.parent.mkdir(parents=True, exist_ok=True)
-                if not backup.exists():
-                    shutil.copy2(legacy, backup)
-            write_data(path, json.dumps(values, ensure_ascii=False, indent=4))
-            if legacy.is_file() and any(key in old for key in keys):
-                for key in keys:
-                    old.pop(key, None)
-                try:
-                    write_data(legacy, json.dumps(old, ensure_ascii=False, indent=4))
-                except OSError:
-                    path.unlink()
-                    raise
-        else:
-            shutil.copy2(legacy if legacy.is_file() else default, path)
+        values = read_json(path)
+        merged = merge_defaults(values, read_json(default))
+        if not path.is_file() or merged != values:
+            write_data(path, json.dumps(merged, ensure_ascii=False, indent=4))
     return path
 
 
@@ -94,17 +97,20 @@ def update_module_settings(source, values):
     return current
 
 
-def save_yaml_values(source, values):
-    """合并 YAML 已有未知字段，避免新增参数被旧配置窗口覆盖。"""
+def save_json_values(source, values):
+    """合并 JSON 已有未知字段，避免新增参数被旧配置窗口覆盖。"""
     path = config_path(source)
     with EXTRA.FILE_LOCK:
-        current = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        try:
+            current = json.loads(path.read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError):
+            current = {}
         for key, value in values.items():
             if isinstance(value, dict) and isinstance(current.get(key), dict):
                 current[key].update(value)
             else:
                 current[key] = value
-        write_data(path, yaml.safe_dump(current, allow_unicode=True, sort_keys=False))
+        write_data(path, json.dumps(current, ensure_ascii=False, indent=4))
 
 
 def save_json_configs(changes):

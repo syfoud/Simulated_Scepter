@@ -77,18 +77,18 @@
 ![image](doc/retry.png)
 ## 地圖頻率分析
 ```plaintext
-sqlite3 config/backup/map_visits.db "SELECT * FROM map_visits ORDER BY visit_count DESC;"
+sqlite3 user/backup/map_visits.db "SELECT * FROM map_visits ORDER BY visit_count DESC;"
 ```
 
 ## 節點日誌查詢
 ```plaintext
-sqlite3 config/backup/node_log.db "SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
+sqlite3 user/backup/node_log.db "SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
 ```
 
 ## 事件日誌查詢(emergency)
 ```plaintext
-sqlite3 config/backup/emergency.db "SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
-sqlite3 config/backup/emergency.db "DELETE FROM node_log;"
+sqlite3 user/backup/emergency.db "SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
+sqlite3 user/backup/emergency.db "DELETE FROM node_log;"
 ```
 
 ## 解除安裝
@@ -202,7 +202,6 @@ F5/『停止任務』按鈕停止運行。
 
 ## 資料處理與配置
 
-- **[PyYAML](https://pyyaml.org/)** - YAML解析器，用於設定檔管理
 - **[Shapely](https://shapely.readthedocs.io/)** - 幾何物件操作庫，用於空間分析和路徑規劃
 - **[pyclipper](https://github.com/greginvm/pyclipper)** - 多邊形裁剪庫，配合OCR使用
 - **[SciPy](https://scipy.org/)** - 科學計算庫，用於訊號處理和小地圖分析

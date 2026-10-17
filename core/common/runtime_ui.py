@@ -15,7 +15,7 @@ class RuntimeSettings(QWidget):
         super().__init__(parent)
         uic.loadUi(str(resource_path(__file__, "ui/RuntimeSettings.ui")), self)
         self.early_stop_checkbox.setChecked(data.get("early_stop", False))
-        authorized = (Path(PATHS["model"]) / "kesln.onnx").is_file()
+        authorized = (Path(PATHS["user"]) / "kesln.onnx").is_file()
         self.early_stop_checkbox.setEnabled(authorized)
         self.Aboutupdatelock.setVisible(not authorized)
         self.Aboutupdatelock.clicked.connect(lambda: show_unlock_dialog(self))

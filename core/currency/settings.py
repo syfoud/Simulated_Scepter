@@ -1,7 +1,6 @@
+import json
 import os
 from pathlib import Path
-
-import yaml
 
 from tool.storage import config_path, resource_path, write_data
 from tool import EXTRA
@@ -23,9 +22,9 @@ PRIORITY_KEYS = (
 def load_default_priority():
     """Load the default currency-war priority from the example config."""
     try:
-        with open(resource_path(__file__, "config/default.yml"), encoding="utf-8") as config_file:
-            values = yaml.safe_load(config_file) or {}
-    except (OSError, yaml.YAMLError):
+        with open(resource_path(__file__, "config/default.json"), encoding="utf-8") as config_file:
+            values = json.load(config_file) or {}
+    except (OSError, ValueError):
         return {}
 
     priority = values.get("priority")
@@ -92,8 +91,8 @@ def load_currency_settings(path=None):
     with EXTRA.FILE_LOCK:
         try:
             with open(path, encoding="utf-8") as config_file:
-                values = yaml.safe_load(config_file) or {}
-        except (OSError, yaml.YAMLError):
+                values = json.load(config_file) or {}
+        except (OSError, ValueError):
             values = {}
     return normalize_currency_settings(values)
 
@@ -104,8 +103,8 @@ def save_currency_settings(values, path=None):
     with EXTRA.FILE_LOCK:
         try:
             with open(path, encoding="utf-8") as config_file:
-                current = yaml.safe_load(config_file) or {}
-        except (OSError, yaml.YAMLError):
+                current = json.load(config_file) or {}
+        except (OSError, ValueError):
             current = {}
         if not isinstance(current, dict):
             current = {}
@@ -113,5 +112,5 @@ def save_currency_settings(values, path=None):
         current.update(values)
         normalized = normalize_currency_settings(current)
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        write_data(Path(path), yaml.safe_dump(current, allow_unicode=True, sort_keys=False))
+        write_data(Path(path), json.dumps(current, ensure_ascii=False, indent=4))
     return normalized

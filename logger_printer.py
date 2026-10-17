@@ -250,7 +250,7 @@ class QMainWindowLog(QMainWindowLoadUI):
 
     def check_model_file(self):
 
-        model_exists = (Path(PATHS["model"]) / "kesln.onnx").is_file()
+        model_exists = (Path(PATHS["user"]) / "kesln.onnx").is_file()
         self.Aboutupdatelock.setVisible(not model_exists)
 
         if not model_exists:

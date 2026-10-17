@@ -1,11 +1,6 @@
-import os
-import shutil
-import sys
+import json
 
-import yaml
-
-from route import PATHS
-from tool.storage import config_path, resource_path, save_yaml_values
+from tool.storage import config_path, save_json_values
 
 
 class Config:
@@ -50,112 +45,38 @@ class Config:
         return int(self.difficult) if int(self.difficult) in self.allow_difficult else 1
 
     def read(self):
-        path = config_path(__file__)
-        example_path = resource_path(__file__, "config/default.yml")
-        if not os.path.exists(path):
-            if os.path.exists(example_path):
-                shutil.copy2(example_path, path)
-            else:
-                self.save()
-                return
-
-        if os.path.exists(path):
-            with open(path, encoding="utf-8", errors='ignore') as f:
-                config = yaml.safe_load(f)['config']
-                try:
-                    self.order_text = " ".join(str(x) for x in config['order_text'])
-                    self.angle = str(config['angle'])
-                    self.difficult = config['difficulty']
-                    self.fate = config['fate']
-                    self.map_sha = config['map_sha']
-                    self.show_map_mode = config['show_map_mode']
-                    self.debug_mode = config['debug_mode']
-                    self.speed_mode = config['speed_mode']
-                    self.bonus = config['bonus']
-                    self.long_press_sprint = config['long_press_sprint']
-                    self.use_consumable = config['use_consumable']
-                    self.force_update = config['force_update']
-                    self.timezone = config['timezone']
-                    self.slow_mode = config['slow_mode']
-                    self.max_run = config['max_run']
-                except Exception:
-                    pass
-            with open(path, encoding="utf-8", errors='ignore') as f:
-                try:
-                    self.mapping = yaml.safe_load(f)['key_mapping']
-                except Exception:
-                    pass
-        else:
-            self.save()
+        """读取用户配置；缺失字段已由存储层按默认配置补齐。"""
+        with open(config_path(__file__), encoding="utf-8") as file:
+            data = json.load(file)
+        config = data["config"]
+        self.order_text = " ".join(str(x) for x in config['order_text'])
+        self.angle = str(config['angle'])
+        self.difficult = config['difficulty']
+        self.fate = config['fate']
+        self.map_sha = config['map_sha']
+        self.show_map_mode = config['show_map_mode']
+        self.debug_mode = config['debug_mode']
+        self.speed_mode = config['speed_mode']
+        self.bonus = config['bonus']
+        self.long_press_sprint = config['long_press_sprint']
+        self.use_consumable = config['use_consumable']
+        self.force_update = config['force_update']
+        self.timezone = config['timezone']
+        self.slow_mode = config['slow_mode']
+        self.max_run = config['max_run']
+        self.mapping = data['key_mapping']
 
     def save(self):
-        try:
-            with open(config_path(__file__), encoding="utf-8", errors='ignore') as f:
-                secondary_fate = yaml.safe_load(f)['config']['secondary_fate']
-        except Exception:
-            try:
-                with open(resource_path(__file__, "config/default.yml"), encoding="utf-8", errors='ignore') as f:
-                    secondary_fate = yaml.safe_load(f)['config']['secondary_fate']
-            except Exception:
-                secondary_fate = ['巡猎','毁灭','丰饶']
-
-        try:
-            with open(config_path(__file__), encoding="utf-8", errors='ignore') as f:
-                prior = yaml.safe_load(f)['prior']
-        except Exception:
-            try:
-                with open(resource_path(__file__, "config/default.yml"), encoding="utf-8", errors='ignore') as f:
-                    prior = yaml.safe_load(f)['prior']
-            except Exception:
-                prior = {
-                    '奇物':
-                        ['福灵胶', '博士之袍', '陨石球', '降维骰子', '信仰债券', '时空棱镜', '朋克洛德', '香涎干酪',
-                         '龋齿星系'],
-                    '事件':
-                        ['购买一个', '丢下雕像', '和序列扑满玩', '信仰星神', '克里珀的恩赐', '哈克的藏品', '动作片',
-                         '感恩克里珀星神', '换取1个星祝福', '星神的记载', '翻开牌', '摧毁黑匣', '1个1星祝福',
-                         '1个1-星祝福', '选择里奥'],
-                    '存护':
-                        ['零维强化', '均晶转变', '共晶反应', '宏观偏析', '超静定场', '谐振传递', '四棱锥体',
-                         '聚塑', '哨戒', '亚共晶体', '切变结构', '弥合', '迸裂晶格'],
-                    '记忆':
-                        ['体验的富翁', '全面记忆', '第二次初恋', '浮黎', '缄默', '纯真', '难言的羞耻',
-                         '怅然若失', '麻木不仁', '不寒而栗', '特立独行', '头晕目眩', '多愁善感', '沦浃肌髓'],
-                    '虚无':
-                        ['局外人', '苦难与阳光', '怀疑的四重根', '为何一切尚未消失', '感官追奉者的葬礼',
-                         '被装在套子里的人', '旷野的呼告', '存在的黄昏', '火堆外的夜', '知觉迷墙', '虚妄贡品',
-                         '日出之前', '无根据颂歌', '自欺咖啡馆', '他人即地狱', '开端与终结'],
-                    '丰饶':
-                        ['诸行无常', '诸法无我', '一法界心', '施诸愿印', '延彼遐龄', '厌离邪秽苦',
-                         '天人不动众', '宝光烛日月', '明澈琉璃身', '法雨', '胜军', '灭罪累生善'],
-                    '巡猎':
-                        ['柘弓危矢', '射不主皮', '帝星君临', '白矢决射御', '云镝逐步离', '彤弓素矰',
-                         '背孤击虚'],
-                    '毁灭':
-                        ['激变变星', '极端氦闪', '事件视界', '寰宇热寂特征数', '反物质非逆方程', '戒律性闪变',
-                         '危害性余光', '毁灭性吸积', '原生黑洞', '轨道红移', '预兆性景深', '递增性末日',
-                         '灾难性共振', '破坏性耀发', '偏振受体', '永坍缩体', '不稳定带', '哨戒卫星',
-                         '回光效应'],
-                    '欢愉':
-                        ['末日狂欢', '开盖有奖', '茫茫白夜', '众生安眠', '阴风阵阵', '被涂污的信天翁',
-                         '十二猴子与怒汉', '操行满分', '基本有害', '灰暗的火', '第二十一条军规',
-                         '流吧你的眼泪'],
-                    '繁育':
-                        ['刺吸口器', '结晶鳌刺', '酚类物质', '子囊释放', '菌种脓疤', '镰刀肢足', '腐殖疮', '裂解酶',
-                         '代谢腔', '裸脑质', '代谢腔', '催化剂', '节间膜', '孢夹', '骨刃', '鳞翅', '脊刺', '槽针',
-                         '液囊'],
-                    '智识':
-                        ['34型灰质', '2型杏仁核', '18型枕叶', '前庭系统', '递质合成', '外显记忆', '触觉通路',
-                         '阈下知觉', '纹状皮层', '跳跃传导', '齿轮啮合的王座', '导线弯绕的指环', '能量变距的权杖',
-                         '偏时引燃的炬火', '延迟衍射的烛光', '金属斑驳的华盖', '管道交错的桂冠', '线圈编制的罗琦']
-                }
-        save_yaml_values(__file__, {
+        """保存既有配置项，保留配置中的共享字段。"""
+        with open(config_path(__file__), encoding="utf-8") as file:
+            data = json.load(file)
+        save_json_values(__file__, {
                 "config": {
                     "order_text": list(map(lambda x: int(x), self.order_text.split(' '))),
                     "angle": float(self.angle),
                     "difficulty": self.diffi,
                     "fate": self.fate,
-                    "secondary_fate": secondary_fate,
+                    "secondary_fate": data["config"]["secondary_fate"],
                     "map_sha": self.map_sha,
                     "show_map_mode": self.show_map_mode,
                     "debug_mode": self.debug_mode,
@@ -168,7 +89,7 @@ class Config:
                     "timezone": self.timezone,
                     "max_run": self.max_run
                 },
-                "prior": prior,
+                "prior": data["prior"],
                 "key_mapping": self.mapping
             })
 

@@ -4,13 +4,14 @@
 
     video  视频录制产生的 第x次轮回-x战-年月日_时分秒.mp4
     log    logs 目录下的 log_年-月-日-时-分.txt
-    temp   temp 及其七个子目录下的 年月日_时分秒(.毫秒).png，
+    temp   temp 及其子目录下的 年月日_时分秒(.毫秒).png，
            以及 blank_state 下名称带时间的 blank_像素数_年月日_时分秒 调试目录
 
 时间直接取自文件或目录名称中的时间，不依赖文件系统的创建或修改时间。本次运行
 正在写入的日志由当前进程占用，删除必然失败，因此不在清理范围内。单个对象删除
-失败不会中断清理，失败数量单独统计。配置单独保存在
-config/config/cleanup_config.yml，参数不合法时用 example 配置的默认值覆盖。
+失败不会中断清理，失败数量单独统计。自动清理设置保存在用户配置
+user/gui_settings.json 的 cleanup 段，参数不合法时用 resource/gui_settings_default.json
+的默认值覆盖，默认配置不可读时使用代码内置默认值。
 """
 
 import glob
@@ -20,14 +21,13 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-import yaml
-
 from route import PATHS
 from tool import EXTRA
 from tool.log import CUS_LOGGER, current_log_file, log_emitter
+from tool.settings import ensure_settings, load_default_settings, read_json, write_json
 
-CONFIG_PATH = os.path.join(PATHS["config"], "cleanup_config.yml")
-EXAMPLE_PATH = os.path.join(PATHS["example"], "cleanup_config_example.yml")
+# 自动清理设置在用户配置中的字段名。
+CONFIG_KEY = "cleanup"
 
 CATEGORIES = ("video", "log", "temp")
 
@@ -73,8 +73,8 @@ UNIT_NAMES = {
 
 LAST_CLEANUP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# 默认参数以 example 配置为准（手动清理 / 程序启动时 / 3 日），这里的取值是
-# example 配置不可读时的兜底，保证配置读取始终可用。
+# 默认参数以 resource/gui_settings_default.json 的 cleanup 段为准（手动清理 /
+# 程序启动时 / 3 日），这里的取值是默认配置不可读时的兜底，保证配置读取始终可用。
 DEFAULT_MODE = "manual"
 DEFAULT_TRIGGER = "program_start"
 DEFAULT_VALUE = 3
@@ -203,28 +203,8 @@ def validate_config(config: CleanupConfig) -> list[str]:
     return errors
 
 
-def read_raw_config(path) -> dict | None:
-    """读取 YAML 配置文本。
-
-    Args:
-        path: 配置文件路径。
-
-    Returns:
-        解析后的字典；文件不存在、无法读取或存在语法错误时返回 None。
-    """
-    if not os.path.exists(path):
-        return None
-    with EXTRA.FILE_LOCK:
-        try:
-            with open(path, encoding="utf-8") as config_file:
-                values = yaml.safe_load(config_file)
-        except (OSError, yaml.YAMLError):
-            return None
-    return values if isinstance(values, dict) else None
-
-
-def load_example_item(category: str) -> CleanupItem:
-    """读取 example 配置中某个清理对象的默认参数。
+def load_default_item(category: str) -> CleanupItem:
+    """读取默认配置中某个清理对象的默认参数。
 
     单个参数非法时该参数回退到代码内置默认值，保证返回值始终可用。
 
@@ -232,10 +212,11 @@ def load_example_item(category: str) -> CleanupItem:
         category: 清理对象，取 CATEGORIES 之一。
 
     Returns:
-        该对象在 example 配置中的默认参数。
+        该对象在默认配置中的默认参数。
     """
-    values = read_raw_config(EXAMPLE_PATH)
-    example = values.get(category) if values else None
+    values = load_default_settings()
+    section = values.get(CONFIG_KEY) if values else None
+    example = section.get(category) if isinstance(section, dict) else None
     if not isinstance(example, dict):
         example = {}
 
@@ -252,33 +233,28 @@ def load_example_item(category: str) -> CleanupItem:
 
 
 def load_cleanup_config(path=None) -> CleanupConfig:
-    """读取自动清理配置，非法参数用 example 配置的默认值覆盖。
+    """读取自动清理设置，非法参数用默认配置的默认值覆盖。
 
-    配置文件不存在时先由 example 配置创建，随后按默认参数读取；YAML 语法
-    错误时整份配置使用 example 配置的默认参数。缺失、类型错误或取值越界
-    的单个参数只覆盖该参数，其他合法参数保持不变。
+    用户配置不存在时先由默认配置创建，随后按默认参数读取；配置无法读取或
+    cleanup 段缺失时整份设置使用默认参数。缺失、类型错误或取值越界的单个
+    参数只覆盖该参数，其他合法参数保持不变。
 
     Args:
-        path: 配置文件路径，默认使用正式配置。
+        path: 配置文件路径，默认使用用户配置。
 
     Returns:
         可直接使用的自动清理配置。
     """
-    path = os.fspath(path or CONFIG_PATH)
-    if not os.path.exists(path) and path == CONFIG_PATH and os.path.exists(EXAMPLE_PATH):
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with EXTRA.FILE_LOCK:
-            with open(EXAMPLE_PATH, encoding="utf-8") as example_file:
-                example_text = example_file.read()
-            with open(path, mode="w", encoding="utf-8") as config_file:
-                config_file.write(example_text)
-
-    values = read_raw_config(path)
+    path = path or ensure_settings()
+    values = read_json(path)
+    section = values.get(CONFIG_KEY) if values else None
+    if not isinstance(section, dict):
+        section = {}
 
     items = {}
     for category in CATEGORIES:
-        fallback = load_example_item(category)
-        raw = values.get(category) if values else None
+        fallback = load_default_item(category)
+        raw = section.get(category)
         if not isinstance(raw, dict):
             raw = {}
 
@@ -297,27 +273,26 @@ def load_cleanup_config(path=None) -> CleanupConfig:
 
 
 def write_config(config: CleanupConfig, path=None) -> None:
-    """以统一结构写入自动清理配置。
+    """把自动清理设置写入用户配置的 cleanup 段，保留其余字段。
 
     Args:
         config: 待写入的自动清理配置，调用方需保证参数合法。
-        path: 配置文件路径，默认使用正式配置。
+        path: 配置文件路径，默认使用用户配置。
     """
-    path = os.fspath(path or CONFIG_PATH)
-    content = {}
-    for category in CATEGORIES:
-        item = config.item(category)
-        content[category] = {
-            "mode": item.mode,
-            "trigger": item.trigger,
-            "value": item.value,
-            "unit": item.unit,
-            "last_cleanup": item.last_cleanup,
-        }
+    path = path or ensure_settings()
     with EXTRA.FILE_LOCK:
-        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        with open(path, mode="w", encoding="utf-8") as config_file:
-            yaml.safe_dump(content, config_file, allow_unicode=True, sort_keys=False)
+        data = read_json(path) or {}
+        data[CONFIG_KEY] = {
+            category: {
+                "mode": config.item(category).mode,
+                "trigger": config.item(category).trigger,
+                "value": config.item(category).value,
+                "unit": config.item(category).unit,
+                "last_cleanup": config.item(category).last_cleanup,
+            }
+            for category in CATEGORIES
+        }
+        write_json(path, data)
 
 
 def update_last_cleanup(category: str, cleaned_at: str, path=None) -> bool:
@@ -328,24 +303,25 @@ def update_last_cleanup(category: str, cleaned_at: str, path=None) -> bool:
     Args:
         category: 清理对象，取 CATEGORIES 之一。
         cleaned_at: 本次清理触发时间，格式为 YYYY-MM-DD HH:MM:SS。
-        path: 配置文件路径，默认使用正式配置。
+        path: 配置文件路径，默认使用用户配置。
 
     Returns:
         写入成功返回 True；读取或写入失败返回 False。
     """
     try:
-        config = load_cleanup_config(path)
-        items = dict(config.items)
-        current = config.item(category)
-        items[category] = CleanupItem(
-            mode=current.mode,
-            trigger=current.trigger,
-            value=current.value,
-            unit=current.unit,
-            last_cleanup=cleaned_at,
-        )
-        write_config(CleanupConfig(items=items), path)
-    except (OSError, yaml.YAMLError) as error:
+        with EXTRA.FILE_LOCK:
+            config = load_cleanup_config(path)
+            items = dict(config.items)
+            current = config.item(category)
+            items[category] = CleanupItem(
+                mode=current.mode,
+                trigger=current.trigger,
+                value=current.value,
+                unit=current.unit,
+                last_cleanup=cleaned_at,
+            )
+            write_config(CleanupConfig(items=items), path)
+    except (OSError, ValueError) as error:
         CUS_LOGGER.warning(
             "上次清理时间写入失败：%s（%s）", CATEGORY_NAMES[category], error
         )
@@ -353,16 +329,20 @@ def update_last_cleanup(category: str, cleaned_at: str, path=None) -> bool:
     return True
 
 
-# ---------------------------------------------------------------------------
 # 执行：命中规则的收集、删除与触发时机判断
-# ---------------------------------------------------------------------------
 # 程序产生的临时文件统一在此目录及其子目录下。
 TEMPDIRS = (
+    "analysis_map",
     "angle",
     "bigmaperror",
     "blank_state",
+    "currencywar",
+    "debug",
+    "event",
     "kill",
+    "map",
     "no_red2",
+    "screenshot",
     "stop",
     "unmatched_action_count",
 )

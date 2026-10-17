@@ -51,7 +51,7 @@ class GuiPreferencesTests(unittest.TestCase):
         self.actions.mkdir()
         self.config = self.root / "config"
         self.config.mkdir()
-        self.settings = self.config / "settings.json"
+        self.settings = self.config / "gui_settings.json"
         self.settings.write_text(json.dumps({
             "debug": False, "hotkeys": {"stop": "f8"}, "other": {"keep": True},
         }), encoding="utf-8")
@@ -64,7 +64,7 @@ class GuiPreferencesTests(unittest.TestCase):
         self.logger = Mock()
         self.dialogs = Mock()
         self.script_runner = Mock()
-        self.enterContext(patch.dict(PATHS, {"root": str(self.root), "config": str(self.config), "example": str(self.root / "example"), "core": str(self.core), "backup": str(self.root / "backup")}))
+        self.enterContext(patch.dict(PATHS, {"root": str(self.root), "user": str(self.config), "core": str(self.core), "backup": str(self.root / "backup")}))
         self.gui = self.make_gui()
 
     def make_gui(self):
@@ -86,8 +86,8 @@ class GuiPreferencesTests(unittest.TestCase):
             "script_key": script_key, "script_path": script_path,
             "update_settings": update_settings,
             "EXTRA": SimpleNamespace(FILE_LOCK=threading.Lock()),
-            "PATHS": {"root": str(self.root), "config": str(self.config),
-                      "example": str(self.root / "example"), "core": str(self.core), "backup": str(self.root / "backup")},
+            "PATHS": {"root": str(self.root), "user": str(self.config),
+                      "core": str(self.core), "backup": str(self.root / "backup")},
         })
         for widget in window.findChildren(QWidget) + window.findChildren(QLayout):
             if widget.objectName():
@@ -232,16 +232,12 @@ class GuiPreferencesTests(unittest.TestCase):
         self.assertEqual(reopened.script_combo.currentData(), str(self.actions / "中文脚本.json"))
         self.assertEqual(json.loads(self.settings.read_text(encoding="utf-8")), saved)
 
-    def test_restoration_and_legacy_defaults_do_not_write_during_startup(self):
-        for selection in ({}, {"script_engine": "IronBlood", "script_file": "中文脚本.json"}):
-            with self.subTest(selection=selection):
-                self.gui = self.make_gui()
-                self.gui.opt.update(selection)
-                original = self.settings.read_bytes()
-                self.gui.init_script_controls()
-                self.assertEqual(self.gui.engine_combo.currentText(), selection.get("script_engine", "Simulated"))
-                self.assertEqual(Path(self.gui.script_combo.currentData()).name, selection.get("script_file", "a.json"))
-                self.assertEqual(self.settings.read_bytes(), original)
+    def test_restoration_defaults_do_not_write_during_startup(self):
+        original = self.settings.read_bytes()
+        self.gui.init_script_controls()
+        self.assertEqual(self.gui.engine_combo.currentText(), "Simulated")
+        self.assertEqual(Path(self.gui.script_combo.currentData()).name, "a.json")
+        self.assertEqual(self.settings.read_bytes(), original)
 
     def test_unavailable_saved_options_fall_back_to_first_available_items(self):
         self.gui.opt.update({"script_engine": "RemovedEngine", "script_file": "missing.json"})

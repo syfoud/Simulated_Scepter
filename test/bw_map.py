@@ -1,9 +1,12 @@
+import os
 from copy import deepcopy
+from datetime import datetime
 
 import cv2 as cv
 import numpy as np
 
 from importing import load_img
+from route import PATHS
 from tool.utils.image_tool import find_image_by_name
 from tool.utils.minimap_util import rotate_minimap, mask_minimap_center, crop, area_offset, get_minimap
 
@@ -65,12 +68,18 @@ def get_bw_map(local_screen=None,screen=None):
         #     for j in range(bw_map.shape[1]):
         #         if ((i - 93) ** 2 + (j - 93) ** 2) > 90 ** 2:
         #             bw_map[i, j] = 0
-        cv.imwrite("bwmap.jpg", bw_map)
-        
+        # 调试图统一写入 temp/debug/，允许由自动清理按时间命名规则回收。
+        debug_folder = os.path.join(PATHS["temp"], "debug")
+        os.makedirs(debug_folder, exist_ok=True)
+        cv.imwrite(
+            os.path.join(debug_folder, f"bwmap_{datetime.now():%Y%m%d_%H%M%S_%f}.png"),
+            bw_map,
+        )
+
         # 统计非黑像素点数量
         non_black_pixels = np.count_nonzero(bw_map)
         print(f"bw_map 中非黑像素点数量：{non_black_pixels}")
-        
+
         return bw_map, non_black_pixels
     except Exception as e:
         print(f"get_bw_map函数执行出错: {str(e)}")

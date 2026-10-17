@@ -6,7 +6,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import yaml
 from PyQt5.QtCore import Qt
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import (
@@ -22,8 +21,8 @@ from core.common import config as runtime_config
 from route import PATHS
 from test.core_fixture import copy_core
 from tool.registry import KernelRegistry
-from tool.settings import load_settings, update_settings
-from tool.storage import config_path, load_module_settings, update_module_settings
+from tool.settings import load_settings
+from tool.storage import config_path, update_module_settings
 
 
 class EngineSettingsGuiTests(unittest.TestCase):
@@ -36,27 +35,31 @@ class EngineSettingsGuiTests(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.config = Path(folder.name) / "config"
         self.config.mkdir()
-        self.settings = self.config / "settings.json"
-        self.models = Path(folder.name) / "models"
-        self.models.mkdir()
-        (self.models / "kesln.onnx").write_bytes(b"UI authorization fixture")
-        data = json.loads((Path(PATHS["example"]) / "settings_example.json").read_text(encoding="utf-8"))
+        self.settings = self.config / "gui_settings.json"
+        (self.config / "kesln.onnx").write_bytes(b"UI authorization fixture")
+        data = json.loads((Path(PATHS["root"]) / "resource" / "gui_settings_default.json").read_text(encoding="utf-8"))
         data.update({"early_stop": False, "other": {"keep": True}, "any_fate": "巡猎"})
         self.settings.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         self.core = copy_core(Path(folder.name) / "core")
-        for module, legacy in (("simulated", "info_old.yml"), ("divergent", "info.yml"),
-                               ("currency", "currency_config.yml")):
-            (self.config / legacy).write_bytes((self.core / module / "config/default.yml").read_bytes())
-        self.enterContext(patch.dict(PATHS, {"config": str(self.config), "model": str(self.models), "core": str(self.core), "backup": str(Path(folder.name) / "backup")}))
+        self.enterContext(patch.dict(PATHS, {"user": str(self.config), "core": str(self.core), "backup": str(Path(folder.name) / "backup")}))
 
         self.registry = KernelRegistry()
         self.paths = {}
-        # 首次迁移单独测试；打开窗口前完成迁移后，取消不得写入任何配置。
+        # 打开窗口前存储层会按默认配置补全缺失字段；取消不得写入任何配置。
         for spec in self.registry.specs.values():
             self.paths[spec.id] = config_path(spec.folder / "settings_ui.py")
 
     def values(self, engine):
         return json.loads(self.paths[engine].read_text(encoding="utf-8"))
+
+    def snapshot(self, exclude=None):
+        """按相对路径记录配置目录下所有文件的字节内容。"""
+        data = {}
+        for path in self.config.rglob("*"):
+            if not path.is_file() or (exclude is not None and path == exclude):
+                continue
+            data[path.relative_to(self.config).as_posix()] = path.read_bytes()
+        return data
 
     def dialog(self, engine):
         dialog = self.registry.create_settings(engine)
@@ -70,14 +73,14 @@ class EngineSettingsGuiTests(unittest.TestCase):
         self.assertEqual(dialog.result(), QDialog.Accepted)
 
     def test_all_settings_windows_load_and_cancel_without_writing(self):
-        before = {file.name: file.read_bytes() for file in self.config.iterdir()}
+        before = self.snapshot()
         for engine in (spec.id for spec in self.registry.runnable()):
             with self.subTest(engine=engine):
                 dialog = self.dialog(engine)
                 self.assertTrue(dialog.section.isVisible())
                 dialog.buttons.button(QDialogButtonBox.Cancel).click()
                 self.assertEqual(dialog.result(), QDialog.Rejected)
-        self.assertEqual(before, {file.name: file.read_bytes() for file in self.config.iterdir()})
+        self.assertEqual(before, self.snapshot())
 
     def test_common_settings_share_one_file_with_inheriting_kernels(self):
         dialog = self.dialog("Common")
@@ -95,33 +98,25 @@ class EngineSettingsGuiTests(unittest.TestCase):
                 importer.assert_called_with(f"core.{spec.folder.name}.settings_ui")
             self.assertEqual(importer.call_count, len(self.registry.runnable()))
 
-    def test_legacy_role_slot_is_migrated_before_any_configuration_window_opens(self):
-        self.paths["Common"].unlink()
-        update_settings({"silver_wolf_switch": "三号位"})
-        loaded = load_module_settings(runtime_config.__file__)
-        self.assertEqual(loaded["silver_wolf_switch"], 3)
-        self.assertNotIn("silver_wolf_switch", load_settings())
-        self.assertEqual(load_settings()["other"], {"keep": True})
-
-    def test_yaml_settings_save_only_the_selected_engine_and_restore_visible_values(self):
+    def test_json_settings_save_only_the_selected_engine_and_restore_visible_values(self):
         for engine, filename, field in (
-            ("Simulated", "info_old.yml", "Simul_max_run_input"),
-            ("Divergent", "info.yml", "Diver_max_run_input"),
+            ("Simulated", "info_old.json", "Simul_max_run_input"),
+            ("Divergent", "info.json", "Diver_max_run_input"),
         ):
             with self.subTest(engine=engine):
-                others = {p.name: p.read_bytes() for p in self.config.iterdir() if p.name != filename}
+                others = self.snapshot(exclude=self.paths[engine])
                 dialog = self.dialog(engine)
                 getattr(dialog.section, field).setText("7")
                 if engine == "Divergent":
                     dialog.section.Diver_team_combo.setCurrentText("击破")
                 self.save(dialog)
-                values = yaml.safe_load(self.paths[engine].read_text(encoding="utf-8"))["config"]
+                values = json.loads(self.paths[engine].read_text(encoding="utf-8"))["config"]
                 self.assertEqual(values["max_run"], 7)
                 reopened = self.dialog(engine)
                 self.assertEqual(getattr(reopened.section, field).text(), "7")
                 if engine == "Divergent":
                     self.assertEqual(reopened.section.Diver_team_combo.currentText(), "击破")
-                self.assertEqual(others, {p.name: p.read_bytes() for p in self.config.iterdir() if p.name != filename})
+                self.assertEqual(others, self.snapshot(exclude=self.paths[engine]))
 
     def test_shared_runtime_keys_and_specialized_keys_round_trip_without_duplication(self):
         dialog = self.dialog("AnyFate")
@@ -174,7 +169,7 @@ class EngineSettingsGuiTests(unittest.TestCase):
 
     def test_missing_model_disables_advanced_early_stop_controls(self):
         update_module_settings(runtime_config.__file__, {"early_stop": True})
-        with patch.dict(PATHS, {"model": str(self.config / "missing")}):
+        with patch.dict(PATHS, {"user": str(self.config / "missing")}):
             for engine in ("AnyFate", "IronBlood", "FingerSnap"):
                 dialog = self.dialog(engine)
                 self.assertFalse(dialog.runtime.early_stop_checkbox.isEnabled())
@@ -202,11 +197,11 @@ class EngineSettingsGuiTests(unittest.TestCase):
             self.assertEqual(dialog.windowTitle(), "高级用户功能解锁说明")
             text = dialog.findChild(QTextBrowser).toPlainText()
             self.assertIn("kesln.onnx", text)
-            self.assertIn("resource/models/", text)
+            self.assertIn("user/", text)
             captured.append(text)
             return QDialog.Rejected
 
-        with patch.dict(PATHS, {"model": str(self.config / "missing")}), \
+        with patch.dict(PATHS, {"user": str(self.config / "missing")}), \
                 patch.object(QDialog, "exec_", new=capture):
             for engine in ("AnyFate", "IronBlood", "FingerSnap"):
                 dialog = self.dialog(engine)
@@ -215,7 +210,7 @@ class EngineSettingsGuiTests(unittest.TestCase):
         self.assertEqual(len(set(captured)), 1)
 
     def test_auth_check_requires_a_file_and_does_not_accept_a_named_directory(self):
-        model = self.models / "kesln.onnx"
+        model = self.config / "kesln.onnx"
         model.unlink()
         model.mkdir()
         dialog = self.dialog("FingerSnap")
@@ -224,17 +219,17 @@ class EngineSettingsGuiTests(unittest.TestCase):
 
     def test_kernel_settings_do_not_offer_debug_toggles_or_overwrite_debug_flags(self):
         for engine, filename, old_control in (
-            ("Simulated", "info_old.yml", "Simul_debug_checkbox"),
-            ("Divergent", "info.yml", "Diver_debug_checkbox"),
+            ("Simulated", "info_old.json", "Simul_debug_checkbox"),
+            ("Divergent", "info.json", "Diver_debug_checkbox"),
         ):
             path = self.paths[engine]
-            values = yaml.safe_load(path.read_text(encoding="utf-8"))
+            values = json.loads(path.read_text(encoding="utf-8"))
             values["config"]["debug_mode"] = 1
-            path.write_text(yaml.safe_dump(values, allow_unicode=True), encoding="utf-8")
+            path.write_text(json.dumps(values, ensure_ascii=False), encoding="utf-8")
             dialog = self.dialog(engine)
             self.assertIsNone(dialog.findChild(QWidget, old_control))
             self.save(dialog)
-            self.assertEqual(yaml.safe_load(path.read_text(encoding="utf-8"))["config"]["debug_mode"], 1)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["config"]["debug_mode"], 1)
 
     def test_invalid_model_input_does_not_partially_save_runtime_settings(self):
         dialog = self.dialog("FingerSnap")
@@ -258,7 +253,7 @@ class EngineSettingsGuiTests(unittest.TestCase):
         self.assertTrue(dialog.isVisible())
         self.assertEqual(self.settings.read_bytes(), before)
 
-    def test_yaml_write_failure_restores_running_configuration(self):
+    def test_json_write_failure_restores_running_configuration(self):
         import core.simulated.settings_ui as module
 
         dialog = self.dialog("Simulated")
@@ -297,7 +292,7 @@ class EngineSettingsGuiTests(unittest.TestCase):
         from core.currency.priority_ui import CurrencyPriorityDialog
 
         path = self.paths["Currency"]
-        before = yaml.safe_load(path.read_text(encoding="utf-8"))
+        before = json.loads(path.read_text(encoding="utf-8"))
         dialog = CurrencyPriorityDialog()
         self.addCleanup(dialog.deleteLater)
         values = dialog.collect_current()
@@ -305,7 +300,7 @@ class EngineSettingsGuiTests(unittest.TestCase):
         dialog.populate_lists(values)
         with patch.object(QMessageBox, "information"):
             dialog.save_button.click()
-        stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+        stored = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(stored["priority"], values)
         self.assertEqual({key: value for key, value in stored.items() if key != "priority"},
                          {key: value for key, value in before.items() if key != "priority"})
@@ -315,15 +310,15 @@ class EngineSettingsGuiTests(unittest.TestCase):
 
     def test_currency_strategy_save_preserves_priority_and_other_fields(self):
         path = self.paths["Currency"]
-        values = yaml.safe_load(path.read_text(encoding="utf-8"))
+        values = json.loads(path.read_text(encoding="utf-8"))
         values["custom"] = "保留"
-        path.write_text(yaml.safe_dump(values, allow_unicode=True), encoding="utf-8")
+        path.write_text(json.dumps(values, ensure_ascii=False), encoding="utf-8")
         dialog = self.dialog("Currency")
         dialog.section.Currency_exit_plane_combo.setCurrentIndex(2)
         dialog.section.Currency_prior_exit_plane_combo.setCurrentIndex(2)
         dialog.section.Currency_exit_if_no_prior_checkbox.setChecked(True)
         self.save(dialog)
-        stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+        stored = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(stored["exit_after_plane"], 3)
         self.assertEqual(stored["prior_exit_plane"], 2)
         self.assertTrue(stored["exit_if_no_prior"])

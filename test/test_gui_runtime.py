@@ -41,12 +41,12 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         config = Path(self.folder.name)
-        source = Path(self.module.PATHS["example"]) / "settings_example.json"
-        (config / "settings.json").write_bytes(source.read_bytes())
+        source = Path(self.module.PATHS["root"]) / "resource" / "gui_settings_default.json"
+        (config / "gui_settings.json").write_bytes(source.read_bytes())
         shutil.copytree(Path(self.module.PATHS["root"]) / "actions", config / "actions")
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
-        self.stack.enter_context(patch.dict(self.module.PATHS, {"root": str(config), "config": str(config), "core": str(copy_core(config / "core")), "backup": str(config / "backup")}))
+        self.stack.enter_context(patch.dict(self.module.PATHS, {"root": str(config), "user": str(config), "core": str(copy_core(config / "core")), "backup": str(config / "backup")}))
         self.stack.enter_context(patch.object(self.module.MainWindow, "setup_keyboard_listener"))
         self.stack.enter_context(patch.object(self.module.MainWindow, "check_first_launch"))
         self.stack.enter_context(patch.object(self.module, "find_game_window", return_value=Mock()))

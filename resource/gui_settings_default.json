@@ -1,0 +1,45 @@
+{
+    "script_engine": "Simulated",
+    "script_file": "",
+    "start_game_on_task": false,
+    "game_executable_path": "",
+    "ocr_device": "auto",
+    "recording_state": false,
+    "record_map": false,
+    "recording_iron_blood": false,
+    "del_record_time": 14,
+    "hotkeys": {
+        "stop": "f5",
+        "test": "f6",
+        "print": "f7"
+    },
+    "cleanup": {
+        "video": {
+            "mode": "manual",
+            "trigger": "program_start",
+            "value": 3,
+            "unit": "day",
+            "last_cleanup": ""
+        },
+        "log": {
+            "mode": "manual",
+            "trigger": "program_start",
+            "value": 3,
+            "unit": "day",
+            "last_cleanup": ""
+        },
+        "temp": {
+            "mode": "manual",
+            "trigger": "program_start",
+            "value": 3,
+            "unit": "day",
+            "last_cleanup": ""
+        }
+    },
+    "debug": false,
+    "record_event_map": false,
+    "recording_keep_long_run": false,
+    "recording_keep_long_run_threshold": 1.2,
+    "record_add_label": false,
+    "skin_type": 1
+}

@@ -7,7 +7,5 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def copy_core(target):
-    shutil.copytree(ROOT / "core", target, ignore=shutil.ignore_patterns(
-        "__pycache__", "settings.json", "settings.yml",
-    ))
+    shutil.copytree(ROOT / "core", target, ignore=shutil.ignore_patterns("__pycache__"))
     return Path(target)

@@ -859,7 +859,9 @@ def display_matches(image, matches, path=None, highlight_idx=None, save_path=Non
     # cv2.waitKey(wait_ms);
     # cv2.destroyAllWindows()
     if save_path:
-        cv2.imwrite(PATHS["temp"]+datetime.now().strftime("%Y%m%d_%H%M%S")+".png", vis)
+        folder = save_path if isinstance(save_path, str) else os.path.join(PATHS["temp"], "analysis_map")
+        os.makedirs(folder, exist_ok=True)
+        cv2.imwrite(os.path.join(folder, datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".png"), vis)
 
 
 def detect_infectable_nodes(color_image, matches, pad=20, cyan_ratio_threshold=0.20,

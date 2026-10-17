@@ -28,8 +28,8 @@ class ScheduleTests(unittest.TestCase):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
         self.root = Path(self.folder.name)
-        self.enterContext(patch.dict(PATHS, {"root": str(self.root), "config": str(self.root / "config")}))
-        self.path = self.root / "config/schedules.json"
+        self.enterContext(patch.dict(PATHS, {"root": str(self.root), "user": str(self.root / "user")}))
+        self.path = self.root / "user/schedules.json"
         self.script = self.root / "actions/job.json"
         save_script(self.script, [new_event()])
         self.now = datetime.now().replace(microsecond=0) + timedelta(days=2)
