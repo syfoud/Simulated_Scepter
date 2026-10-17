@@ -42,3 +42,4 @@ native/countdown/target/
 tool/_countdown_native.dll
 tool/_countdown_native.so
 tool/_countdown_native.dylib
+resource/models/kesln.onnx
