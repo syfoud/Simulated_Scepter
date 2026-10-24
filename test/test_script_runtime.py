@@ -56,6 +56,8 @@ def script_fixture(kernel_id, path):
     engine.quan = engine.bai_e = False
     engine.need_end = engine.need_record = engine.auto_attack_breakable = False
     engine.opt, engine.loaded_map_root, engine.max_interact_time = {}, None, 60
+    # 生产代码在 normal() 里按需 OCR 当前区域；AST 抽取类时 __init__ 被丢掉，需手动补上。
+    engine.area = ""
     engine.fate = "丰饶" if kernel_id == "FingerSnap" else "毁灭"
     engine.is_pig_node = Mock(return_value=False)
     engine.switch_current_role = Mock()

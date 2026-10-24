@@ -27,7 +27,7 @@ class ScheduleTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        self.root = Path(self.folder.name)
+        self.root = Path(self.folder.name).resolve()  # 生产代码比较的是解析后的长路径
         self.enterContext(patch.dict(PATHS, {"root": str(self.root), "user": str(self.root / "user")}))
         self.path = self.root / "user/schedules.json"
         self.script = self.root / "actions/job.json"

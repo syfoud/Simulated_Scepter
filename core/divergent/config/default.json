@@ -13,7 +13,7 @@
         ],
         "save": 1,
         "timezone": "Default",
-        "max_run": 34,
+        "max_run": 0,
         "accuracy": 1440,
         "enable_portal_prior": 0,
         "portal_prior": {

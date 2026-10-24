@@ -350,7 +350,8 @@ TEMPDIRS = (
 BLANK_STATE_DIR = "blank_state"
 
 VIDEO_PATTERN = re.compile(r"(\d{8})_(\d{6})\.mp4$")
-LOG_PATTERN = re.compile(r"log_(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.txt$")
+# 测试运行写入的日志带 test_ 前缀（见 tool/log.py 的 timed_log_filename），同样纳入清理。
+LOG_PATTERN = re.compile(r"(?:test_)?log_(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.txt$")
 TEMP_PATTERN = re.compile(r"(\d{8})_(\d{6})(?:_\d+)?\.png$")
 # blank_state 下每次调试都会新建一个“blank_像素数_年月日_时分秒”目录，目录名本身带时间。
 TEMP_DIRECTORY_PATTERN = re.compile(r"blank_\d+_(\d{8})_(\d{6})$")

@@ -382,21 +382,27 @@ class RecordLineTest(unittest.TestCase):
         self.assertIn("开局期望:0.00", line)
 
     def test_failure_reason_is_written_as_negative_weight(self):
-        """识别失败时把原因码写成负数，便于事后分辨失败类型。"""
+        """识别失败时把原因码写成负数，便于事后分辨失败类型；负数原因码不留小数。"""
         line = self.write_record(IronBloodUniverse.MAP_ANALYSIS_NO_MATCH)
 
-        self.assertIn("开局期望:-2.00", line)
+        self.assertIn("开局期望:-2", line)
 
-    def test_restart_before_the_record_keeps_the_expectation(self):
-        """退出流程里「点击空白结算」可能先于「结算界面」触发，不能因此丢掉开局期望。"""
+    def test_restart_before_the_record_writes_no_init_code(self):
+        """开局期望只在本局内有效，进入下一轮回时立刻重置为 -5。
+
+        结算界面同时含「来自黑塔的分析报告」和「点击空白」两个 trigger，识别先后顺序
+        在小概率下会让 end_of_university 根本执行不到，所以重置放在 restart_recording。
+        """
         line = self.write_record(3.5, restart_first=True)
 
-        self.assertIn("开局期望:3.50", line)
+        self.assertIn("开局期望:-5", line)
 
-    def test_expectation_is_cleared_after_the_record(self):
-        """本局记录写完就重置为「还没做开局识别」，避免下一局沿用上一局的读数。"""
+    def test_expectation_is_cleared_when_next_round_starts(self):
+        """本局记录写完后读数仍然保留，等下一轮开始时才重置为「还没做开局识别」。"""
         self.write_record(3.5)
 
+        self.assertEqual(3.5, self.last_engine.first_plane_weight)
+        self.last_engine.restart_recording()
         self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NO_INIT,
                          self.last_engine.first_plane_weight)
 
@@ -404,7 +410,7 @@ class RecordLineTest(unittest.TestCase):
         """已经在模拟宇宙里直接开局时走不到识别流程，记录里写 -5，而不是少一个字段。"""
         line = self.write_record(IronBloodUniverse.MAP_ANALYSIS_NO_INIT)
 
-        self.assertIn("开局期望:-5.00", line)
+        self.assertIn("开局期望:-5", line)
         self.assertIn("用时:0分23秒", line)
 
 

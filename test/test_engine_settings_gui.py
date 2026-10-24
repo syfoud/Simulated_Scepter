@@ -33,15 +33,17 @@ class EngineSettingsGuiTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
-        self.config = Path(folder.name) / "config"
+        # 生产代码的 config_path() 返回解析后的长路径，这里统一用长路径，便于按路径比较。
+        self.root = Path(folder.name).resolve()
+        self.config = self.root / "config"
         self.config.mkdir()
         self.settings = self.config / "gui_settings.json"
         (self.config / "kesln.onnx").write_bytes(b"UI authorization fixture")
         data = json.loads((Path(PATHS["root"]) / "resource" / "gui_settings_default.json").read_text(encoding="utf-8"))
         data.update({"early_stop": False, "other": {"keep": True}, "any_fate": "巡猎"})
         self.settings.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        self.core = copy_core(Path(folder.name) / "core")
-        self.enterContext(patch.dict(PATHS, {"user": str(self.config), "core": str(self.core), "backup": str(Path(folder.name) / "backup")}))
+        self.core = copy_core(self.root / "core")
+        self.enterContext(patch.dict(PATHS, {"user": str(self.config), "core": str(self.core), "backup": str(self.root / "backup")}))
 
         self.registry = KernelRegistry()
         self.paths = {}

@@ -40,7 +40,9 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        config = Path(self.folder.name)
+        # 取 resolve 后的长路径：生产代码比较/返回的都是解析过的路径，
+        # 而 TEMP 为 8.3 短文件名时 tempfile 给出的仍是短路径，直接比较会不相等。
+        config = Path(self.folder.name).resolve()
         source = Path(self.module.PATHS["root"]) / "resource" / "gui_settings_default.json"
         (config / "gui_settings.json").write_bytes(source.read_bytes())
         shutil.copytree(Path(self.module.PATHS["root"]) / "actions", config / "actions")
@@ -204,7 +206,8 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
         from test.test_script_runtime import script_fixture
 
         self.set_mode(True)
-        path = Path(self.folder.name) / "selected-business.json"
+        # 同样取长路径：脚本选择框里放的是生产代码解析过的路径。
+        path = Path(self.folder.name).resolve() / "selected-business.json"
         for kernel_id in ("AnyFate", "IronBlood", "FingerSnap"):
             with self.subTest(kernel_id=kernel_id):
                 engine, manager, phases = script_fixture(kernel_id, path)

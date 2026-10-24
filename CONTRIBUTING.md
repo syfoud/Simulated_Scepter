@@ -115,6 +115,8 @@ uv sync
 
 Python 脚本通过 `uv run --no-sync python <脚本路径>` 执行，模块通过 `uv run --no-sync python -m <模块名>` 执行；将占位内容替换为实际目标。先确认相关测试的依赖与副作用，不能直接批量运行会接管键鼠的脚本，也不假定测试框架已经安装。
 
+用 `python -m unittest test.<模块名>` 或 `python -m unittest discover -s test -t .` 运行时才会先导入 `test` 包，从而隔离测试用的用户目录，并把测试日志写成 `test_log_年-月-日-时-分.txt`；直接 `python test/<脚本>.py` 不经过这层隔离。`test/__init__.py` 的 `MANUAL_TESTS` 登记不参与自动发现的手动脚本，这类脚本按原方式单独运行。
+
 ---
 
 ## 开发流程

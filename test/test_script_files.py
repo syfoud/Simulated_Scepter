@@ -28,7 +28,7 @@ class ScriptFileTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        self.root = Path(self.folder.name)
+        self.root = Path(self.folder.name).resolve()  # 生产代码比较的是解析后的长路径
         self.enterContext(patch.dict(PATHS, {"root": str(self.root)}))
         self.path = self.root / "actions" / "脚本.json"
         self.data = [new_event()]
@@ -87,7 +87,7 @@ class ScriptEditorTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        self.root = Path(self.folder.name)
+        self.root = Path(self.folder.name).resolve()  # 生产代码比较的是解析后的长路径
         self.enterContext(patch.dict(PATHS, {"root": str(self.root)}))
         self.path = self.root / "actions/编辑.json"
         self.data = [new_event()]

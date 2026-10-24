@@ -1,5 +1,6 @@
 import io
 import logging
+import os
 import sys
 import traceback
 from datetime import datetime
@@ -16,6 +17,8 @@ import colorlog
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 
+from route import PATHS
+
 
 # 延迟导入 GLOBAL，避免循环导入
 def get_GLOBAL():
@@ -29,19 +32,28 @@ def get_GLOBAL():
             PRINT_TO_UI = None
         return MockGlobal()
 
-logs_path = Path("logs")
+logs_path = Path(PATHS["logs"])
 logs_path.mkdir(exist_ok=True, parents=True)
 
 current_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M")
+
+# 测试运行时由 test/__init__.py 设置该环境变量，让测试写入的日志带 test_ 前缀，
+# 便于把测试产物和正常运行产生的日志区分开；正常运行该变量不存在，前缀为空。
+LOG_PREFIX = os.environ.get("SIMS_TEST_LOG_PREFIX", "")
+
+
+def timed_log_filename() -> str:
+    """返回按分钟命名的日志文件名（测试运行时带 test_ 前缀）。"""
+    return f"{LOG_PREFIX}log_{current_time_str}.txt"
 
 
 def current_log_file() -> str:
     """返回本次运行正在写入的日志文件名。
 
     Returns:
-        形如 log_年-月-日-时-分.txt 的文件名，与 logs 目录下的实际文件同名。
+        形如 log_年-月-日-时-分.txt 的文件名（测试运行时带 test_ 前缀），与 logs 目录下的实际文件同名。
     """
-    return f"log_{current_time_str}.txt"
+    return timed_log_filename()
 
 
 class LogEmitter(QObject):
@@ -154,7 +166,7 @@ class PrintToFileLogger:
         # 只写入到日志文件
         with open(logs_path / "log.txt", "a", encoding="utf-8") as f:
             f.write(f"PRINT - {message}\n")
-        with open(logs_path / f"log_{current_time_str}.txt", "a", encoding="utf-8") as f:
+        with open(logs_path / timed_log_filename(), "a", encoding="utf-8") as f:
             f.write(f"PRINT - {message}\n")
 
 # 先保存原始的stdout和stderr，然后立即重定向
@@ -191,7 +203,7 @@ class CusLogger(logging.Logger):
         # file_handler.addFilter(keyword_filter)
         # self.addHandler(file_handler)
 
-        timestamped_file_handler = FileHandler(filename=logs_path / f"log_{current_time_str}.txt", mode="a",
+        timestamped_file_handler = FileHandler(filename=logs_path / timed_log_filename(), mode="a",
                                                encoding="utf-8")
         timestamped_file_handler.setFormatter(formatter)
 
@@ -200,7 +212,7 @@ class CusLogger(logging.Logger):
 
         error_file_handler = logging.FileHandler(
             filename=logs_path / "error_log.log",
-            mode='w',
+            mode='a',
             encoding='utf-8'
         )
         error_file_handler.setLevel(logging.ERROR)
@@ -214,7 +226,7 @@ class CusLogger(logging.Logger):
 
         critical_file_handler = logging.FileHandler(
             filename=logs_path / 'critical_log.log',
-            mode='w',
+            mode='a',
             encoding='utf-8'
         )
         critical_file_handler.setLevel(logging.CRITICAL)
@@ -277,7 +289,7 @@ pyqt_logger.propagate = False
 
 # PyQt5 日志：每条只写入一次普通日志文件。
 pyqt_file_handler = FileHandler(
-    filename=logs_path / f"log_{current_time_str}.txt",
+    filename=logs_path / timed_log_filename(),
     mode="a",
     encoding="utf-8"
 )
@@ -314,7 +326,7 @@ def my_print(*args, **kwargs):
         print(*args, **kwargs)
 
 def print_exc():
-    with io.StringIO() as buf, open("logs/error_log.txt", "a") as f:
+    with io.StringIO() as buf, open(logs_path / f"{LOG_PREFIX}error_log.txt", "a", encoding="utf-8") as f:
         traceback.print_exc(file=buf)
         f.write(buf.getvalue())
 

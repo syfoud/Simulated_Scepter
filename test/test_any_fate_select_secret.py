@@ -141,7 +141,8 @@ class _StubEngine:
         self.fate = "存护"
         # 真实现里 self.event 一开始并不存在（getattr 取空串），只有写日志时才读一次
         self.event = ""
-        # select_event 记下「面板第一次认到选项」的时刻，用来等面板淡入（测淡入把它设成 None）
+        # select_event 记下「面板第一次认到选项」的时刻，用来等面板淡入（测淡入把它设成 None）。
+        # 远早于当前时刻（替身时钟从 1000 s 起）表示「早就等满淡入窗口」，多数用例据此直接走兜底。
         self._option_shown_at = 0.0
         self.xx, self.yy = 1920, 1080
         self.scx = 1.0
@@ -708,7 +709,8 @@ class SelectEventTest(unittest.TestCase):
         面板是淡入的：命途图标比选项文字晚约 0.4 s 才画出来
         （虫巢录屏实测 27.10 s 优选项文字已可读，27.13 s fate6 才认得到）。
         面板刚出现的那一两帧先别兜底——那时补认还没有结果，兜底会挑中最长文字
-        （虫巢那次挑中的是最后一行「止步于巢穴门口。」）。等满 0.8 s 再照旧兜底点击。
+        （虫巢那次挑中的是最后一行「止步于巢穴门口。」）。等满 1.5 s 再照旧兜底点击。
+        窗口在 2026-10-24 由 0.8 s 放宽到 1.5 s：按 0.8 s 兜底仍会挑错，所以刚过 0.8 s 也要继续等。
         """
         engine = _StubEngine(
             {},
@@ -725,7 +727,14 @@ class SelectEventTest(unittest.TestCase):
             self._debug_messages(),
         )
 
-        engine._option_shown_at = 0.0  # 已经等满 0.8 s：照旧走兜底
+        # 面板出现后 1.0 s（已过旧的 0.8 s、还没到 1.5 s）：继续等，不兜底。
+        # self.clock 每被 time() 读一次前进 0.1 s，故把起点往前挪 0.9 s，到判定时正好过了 1.0 s。
+        engine._option_shown_at = self.clock.now - 0.9
+        SimulatedUniverse.select_event(engine)
+        self.manager.click.assert_not_called()
+
+        # 已经等满 1.5 s：照旧走兜底
+        engine._option_shown_at = self.clock.now - 2.0
         SimulatedUniverse.select_event(engine)
 
         self.assertEqual([call.args for call in self.manager.click.call_args_list], [OPTION_POINT])

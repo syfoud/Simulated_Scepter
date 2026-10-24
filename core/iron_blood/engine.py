@@ -71,7 +71,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 and self.first_plane_weight <= 0 # 开局期望值异常（≤0）时保留录制
             )
             need_del = del_time and not keep_long_run and not abnormal_first_plane_weight
-            if self.first_plane_weight > 0:
+            if self.first_plane_weight >= 0:
                 CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight:.2f}")
             else:
                 CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight}")
@@ -100,7 +100,7 @@ class IronBloodUniverse(AnyFateUniverse):
             total_min = self.elapsed_time // 60
             total_sec = self.elapsed_time % 60
             # 「开局期望」一律写入：确认识别到写真实值（0 也是真读数），识别失败或本局没做识别写负数原因码
-            if self.first_plane_weight > 0:
+            if self.first_plane_weight >= 0:
                 line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight:.2f}"
             else:
                 line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight}"

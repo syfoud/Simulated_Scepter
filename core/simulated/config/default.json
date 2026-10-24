@@ -24,7 +24,7 @@
         "use_consumable": 0,
         "force_update": 0,
         "timezone": "Default",
-        "max_run": 34
+        "max_run": 0
     },
     "prior": {
         "奇物": [

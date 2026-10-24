@@ -32,7 +32,7 @@ class ScriptToolsTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        self.root = Path(self.folder.name)
+        self.root = Path(self.folder.name).resolve()  # 生产代码返回的是解析后的长路径
         self.enterContext(patch.dict(PATHS, {"image": str(self.root / "imgs")}))
         self.enterContext(patch("tool.script_tools.get_global_stop_flag", return_value=False))
         self.enterContext(patch("tool.script_tools.key_mouse_manager", Mock()))
@@ -267,7 +267,7 @@ class ScriptToolsGuiTests(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.folder.cleanup)
-        self.root = Path(self.folder.name)
+        self.root = Path(self.folder.name).resolve()  # 生产代码返回的是解析后的长路径
         self.enterContext(patch.dict(PATHS, {"root": str(self.root), "image": str(self.root / "imgs")}))
         self.frame = np.random.default_rng(5).integers(0, 256, (540, 960, 3), dtype=np.uint8)
         self.texts = [{"raw_text": "确认1", "box": [100, 220, 100, 145]}]
