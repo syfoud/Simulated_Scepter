@@ -106,6 +106,17 @@ class InvestmentSelectionTrackerTests(unittest.TestCase):
         self.complete(tracker, SelectionKind.IMMEDIATE_BONUS)
         self.assertTrue(tracker.should_exit(1))
 
+    def test_no_exit_plane_never_exits_after_selection(self):
+        tracker = InvestmentSelectionTracker()
+        self.complete(tracker, SelectionKind.NORMAL, grants_bonus=True)
+        self.complete(tracker, SelectionKind.IMMEDIATE_BONUS)
+        self.complete(tracker, SelectionKind.DELAYED_BONUS)
+        self.complete(tracker, SelectionKind.NORMAL)
+        self.complete(tracker, SelectionKind.NORMAL)
+
+        self.assertEqual(3, tracker.plane_count)
+        self.assertFalse(tracker.should_exit(None))
+
     def test_bonus_selections_never_increment_plane_count(self):
         tracker = InvestmentSelectionTracker()
 

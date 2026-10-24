@@ -568,7 +568,7 @@
         ]
     },
     {
-        "name": "1-1主界面",
+        "name": "1-1主界面进战",
         "trigger": {
             "text": "奖励",
             "box": [
@@ -578,7 +578,7 @@
                 103
             ],
             "redundancy": 30,
-            "condition": "1-1"
+            "interval": 3
         },
         "actions": [
             "handle_1_1_reward"
@@ -588,29 +588,6 @@
         "name": "跳过战斗",
         "trigger": {
             "text": "跳过",
-            "box": [
-                1784,
-                1852,
-                730,
-                770
-            ],
-            "interval": 3,
-            "redundancy": 60,
-            "condition": "currency_main"
-        },
-        "actions": [
-            {
-                "position": [
-                    1818,
-                    750
-                ]
-            }
-        ]
-    },
-    {
-        "name": "出战",
-        "trigger": {
-            "text": "出战",
             "box": [
                 1784,
                 1852,
@@ -712,23 +689,6 @@
             {
                 "set_state": "goto_currency"
             }
-        ]
-    },
-    {
-        "name": "大世界",
-        "trigger": {
-            "photo": "smartphone",
-            "pos": {
-                "x": 0.9833,
-                "y": 0.9380
-            },
-            "threshold": 0.96
-        },
-        "actions": [
-            {
-                "set_state": "goto_currency"
-            },
-            "goto_currency"
         ]
     },
     {
@@ -857,6 +817,45 @@
                     898
                 ]
             }
+        ]
+    },
+    {
+        "name": "出战",
+        "trigger": {
+            "text": "出战",
+            "box": [
+                1784,
+                1852,
+                730,
+                770
+            ],
+            "interval": 3,
+            "redundancy": 60
+        },
+        "actions": [
+            {
+                "position": [
+                    1818,
+                    750
+                ]
+            }
+        ]
+    },
+    {
+        "name": "大世界",
+        "trigger": {
+            "photo": "smartphone",
+            "pos": {
+                "x": 0.9833,
+                "y": 0.938
+            },
+            "threshold": 0.96
+        },
+        "actions": [
+            {
+                "set_state": "goto_currency"
+            },
+            "goto_currency"
         ]
     }
 ]

@@ -35,14 +35,20 @@ def load_default_priority():
     return priority
 
 def normalize_currency_settings(values=None):
-    """Validate currency-war settings and return serializable values."""
+    """Validate currency-war settings and return serializable values.
+
+    exit_after_plane 为 None 表示完成投资策略选择后不退出对局；prior_exit_plane
+    为 None 表示刷出必选投资环境时不调整退出位面。
+    """
     values = values if isinstance(values, dict) else {}
-    try:
-        exit_plane = int(values.get("exit_after_plane", DEFAULT_EXIT_PLANE))
-    except (TypeError, ValueError):
-        exit_plane = DEFAULT_EXIT_PLANE
-    if exit_plane not in EXIT_PLANES:
-        exit_plane = DEFAULT_EXIT_PLANE
+    exit_plane = values.get("exit_after_plane", DEFAULT_EXIT_PLANE)
+    if exit_plane is not None:
+        try:
+            exit_plane = int(exit_plane)
+        except (TypeError, ValueError):
+            exit_plane = DEFAULT_EXIT_PLANE
+        if exit_plane not in EXIT_PLANES:
+            exit_plane = DEFAULT_EXIT_PLANE
 
     exit_if_no_prior = values.get(
         "exit_if_no_prior",

@@ -74,6 +74,25 @@ class CurrencySettingsTests(unittest.TestCase):
 
         self.assertEqual(settings["exit_after_plane"], 3)
 
+    def test_loads_no_exit_plane(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "currency.yml"
+            path.write_text("exit_after_plane: null\n", encoding="utf-8")
+
+            settings = load_currency_settings(path)
+
+        self.assertIsNone(settings["exit_after_plane"])
+
+    def test_save_no_exit_plane_round_trips(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "currency.yml"
+            path.write_text("exit_after_plane: 2\n", encoding="utf-8")
+
+            saved = save_currency_settings({"exit_after_plane": None}, path)
+
+            self.assertIsNone(saved["exit_after_plane"])
+            self.assertIsNone(load_currency_settings(path)["exit_after_plane"])
+
     def test_invalid_exit_plane_falls_back_to_first_plane(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "currency.json"

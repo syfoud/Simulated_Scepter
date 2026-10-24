@@ -73,7 +73,18 @@ class InvestmentSelectionTracker:
     def delayed_count(self) -> int:
         return sum(self._delayed_by_boundary.values())
 
-    def should_exit(self, exit_plane: int) -> bool:
+    def should_exit(self, exit_plane: int | None) -> bool:
+        """判断完成当前投资策略选择后是否可以退出对局。
+
+        Args:
+            exit_plane: 设定的退出位面，None 表示本局不自动退出。
+
+        Returns:
+            已达到退出位面且没有立即奖励阻塞时为 True。
+        """
+        if exit_plane is None:
+            return False
+
         # Immediate choices block leaving the current screen. Delayed choices on a
         # future boundary are intentionally abandoned when the requested plane ends.
         return self.plane_count >= exit_plane and not self._immediate_boundaries

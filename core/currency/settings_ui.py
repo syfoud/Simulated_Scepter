@@ -18,6 +18,7 @@ class SettingsDialog(BaseDialog):
         self.section = ui = self.add_section(resource_path(__file__, "ui/settings.ui"))
         for plane in EXIT_PLANES:
             ui.Currency_exit_plane_combo.addItem(f"第 {plane} 位面", plane)
+        ui.Currency_exit_plane_combo.addItem("不退出", None)
         ui.Currency_exit_plane_combo.setCurrentIndex(
             ui.Currency_exit_plane_combo.findData(settings["exit_after_plane"]))
         ui.Currency_exit_if_no_prior_checkbox.setChecked(settings["exit_if_no_prior"])

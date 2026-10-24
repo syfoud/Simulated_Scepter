@@ -104,8 +104,9 @@ class SimulatedCurrency(CurrencyUtils):
 
         # 记录本局是否刷出了必选（prior）投资环境
         self.prior_environment_found = False
-
-        CUS_LOGGER.info(f"货币战争退出位面设置为: 第{self.set_exit_plane}面")
+        self.has_fresh = False
+        exit_plane_text = "不退出" if self.set_exit_plane is None else f"第{self.set_exit_plane}面"
+        CUS_LOGGER.info(f"货币战争退出位面设置为: {exit_plane_text}")
 
     def recognize_options (self, boxes, redundancy = 30):
         """对多个选项区域进行 OCR 识别，返回文字列表"""
@@ -132,7 +133,6 @@ class SimulatedCurrency(CurrencyUtils):
                 if not warn_game:
                     warn_game = True
                     CUS_LOGGER.warning (f"等待游戏窗口，当前窗口：{Text}")
-                time.sleep (0.5)
                 cnt += 1
                 if cnt == 1200:
                     set_forground () # 将游戏窗口设为前台
@@ -233,7 +233,6 @@ class SimulatedCurrency(CurrencyUtils):
             )
             key_mouse_manager.click(*self.DIFFICULTY_DOWN_POSITION)
             key_mouse_manager.wait()
-            time.sleep(self.DIFFICULTY_SETTLE_SECONDS)
 
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
@@ -285,7 +284,6 @@ class SimulatedCurrency(CurrencyUtils):
 
     def select_envir (self):
         CUS_LOGGER.info ("=== 进入投资环境选择阶段===")
-        time.sleep (1) # 等待界面加载
         self.ts.forward (self.get_screen ())
         boxes = self.ENVIR_BOXES
         def match_prior (texts):
@@ -299,18 +297,20 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info (f"OCR 识别结果: {texts}")
         matched, selected_idx = match_prior (texts)
 
-        if not matched:
+        if not matched and not self.has_fresh:
             CUS_LOGGER.info ("未匹配到必选环境，点击刷新按钮")
             key_mouse_manager.click (672, 984)  # 刷新按钮坐标
             key_mouse_manager.wait()
-            time.sleep (4) # 等待刷新完成
+            self.has_fresh=True
+            return
             self.ts.forward (self.get_screen ())
             # 刷新后重新识别并再次尝试匹配必选
             texts = self.recognize_options (self.ENVIR_BOXES)
             CUS_LOGGER.info (f"刷新后 OCR 结果: {texts}")
             matched, selected_idx = match_prior (texts)
         # 构建完整的优先级列表（按顺序）
-        if not matched:
+        elif not matched:
+            self.has_fresh=False
             # 顺序：prior_envir + envir[0] + envir[1] + ... + envir[4]
             prior_list = self.prior_envir[:] # 复制最高优先级列表
             for envir in self.envir: # 遍历envir列表，将每个子列表的元素按顺序添加到prior_list中
@@ -345,7 +345,6 @@ class SimulatedCurrency(CurrencyUtils):
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
         key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
         key_mouse_manager.wait()
-        time.sleep(0.4)
 
         self._confirm_environment_selection()
 
@@ -369,6 +368,7 @@ class SimulatedCurrency(CurrencyUtils):
             if not self.prior_environment_found:
                 self.prior_environment_found = True
 
+                # 必选环境指定的退出位面优先于默认设置，包括默认的“不退出”。
                 if self.prior_exit_plane is not None:
                     self.exit_plane = self.prior_exit_plane
                     CUS_LOGGER.info(
@@ -400,7 +400,6 @@ class SimulatedCurrency(CurrencyUtils):
         ]
 
         for attempt in range(max_attempts):
-            time.sleep(0.6)
             if not self.click_text(
                 text="投资环境",
                 box=self.ENVIRONMENT_TITLE_BOX,
@@ -426,7 +425,6 @@ class SimulatedCurrency(CurrencyUtils):
 
             key_mouse_manager.click(*centers[selected_idx])
             key_mouse_manager.wait()
-            time.sleep(0.4)
             self._confirm_environment_selection()
 
             CUS_LOGGER.info(
@@ -456,9 +454,7 @@ class SimulatedCurrency(CurrencyUtils):
             for idx in pending:
                 key_mouse_manager.click(*self.BLESS_REFRESH_POSITIONS[idx])
                 key_mouse_manager.wait()
-                time.sleep(0.4)
 
-            time.sleep(0.8)
             self.ts.forward(self.get_screen())
             latest_texts = self.recognize_options(self.BLESS_BOXES)
             pending = [
@@ -493,7 +489,6 @@ class SimulatedCurrency(CurrencyUtils):
             f"=== 进入投资策略选择：{kind_text}，"
             f"已完成{self.investment_tracker.plane_count}面 ==="
         )
-        time.sleep (1)
         self.ts.forward (self.get_screen ())
         boxes = self.BLESS_BOXES
 
@@ -563,10 +558,8 @@ class SimulatedCurrency(CurrencyUtils):
             )
 
         key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
-        time.sleep (0.1)
 
         self.click_text (text = "确认", box = [948, 1005, 968, 999], click = True)
-        time.sleep (5)
         CUS_LOGGER.info ("投资策略选择完成")
         self.ts.forward (self.get_screen())
 
@@ -579,9 +572,10 @@ class SimulatedCurrency(CurrencyUtils):
             and self.run_history.record_unlocked_investment(unlocked_investment)
         ):
             CUS_LOGGER.info(f"本局新解锁投资策略：{unlocked_investment}")
+        exit_plane_text = "不退出" if self.exit_plane is None else str(self.exit_plane)
         CUS_LOGGER.info(
             f"投资进度：普通位面={self.investment_tracker.plane_count}/"
-            f"{self.exit_plane}，立即奖励={self.investment_tracker.immediate_count}，"
+            f"{exit_plane_text}，立即奖励={self.investment_tracker.immediate_count}，"
             f"延迟奖励={self.investment_tracker.delayed_count}"
         )
 
@@ -594,19 +588,17 @@ class SimulatedCurrency(CurrencyUtils):
 
     def drag_characters(self):
         '''用于拖拽角色'''
-        time.sleep(1)
         key_mouse_manager.drag(
             0.7703, 0.1569, 0.6107, 0.6306
         )
-        time.sleep(1.5)
+        key_mouse_manager.sleep(0.5)
         key_mouse_manager.drag(
             0.7047, 0.1560, 0.5354, 0.6310
         )
-        time.sleep(1.5)
+        key_mouse_manager.sleep(0.5)
         key_mouse_manager.drag(
             0.6396, 0.1551, 0.4617, 0.6310
         )
-        time.sleep(1.5)
         return 1
 
     def handle_1_1_reward(self):
@@ -614,8 +606,8 @@ class SimulatedCurrency(CurrencyUtils):
 
         if self.prior_environment_found or not self.exit_if_no_prior:
             CUS_LOGGER.info("进入1-1，准备拖动")
-            time.sleep(4.5)
             self.drag_characters()
+            key_mouse_manager.sleep(0.5)
             key_mouse_manager.click(1818, 750) # 点击出战
             key_mouse_manager.wait()
             self.update_state("startbattle")
@@ -645,23 +637,6 @@ class SimulatedCurrency(CurrencyUtils):
 
         key_mouse_manager.click(1818, 750) # 点击出战
         key_mouse_manager.wait()
-        time.sleep(3.5)
-
-        # 判断是否进入战斗
-        max_attempts = 10
-        for attempt in range(max_attempts):
-            if self._stop:
-                CUS_LOGGER.info("检测到停止标志，提前退出检测终止")
-                return False
-
-            CUS_LOGGER.debug(f"正在检测是否位于战斗中，次数 {attempt + 1}/{max_attempts}")
-            if self.is_battle_started():
-                return 1
-            time.sleep(0.5)
-
-        CUS_LOGGER.warning("超出最大检测次数，未能检测到进入战斗，尝试退出")
-        self.exit_requested = True
-        self.update_state("exit")
         return 1
 
     def exit(self):
@@ -689,7 +664,6 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("当前处于战斗中，按 ESC 并点击撤退")
             key_mouse_manager.press("esc")
             key_mouse_manager.wait()
-            time.sleep(1.5)
             key_mouse_manager.click(1223, 985) # 点击撤退
             key_mouse_manager.wait()
             self.ts.forward(self.get_screen())
@@ -737,7 +711,6 @@ class SimulatedCurrency(CurrencyUtils):
 
             key_mouse_manager.press("esc")
             key_mouse_manager.wait()
-            time.sleep(0.1)
 
         CUS_LOGGER.warning("未能确认进入“放弃并结算”页面，本次退出尝试失败，将在下一轮重试")
         return 0

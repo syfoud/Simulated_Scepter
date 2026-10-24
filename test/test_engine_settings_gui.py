@@ -327,6 +327,19 @@ class EngineSettingsGuiTests(unittest.TestCase):
         reopened = self.dialog("Currency")
         self.assertEqual(reopened.section.Currency_exit_plane_combo.currentData(), 3)
 
+    def test_currency_no_exit_choice_stores_empty_plane(self):
+        path = self.paths["Currency"]
+        dialog = self.dialog("Currency")
+        combo = dialog.section.Currency_exit_plane_combo
+        self.assertNotEqual(combo.findText("不退出"), -1)
+        combo.setCurrentIndex(combo.findText("不退出"))
+        self.save(dialog)
+
+        stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+        self.assertIsNone(stored["exit_after_plane"])
+        reopened = self.dialog("Currency")
+        self.assertIsNone(reopened.section.Currency_exit_plane_combo.currentData())
+
 
 if __name__ == "__main__":
     unittest.main()
