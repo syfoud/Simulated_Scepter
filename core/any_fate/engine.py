@@ -152,10 +152,29 @@ class AnyFateUniverse(SimulatedUniverse):
         self.init_map()
         CUS_LOGGER.info(f'{factor}再度踏上轮回……')
 
+    def click_blank(self):
+        """
+        点击空白处继续。
+
+        结算界面的「来自黑塔的分析报告」有极小概率漏检；此时若按普通点击空白处理，
+        本局end_of_university()和restart_recording()都会被跳过。标题比下方的
+        「点击空白处继续」早出现约两帧，所以真正点掉界面之前，再单独识别一次标题框：
+        命中就补齐结算动作。end/re_start 表示本局刚结算过，此时界面还没消失，不能再结算一次。
+        """
+        if self.state not in ("end", "re_start"):
+            # 只识别标题所在的一行，不做整屏检测，耗时约几十毫秒
+            title = self.ts.ocr_one_row(self.get_screen(), box=[716, 1013, 217, 252])
+            if "来自黑塔的分析报告" in title:
+                CUS_LOGGER.warning("整屏未识别到结算界面，改为在点击空白处补做结算")
+                self.end_of_university()
+                # 与 insect.json「结算界面」的动作保持一致
+                self.click_position([900, 1000])
+                self.restart_recording()
+                return
+        self.click_position([1456, 875])
+
     def update_count(self, read=True):
-        """
-        更新或读取计数器值（任意命途使用 count.txt 的第三行）
-        """
+        """更新或读取计数器值（任意命途使用 count.txt 的第三行）"""
         file_name = os.path.join(PATHS["backup"], "count.txt")
         if read:
             new_cnt = 0
@@ -237,8 +256,15 @@ class AnyFateUniverse(SimulatedUniverse):
                 self.bai_e = 1
             #上次交互时间
             self.last_interact_time = bk_lst_changed
+            # 本局是否需要离开跑图状态：need_end 表示本局提前结束并结算；
+            # 长时间没有有效交互（通常是寻路卡住）则暂离后重进本局。
+            # 必须在走动和施放秘技之前判定：秘技施放动画期间按 esc 唤不出暂离界面，
+            # 先寻路施法再按 esc 只会一直失败，并在下一轮继续寻路施法。
+            need_away = self.need_end or (
+                time.time() - self.last_interact_time >= self.max_interact_time and not self.need_record
+            )
             # 刚进图，初始化一些数据
-            if not self.need_end:
+            if not need_away:
                 if not self.area:
                     ocr_text = self.ts.find_with_box(box=[55, 164, 12, 40],forward=True,re_screen=False)
                     self.area=merge_text(ocr_text) if len(ocr_text) else ""
@@ -334,8 +360,8 @@ class AnyFateUniverse(SimulatedUniverse):
                     self.area=""
                     key_mouse_manager.mouse_move(1)
                     key_mouse_manager.wait()
-            # 长时间未交互/战斗，暂离或重开
-            if ((time.time() - self.last_interact_time >= self.max_interact_time) and not self.need_record )or self.need_end:
+            else:
+                # 暂离或提前结算前不做任何走动和施法，否则 esc 会被动画吞掉
                 key_mouse_manager.clean()
                 key_mouse_manager.wait()
                 key_mouse_manager.keyUp("w")
@@ -343,12 +369,15 @@ class AnyFateUniverse(SimulatedUniverse):
                 key_mouse_manager.wait()
                 tm=time.time()
                 found=False
-                #esc有时不一定生效，比如释放秘技时
+                # esc 有时不一定生效（动画、加载过程中），因此轮询到超时
                 while time.time()-tm<3:
                     if self.click_text(text="暂离", box=[1321, 1383, 787, 821],click=False,allow_fail=True):
                         found=True
+                        self.area="" # 暂离后会回到「黑塔的办公室」，需清空区域缓存否则将不会识别到"黑塔的办公"
                         break
                 if not found:
+                    # 未唤出暂离界面时直接回主循环重试，本轮不再走动或施放秘技
+                    CUS_LOGGER.debug("未识别到暂离文本")
                     return 1
                 self.update_state("ui")
                 self.init_map()

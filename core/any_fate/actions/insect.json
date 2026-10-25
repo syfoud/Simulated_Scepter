@@ -1,19 +1,4 @@
-[ {
-        "name": "点击空白结算",
-        "trigger":{
-            "text": "点击空白",
-            "box": [873, 1047, 878, 909],
-            "redundancy": 30,
-            "condition": "end"
-        },
-        "actions":
-        [
-            {
-                "position": [900, 1000]
-            },
-            "restart_recording"
-        ]
-    },
+[
     {
         "name": "结算界面",
         "trigger":{
@@ -23,7 +8,11 @@
         },
         "actions":
         [
-            "end_of_university"
+            "end_of_university",
+            {
+                "position": [900, 1000]
+            },
+            "restart_recording"
         ]
     },
     {
@@ -51,9 +40,7 @@
         },
         "actions":
         [
-            {
-                "position": [1456, 875]
-            }
+            "click_blank"
         ]
     },
         {
@@ -112,7 +99,8 @@
                 "set_state": "strange"
             }
         ]
-    },{
+    },
+    {
         "name": "丢弃奇物",
         "trigger":{
             "text": "丢弃奇物",
@@ -135,7 +123,8 @@
         [
             "drop_bless"
         ]
-    },{
+    },
+    {
         "name": "祝福商店",
         "trigger":{
             "text": "祝福商店",
@@ -163,7 +152,25 @@
             "strange_shop"
         ]
     },
-        {
+    {
+        "name": "战斗暂停",
+        "trigger":{
+            "text": "继续战斗",
+            "box": [1580, 1679, 970, 998],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1631, 983]
+            },
+            {
+                "set_state": "battle"
+            }
+        ]
+    },
+    {
         "name": "自动战斗检测",
         "trigger":{
             "photo": "c",
@@ -189,7 +196,7 @@
             }
         ]
     },
-        {
+    {
         "name": "秘闻",
         "trigger":{
             "text": "秘闻",
