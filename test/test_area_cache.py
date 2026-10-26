@@ -8,6 +8,9 @@
 现在的行为：三个内核的 select_go 在点完「确认移动」之后清空 self.area，到达下一个节点时重新
 识别区域名。清空必须排在 record_map_visit 之后——访问次数统计受「区域名不为空」保护，清早了
 统计就断了。
+
+同样的清空也补进了 finger_snap 的 initing_map：切换位面时不走重投界面，原来的区域名会残留到
+新位面的第一个节点上。
 """
 
 import unittest
@@ -179,6 +182,35 @@ class FingerSnapSelectGoTest(unittest.TestCase):
         self.assertIs(engine.new_node, True)
         engine.record_map_visit.assert_called_once_with(NOW_MAP)
         self.key_mouse_manager.click.assert_called_once_with(*CLICK_POINT)
+
+
+class FingerSnapInitingMapTest(unittest.TestCase):
+    def setUp(self):
+        self.key_mouse_manager = make_key_mouse_manager()
+        self.enterContext(
+            patch("core.finger_snap.engine.key_mouse_manager", self.key_mouse_manager))
+
+    def make_engine(self):
+        engine = FingerSnap.__new__(FingerSnap)
+        engine.debug = True
+        engine.area = AREA
+        engine.plane_floor = -1
+        engine.node_count = 5
+        engine.new_node = False
+        engine.click_text = Mock(side_effect=click_text_side_effect)
+        engine.try_analysis_map = Mock(return_value=True)
+        engine.save_screen = Mock()
+        return engine
+
+    def test_entering_plane_clears_area_name(self):
+        engine = self.make_engine()
+
+        engine.initing_map()
+
+        self.assertEqual(engine.area, "")
+        self.assertEqual(engine.plane_floor, 1)
+        self.assertEqual(engine.node_count, 0)
+        self.assertIs(engine.new_node, True)
 
 
 if __name__ == "__main__":
