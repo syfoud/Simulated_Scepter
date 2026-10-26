@@ -346,6 +346,90 @@
             "initing_map"
         ]
     },
+    {
+        "name": "获得祝福",
+        "trigger":{
+            "text": "获得祝福",
+            "box": [808, 1114, 159, 266],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "获得奇物",
+        "trigger":{
+            "text": "获得奇物",
+            "box": [808, 1114, 159, 266],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "获得物品",
+        "trigger":{
+            "text": "获得物品",
+            "box": [910, 1011, 159, 241],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "失去祝福",
+        "trigger":{
+            "text": "失去祝福",
+            "box": [816, 1103, 50, 146],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "失去奇物",
+        "trigger":{
+            "text": "失去奇物",
+            "box": [816, 1103, 50, 146],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "失去物品",
+        "trigger":{
+            "text": "失去物品",
+            "box": [816, 1103, 50, 146],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
 {
         "name": "模拟宇宙外",
         "trigger":{
