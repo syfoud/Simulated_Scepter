@@ -1,19 +1,4 @@
-[ {
-        "name": "点击空白结算",
-        "trigger":{
-            "text": "点击空白",
-            "box": [873, 1047, 878, 909],
-            "redundancy": 30,
-            "condition": "end"
-        },
-        "actions":
-        [
-            {
-                "position": [900, 1000]
-            },
-            "restart_recording"
-        ]
-    },
+[
     {
         "name": "结算界面",
         "trigger":{
@@ -23,7 +8,11 @@
         },
         "actions":
         [
-            "end_of_university"
+            "end_of_university",
+            {
+                "position": [900, 1000]
+            },
+            "restart_recording"
         ]
     },
     {
@@ -36,21 +25,6 @@
         },
         "actions":
         [    "emergency",
-            {
-                "position": [1456, 875]
-            }
-        ]
-    },
-{
-        "name": "点击空白",
-        "trigger":{
-            "text": "点击空白",
-            "box": [872, 1048, 729, 1015],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions":
-        [
             {
                 "position": [1456, 875]
             }
@@ -362,7 +336,21 @@
                 "sleep": 1
             }
         ]
-    },{
+    },
+    {
+        "name": "点击空白",
+        "trigger":{
+            "text": "点击空白",
+            "box": [872, 1048, 729, 1015],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "click_blank"
+        ]
+    },
+    {
         "name": "确认命途",
         "trigger":{
             "text": "确认命途",
