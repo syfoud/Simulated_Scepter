@@ -548,6 +548,7 @@ class SimulatedUniverse(UniverseUtils):
         x = (row["box"][0] + row["box"][1]) / 2
         y = (row["box"][2] + row["box"][3]) / 2
         text = row["raw_text"]
+        # OCR 结果有时会把选项左侧星号识别成「米」字
         if text.startswith("米"):
             text = text[1:]
         # 事件名只在出问题（越界、退而求其次）时才读：正常命中优选项的路径不读，省一次 OCR。
