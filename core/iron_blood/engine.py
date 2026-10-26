@@ -188,6 +188,8 @@ class IronBloodUniverse(AnyFateUniverse):
         self.click_text(text="进入位面", box=[907, 1009, 857, 891])
         self.node_count = 0
         self.new_node = True
+        # 切换位面时没有重投界面出现，需清空区域名缓存
+        self.area = ""
         key_mouse_manager.wait()
         if analysis_status == self.MAP_ANALYSIS_OK:
             analysis_status = self.analyze_map_until_stable(1, 1, captured=stable_frame)

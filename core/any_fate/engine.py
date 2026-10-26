@@ -249,8 +249,13 @@ class AnyFateUniverse(SimulatedUniverse):
                 self.bai_e = 1
             #上次交互时间
             self.last_interact_time = bk_lst_changed
+            # 本局是否需要暂离：长时间没有有效交互则暂离并重进。
+            # 必须在走动和施放秘技之前判定：秘技施放动画期间按 esc 无效。
+            need_away = self.need_end or (
+                time.time() - self.last_interact_time >= self.max_interact_time and not self.need_record
+            )
             # 刚进图，初始化一些数据
-            if not self.need_end:
+            if not need_away:
                 if not self.area:
                     ocr_text = self.ts.find_with_box(box=[55, 164, 12, 40],forward=True,re_screen=False)
                     self.area=merge_text(ocr_text) if len(ocr_text) else ""
@@ -346,8 +351,8 @@ class AnyFateUniverse(SimulatedUniverse):
                     self.area=""
                     key_mouse_manager.mouse_move(1)
                     key_mouse_manager.wait()
-            # 长时间未交互/战斗，暂离或重开
-            if ((time.time() - self.last_interact_time >= self.max_interact_time) and not self.need_record )or self.need_end:
+            else:
+                # 暂离或提前结算前不做任何走动和施法，否则 esc 会被动画吞掉
                 key_mouse_manager.clean()
                 key_mouse_manager.wait()
                 key_mouse_manager.keyUp("w")
@@ -355,12 +360,14 @@ class AnyFateUniverse(SimulatedUniverse):
                 key_mouse_manager.wait()
                 tm=time.time()
                 found=False
-                #esc有时不一定生效，比如释放秘技时
+                # esc 有时不一定生效（动画、加载过程中），因此轮询到超时
                 while time.time()-tm<3:
                     if self.click_text(text="暂离", box=[1321, 1383, 787, 821],click=False,allow_fail=True):
                         found=True
+                        self.area=""
                         break
                 if not found:
+                    CUS_LOGGER.debug("未识别到暂离文本")
                     return 1
                 self.update_state("ui")
                 self.init_map()
