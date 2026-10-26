@@ -656,6 +656,10 @@ class SelectEventTest(unittest.TestCase):
             any("「超验之镜」选项列表里没有优选项命中" in msg for msg in self._warning_messages()),
             self._warning_messages(),
         )
+        self.assertTrue(
+            any(f"点击「{OPTION_TEXT}」" in msg for msg in self._warning_messages()),
+            self._warning_messages(),
+        )
         self.assertEqual(self._error_messages(), [])
 
     def test_fallback_skips_option_whose_text_sits_outside_option_area(self):
@@ -701,6 +705,10 @@ class SelectEventTest(unittest.TestCase):
         self.assertEqual(
             [call.args for call in self.manager.click.call_args_list],
             [(1 - 1474 / 1920, 1 - 278.5 / 1080)],
+        )
+        self.assertTrue(
+            any("点击「购买一个钻石盒。」" in msg for msg in self._warning_messages()),
+            self._warning_messages(),
         )
         self.assertEqual(self._error_messages(), [])
 
