@@ -306,6 +306,8 @@ class FingerSnap(AnyFateUniverse):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count = 0
             self.new_node = True
+            # 切换位面时没有重投界面出现，需清空区域名缓存
+            self.area = ""
         key_mouse_manager.wait()
     def try_analysis_map(self, mode=1, target_selection=False):
         """识别地图，必要时刷新截图复核，补偿慈怀闪光造成的瞬时漏检。
