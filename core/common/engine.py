@@ -207,10 +207,6 @@ class StateKernel:
         if threshold is None:
             threshold = self.threshold
         target = find_image_by_name(path)
-        mapping = getattr(self.config, 'mapping', None)
-        if path == "f" and mapping and mapping[0] != 'f':
-            target = self.gen_hotkey_img(mapping[0])
-            threshold -= 0.01
         target = cv.resize(
             target,
             dsize=(int(self.scx * target.shape[1]), int(self.scx * target.shape[0])),

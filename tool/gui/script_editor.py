@@ -149,7 +149,7 @@ class ScriptEditor(QDialog):
         self.debug_stop_btn.setEnabled(False)
         self.trigger_fields = ParameterFields({
             "text": "目标文字", "box": [0, 1920, 0, 1080], "photo": "图片名称",
-            "pos": {"x": 0.5, "y": 0.5}, "mask": "f_key", "state_only": True,
+            "pos": {"x": 0.5, "y": 0.5}, "mask": "interact_icon", "state_only": True,
             "condition": "状态名称", "once": False, "interval": 1, "threshold": 0.9, "redundancy": 30,
         }, self.trigger_host)
         self.trigger_layout.addWidget(self.trigger_fields)

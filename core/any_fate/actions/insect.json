@@ -184,7 +184,7 @@
         {
         "name": "自动战斗检测",
         "trigger":{
-            "photo": "c",
+            "photo": "auto_battle",
             "pos": {"x":0.9891,"y":0.1491},
             "threshold":0.9
         },
@@ -846,7 +846,7 @@
         "name": "可能处于模拟宇宙中",
         "trigger":{
             "photo": "big_world",
-            "pos": {"x":0.0245,"y":0.5185},
+            "pos": {"x":0.0620,"y":0.1287},
             "threshold":0.98
         },
         "actions":

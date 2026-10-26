@@ -84,8 +84,8 @@
     {
         "name": "自动交互",
         "trigger":{
-            "photo": "f",
-            "mask":"f_key",
+            "photo": "interact",
+            "mask":"interact_icon",
             "threshold":0.96
         },
         "actions":
@@ -542,7 +542,7 @@
         "name": "可能处于模拟宇宙中",
         "trigger":{
             "photo": "big_world",
-            "pos": {"x":0.0245,"y":0.5185},
+            "pos": {"x":0.0620,"y":0.1287},
             "threshold":0.98
         },
         "actions":

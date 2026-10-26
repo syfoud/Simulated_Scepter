@@ -166,7 +166,7 @@ class DivergentUniverse(UniverseUtils):
                 self.area()
                 self.last_action_time = time.time()
 
-            elif self.check("c", 0.988, 0.1028, threshold=0.925):
+            elif self.check("auto_battle", 0.988, 0.1028, threshold=0.925):
                 # 未检查到自动战斗,已经入站,清除秘技持续
                 self.da_hei_ta_effecting = False
                 self.press('v')

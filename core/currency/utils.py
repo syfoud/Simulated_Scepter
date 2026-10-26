@@ -14,8 +14,6 @@ import win32com.client
 import win32con
 import win32gui
 import win32print
-from PIL import Image, ImageDraw, ImageFont
-
 from tool.public_ocr import merge_text
 from route import PATHS
 from core.common.engine import StateKernel
@@ -41,7 +39,7 @@ from tool.utils.game_window import (
     set_game_foreground,
 )
 from tool.utils.get_win_rect import get_window_rect
-from tool.utils.image_tool import find_image_by_name, find_image_in_folder
+from tool.utils.image_tool import find_image_by_name
 from tool.utils.minimap_util import MINIMAP_RADIUS, POSITION_SEARCH_SCALE, get_minimap
 from tool.utils.mminimap import PositionPredict
 
@@ -235,20 +233,6 @@ class CurrencyUtils(StateKernel):
         # scx scy:当前窗口和基准窗口（1920*1080）缩放大小比例
         time.sleep(1)
         return 1
-    def gen_hotkey_img(self,hotkey="e",bg=PATHS["image"]+"/f_bg.jpg"):
-        img=find_image_in_folder('key/', hotkey)
-        if img is None:
-            hotkey = hotkey.upper()
-            img = Image.open(bg)
-            font = ImageFont.truetype(PATHS["font"]+"/base.ttf", 24)
-            d = ImageDraw.Draw(img)
-            position = (2,-3)
-            color = (152, 214, 241)
-            d.text(position, hotkey, font=font, fill=color)
-            img = np.array(img)
-            cv.imwrite(PATHS["image"]+"/key/"+hotkey.lower()+".jpg", img)
-        return img
-
 
     # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
     def wait_flag(self, f, timeout=3.0):
@@ -415,7 +399,7 @@ class CurrencyUtils(StateKernel):
         if must_be is None and (self.ts.similar("区域") or self.ts.similar("觐见")):
             must_be='tp'
         while not ava and time.time()-tm<1.8:
-            if not self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True):
+            if not self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
                 if not self.is_run():
                     CUS_LOGGER.info("仿佛连深不见底的最初混沌，也能够烧却。")
                     ava = True
@@ -426,11 +410,11 @@ class CurrencyUtils(StateKernel):
                 if not self.is_run():
                     CUS_LOGGER.info("…我以为，那就是世间最极致的力量，再无其他。")
                     ava=True
-                elif (not self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True)) and must_be == 'tp':
+                elif (not self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True)) and must_be == 'tp':
                     CUS_LOGGER.info("或许只要短短万年的时光——它便会被烧成哀毁骨立的焦炭盗火行者了吧。")
                     ava=True
             else:
-                if not self.check("f", mask=MASK["f_key"], threshold=0.96, fresh=True):
+                if not self.check("interact", mask=MASK["interact_icon"], threshold=0.96, fresh=True):
                     ava=True
 
         if ava:
@@ -568,7 +552,7 @@ class CurrencyUtils(StateKernel):
     #0.2~0.25s
     def is_run(self,check=True):
         if check:
-            if not self.check("big_world", 0.0245, 0.5185, threshold=0.98, fresh=True):
+            if not self.check("big_world", 0.0620, 0.1287, threshold=0.98, fresh=True):
                 self.update_state("no_run")
                 return False
         # loc_scr = get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True)

@@ -19,7 +19,7 @@ import win32com.client
 import win32con
 import win32gui
 import win32print
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 import core.divergent.keyops as keyops
 import core.divergent.ocr as ocr
@@ -43,6 +43,7 @@ from tool.utils.game_window import (
     set_game_foreground,
 )
 from tool.utils.get_win_rect import get_window_rect
+from tool.utils.image_tool import find_image_by_name
 
 
 def notif(title, msg, cnt=None):
@@ -192,16 +193,6 @@ class UniverseUtils(StateKernel):
                 print_exc()
                 pass
         self.sct = Screen()
-
-    def gen_hotkey_img(self,hotkey="e",bg="resource/imgs/f_bg.jpg"):
-        hotkey = hotkey.upper()
-        image = Image.open(bg)
-        font = ImageFont.truetype(PATHS["font"]+"/base.ttf", 24)
-        d = ImageDraw.Draw(image)
-        position = (2,-3)
-        color = (152, 214, 241)
-        d.text(position, hotkey, font=font, fill=color)
-        return np.array(image)
 
     def press(self, c, t=0):
         if c not in "3r":
@@ -519,11 +510,8 @@ class UniverseUtils(StateKernel):
             self.get_screen()
         if threshold is None:
             threshold = self.threshold
-        path = self.format_path(path)
-        target = cv.imread(path)
-        if path == 'resource/imgs/f.jpg' and config.mapping[0]!='f':
-            target = self.gen_hotkey_img(config.mapping[0])
-            threshold -= 0.01
+        # 按名称查图像记忆切片，不拼接扩展名：模板中 jpg 与 png 混用
+        target = find_image_by_name(path)
         target = cv.resize(
             target,
             dsize=(int(self.scx * target.shape[1]), int(self.scx * target.shape[0])),
@@ -853,7 +841,7 @@ class UniverseUtils(StateKernel):
         time.sleep(1)
 
     def check_f(self, is_in=[], check_text=1):
-        if self.check("f", mask=MASK["f_key"], threshold=0.95):
+        if self.check("interact", mask=MASK["interact_icon"], threshold=0.95):
             if not check_text:
                 return 1
             text = self.ts.ocr_one_row(self.screen, [1206, 1437, 587, 635])
@@ -987,7 +975,7 @@ class UniverseUtils(StateKernel):
         while not ava and time.time()-tm<1.6:
             self.get_screen()
             if not self.check(
-                    "f", mask=MASK["f_key"], threshold=0.96
+                    "interact", mask=MASK["interact_icon"], threshold=0.96
                 ) and not self.isrun():
                 ava = 1
         CUS_LOGGER.info('交互点生效：' + str(ava))
@@ -1148,7 +1136,7 @@ class UniverseUtils(StateKernel):
                         break
                 else:
                     self.get_screen()
-                    if type == 3 and self.check("f", mask=MASK["f_key"], threshold=0.96):
+                    if type == 3 and self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         self.press('f')
                         keyops.keyUp("w")
                         if self.nof(must_be='tp'):
@@ -1205,7 +1193,7 @@ class UniverseUtils(StateKernel):
                     self.get_screen()
                     if self.quan and self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
                         return
-                    if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                    if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         CUS_LOGGER.info("大图识别到传送点")
                         self.press('f')
                         if self.nof(must_be='tp'):
@@ -1498,7 +1486,7 @@ class UniverseUtils(StateKernel):
             nt = time.time()
             while time.time()-nt<1.3:
                 self.get_screen()
-                if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                     self.press('f')
                     keyops.keyUp('w')
                     break
@@ -1557,7 +1545,7 @@ class UniverseUtils(StateKernel):
                 self.stop_move=1
                 break
             if self.mini_target==1:
-                if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                     self.press('f')
                     CUS_LOGGER.info('发现事件交互')
                     self.stop_move=1
@@ -1593,17 +1581,17 @@ class UniverseUtils(StateKernel):
                     time.sleep(1.7+self.slow*1.1-(self.quan and self.floor not in [3, 7, 12])*0.5)
                     if self.mini_state==1 and self.floor in [3, 7, 12] and not self.quan:
                         keyops.keyUp("w")
-                        if not self.check("ruan",0.0625,0.7065,threshold=0.95) and not self.check("U", 0.0240,0.7759):
-                            for i in range([3, 7, 12].index(self.floor)+2):
-                                self.press(str(i+1))
-                                time.sleep(0.4)
-                                self.use_e()
-                                self.get_screen()
-                                if not self.check("z", mask=MASK["monster_info"], threshold=0.95):
-                                    break
-                                if self._stop:
-                                    break
-                            keyops.keyDown("w")
+                        # 打首领层前先把队伍里的秘技依次放一遍，给全队挂增益
+                        for i in range([3, 7, 12].index(self.floor)+2):
+                            self.press(str(i+1))
+                            time.sleep(0.4)
+                            self.use_e()
+                            self.get_screen()
+                            if not self.check("z", mask=MASK["monster_info"], threshold=0.95):
+                                break
+                            if self._stop:
+                                break
+                        keyops.keyDown("w")
                     iters = 0
                     while self.check("z", mask=MASK["monster_info"], threshold=0.95) and not self._stop:
                         iters+=1
@@ -1656,7 +1644,7 @@ class UniverseUtils(StateKernel):
                     return
                 self.get_screen()
                 if self.mini_target==1:
-                    if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                    if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         self.press('f')
                         if self.nof(must_be='event'):
                             return

@@ -9,9 +9,10 @@
 用户需要站进房间后运行本脚本，完整手动走一遍事件关路线：
 - 脚本自动保存 init.jpg（房间识别快照）；
 - 自动跟踪你的位置并画成蓝色路径（你绕开桌子的走法就是最佳路线）；
-- 每次画面出现 F 提示时：**第 1 个 F = 黄绿交互点，第 2 个 F = 黄色终点**
-  （支持"事件点 + 觐见装置"的双 F 流程；多余的 F 会被忽略）；
-- F 提示消失后且间隔超过 3 秒，才会认下一个 F，避免同一提示被重复记录；
+- 每次画面出现交互提示（交互文字左侧的对话图标）时：
+  **第 1 次 = 黄绿交互点，第 2 次 = 黄色终点**
+  （支持"事件点 + 觐见装置"的双交互流程；多余的会被忽略）；
+- 交互提示消失后且间隔超过 3 秒，才会认下一次，避免同一提示被重复记录；
 - 事件对话等界面打开时自动暂停记录（通过 big_world 图标判断），
   不会把界面画面当轨迹录进去；
 - 走完全部流程后，在命令行窗口按回车结束：只要有交互点就自动转正。
@@ -24,7 +25,7 @@
 - **请在正常进入房间后（站在出生点）立即开始录制**；暂离重进会改变
   出生点，导致地图起点与回放时的真实起点不一致；
 - 运行期间不要打开任何覆盖小地图/交互提示区域的界面；
-- 走到 F 位置后请自己按 F 继续流程（脚本只记录，不代按）；
+- 走到交互点后请自己按游戏内交互键（默认 F）继续流程（脚本只记录，不代按）；
 - 走完全部流程后回到本窗口按回车：脚本会写入绿色起点、蓝色连续路线、
   黄绿交互点与纯黄终点（路线尽头），然后自动转正目录。
 """
@@ -60,19 +61,19 @@ from tool.utils.minimap_util import (  # noqa: E402
 )
 from tool.utils.mminimap import PositionPredict  # noqa: E402
 
-# F 提示检测参数（识别区域与 UniverseUtils.check("f", mask=MASK["f_key"]) 一致）
-F_THRESHOLD = 0.96
-# big_world 图标：位于界面左上角，仅在"可自由行动"时可见，用于暂停录制
-WORLD_X = 0.0245
-WORLD_Y = 0.5185
+# 交互提示检测参数（识别区域与 UniverseUtils.check("interact", mask=MASK["interact_icon"]) 一致）
+INTERACT_THRESHOLD = 0.96
+# big_world 图标：屏幕右侧中部偏下的鼠标右键提示图标，仅在"可自由行动"时可见，用于暂停录制
+WORLD_X = 0.0620
+WORLD_Y = 0.1287
 WORLD_THRESHOLD = 0.98
 CROP_PAD = 60
 SCREEN_W = 1920
 SCREEN_H = 1080
 
-# 轨迹采样、F 状态机与录制时长
+# 轨迹采样、交互提示状态机与录制时长
 TRACE_STEP = 8.0
-F_MIN_INTERVAL = 3.0    # 两次 F 记录之间的最小间隔（配合“F 消失后”判定防重复）
+INTERACT_MIN_INTERVAL = 3.0    # 两次交互记录之间的最小间隔（配合“提示消失后”判定防重复）
 MAX_SECONDS = 600
 
 MAP_ROOTS = {
@@ -262,9 +263,9 @@ def main():
     start_time = time.time()
     last_pos = None
     recent = deque(maxlen=3)
-    f_count = 0
-    f_await_clear = False
-    f_last_time = 0.0
+    interact_count = 0
+    interact_await_clear = False
+    interact_last_time = 0.0
     end_pos = None
     print("[manual_record] 走完全部流程后，回到本窗口按回车结束录制")
     while True:
@@ -299,27 +300,30 @@ def main():
                     map_file, big, cut_pos, start_pos, trace, interactions,
                     predictor.map_num, end_pos,
                 )
-            found_f, f_sim = check_icon(
-                screen, "f", F_THRESHOLD, region=MASK["f_key"]
+            found_interact, interact_sim = check_icon(
+                screen, "interact", INTERACT_THRESHOLD, region=MASK["interact_icon"]
             )
-            if not found_f:
-                # F 提示消失后，才允许认下一个 F（防止同一提示被重复记录）
-                f_await_clear = False
-            elif not f_await_clear and time.time() - f_last_time > F_MIN_INTERVAL:
-                # 新的一次 F：第 1 个 = 黄绿交互点，第 2 个 = 黄色终点
-                f_count += 1
-                f_last_time = time.time()
-                f_await_clear = True
-                if f_count == 1:
+            if not found_interact:
+                # 交互提示消失后，才允许认下一次（防止同一提示被重复记录）
+                interact_await_clear = False
+            elif (
+                not interact_await_clear
+                and time.time() - interact_last_time > INTERACT_MIN_INTERVAL
+            ):
+                # 新的一次交互：第 1 次 = 黄绿交互点，第 2 次 = 黄色终点
+                interact_count += 1
+                interact_last_time = time.time()
+                interact_await_clear = True
+                if interact_count == 1:
                     interactions.append(position)
-                    print(f"\n[manual_record] 第1次F（黄绿交互点）已标注: {position}")
-                elif f_count == 2:
+                    print(f"\n[manual_record] 第1次交互（黄绿交互点）已标注: {position}")
+                elif interact_count == 2:
                     end_pos = position
-                    print(f"\n[manual_record] 第2次F（黄色终点）已标注: {position}")
+                    print(f"\n[manual_record] 第2次交互（黄色终点）已标注: {position}")
                 else:
-                    print(f"\n[manual_record] 第{f_count}次F 已忽略（仅保留交互点与终点）")
+                    print(f"\n[manual_record] 第{interact_count}次交互 已忽略（仅保留交互点与终点）")
             print(
-                f"[manual_record] 位置{position} F相似度{f_sim:.2f} "
+                f"[manual_record] 位置{position} 交互图标相似度{interact_sim:.2f} "
                 f"交互点{len(interactions)}个 轨迹{len(trace)}点 用时{elapsed}s",
                 end="\r",
             )
