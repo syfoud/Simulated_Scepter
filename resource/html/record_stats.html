@@ -442,6 +442,16 @@
     <div class="memo-hint" id="memoHint">
       选择后自动读取文件夹中的 kill_record*.txt（铁血）和 countdown*.txt（弹指），下次打开自动恢复。
     </div>
+    <div class="memo-row" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+      <span class="memo-status" style="font-weight: 600;">自定义阈值</span>
+      <label style="font-size: 13px; display: flex; align-items: center; gap: 4px;">
+        铁血三面 &gt; <input type="number" id="tieThresholdInput" class="memo-btn" style="width: 70px; padding: 4px 8px;" value="30">
+      </label>
+      <label style="font-size: 13px; display: flex; align-items: center; gap: 4px;">
+        弹指高倒计时 &gt; <input type="number" id="tanThresholdInput" class="memo-btn" style="width: 70px; padding: 4px 8px;" value="75">
+      </label>
+      <button id="saveThresholdBtn" class="memo-btn primary" style="padding: 4px 12px;">应用</button>
+    </div>
   </div>
 
   <div class="drop" id="drop">
@@ -463,6 +473,12 @@
 <script>
 (function() {
   'use strict';
+
+  const TIE_THRESHOLD_KEY = 'round-stats-tie-threshold';
+  const TAN_THRESHOLD_KEY = 'round-stats-tan-threshold';
+  let TIE_THREE_THRESHOLD = Number(localStorage.getItem(TIE_THRESHOLD_KEY)) || 30;
+  let TAN_HIGH_THRESHOLD = Number(localStorage.getItem(TAN_THRESHOLD_KEY)) || 75;
+  let lastUploadedFiles = null;
 
   const THEME_KEY = 'round-stats-theme';
 
@@ -679,8 +695,8 @@
         const k = r.value;
         if (k === 0) zero++;
         else if (k >= 1 && k <= 13) one++;
-        else if (k >= 14 && k <= 30) two++;
-        else if (k > 30) three++;
+        else if (k >= 14 && k <= TIE_THREE_THRESHOLD) two++;
+        else if (k > TIE_THREE_THRESHOLD) three++;
       }
       return { zero, one, two, three, missing, total: records.length };
     } else {
@@ -689,8 +705,8 @@
         if (r.missing) { missing++; continue; }
         const v = r.value;
         if (v < 18) low++;
-        else if (v >= 18 && v <= 60) normal++;
-        else if (v > 60) high++;
+        else if (v >= 18 && v <= TAN_HIGH_THRESHOLD) normal++;
+        else if (v > TAN_HIGH_THRESHOLD) high++;
       }
       return { low, normal, high, missing, total: records.length };
     }
@@ -757,23 +773,23 @@
   function pointColor(kills) {
     if (kills === 0) return cssVar('--c-zero');
     if (kills <= 13) return cssVar('--c-one');
-    if (kills <= 30) return cssVar('--c-two');
+    if (kills <= TIE_THREE_THRESHOLD) return cssVar('--c-two');
     return cssVar('--c-three');
   }
 
   function calculateProbabilities(expectation) {
     const eligible = chartRecords.filter(r => r.expectation >= expectation);
     const total = eligible.length;
-    const two = eligible.filter(r => r.kills >= 14 && r.kills <= 30).length;
-    const three = eligible.filter(r => r.kills > 30).length;
+    const two = eligible.filter(r => r.kills >= 14 && r.kills <= TIE_THREE_THRESHOLD).length;
+    const three = eligible.filter(r => r.kills > TIE_THREE_THRESHOLD).length;
     return { total, two, three };
   }
 
   function calculateLineProbabilities(expectation) {
     const eligible = chartRecords.filter(r => r.expectation >= expectation && r.kills !== 0);
     const total = eligible.length;
-    const two = eligible.filter(r => r.kills >= 14 && r.kills <= 30).length;
-    const three = eligible.filter(r => r.kills > 30).length;
+    const two = eligible.filter(r => r.kills >= 14 && r.kills <= TIE_THREE_THRESHOLD).length;
+    const three = eligible.filter(r => r.kills > TIE_THREE_THRESHOLD).length;
     return {
       total, two, three,
       twoPercent: total ? two / total * 100 : 0,
@@ -788,9 +804,9 @@
     const total = p.total;
     document.getElementById('selectedExpectation').textContent = selectedExpectation.toFixed(2);
     document.getElementById('eligibleRecordCount').textContent = total;
-    document.getElementById('twoProbability').innerHTML = `${total ? ((p.two / total) * 100).toFixed(2) : '0.00'}%<span style="color: #000; font-weight: normal;">（</span>${p.two}<span style="color: #000; font-weight: normal;"> 条）</span>`;
-    document.getElementById('threeProbability').innerHTML = `${total ? ((p.three / total) * 100).toFixed(2) : '0.00'}%<span style="color: #000; font-weight: normal;">（</span>${p.three}<span style="color: #000; font-weight: normal;"> 条）</span>`;
-    document.getElementById('combinedProbability').innerHTML = `${total ? (((p.two + p.three) / total) * 100).toFixed(2) : '0.00'}%<span style="color: #000; font-weight: normal;">（</span>${p.two + p.three}<span style="color: #000; font-weight: normal;"> 条）</span>`;
+    document.getElementById('twoProbability').textContent = total ? ((p.two / total) * 100).toFixed(2) + '%' : '0.00%';
+    document.getElementById('threeProbability').textContent = total ? ((p.three / total) * 100).toFixed(2) + '%' : '0.00%';
+    document.getElementById('combinedProbability').textContent = total ? (((p.two + p.three) / total) * 100).toFixed(2) + '%' : '0.00%';
   }
 
   function updateLineSelectionSummary(value) {
@@ -798,9 +814,9 @@
     const p = calculateLineProbabilities(e);
     document.getElementById('lineSelectedExpectation').textContent = e.toFixed(2);
     document.getElementById('lineEligibleRecordCount').textContent = p.total;
-    document.getElementById('lineTwoProbability').innerHTML = `${p.twoPercent.toFixed(2)}%<span style="color: #000; font-weight: normal;">（</span>${p.two}<span style="color: #000; font-weight: normal;"> 条）</span>`;
-    document.getElementById('lineThreeProbability').innerHTML = `${p.threePercent.toFixed(2)}%<span style="color: #000; font-weight: normal;">（</span>${p.three}<span style="color: #000; font-weight: normal;"> 条）</span>`;
-    document.getElementById('lineCombinedProbability').innerHTML = `${p.combinedPercent.toFixed(2)}%<span style="color: #000; font-weight: normal;">（</span>${p.two + p.three}<span style="color: #000; font-weight: normal;"> 条）</span>`;
+    document.getElementById('lineTwoProbability').textContent = p.twoPercent.toFixed(2) + '%';
+    document.getElementById('lineThreeProbability').textContent = p.threePercent.toFixed(2) + '%';
+    document.getElementById('lineCombinedProbability').textContent = p.combinedPercent.toFixed(2) + '%';
   }
 
   function niceYAxis(values) {
@@ -1599,8 +1615,8 @@
             <div class="chart-legend">
               <div class="legend-item"><span class="legend-dot" style="background:var(--c-zero)"></span>未战斗 (0)</div>
               <div class="legend-item"><span class="legend-dot" style="background:var(--c-one)"></span>一面 (1~13)</div>
-              <div class="legend-item"><span class="legend-dot" style="background:var(--c-two)"></span>二面 (14~30)</div>
-              <div class="legend-item"><span class="legend-dot" style="background:var(--c-three)"></span>三面 (&gt;30)</div>
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-two)"></span>二面 (14~${TIE_THREE_THRESHOLD})</div>
+              <div class="legend-item"><span class="legend-dot" style="background:var(--c-three)"></span>三面 (&gt;${TIE_THREE_THRESHOLD})</div>
             </div>
           </div>
         </div>
@@ -1667,8 +1683,8 @@
     if (hasMissing) html += `<th class="num">缺失</th>`;
     html += `<th class="num">未战斗 (0)</th>
       <th class="num">一面 (1~13)</th>
-      <th class="num">二面 (14~30)</th>
-      <th class="num">三面 (&gt;30)</th>
+      <th class="num">二面 (14~${TIE_THREE_THRESHOLD})</th>
+      <th class="num">三面 (&gt;${TIE_THREE_THRESHOLD})</th>
     </tr></thead><tbody>`;
 
     // 3. 动态拼接每一行
@@ -1721,8 +1737,8 @@
       <th class="num">总记录数</th>`;
     if (hasMissing) html += `<th class="num">缺失</th>`;
     html += `<th class="num">低倒计时 (&lt;18)</th>
-      <th class="num">普通倒计时 (18~60)</th>
-      <th class="num">高倒计时 (&gt;60)</th>
+      <th class="num">普通倒计时 (18~${TAN_HIGH_THRESHOLD})</th>
+      <th class="num">高倒计时 (&gt;${TAN_HIGH_THRESHOLD})</th>
     </tr></thead><tbody>`;
 
     // 3. 动态拼接每一行
@@ -1751,10 +1767,10 @@
   }
 
   function buildTieDetailTable(allRecords) {
-    const filtered = allRecords.filter(r => !r.missing && r.value > 30);
+    const filtered = allRecords.filter(r => !r.missing && r.value > TIE_THREE_THRESHOLD);
 
     if (filtered.length === 0) {
-      return '<div class="empty">暂无三面记录（击杀数 > 30）</div>';
+      return `<div class="empty">暂无三面记录（击杀数 > ${TIE_THREE_THRESHOLD}）</div>`;
     }
 
     const grouped = {};
@@ -1806,10 +1822,10 @@
   }
 
   function buildTanDetailTable(allRecords) {
-    const filtered = allRecords.filter(r => !r.missing && r.value > 60);
+    const filtered = allRecords.filter(r => !r.missing && r.value > TAN_HIGH_THRESHOLD);
 
     if (filtered.length === 0) {
-      return '<div class="empty">暂无高倒计时记录（倒计时 > 60）</div>';
+      return `<div class="empty">暂无高倒计时记录（倒计时 > ${TAN_HIGH_THRESHOLD}）</div>`;
     }
 
     const grouped = {};
@@ -1883,7 +1899,7 @@
 
     const detailDiv = document.createElement('div');
     detailDiv.className = 'full-width';
-    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">三面详细记录（击杀数 &gt; 30）</div>` + buildTieDetailTable(allRecords);
+    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">三面详细记录（击杀数 &gt; ${TIE_THREE_THRESHOLD}）</div>` + buildTieDetailTable(allRecords);
     panel.appendChild(detailDiv);
 
     // 异常开局期望值记录：只统计负数，没有异常则不显示整个板块。
@@ -2010,7 +2026,7 @@
 
     const detailDiv = document.createElement('div');
     detailDiv.className = 'full-width';
-    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">高倒计时详细记录（倒计时 &gt; 60）</div>` + buildTanDetailTable(allRecords);
+    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">高倒计时详细记录（倒计时 &gt; ${TAN_HIGH_THRESHOLD}）</div>` + buildTanDetailTable(allRecords);
     panel.appendChild(detailDiv);
   }
 
@@ -2064,6 +2080,8 @@
   }
 
   function handleFiles(fileList) {
+    lastUploadedFiles = fileList;
+    currentHandle = null;
     const tieFiles = [];
     const tanFiles = [];
 
@@ -2229,6 +2247,41 @@
     drawExpectationChart();
     drawProbabilityLineChart();
   });
+
+  const tieThresholdInput = document.getElementById('tieThresholdInput');
+  const tanThresholdInput = document.getElementById('tanThresholdInput');
+  const saveThresholdBtn = document.getElementById('saveThresholdBtn');
+
+  if (tieThresholdInput) tieThresholdInput.value = TIE_THREE_THRESHOLD;
+  if (tanThresholdInput) tanThresholdInput.value = TAN_HIGH_THRESHOLD;
+
+  if (saveThresholdBtn) {
+    saveThresholdBtn.addEventListener('click', () => {
+      const tieVal = parseInt(tieThresholdInput.value, 10);
+      const tanVal = parseInt(tanThresholdInput.value, 10);
+      let updated = false;
+      if (!isNaN(tieVal) && tieVal > 0 && tieVal !== TIE_THREE_THRESHOLD) {
+        TIE_THREE_THRESHOLD = tieVal;
+        localStorage.setItem(TIE_THRESHOLD_KEY, TIE_THREE_THRESHOLD);
+        updated = true;
+      }
+      if (!isNaN(tanVal) && tanVal > 0 && tanVal !== TAN_HIGH_THRESHOLD) {
+        TAN_HIGH_THRESHOLD = tanVal;
+        localStorage.setItem(TAN_THRESHOLD_KEY, TAN_HIGH_THRESHOLD);
+        updated = true;
+      }
+      if (updated) {
+        if (currentHandle) {
+          loadFromCurrentHandle();
+        } else if (lastUploadedFiles) {
+          handleFiles(lastUploadedFiles);
+        } else {
+          renderTiePanel([]);
+          renderTanPanel([]);
+        }
+      }
+    });
+  }
 
   async function init() {
     if (!supportsFS) {
