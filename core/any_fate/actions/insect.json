@@ -422,7 +422,63 @@
             }
         ]
     },
-{
+    {
+        "name": "进入位面2",
+        "trigger":{
+            "text": "位面",
+            "box": [905, 1015, 680, 725],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "初始效果",
+        "trigger":{
+            "text": "初始效果",
+            "box": [800, 1100, 494, 548],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "冒险介绍",
+        "trigger":{
+            "text": "挑战",
+            "box": [770, 935, 395, 437],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "挑战结束",
+        "trigger":{
+            "text": "挑战结束",
+            "box": [833, 1090, 321, 387],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
         "name": "模拟宇宙外",
         "trigger":{
             "text": "模拟宇宙",
