@@ -152,18 +152,6 @@ class AnyFateUniverse(SimulatedUniverse):
         self.init_map()
         CUS_LOGGER.info(f'{factor}再度踏上轮回……')
 
-    def click_blank(self):
-        """点击空白处继续。因结算界面有极小概率漏检，因此重新识别一遍。"""
-        if self.state not in ("end", "re_start"):
-            title = self.ts.ocr_one_row(self.get_screen(), box=[716, 1013, 217, 252])
-            if "来自黑塔的分析报告" in title:
-                CUS_LOGGER.warning("检测到结算界面，补做结算")
-                self.end_of_university()
-                self.click_position([900, 1000])
-                self.restart_recording()
-                return
-        self.click_position([1456, 875])
-
     def update_count(self, read=True):
         """
         更新或读取计数器值（任意命途使用 count.txt 的第三行）

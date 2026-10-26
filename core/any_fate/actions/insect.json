@@ -440,19 +440,6 @@
         ]
     },
     {
-        "name": "点击空白",
-        "trigger":{
-            "text": "点击空白",
-            "box": [872, 1048, 729, 1015],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions":
-        [
-            "click_blank"
-        ]
-    },
-    {
         "name": "确认命途",
         "trigger":{
             "text": "确认命途",

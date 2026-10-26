@@ -2,9 +2,10 @@
 「点击空白」细化触发器的接线测试。
 
 背景：除结算界面（来自黑塔的分析报告）外，还有若干只要求「点击空白处继续」点掉的界面
-（获得祝福、获得奇物、获得物品、失去祝福、失去奇物、失去物品）。它们原本都由兜底的
-「点击空白」处理，但 run_static 每轮只执行第一个命中的事件，兜底事件一旦先命中，细化
-事件就永远轮不到，所以六类界面各自独立成事件；点击落点与兜底一致，只是优先匹配。
+（获得祝福、获得奇物、获得物品、失去祝福、失去奇物、失去物品）。它们各自独立成事件，
+识别文字就是界面名，点击落点是同一个空白处。原先还有一个兜底的「点击空白」事件：
+run_static 每轮只执行第一个命中的事件，它一旦先命中，细化事件就永远轮不到；该兜底事件
+在结算界面漏检时会把界面点掉，跳过结算与录像切分，因此已删除。
 """
 
 import json
@@ -13,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INSECT_JSON = ROOT / "core" / "any_fate" / "actions" / "insect.json"
-# 兜底点击的落点（六类细化事件与「点击空白」同值）
+# 六类细化事件共用的点击落点
 BLANK_CLICK = [1456, 875]
 # 除结算界面之外的六类「点击空白处继续」界面
 SPECIFIC_BLANK_EVENTS = (
@@ -44,7 +45,7 @@ class SpecificBlankClickTest(unittest.TestCase):
                 self.assertEqual(events[event_index(events, name)]["trigger"]["text"], name)
 
     def test_specific_blank_events_click_the_same_spot_as_the_plain_one(self):
-        """细化事件只是优先匹配，点击落点与兜底「点击空白」一致。"""
+        """六类细化事件只是识别文字不同，点击落点是同一个空白处。"""
         events = load_insect()
 
         for name in SPECIFIC_BLANK_EVENTS:
@@ -52,7 +53,7 @@ class SpecificBlankClickTest(unittest.TestCase):
                 self.assertEqual(
                     events[event_index(events, name)]["actions"],
                     [{"position": BLANK_CLICK}],
-                    f"{name} 的点击落点应与兜底「点击空白」一致",
+                    f"{name} 的点击落点应与其它细化事件一致",
                 )
 
     def test_specific_blank_events_are_grouped_after_entering_the_plane(self):
