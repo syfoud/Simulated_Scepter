@@ -341,6 +341,9 @@ class IronBloodUniverse(AnyFateUniverse):
                     CUS_LOGGER.debug(f"当前极限值{self.kill_count + self.max_limited}无法达到第二位面推荐值{self.second_plane_count},终止本次演算")
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+        # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
+        # 而它通常已被上一节点消费掉，这里必须自己清
+        self.area = ""
         self.new_node=True
 
     def calculated_roll(self):
