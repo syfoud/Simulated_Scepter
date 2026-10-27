@@ -24,8 +24,6 @@ class Config:
         self.bonus = 0
         self.timezones = ['America', 'Asia', 'Europe', 'Default']
         self.timezone = 'Default'
-        self.origin_key = ['f','m','shift','v','e','w','a','s','d','1','2','3','4']
-        self.mapping = self.origin_key
         self.max_run = 34
 
     @property

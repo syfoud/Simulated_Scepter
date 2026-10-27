@@ -38,7 +38,7 @@ from tool.log import CUS_LOGGER, log_emitter
 from tool.registry import KernelRegistry
 from tool.script_files import discover_scripts, read_script, script_key, script_path
 from tool.script_tools import capture_sample, debug_events
-from tool.settings import load_settings, update_settings
+from tool.settings import load_default_settings, load_settings, update_settings
 from tool.thread import ThreadWithException
 from tool.utils.game_install import (
     find_star_rail_executable,
@@ -416,6 +416,10 @@ class MainWindow(QMainWindowLog):
         self._task_monitor_timer.timeout.connect(self._check_task_thread)
         self._last_key_time = {}
         self._task_running_warning = None
+        # 键位窗口打开期间暂停程序热键，否则用户按下的 F5/F6/F7 会被全局钩子当场触发
+        self._capturing_keys = False
+        # 键位窗口返回的待保存键位，等用户点击「保存快捷键设置」才写配置
+        self.pending_game_keys = None
 
         # 加载快捷键配置并注册监听器
         self.hotkey_config = self.load_hotkey_config()
@@ -635,6 +639,7 @@ class MainWindow(QMainWindowLog):
         self.general_settings_save_btn.clicked.connect(self.save_general_config)
         self.ocr_settings_btn.clicked.connect(self.open_ocr_settings)
         self.hotkey_save_btn.clicked.connect(self.save_hotkey_config)
+        self.custom_keybinding_btn.clicked.connect(self.open_game_keybinding)
         self.record_stats_btn.clicked.connect(self.open_record_stats)
         self.Aboutupdatelock.clicked.connect(lambda: show_unlock_dialog(self))
         self.video_convert_btn.clicked.connect(self.start_video_convert)
@@ -701,6 +706,29 @@ class MainWindow(QMainWindowLog):
         finally:
             dialog.deleteLater()
 
+    def open_game_keybinding(self):
+        """
+        打开游戏内键位设置窗口
+
+        窗口只把改好的键位带回内存，写入配置仍由「保存快捷键设置」完成，
+        这样两处设置落在同一次保存里，不会出现只生效一半的状态。
+        """
+        from tool.gui.game_key_dialog import GameKeyDialog
+
+        self._capturing_keys = True
+        try:
+            dialog = GameKeyDialog(self)
+        except (OSError, ValueError) as error:
+            self._capturing_keys = False
+            QMessageBox.warning(self, "键位设置加载失败", str(error))
+            return
+        try:
+            if dialog.exec_() == QDialog.Accepted:
+                self.pending_game_keys = dialog.game_keys()
+        finally:
+            self._capturing_keys = False
+            dialog.deleteLater()
+
     def load_hotkey_config(self):
         """从用户配置读取快捷键，缺失项使用默认值。"""
         default_config = {
@@ -743,6 +771,10 @@ class MainWindow(QMainWindowLog):
         """
         current_time = time.time()
         key = event.name.lower()
+
+        # 键位窗口打开时用户是在录键，不能同时触发程序的停止/截图/打印
+        if self._capturing_keys:
+            return
 
         # 防重复触发
         last_time = self._last_key_time.get(key, 0)
@@ -1208,21 +1240,80 @@ class MainWindow(QMainWindowLog):
 
 
     def save_hotkey_config(self):
+        """
+        保存程序热键与游戏内键位
+
+        两者共用这一次保存：游戏内键位窗口只带回待保存值，避免出现
+        「键位已改但没保存」或只保存了一半的中间状态。
+        """
+        from tool.gui.game_key_dialog import GAME_KEY_LABELS
+        from tool.key_mouse_manager import (is_valid_key_name, normalize_key_name,
+                                            reload_game_keys)
+
+        if self.is_task_running():
+            QMessageBox.warning(
+                self, "提示", "任务运行中，无法保存快捷键配置。\n请先停止任务后再保存。")
+            return
+
         hotkey_config = {
             "stop": self.stop_hotkey_input.text().strip(),
             "test": self.test_hotkey_input.text().strip(),
             "print": self.print_hotkey_input.text().strip(),
         }
 
+        game_keys = dict(self.pending_game_keys or self.opt.get("game_keys") or {})
+        # update_settings 是浅合并，game_keys 必须整表写入，否则未出现在本次
+        # 修改里的项会被默认值覆盖，用户之前的自定义就丢了。
+        for name, default_value in (load_default_settings().get("game_keys") or {}).items():
+            game_keys.setdefault(name, default_value)
+
+        invalid_names = [name for name, value in game_keys.items()
+                         if not is_valid_key_name(value)]
+        if invalid_names:
+            detail = "、".join(f"“{GAME_KEY_LABELS.get(name, name)}”" for name in invalid_names)
+            QMessageBox.warning(self, "提示", f"当前{detail}所设键位不合法。\n未保存修改。")
+            return
+
+        game_keys = {name: normalize_key_name(value) for name, value in game_keys.items()}
+        duplicate_message = self._build_duplicate_key_message(game_keys, GAME_KEY_LABELS)
+
         self.update_settings({
-            "hotkeys": hotkey_config
+            "hotkeys": hotkey_config,
+            "game_keys": game_keys,
         })
 
         self.hotkey_config = hotkey_config
+        self.pending_game_keys = None
         self.refresh_keyboard_listener()
         self.update_button_hotkey_text(self.hotkey_config)
+        # 管理器缓存了上一次解析结果，保存后必须让它按新配置重新加载
+        reload_game_keys()
 
-        QMessageBox.information(self, "提示", "快捷键配置已保存")
+        if duplicate_message:
+            QMessageBox.warning(self, "提示", duplicate_message)
+        else:
+            QMessageBox.information(self, "提示", "快捷键配置已保存")
+
+    @staticmethod
+    def _build_duplicate_key_message(game_keys, labels):
+        """生成重复键位提示；没有重复时返回空串。"""
+        owners = {}
+        for name, value in game_keys.items():
+            owners.setdefault(value, []).append(name)
+
+        pairs = []
+        for names in owners.values():
+            for index in range(len(names) - 1):
+                first, second = names[index], names[index + 1]
+                pairs.append(f"“{labels.get(first, first)}”与“{labels.get(second, second)}”")
+        if not pairs:
+            return ""
+
+        return (
+            f"当前{'、'.join(pairs)}所设键位重复。\n"
+            "已正常保存；建议重复对比游戏内按键设置检查一遍确认设置是否正确。\n"
+            "（游戏默认按键表里“教学目录”和“新手提示”都是 G）"
+        )
 
     def save_general_config(self):
         try:

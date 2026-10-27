@@ -207,6 +207,11 @@ class StateKernel:
         if threshold is None:
             threshold = self.threshold
         target = find_image_by_name(path)
+        if target is None:
+            # 模板名写错/文件缺失时直接判定为未匹配：否则 target.shape 会抛 AttributeError，
+            # 中断整个任务线程，且现场已无法判断是哪个模板名写错了
+            CUS_LOGGER.error(f"模板 {path} 不存在，本次匹配判定为未匹配")
+            return False
         target = cv.resize(
             target,
             dsize=(int(self.scx * target.shape[1]), int(self.scx * target.shape[0])),

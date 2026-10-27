@@ -1065,6 +1065,13 @@ border:none</string>
                      </layout>
                     </item>
                     <item>
+                     <widget class="QPushButton" name="custom_keybinding_btn">
+                      <property name="text">
+                       <string>游戏内键位设置</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
                      <widget class="QPushButton" name="hotkey_save_btn">
                       <property name="text">
                        <string>保存快捷键设置</string>

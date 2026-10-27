@@ -191,7 +191,7 @@ class AnyFateUniverse(SimulatedUniverse):
     # 切换指定位置的角色
     def switch_current_role(self, num):
         if self.current_role != num:
-            key_mouse_manager.press(f"{num}")
+            key_mouse_manager.press(f"role_{num}")
             self.current_role = num
             CUS_LOGGER.debug(f"已切换至{num}号位角色")
             key_mouse_manager.sleep(0.6)
@@ -290,11 +290,11 @@ class AnyFateUniverse(SimulatedUniverse):
                                 release = False
                             if cast:
                                 key_mouse_manager.sleep(0.6) # 实测在网络延迟较高的情况下银狼有概率释放不出秘技，因此增加0.6s延迟。后续或可更改为实时检测银狼秘技施放情况
-                                key_mouse_manager.press('e')
+                                key_mouse_manager.press("technique")
                                 CUS_LOGGER.debug("已施放银狼秘技")
                                 key_mouse_manager.sleep(0.6)
                             elif release:
-                                key_mouse_manager.press('e')
+                                key_mouse_manager.press("technique")
                                 CUS_LOGGER.debug("已解除银狼秘技")
                                 key_mouse_manager.sleep(0.6)
                 key_mouse_manager.wait()
@@ -343,7 +343,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 # 暂离或提前结算前不做任何走动和施法，否则 esc 会被动画吞掉
                 key_mouse_manager.clean()
                 key_mouse_manager.wait()
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.press("esc")
                 key_mouse_manager.wait()
                 tm=time.time()
@@ -406,7 +406,7 @@ class AnyFateUniverse(SimulatedUniverse):
         """
         if not self.big_map_init:
             key_mouse_manager.clean()
-            key_mouse_manager.keyUp("w")
+            key_mouse_manager.keyUp("move_w")
             key_mouse_manager.wait()
             if self._stop:
                 return True
@@ -459,7 +459,7 @@ class AnyFateUniverse(SimulatedUniverse):
             self.loaded_map_root = None
         if not self.big_map_init:
             key_mouse_manager.clean()
-            key_mouse_manager.keyUp("w")
+            key_mouse_manager.keyUp("move_w")
             key_mouse_manager.wait()
             if self._stop:
                 return True
@@ -671,9 +671,9 @@ class AnyFateUniverse(SimulatedUniverse):
                 self.best_match=self.pos_predictor.match_multiple_maps(self.screen,0)
                 self.start_pos=self.best_match['position']
             if record:
-                key_mouse_manager.press("s")
+                key_mouse_manager.press("move_s")
                 key_mouse_manager.wait()
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
         else:
             if self.click_text(text="确认",box=[1361, 1417, 713, 744],click=False,allow_fail=True):
                 self.big_map_init = False
@@ -1029,7 +1029,7 @@ class AnyFateUniverse(SimulatedUniverse):
         return True
 
     def initing_map(self):
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[10, 220, 0, 112],click=False,warning=False):
             self.plane_floor=1
         elif self.click_text(text="浪潮",box=[10, 220, 0, 112],click=False,warning=False):
@@ -1049,7 +1049,7 @@ class AnyFateUniverse(SimulatedUniverse):
         return
 
     def initing_map2(self):
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[385, 449, 548, 583],click=False,warning=False):
             self.plane_floor=1
         elif self.click_text(text="浪潮",box=[385, 449, 548, 583],click=False,warning=False):
@@ -1335,7 +1335,7 @@ class AnyFateUniverse(SimulatedUniverse):
 
     def select_go(self):
         key_mouse_manager.clean()
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
         if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996],click=False,allow_fail=True):
             if self.click_text(text="点击空白处关闭", box=[876, 1047, 1008, 1035],click=False,allow_fail=True):

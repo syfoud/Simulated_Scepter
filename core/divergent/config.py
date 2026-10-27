@@ -31,8 +31,6 @@ class Config:
         self.team = '终结技'
         self.timezones = ['America', 'Asia', 'Europe', 'Default']
         self.timezone = 'Default'
-        self.origin_key = ['f','m','shift','v','e','w','a','s','d','1','2','3','4']
-        self.mapping = self.origin_key
         self.max_run = 34
         with open(os.path.join(PATHS["root"], "actions", "character.json"), encoding='utf-8') as file:
             self.match = json.load(file)
@@ -98,7 +96,6 @@ class Config:
         self.accuracy = config['accuracy']
         self.enable_portal_prior = config['enable_portal_prior']
         self.portal_prior = config['portal_prior']
-        self.mapping = data['key_mapping']
 
     def save(self):
         save_json_values(__file__, {
@@ -117,8 +114,7 @@ class Config:
                     "accuracy": self.accuracy,
                     "enable_portal_prior": self.enable_portal_prior,
                     "portal_prior": self.portal_prior
-                },
-                "key_mapping": self.mapping
+                }
             })
 
 

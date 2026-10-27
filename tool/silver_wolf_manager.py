@@ -134,7 +134,7 @@ class SilverWolfManager:
                 self.parent.switch_to_configured_role()
                 return True
             CUS_LOGGER.debug("银狼秘技：秘技点为 0，切回一号位")
-            key_mouse_manager.press("1")
+            key_mouse_manager.press("role_1")
             key_mouse_manager.wait()
             return True
 

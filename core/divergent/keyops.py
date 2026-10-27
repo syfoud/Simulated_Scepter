@@ -4,19 +4,19 @@ import time
 import pyautogui
 
 from core.divergent.config import config
+from tool.key_mouse_manager import resolve_key
 
-
-def get_mapping(x):
-    if x in config.origin_key:
-        x = config.mapping[config.origin_key.index(x)]
-    return x
 
 def keyDown(x):
-    pyautogui.keyDown(get_mapping(x))
+    pyautogui.keyDown(resolve_key(x))
+
+
 def keyUp(x):
-    if config.long_press_sprint and x=='w':
-        pyautogui.keyUp(get_mapping('shift'))
-    pyautogui.keyUp(get_mapping(x))
+    # 长按加速：走 W 的时候把加速键一并松开，否则会一直处于加速状态
+    if config.long_press_sprint and x == 'move_w':
+        pyautogui.keyUp(resolve_key('sprint'))
+    pyautogui.keyUp(resolve_key(x))
+
 
 class KeyController:
     def __init__(self, father):
@@ -28,9 +28,9 @@ class KeyController:
     def loop(self):
         while not self.father._stop:
             if self.fff:
-                keyDown('f')
+                keyDown('interact')
                 time.sleep(0.02)
-                keyUp('f')
+                keyUp('interact')
             else:
                 time.sleep(0.1)
             for event in self.events:
