@@ -19,7 +19,7 @@
     {
         "name": "自动战斗检测",
         "trigger":{
-            "photo": "c",
+            "photo": "auto_battle",
             "pos": {"x":0.988,"y":0.1028},
             "threshold":0.985
         },
