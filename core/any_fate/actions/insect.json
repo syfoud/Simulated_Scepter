@@ -1,19 +1,4 @@
-[ {
-        "name": "点击空白结算",
-        "trigger":{
-            "text": "点击空白",
-            "box": [873, 1047, 878, 909],
-            "redundancy": 30,
-            "condition": "end"
-        },
-        "actions":
-        [
-            {
-                "position": [900, 1000]
-            },
-            "restart_recording"
-        ]
-    },
+[
     {
         "name": "结算界面",
         "trigger":{
@@ -23,7 +8,11 @@
         },
         "actions":
         [
-            "end_of_university"
+            "end_of_university",
+            {
+                "position": [900, 1000]
+            },
+            "restart_recording"
         ]
     },
     {
@@ -36,21 +25,6 @@
         },
         "actions":
         [    "emergency",
-            {
-                "position": [1456, 875]
-            }
-        ]
-    },
-{
-        "name": "点击空白",
-        "trigger":{
-            "text": "点击空白",
-            "box": [872, 1048, 729, 1015],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions":
-        [
             {
                 "position": [1456, 875]
             }
@@ -448,7 +422,77 @@
             }
         ]
     },
-{
+    {
+        "name": "进入位面2",
+        "trigger":{
+            "text": "位面",
+            "box": [905, 1015, 680, 725],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "初始效果",
+        "trigger":{
+            "text": "初始效果",
+            "box": [800, 1100, 494, 548],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "冒险介绍",
+        "trigger":{
+            "text": "挑战",
+            "box": [770, 935, 395, 437],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "挑战结束",
+        "trigger":{
+            "text": "挑战结束",
+            "box": [833, 1090, 321, 387],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "位面紊乱",
+        "trigger":{
+            "text": "位面",
+            "box": [864, 1045, 462, 509],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
         "name": "模拟宇宙外",
         "trigger":{
             "text": "模拟宇宙",
@@ -464,7 +508,8 @@
                 "sleep": 1
             }
         ]
-    },{
+    },
+    {
         "name": "确认命途",
         "trigger":{
             "text": "确认命途",

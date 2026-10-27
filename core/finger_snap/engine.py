@@ -282,6 +282,9 @@ class FingerSnap(AnyFateUniverse):
                 CUS_LOGGER.error("未找到下一步路径点")
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+        # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
+        # 而它通常已被上一节点消费掉，这里必须自己清
+        self.area = ""
         self.new_node=True
     def initing_map(self):
         if not self.debug:
@@ -303,6 +306,8 @@ class FingerSnap(AnyFateUniverse):
             self.click_text(text="进入位面", box=[907, 1009, 857, 891])
             self.node_count = 0
             self.new_node = True
+            # 切换位面时没有重投界面出现，需清空区域名缓存
+            self.area = ""
         key_mouse_manager.wait()
     def try_analysis_map(self, mode=1, target_selection=False):
         """识别地图，必要时刷新截图复核，补偿慈怀闪光造成的瞬时漏检。

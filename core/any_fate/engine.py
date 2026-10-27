@@ -1356,6 +1356,9 @@ class AnyFateUniverse(SimulatedUniverse):
                 CUS_LOGGER.error("未找到下一步路径点")
         else:
             self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+        # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
+        # 而它通常已被上一节点消费掉，这里必须自己清
+        self.area=""
         self.new_node=True
 
     def read_action_counts(self):
@@ -1408,7 +1411,6 @@ class AnyFateUniverse(SimulatedUniverse):
             if self.area:
                 self.now_area.append(self.area)
             CUS_LOGGER.debug(f"已走过: {self.now_area}")
-            self.area = ""
             self.event = ""
             self.new_node=False
 
