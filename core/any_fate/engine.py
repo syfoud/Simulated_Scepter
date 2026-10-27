@@ -1411,7 +1411,6 @@ class AnyFateUniverse(SimulatedUniverse):
             if self.area:
                 self.now_area.append(self.area)
             CUS_LOGGER.debug(f"已走过: {self.now_area}")
-            self.area = ""
             self.event = ""
             self.new_node=False
 
