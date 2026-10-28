@@ -874,6 +874,18 @@
         ]
     },
     {
+        "name": "战斗失败",
+        "trigger":{
+            "text": "重新挑战",
+            "box": [1154, 1254, 974, 1001],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            position: [1205, 990]
+        ]
+    },
+    {
         "name": "大世界",
         "trigger":{
             "photo": "smartphone",
