@@ -58,7 +58,8 @@ class CoreStorageTests(unittest.TestCase):
         self.assertEqual(values["config"]["fate"], defaults["config"]["fate"])
         self.assertEqual(values["config"]["order_text"], defaults["config"]["order_text"])
         self.assertEqual(values["prior"], defaults["prior"])
-        self.assertEqual(values["key_mapping"], defaults["key_mapping"])
+        # key_mapping 已废弃：键位改由 gui_settings.game_keys 管理，模块配置里不再有该字段
+        self.assertNotIn("key_mapping", values)
 
     def test_existing_values_win_over_default_config(self):
         self.write_settings("simulated", {"config": {"fate": "虚无"}})

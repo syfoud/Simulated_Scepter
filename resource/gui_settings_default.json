@@ -9,7 +9,7 @@
     "recording_iron_blood": false,
     "del_record_time": 14,
     "hotkeys": {
-        "stop": "f5",
+        "stop": "end",
         "test": "f6",
         "print": "f7"
     },

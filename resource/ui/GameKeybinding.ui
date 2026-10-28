@@ -17,7 +17,7 @@
    <item>
     <widget class="QLabel" name="tip_label">
      <property name="text">
-      <string>双击输入框后按下新按键即可修改。
+      <string>点击输入框后按下新按键即可修改，点击其他位置则不修改。
 左 Alt 与 Esc 是游戏内固定按键，不提供修改。
 修改结果在返回后点击「保存快捷键设置」生效。</string>
      </property>

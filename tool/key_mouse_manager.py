@@ -37,6 +37,15 @@ _KEY_NAME_ALIASES = {
     "leftcontrol": "ctrlleft", "rightcontrol": "ctrlright",
     "control": "ctrlleft", "ctrl": "ctrlleft",
     "shift": "shiftleft", "alt": "altleft",
+    # keyboard 库把左右修饰键写成带空格的形式，读旧配置时要能认出来
+    "left shift": "shiftleft", "right shift": "shiftright",
+    "left ctrl": "ctrlleft", "right ctrl": "ctrlright",
+    "left control": "ctrlleft", "right control": "ctrlright",
+    "left alt": "altleft", "right alt": "altright",
+    # 编辑键/扩展键同理：程序热键允许设置这些键，两套命名要能互相转换
+    "page up": "pageup", "page down": "pagedown",
+    "caps lock": "capslock", "num lock": "numlock",
+    "scroll lock": "scrolllock", "print screen": "printscreen",
 }
 
 

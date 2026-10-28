@@ -56,7 +56,7 @@ from tool.window_recorder.video_remux import (
 load_all_images_from_directory()
 import faulthandler
 
-from PyQt5.QtCore import QSignalBlocker, Qt, QTimer, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QEvent, QSignalBlocker, Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
@@ -77,6 +77,57 @@ from align_angle import main as align_angle_main
 from logger_printer import QMainWindowLog
 
 HOTKEY_DEBOUNCE_SECONDS = 1.0
+
+# 程序热键在 keyboard 库里的键名与 pyautogui 不同：修饰键必须写成 "left shift"
+# 这类带左右的形式，否则 keyboard 解析不到扫描码，热键注册会静默失败。
+_KEYBOARD_KEY_NAMES = {
+    # keyboard 库用带空格的名字区分左右修饰键，只写 "shift"/"ctrl"/"alt" 会被当成两侧通用，
+    # 那就和录键时按下的那一侧对不上了。
+    "ctrlleft": "left ctrl",
+    "ctrlright": "right ctrl",
+    "shiftleft": "left shift",
+    "shiftright": "right shift",
+    "altleft": "left alt",
+    "altright": "right alt",
+    # 编辑键与扩展键在两套命名里也不同。游戏内不让绑这些键，但程序热键可以用。
+    "pageup": "page up",
+    "pagedown": "page down",
+    "capslock": "caps lock",
+    "numlock": "num lock",
+    "scrolllock": "scroll lock",
+    "printscreen": "print screen",
+}
+
+# 程序热键在提示文案里的动作名
+HOTKEY_LABELS = {"stop": "停止任务", "test": "截图测试", "print": "打印坐标"}
+
+
+def to_keyboard_key_name(name):
+    """把界面上的键名转成 keyboard 库认识的键名；空字符串表示该热键不使用。"""
+    from tool.key_mouse_manager import normalize_key_name
+
+    normalized = normalize_key_name(str(name or ""))
+    if not normalized or normalized == "none":
+        return ""
+    return _KEYBOARD_KEY_NAMES.get(normalized, normalized)
+
+
+def is_registerable_hotkey(name):
+    """判断键名能否被 keyboard 库注册。
+
+    keyboard 遇到不认识的键名只在注册时抛异常或静默失败，热键会变成按了没反应，
+    所以读取配置时先用它自己的解析函数验一遍。
+    """
+    key_name = to_keyboard_key_name(name)
+    if not key_name:
+        return False
+    try:
+        keyboard.key_to_scan_codes(key_name)
+    except (ValueError, KeyError):
+        return False
+    return True
+
+
 # 程序启动时触发的清理延迟执行的毫秒数，让主界面先完成显示。
 CLEANUP_STARTUP_DELAY_MS = 1500
 STARTUP_TASK_DELAY_SECONDS = 5
@@ -416,10 +467,14 @@ class MainWindow(QMainWindowLog):
         self._task_monitor_timer.timeout.connect(self._check_task_thread)
         self._last_key_time = {}
         self._task_running_warning = None
-        # 键位窗口打开期间暂停程序热键，否则用户按下的 F5/F6/F7 会被全局钩子当场触发
+        # 键位窗口打开期间暂停程序热键，否则用户录键时按下的停止/截图/打印热键会被全局钩子当场触发
         self._capturing_keys = False
         # 键位窗口返回的待保存键位，等用户点击「保存快捷键设置」才写配置
         self.pending_game_keys = None
+        # 程序热键输入框的录键控制器；录键期间必须暂停全局热键，
+        # 否则用户想把停止键录成热键时会直接停止任务
+        self._hotkey_captures = {}
+        self._hotkey_capture_active = False
 
         # 加载快捷键配置并注册监听器
         self.hotkey_config = self.load_hotkey_config()
@@ -663,11 +718,10 @@ class MainWindow(QMainWindowLog):
         self.cleanup_section = CleanupSettingsSection(self.advanced_settings_main_page)
         self.cleanup_section.cleanup_requested.connect(self.cleanup_category)
         self.Cleanup_save_btn.clicked.connect(self.save_cleanup_config)
-        hotkeys = data.get("hotkeys", {})
-        self.stop_hotkey_input.setText(hotkeys.get("stop", "f5"))
-        self.test_hotkey_input.setText(hotkeys.get("test", "f6"))
-        self.print_hotkey_input.setText(hotkeys.get("print", "f7"))
-        self.update_button_hotkey_text(hotkeys)
+        self._install_hotkey_captures()
+        for action, capture in self._hotkey_captures.items():
+            capture.set_key_name(self.hotkey_config.get(action, ""))
+        self.update_button_hotkey_text(self.hotkey_config)
         self.update_dependent_controls_state()
         self.connect_dependency_signals()
         tray = next((spec for spec in self.registry.runnable() if spec.tray), None)
@@ -729,28 +783,72 @@ class MainWindow(QMainWindowLog):
             self._capturing_keys = False
             dialog.deleteLater()
 
+    def _install_hotkey_captures(self):
+        """把三个程序热键输入框装成录键输入框。"""
+        from tool.gui.game_key_dialog import KeyCapture
+
+        self._hotkey_captures = {}
+        for action, edit in (("stop", self.stop_hotkey_input),
+                             ("test", self.test_hotkey_input),
+                             ("print", self.print_hotkey_input)):
+            capture = KeyCapture(edit, allow_empty=True, allow_tab=True)
+            capture.capture_state_changed.connect(self._on_hotkey_capture_state_changed)
+            edit.setToolTip("点击后按下新按键即可修改；按 Delete 清空表示不使用该热键")
+            self._hotkey_captures[action] = capture
+
+    def _on_hotkey_capture_state_changed(self, _capturing):
+        # 以全部输入框的实际状态为准：两个输入框切换焦点时，旧框的"结束"信号
+        # 可能晚于新框的"开始"信号到达，单独维护一个标志位会被覆盖成未录键
+        self._hotkey_capture_active = any(
+            capture.is_capturing() for capture in self._hotkey_captures.values())
+
+    def changeEvent(self, event):
+        # 切到别的窗口时 Qt 不会给焦点控件发 FocusOut，录键框会一直停在等待按键的
+        # 状态，这里主动取消，等价于用户点到了窗口外面
+        if event.type() == QEvent.WindowDeactivate:
+            for capture in getattr(self, "_hotkey_captures", {}).values():
+                capture.cancel_capture()
+        super().changeEvent(event)
+
     def load_hotkey_config(self):
-        """从用户配置读取快捷键，缺失项使用默认值。"""
+        """从用户配置读取程序快捷键，缺失或不合法的项回退默认值。
+
+        程序热键只在读取时校验：界面上的录键框只能录出合法键名，
+        保存时不必再校验一遍。
+        """
+        from tool.key_mouse_manager import normalize_key_name
+
         default_config = {
-            "stop": "f5",
+            "stop": "end",
             "test": "f6",
             "print": "f7"
         }
 
         try:
             data = load_settings()
-            hotkey_config = data.get("hotkeys", default_config)
-            if not isinstance(hotkey_config, dict):
-                hotkey_config = dict(default_config)
+            hotkeys = data.get("hotkeys", default_config)
+            if not isinstance(hotkeys, dict):
+                hotkeys = dict(default_config)
 
-            # 确保所有必需的快捷键都存在
-            for key in default_config:
-                hotkey_config.setdefault(key, default_config[key])
+            hotkey_config = {}
+            for action, default_key in default_config.items():
+                value = hotkeys.get(action, default_key)
+                value = "" if value is None else str(value).strip()
+                # 空串与 none 表示用户不想用这个热键，保留为空而不是回退默认值
+                if not value or value.lower() == "none":
+                    hotkey_config[action] = ""
+                    continue
+                normalized = normalize_key_name(value)
+                if not is_registerable_hotkey(normalized):
+                    CUS_LOGGER.warning("快捷键配置中 %s 的键位 %r 不合法，已回退为默认键 %s",
+                                       action, value, default_key)
+                    normalized = default_key
+                hotkey_config[action] = normalized
 
             return hotkey_config
         except Exception as e:
             print(f"加载快捷键配置失败：{e}，使用默认配置")
-            return default_config
+            return dict(default_config)
 
     def setup_keyboard_listener(self):
         """
@@ -758,9 +856,11 @@ class MainWindow(QMainWindowLog):
         """
         # 使用当前 hotkey_config 注册快捷键监听
         for action, key in self.hotkey_config.items():
-            if key and key.lower() != "none":
-                keyboard.on_press_key(key.lower(), lambda event, act=action: self._on_hotkey_pressed(event, act))
-                self.registered_hotkeys.append(key.lower())
+            key_name = to_keyboard_key_name(key)
+            if key_name:
+                keyboard.on_press_key(
+                    key_name, lambda event, act=action: self._on_hotkey_pressed(event, act))
+                self.registered_hotkeys.append(key_name)
 
     def update_settings(self, updates):
         self.opt = update_settings(updates)
@@ -772,8 +872,9 @@ class MainWindow(QMainWindowLog):
         current_time = time.time()
         key = event.name.lower()
 
-        # 键位窗口打开时用户是在录键，不能同时触发程序的停止/截图/打印
-        if self._capturing_keys:
+        # 键位窗口或程序热键输入框正在录键时，用户按下的键是在设置键位，
+        # 不能同时触发程序的停止/截图/打印
+        if self._capturing_keys or self._hotkey_capture_active:
             return
 
         # 防重复触发
@@ -832,21 +933,25 @@ class MainWindow(QMainWindowLog):
         self._task_running_warning = None
 
     def update_button_hotkey_text(self, hotkey_config):
-        stop_key = hotkey_config.get("stop", "f5").upper()
-        test_key = hotkey_config.get("test", "f6").upper()
-        print_key = hotkey_config.get("print", "f7").upper()
+        from tool.gui.game_key_dialog import display_key_name
 
-        self.stop_btn.setText(f"停止任务 {stop_key}")
-        self.test_btn.setText(f"截图测试 {test_key}")
-        self.print_btn.setText(f"打印坐标 {print_key}")
+        for action, button in (("stop", self.stop_btn),
+                               ("test", self.test_btn),
+                               ("print", self.print_btn)):
+            key_name = hotkey_config.get(action, "")
+            label = HOTKEY_LABELS[action]
+            # 未设置热键时按钮只显示动作名
+            button.setText(f"{label} {display_key_name(key_name)}" if key_name else label)
 
     def refresh_keyboard_listener(self):
         keyboard.unhook_all()
         self.registered_hotkeys.clear()
         for action, key in self.hotkey_config.items():
-            if key and key.lower() != "none":
-                keyboard.on_press_key(key.lower(), lambda event, act=action: self._on_hotkey_pressed(event, act))
-                self.registered_hotkeys.append(key.lower())
+            key_name = to_keyboard_key_name(key)
+            if key_name:
+                keyboard.on_press_key(
+                    key_name, lambda event, act=action: self._on_hotkey_pressed(event, act))
+                self.registered_hotkeys.append(key_name)
 
     def update_dependent_controls_state(self):
         self.game_path_input.setEnabled(self.start_game_checkbox.isChecked())
@@ -1044,7 +1149,9 @@ class MainWindow(QMainWindowLog):
             raise ValueError("所选内核不可用")
         read_script(path)
         engine_name = spec.name
-        stop_key = self.load_hotkey_config()["stop"].upper()
+        from tool.gui.game_key_dialog import display_key_name
+
+        stop_key = display_key_name(self.load_hotkey_config()["stop"]) or "未设置"
 
         def task():
             self.current_task = su = self.create_task_engine(kernel_id, script=True)
@@ -1088,8 +1195,11 @@ class MainWindow(QMainWindowLog):
                 engine._stop = False
                 self.current_task = engine
                 if not engine._stop and not get_global_stop_flag():
+                    from tool.gui.game_key_dialog import display_key_name
+
                     CUS_LOGGER.info("脚本编辑器开始%s，使用 %s 内核；按 %s 可停止。",
-                                    description, kernel, self.load_hotkey_config()["stop"].upper())
+                                    description, kernel,
+                                    display_key_name(self.load_hotkey_config()["stop"]) or "未设置")
                     result = operation(engine)
                     if get_global_stop_flag():
                         result = {"message": "操作已停止"}
@@ -1247,40 +1357,40 @@ class MainWindow(QMainWindowLog):
         「键位已改但没保存」或只保存了一半的中间状态。
         """
         from tool.gui.game_key_dialog import GAME_KEY_LABELS
-        from tool.key_mouse_manager import (is_valid_key_name, normalize_key_name,
-                                            reload_game_keys)
+        from tool.key_mouse_manager import normalize_key_name, reload_game_keys
 
         if self.is_task_running():
             QMessageBox.warning(
                 self, "提示", "任务运行中，无法保存快捷键配置。\n请先停止任务后再保存。")
             return
 
-        hotkey_config = {
-            "stop": self.stop_hotkey_input.text().strip(),
-            "test": self.test_hotkey_input.text().strip(),
-            "print": self.print_hotkey_input.text().strip(),
-        }
+        # 热键只能由录键输入框产生，保存时无需再校验合法性
+        if self._hotkey_captures:
+            hotkey_config = {action: capture.key_name
+                             for action, capture in self._hotkey_captures.items()}
+        else:
+            hotkey_config = dict(self.hotkey_config)
 
         game_keys = dict(self.pending_game_keys or self.opt.get("game_keys") or {})
         # update_settings 是浅合并，game_keys 必须整表写入，否则未出现在本次
         # 修改里的项会被默认值覆盖，用户之前的自定义就丢了。
         for name, default_value in (load_default_settings().get("game_keys") or {}).items():
             game_keys.setdefault(name, default_value)
-
-        invalid_names = [name for name, value in game_keys.items()
-                         if not is_valid_key_name(value)]
-        if invalid_names:
-            detail = "、".join(f"“{GAME_KEY_LABELS.get(name, name)}”" for name in invalid_names)
-            QMessageBox.warning(self, "提示", f"当前{detail}所设键位不合法。\n未保存修改。")
-            return
-
         game_keys = {name: normalize_key_name(value) for name, value in game_keys.items()}
-        duplicate_message = self._build_duplicate_key_message(game_keys, GAME_KEY_LABELS)
 
-        self.update_settings({
-            "hotkeys": hotkey_config,
-            "game_keys": game_keys,
-        })
+        warning_message = self._build_key_warning_message(
+            game_keys, GAME_KEY_LABELS, hotkey_config,
+            bool(self.opt.get("debug", False)))
+
+        try:
+            self.update_settings({
+                "hotkeys": hotkey_config,
+                "game_keys": game_keys,
+            })
+        except (OSError, ValueError) as error:
+            CUS_LOGGER.error("快捷键配置保存失败：%s", error, exc_info=True)
+            QMessageBox.warning(self, "提示", f"快捷键配置无法保存：{error}")
+            return
 
         self.hotkey_config = hotkey_config
         self.pending_game_keys = None
@@ -1289,14 +1399,16 @@ class MainWindow(QMainWindowLog):
         # 管理器缓存了上一次解析结果，保存后必须让它按新配置重新加载
         reload_game_keys()
 
-        if duplicate_message:
-            QMessageBox.warning(self, "提示", duplicate_message)
+        if warning_message:
+            QMessageBox.warning(self, "提示", warning_message)
         else:
             QMessageBox.information(self, "提示", "快捷键配置已保存")
 
     @staticmethod
-    def _build_duplicate_key_message(game_keys, labels):
-        """生成重复键位提示；没有重复时返回空串。"""
+    def _build_key_warning_message(game_keys, labels, hotkey_config=None, debug_enabled=False):
+        """生成键位提示：游戏内键位之间的重复，以及与当前生效的程序热键的冲突。"""
+        from tool.key_mouse_manager import normalize_key_name
+
         owners = {}
         for name, value in game_keys.items():
             owners.setdefault(value, []).append(name)
@@ -1306,14 +1418,31 @@ class MainWindow(QMainWindowLog):
             for index in range(len(names) - 1):
                 first, second = names[index], names[index + 1]
                 pairs.append(f"“{labels.get(first, first)}”与“{labels.get(second, second)}”")
-        if not pairs:
-            return ""
 
-        return (
-            f"当前{'、'.join(pairs)}所设键位重复。\n"
-            "已正常保存；建议重复对比游戏内按键设置检查一遍确认设置是否正确。\n"
-            "（游戏默认按键表里“教学目录”和“新手提示”都是 G）"
-        )
+        conflicts = []
+        for action, hotkey in (hotkey_config or {}).items():
+            hotkey = normalize_key_name(hotkey)
+            if not hotkey:
+                continue
+            # test/print 只在 debug 模式下响应，非 debug 时报冲突只会误导用户
+            if action != "stop" and not debug_enabled:
+                continue
+            for name, value in game_keys.items():
+                if normalize_key_name(value) == hotkey:
+                    conflicts.append(
+                        f"“{labels.get(name, name)}”与程序热键“{HOTKEY_LABELS.get(action, action)}”")
+
+        paragraphs = []
+        if pairs:
+            paragraphs.append(
+                f"当前{'、'.join(pairs)}所设键位重复。\n"
+                "已正常保存；建议重复对比游戏内按键设置检查一遍确认设置是否正确。\n"
+                "（游戏默认按键表里“教学目录”和“新手提示”都是 G）")
+        if conflicts:
+            paragraphs.append(
+                f"当前{'、'.join(conflicts)}所设键位重复。\n"
+                "已正常保存；建议更换其中一个键位，避免游戏内按键触发程序热键。")
+        return "\n\n".join(paragraphs)
 
     def save_general_config(self):
         try:
