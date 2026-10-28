@@ -12,6 +12,12 @@
             {
                 "position": [900, 1000]
             },
+            {
+                "sleep": 0.5
+            },
+            {
+                "position": [900, 1000]
+            },
             "restart_recording"
         ]
     },
