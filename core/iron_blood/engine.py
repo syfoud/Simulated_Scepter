@@ -7,8 +7,7 @@ import time
 from route import PATHS
 from tool.storage import load_module_settings, resource_path
 from core.any_fate.engine import AnyFateUniverse
-from core.simulated.engine import SimulatedUniverse
-from tool.GLOBAL import factor, key_mouse_manager
+from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
 from core.simulated.config import config
@@ -47,56 +46,52 @@ class IronBloodUniverse(AnyFateUniverse):
             self.event_prior = json.load(f)["event"]
 
     def restart_recording(self):
-        if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
-            # 增加演算时间过长保留录制配置
-            minutes = self.elapsed_time / 60
-            if self.kill_count == 0:
-                minutes_divide_kill = 0
-            else:
-                minutes_divide_kill = minutes/self.kill_count
-            # 演算时间过长保留录制仅服务于调试
-            recording_keep_long_run_threshold = self.opt.get("recording_keep_long_run_threshold", 1.2)
-            del_time = (
-                self.del_record_time
-                and self.del_record_time>self.kill_count
-            )
-            keep_long_run = (
-                self.debug
-                and self.opt.get("recording_keep_long_run", False)
-                and minutes_divide_kill >= recording_keep_long_run_threshold # 演算时间过长录制保留阈值（分钟数÷战斗数）
-            )
-            abnormal_first_plane_weight = (
-                self.debug
-                and self.opt.get("record_abnormal_first_plane_weight", False)
-                and self.first_plane_weight <= 0 # 开局期望值异常（≤0）时保留录制
-            )
-            need_del = del_time and not keep_long_run and not abnormal_first_plane_weight
-            if self.first_plane_weight >= 0:
-                CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight:.2f}")
-            else:
-                CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight}")
-            self.recorder.stop_recording(need_del, battle_count=self.kill_count, elapsed_time=self.elapsed_time, first_plane_weight=self.first_plane_weight)
-            time.sleep(0.8)
-            self.recorder.start_recording(self.count + 1)
-            self.update_state("re_start")
+        super().restart_recording()
         self.elapsed_time = 0  # 重置演算持续时间
         self.kill_count = 0
-        # 本局记录已写完，重置为「还没做开局识别」，避免下一局沿用本局的读数
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
-        self.fail_match_count=0
-        self.node_count=0
-        self.chaoyan_seen = False  # 新轮回重置「超验之镜」已进过标记
-        self.now_area=[]
+
+    def stop_round_recording(self):
+        """按击杀数决定本轮录像是否删除，并把本局数据写进保留视频的文件名"""
+        # 增加演算时间过长保留录制配置
+        minutes = self.elapsed_time / 60
+        if self.kill_count == 0:
+            minutes_divide_kill = 0
+        else:
+            minutes_divide_kill = minutes/self.kill_count
+        # 演算时间过长保留录制仅服务于调试
+        recording_keep_long_run_threshold = self.opt.get("recording_keep_long_run_threshold", 1.2)
+        del_time = (
+            self.del_record_time
+            and self.del_record_time>self.kill_count
+        )
+        keep_long_run = (
+            self.debug
+            and self.opt.get("recording_keep_long_run", False)
+            and minutes_divide_kill >= recording_keep_long_run_threshold # 演算时间过长录制保留阈值（分钟数÷战斗数）
+        )
+        abnormal_first_plane_weight = (
+            self.debug
+            and self.opt.get("record_abnormal_first_plane_weight", False)
+            and self.first_plane_weight <= 0 # 开局期望值异常（≤0）时保留录制
+        )
+        need_del = del_time and not keep_long_run and not abnormal_first_plane_weight
+        if self.first_plane_weight >= 0:
+            CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight:.2f}")
+        else:
+            CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight}")
+        self.recorder.stop_recording(need_del, battle_count=self.kill_count, elapsed_time=self.elapsed_time, first_plane_weight=self.first_plane_weight)
 
     def end_of_university(self):
-        SimulatedUniverse.end_of_university(self)
+        # 本局的开始时间与用时必须在父类之前取：父类会把 run_start_time 重置为下一局的开始时间
         self.elapsed_time = int(time.time() - self.run_start_time)
+        start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
+        if self.plane_floor==3:
+            self.kill_count+=1
+        super().end_of_university()
         record_file = os.path.join(PATHS["backup"], "kill_record.txt")
         try:
-            if self.plane_floor==3:
-                self.kill_count+=1
             os.makedirs(PATHS["backup"], exist_ok=True)
-            start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
             total_min = self.elapsed_time // 60
             total_sec = self.elapsed_time % 60
             # 「开局期望」一律写入：确认识别到写真实值（0 也是真读数），识别失败或本局没做识别写负数原因码
@@ -108,9 +103,6 @@ class IronBloodUniverse(AnyFateUniverse):
                 file.write(line + "\n")
         except Exception as e:
             CUS_LOGGER.error(f"写入击杀记录文件失败{e}")
-        self.run_start_time = time.time()  # 开始下一局计时
-        self.need_end=False
-        self.init_map()
         if self.kill_count>=40:
             if self.count>10000:
                 CUS_LOGGER.info("寰宇或为您的意志撼动，但「毁灭」的道路，注定无法手捧鲜花……")
@@ -120,8 +112,6 @@ class IronBloodUniverse(AnyFateUniverse):
                 CUS_LOGGER.info("无所谓，旅途本就会改变一个人。")
             self.stop()
             CUS_LOGGER.info("恭喜，您获得了铁血战士！")
-        else:
-            CUS_LOGGER.info(f'{factor}再度踏上轮回……')
 
     def update_count(self, read=True):
         """

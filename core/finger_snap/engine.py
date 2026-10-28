@@ -23,7 +23,7 @@ from tool.countdown_evaluator import (
     format_action,
     parse_effect_text,
 )
-from tool.GLOBAL import factor, key_mouse_manager
+from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
 from core.simulated.config import config
@@ -75,13 +75,7 @@ class FingerSnap(AnyFateUniverse):
         with open(event_finger_snap, encoding="utf-8", errors="ignore") as f:
             self.event_prior = json.load(f)["event"]
     def restart_recording(self):
-        if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
-            need_del=(self.del_record_time and self.del_record_time>self.countdown) and not self.ruanmei2
-            CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}，本轮阮梅其二{self.ruanmei2}")
-            self.recorder.stop_recording(need_del)
-            time.sleep(0.8)
-            self.recorder.start_recording(self.count + 1)
-            self.update_state("re_start")
+        super().restart_recording()
         self.countdown = 15
         self.countdown_agent.reset()
         self._cheat_count = self._reroll_count = 0
@@ -91,11 +85,13 @@ class FingerSnap(AnyFateUniverse):
         self._cheat_requested_effect = None
         self._cheat_requested_at = 0.0
         self._target_decided = False
-        self.fail_match_count=0
-        self.node_count = 0
-        self._ruanmei_er2_seen = False
-        self.now_area=[]
         self.cheat_target = None  # 新轮回清掉上一轮留下的作弊目标
+
+    def stop_round_recording(self):
+        """按倒计时决定本轮录像是否删除"""
+        need_del=(self.del_record_time and self.del_record_time>self.countdown) and not self.ruanmei2
+        CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}，本轮是否遇到阮梅其二{self.ruanmei2}")
+        self.recorder.stop_recording(need_del)
     def select_fate(self):
         self.click_text(text="丰饶", box=[824, 877, 784, 814])
     def update_count(self, read=True):
@@ -134,28 +130,13 @@ class FingerSnap(AnyFateUniverse):
             except Exception as e:
                 CUS_LOGGER.error(f"写入弹指计数失败 {e}")
     def end_of_university(self):
-        self.update_count(False)
-        self.my_cnt += 1
-        tm = int((time.time() - self.init_time) / 60)
-        remain_round = self.nums - self.my_cnt
-        if remain_round > 0:
-            remain = int(remain_round * (time.time() - self.init_time) / self.my_cnt / 60)
-        else:
-            remain = 0
-            remain_round = "∞"
-            CUS_LOGGER.info(f'当仁不让。{factor}将肩负世界，直至此身焚灭。')
-        CUS_LOGGER.info(
-            f"世界演算模拟完成！本轮已迭代次数：{self.my_cnt},总计已迭代次数:{self.count} 剩余:{remain_round}次, 已执行：{tm // 60}小时{tm % 60}分钟  平均{tm // self.my_cnt}分钟一次" + (
-                f"预计剩余{remain // 60}小时{remain % 60}分钟" if remain != 0 else ""))
-        if self.check_bonus == 0 and self.my_cnt >= self.nums > 0:
-            self.end = 1
-        self.update_floor(1)
-        self.update_state("end")
+        # 本局的开始时间与用时必须在父类之前取：父类会把 run_start_time 重置为下一局的开始时间
         elapsed = int(time.time() - self.run_start_time)
+        start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
+        super().end_of_university()
         record_file = os.path.join(PATHS["backup"], "countdown.txt")
         try:
             os.makedirs(PATHS["backup"], exist_ok=True)
-            start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
             total_min = elapsed // 60
             total_sec = elapsed % 60
             line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒,倒计时:{self.countdown:02d}"
@@ -163,9 +144,6 @@ class FingerSnap(AnyFateUniverse):
                 file.write(line + "\n")
         except Exception as e:
             CUS_LOGGER.error(f"写入倒计时记录文件失败{e}")
-        self.run_start_time = time.time()  # 开始下一局计时
-        self.need_end=False
-        self.init_map()
         if self.countdown>=80:
             if self.count>10000:
                 CUS_LOGGER.info("跨越此世的所有恨与爱，为故事写下新的篇章吧♪")
@@ -175,8 +153,6 @@ class FingerSnap(AnyFateUniverse):
                 CUS_LOGGER.info("迷迷，等待。开拓，世界！")
             self.stop()
             CUS_LOGGER.info("恭喜，您获得了弹指一挥！")
-        else:
-            CUS_LOGGER.info(f'{factor}再度踏上轮回……')
 
     def select_doing(self):
         text = self.ts.find_with_box(box=[557, 747, 447, 474], forward=True, re_screen=False)

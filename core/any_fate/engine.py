@@ -133,16 +133,13 @@ class AnyFateUniverse(SimulatedUniverse):
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
     def restart_recording(self):
-        if self.record and self.cut_video and self.YKItDYvq3FpnOYx:
-            self.recorder.stop_recording()
-            time.sleep(0.8)
-            self.recorder.start_recording(self.count + 1)
-            self.update_state("re_start")
+        super().restart_recording()
         self.fail_match_count=0
         self.node_count=0
-        self.chaoyan_seen = False  # 新轮回重置「超验之镜」已进过标记
         self.now_area=[]
-        self.cheat_target = None  # 新轮回清掉上一轮留下的作弊目标
+        # 「超验之镜」标记由 select_event 写入、各模式建图都按它给战斗降权，漏清会让之后每一轮都在用错的权重
+        self.chaoyan_seen = False
+        self.ruanmei2 = False
 
     def end_of_university(self):
         super().end_of_university()

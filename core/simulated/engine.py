@@ -210,14 +210,24 @@ class SimulatedUniverse(UniverseUtils):
         self.lbrqdqvxztk()
 
     def restart_recording(self):
+        """
+        切分录像，为下一局重新开始录制
+
+        本局的记账与记录写入由调用方在它之前完成，因此子类可以在这里安全地复位本局计数。
+        """
         #是否把视频每轮裁剪一次
         if self.record and self.cut_video and self.bveerelbcpgyqan and self.YKItDYvq3FpnOYx:
-            self.recorder.stop_recording()
+            self.stop_round_recording()
             time.sleep(0.8)
             self.recorder.start_recording(self.count + 1)
             self.update_state("re_start")
+
+    def stop_round_recording(self):
+        """停止本轮录像，默认整段保留；需按局裁剪的模块覆盖此方法并用 need_del 决定是否删除"""
+        self.recorder.stop_recording()
+
     def setting_exit(self):
-        if self.state != "end" and self.state!="exit":
+        if self.state != "end" and self.state != "exit":
             key_mouse_manager.click(1359, 811)
             key_mouse_manager.wait()
     def map_data_load(self):

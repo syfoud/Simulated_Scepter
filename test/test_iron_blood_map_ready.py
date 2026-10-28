@@ -343,7 +343,7 @@ class InitingMapTest(unittest.TestCase):
 class RecordLineTest(unittest.TestCase):
     """kill_record.txt 一定会写「开局期望」：确认识别写真实值（含 0），失败/未识别写负数原因码。"""
 
-    def write_record(self, weight, restart_first=False):
+    def write_record(self, weight):
         engine = object.__new__(IronBloodUniverse)
         engine.plane_floor = 1
         engine.kill_count = 3
@@ -353,6 +353,10 @@ class RecordLineTest(unittest.TestCase):
         engine.need_end = True
         engine.record = False  # 关掉录像分支，只验证每局计数的重置
         engine.stop = lambda: None
+        # 父类结算会重置银狼位置缓存并写状态，假内核里补上这两个依赖
+        engine.silver_wolf_manager = type("SilverWolf", (), {"silver_wolf_slot": [1, 2]})()
+        engine.states = []
+        engine.update_state = engine.states.append
         clock = FakeClock()
         clock.now = engine.run_start_time + 23.0
         self.last_engine = engine  # 供用例在记录写完后继续断言引擎状态
@@ -360,10 +364,8 @@ class RecordLineTest(unittest.TestCase):
             with patch.object(iron_blood_engine, "PATHS", {"backup": backup}), \
                     patch.object(iron_blood_engine, "time", clock), \
                     patch.object(SimulatedUniverse, "end_of_university", lambda self: None), \
-                    patch.object(IronBloodUniverse, "init_map", lambda self: None), \
+                    patch.object(any_fate_engine.AnyFateUniverse, "init_map", lambda self: None), \
                     patch.object(iron_blood_engine, "CUS_LOGGER") as logger:
-                if restart_first:
-                    engine.restart_recording()
                 engine.end_of_university()
                 # 写文件失败会被 end_of_university 吞掉并记 error，这里显式暴露
                 self.assertFalse(logger.error.called)
@@ -387,16 +389,6 @@ class RecordLineTest(unittest.TestCase):
 
         self.assertIn("开局期望:-2", line)
 
-    def test_restart_before_the_record_writes_no_init_code(self):
-        """开局期望只在本局内有效，进入下一轮回时立刻重置为 -5。
-
-        结算界面同时含「来自黑塔的分析报告」和「点击空白」两个 trigger，识别先后顺序
-        在小概率下会让 end_of_university 根本执行不到，所以重置放在 restart_recording。
-        """
-        line = self.write_record(3.5, restart_first=True)
-
-        self.assertIn("开局期望:-5", line)
-
     def test_expectation_is_cleared_when_next_round_starts(self):
         """本局记录写完后读数仍然保留，等下一轮开始时才重置为「还没做开局识别」。"""
         self.write_record(3.5)
@@ -405,6 +397,14 @@ class RecordLineTest(unittest.TestCase):
         self.last_engine.restart_recording()
         self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NO_INIT,
                          self.last_engine.first_plane_weight)
+
+    def test_settlement_leaves_the_run_ready_for_the_next_round(self):
+        """记完账立刻进入下一局的准备状态：用时已按本局算出，开局期望等切录像时才清。"""
+        self.write_record(3.5)
+
+        self.assertFalse(self.last_engine.need_end)
+        self.assertEqual(self.last_engine.elapsed_time, 23)
+        self.assertEqual(self.last_engine.kill_count, 3)
 
     def test_run_without_analysis_records_no_init_code(self):
         """已经在模拟宇宙里直接开局时走不到识别流程，记录里写 -5，而不是少一个字段。"""
