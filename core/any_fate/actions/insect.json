@@ -343,6 +343,7 @@
         "trigger":{
             "text": "获得祝福",
             "box": [808, 1114, 159, 266],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -357,6 +358,7 @@
         "trigger":{
             "text": "获得奇物",
             "box": [808, 1114, 159, 266],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -371,6 +373,7 @@
         "trigger":{
             "text": "获得物品",
             "box": [910, 1011, 159, 241],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -385,6 +388,7 @@
         "trigger":{
             "text": "失去祝福",
             "box": [816, 1103, 50, 146],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -399,6 +403,7 @@
         "trigger":{
             "text": "失去奇物",
             "box": [816, 1103, 50, 146],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -427,6 +432,7 @@
         "trigger":{
             "text": "位面",
             "box": [905, 1015, 680, 725],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -441,6 +447,7 @@
         "trigger":{
             "text": "初始效果",
             "box": [800, 1100, 494, 548],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -455,6 +462,7 @@
         "trigger":{
             "text": "挑战",
             "box": [770, 935, 395, 437],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -469,6 +477,7 @@
         "trigger":{
             "text": "挑战结束",
             "box": [833, 1090, 321, 387],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
@@ -483,6 +492,7 @@
         "trigger":{
             "text": "位面",
             "box": [864, 1045, 462, 509],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
