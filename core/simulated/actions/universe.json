@@ -350,44 +350,91 @@
         ]
     },
     {
-        "name": "点击空白祝福",
+        "name": "获得祝福",
         "trigger":{
-            "text": "点击空白",
-            "box": [872, 1044, 984, 1015],
+            "text": "获得祝福",
+            "box": [808, 1114, 159, 266],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
         [
             {
-                "position": [900, 1000]
+                "position": [1456, 875]
             }
         ]
     },
     {
-        "name": "点击空白碎片",
+        "name": "获得奇物",
         "trigger":{
-            "text": "点击空白",
-            "box": [873, 1044, 764, 791],
+            "text": "获得奇物",
+            "box": [808, 1114, 159, 266],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
         [
             {
-                "position": [900, 1000]
+                "position": [1456, 875]
             }
         ]
     },
     {
-        "name": "点击空白奇物",
+        "name": "获得物品",
         "trigger":{
-            "text": "点击空白",
-            "box": [873, 1047, 878, 909],
+            "text": "获得物品",
+            "box": [910, 1011, 159, 241],
+            "interval": 0.8,
             "redundancy": 30
         },
         "actions":
         [
             {
-                "position": [900, 1000]
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "失去祝福",
+        "trigger":{
+            "text": "失去祝福",
+            "box": [816, 1103, 50, 146],
+            "interval": 0.8,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "失去奇物",
+        "trigger":{
+            "text": "失去奇物",
+            "box": [816, 1103, 50, 146],
+            "interval": 0.8,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
+        "name": "失去物品",
+        "trigger":{
+            "text": "失去物品",
+            "box": [816, 1103, 50, 146],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
             }
         ]
     },
