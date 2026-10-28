@@ -19,8 +19,6 @@ import win32com.client
 import win32con
 import win32gui
 import win32print
-from PIL import Image, ImageDraw, ImageFont
-
 from tool.public_ocr import merge_text
 from route import PATHS
 from core.common.engine import StateKernel
@@ -266,20 +264,6 @@ class UniverseUtils(StateKernel):
         # scx scy:当前窗口和基准窗口（1920*1080）缩放大小比例
         time.sleep(1)
         return 1
-    def gen_hotkey_img(self,hotkey="e",bg=PATHS["image"]+"/f_bg.jpg"):
-        img=find_image_in_folder('key/', hotkey)
-        if img is None:
-            hotkey = hotkey.upper()
-            img = Image.open(bg)
-            font = ImageFont.truetype(PATHS["font"]+"/base.ttf", 24)
-            d = ImageDraw.Draw(img)
-            position = (2,-3)
-            color = (152, 214, 241)
-            d.text(position, hotkey, font=font, fill=color)
-            img = np.array(img)
-            cv.imwrite(PATHS["image"]+"/key/"+hotkey.lower()+".jpg", img)
-        return img
-
 
     # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
     def wait_flag(self, f, timeout=3.0):
@@ -634,11 +618,11 @@ class UniverseUtils(StateKernel):
         """
         CUS_LOGGER.info("请求：「开启再创世，去迎接翁法罗斯崭新的黎明。」")
         t_start=time.time()
-        img = self.get_small_interaction_img(MASK["f_text_3"])
+        img = self.get_small_interaction_img(MASK["interact_text_3"])
         text = self.ts.similar_list(self.tk.interacts, img)
         if text is None:
             # 使用新坐标重新尝试
-            img = self.get_small_interaction_img(MASK["f_text"])
+            img = self.get_small_interaction_img(MASK["interact_text"])
             text = self.ts.similar_list(self.tk.interacts, img)
         is_killed = text in ["沉浸", "紧锁", "复活", "下载"]
         if text is not None:
@@ -926,7 +910,7 @@ class UniverseUtils(StateKernel):
         if must_be is None and (self.ts.similar("区域") or self.ts.similar("觐见")):
             must_be='tp'
         while not ava and time.time()-tm<1.8:
-            if not self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True):
+            if not self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
                 if not self.is_run():
                     CUS_LOGGER.info("仿佛连深不见底的最初混沌，也能够烧却。")
                     ava = True
@@ -937,11 +921,11 @@ class UniverseUtils(StateKernel):
                 if not self.is_run():
                     CUS_LOGGER.info("…我以为，那就是世间最极致的力量，再无其他。")
                     ava=True
-                elif (not self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True)) and must_be == 'tp':
+                elif (not self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True)) and must_be == 'tp':
                     CUS_LOGGER.info("或许只要短短万年的时光——它便会被烧成哀毁骨立的焦炭盗火行者了吧。")
                     ava=True
             else:
-                if not self.check("f", mask=MASK["f_key"], threshold=0.96, fresh=True):
+                if not self.check("interact", mask=MASK["interact_icon"], threshold=0.96, fresh=True):
                     ava=True
 
         if ava:
@@ -1225,7 +1209,7 @@ class UniverseUtils(StateKernel):
             if not self.get_loc():
                 CUS_LOGGER.info("结束寻路后后不在大地图界面，返回")
                 return
-            if self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True):
+            if self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
                 if self.target_type != 3 and self.good_f()[0] and not self.ts.similar("黑塔"):
                     self.set_path_state("位于交互点，移除交互点")
                     for j in deepcopy(self.target):
@@ -1276,7 +1260,7 @@ class UniverseUtils(StateKernel):
                     if not self.is_run():
                         CUS_LOGGER.info("找终点时不在大地图，返回")
                         return
-                    if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                    if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         CUS_LOGGER.info("大图识别到类型三传送点")
                         key_mouse_manager.press('f',force= True)
                         key_mouse_manager.wait()
@@ -1395,7 +1379,7 @@ class UniverseUtils(StateKernel):
     #0.2~0.25s
     def is_run(self,check=True):
         if check:
-            if not self.check("big_world", 0.0245, 0.5185, threshold=0.98, fresh=True):
+            if not self.check("big_world", 0.0620, 0.1287, threshold=0.98, fresh=True):
                 self.update_state("no_run")
                 return False
         # loc_scr = get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True)
@@ -1461,7 +1445,7 @@ class UniverseUtils(StateKernel):
             key_mouse_manager.keyDown('w')
             nt = time.time()
             while time.time()-nt<1.3:
-                if self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True):
+                if self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
                     key_mouse_manager.press('f',force= True)
                     key_mouse_manager.keyUp('w')
                     break
@@ -1535,7 +1519,7 @@ class UniverseUtils(StateKernel):
             key_mouse_manager.keyUp("w")
             key_mouse_manager.wait()
             self.get_screen()
-            have_f=self.check("f", mask=MASK["f_key"], threshold=0.96)
+            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("未检测到f交互")
                 key_mouse_manager.keyDown("w")
@@ -1594,16 +1578,16 @@ class UniverseUtils(StateKernel):
                 self.stop_move=1
                 if self.mini_state==1 and self.floor in [4, 8, 13] and not (self.quan or self.bai_e):
                     key_mouse_manager.keyUp("w")
-                    if not self.check("ruan",0.0625,0.7065,threshold=0.95) and not self.check("U", 0.0240,0.7759):
-                        for i in range([4, 8, 13].index(self.floor)+2):
-                            key_mouse_manager.press(str(i+1))
-                            key_mouse_manager.wait()
-                            self.use_e()
-                            self.get_screen()
-                            if not self.check("z", mask=MASK["monster_info"],threshold=0.95):
-                                break
-                            if self._stop:
-                                break
+                    # 打首领层前先把队伍里的秘技依次放一遍，给全队挂增益
+                    for i in range([4, 8, 13].index(self.floor)+2):
+                        key_mouse_manager.press(str(i+1))
+                        key_mouse_manager.wait()
+                        self.use_e()
+                        self.get_screen()
+                        if not self.check("z", mask=MASK["monster_info"],threshold=0.95):
+                            break
+                        if self._stop:
+                            break
                     key_mouse_manager.keyDown("w")
                     key_mouse_manager.wait()
                 iters = 0
@@ -1725,12 +1709,12 @@ class UniverseUtils(StateKernel):
                 self.get_screen()
                 if self.target_type==1:
                     CUS_LOGGER.info("必须找到交互点，尝试寻找")
-                    if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                    if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         key_mouse_manager.press('f',force= True)
                         if self.nof(must_be='event'):
                             self.should_update_map = False
                             return
-                elif self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True):
+                elif self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
                     key_mouse_manager.keyUp(i)
                     key_mouse_manager.wait()
                     if self.good_f()[0] and not (self.ts.similar("黑塔") and time.time() - self.quit < 30):
@@ -1792,7 +1776,7 @@ class UniverseUtils(StateKernel):
         else:
             self.has_target=True
             self.target_type = 1
-        if not self.check("f", mask=MASK["f_key"], threshold=0.96):
+        if not self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
             key_mouse_manager.keyDown("w")
         run_wait_time = 2
         self.first_mini = 0
@@ -1815,7 +1799,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.keyUp("w")
                 key_mouse_manager.wait()
             self.get_screen()
-            have_f=self.check("f", mask=MASK["f_key"], threshold=0.96)
+            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("「但倘若黎明从一开始就不存在……」")
                 key_mouse_manager.keyDown("w")
@@ -1873,7 +1857,7 @@ class UniverseUtils(StateKernel):
                 self.get_screen()
                 if self.target_type==1:
                     CUS_LOGGER.info("沿着他们的足迹……写下前所未有的结局。")
-                    if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                    if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         key_mouse_manager.press('f',force= True)
                         if self.nof(must_be='event'):
                             self.should_update_map = False
@@ -1891,7 +1875,7 @@ class UniverseUtils(StateKernel):
                     i="w"
                 elif self.move_direct_to_text():
                     i="w"
-                if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                     key_mouse_manager.press('f',force= True)
                     if self.nof(must_be='event'):
                         self.should_update_map = False
@@ -1971,7 +1955,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.keyUp("w")
                 key_mouse_manager.wait()
             self.get_screen()
-            have_f=self.check("f", mask=MASK["f_key"], threshold=0.96)
+            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("醒醒…迷途者啊……看清那黑暗中的火光…并非……")
                 key_mouse_manager.keyDown("w")
@@ -2120,7 +2104,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.keyUp("w")
                 key_mouse_manager.wait()
             self.get_screen()
-            have_f=self.check("f", mask=MASK["f_key"], threshold=0.96)
+            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("响应：「一个孑然一身的人。」")
                 key_mouse_manager.keyDown("w")
@@ -2240,7 +2224,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.keyUp("w")
                 key_mouse_manager.wait()
             self.get_screen()
-            have_f=self.check("f", mask=MASK["f_key"], threshold=0.96)
+            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("听好，自往日而来的救世主——请回头吧——勿要惊扰它们，那众多鲜花的如泥死亡。")
                 key_mouse_manager.keyDown("w")
@@ -2395,7 +2379,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.keyUp("w")
                 key_mouse_manager.wait()
             self.get_screen()
-            have_f=self.check("f", mask=MASK["f_key"], threshold=0.96)
+            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info(f"{factor}的悲伤从未消逝。恰恰相反，火种加诸此身，他心中的火焰前所未有地暴烈……")
                 key_mouse_manager.keyDown("w")
@@ -2531,7 +2515,7 @@ class UniverseUtils(StateKernel):
                     self.should_update_map = False
                     return
                 self.get_screen()
-                if self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True):
+                if self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
                     key_mouse_manager.keyUp(i)
                     key_mouse_manager.wait()
                     key_mouse_manager.press('f')
@@ -2545,7 +2529,7 @@ class UniverseUtils(StateKernel):
                         key_mouse_manager.wait()
                 elif self.move_direct_to_text():
                     i="w"
-                elif self.check("f", mask=MASK["f_key"], threshold=0.96,fresh=True):
+                elif self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
                     key_mouse_manager.keyUp(i)
                     key_mouse_manager.wait()
                     key_mouse_manager.press('f')
@@ -2800,7 +2784,7 @@ class UniverseUtils(StateKernel):
             self.last_interact_time = time.time()
             self.target.discard((self.target_loc, 1))
             return
-        if self.check("f", mask=MASK["f_key"], threshold=0.96, fresh=True):
+        if self.check("interact", mask=MASK["interact_icon"], threshold=0.96, fresh=True):
             if self.target_type != 3 and self.good_f()[0] and not self.ts.similar("黑塔"):
                 CUS_LOGGER.info(f"{factor}…别无选择。")
                 for j in deepcopy(self.target):
@@ -2860,7 +2844,7 @@ class UniverseUtils(StateKernel):
                 if not self.is_run():
                     CUS_LOGGER.info("沿着我们的足迹……写下前所未有的结局。")
                     return
-                if self.check("f", mask=MASK["f_key"], threshold=0.96):
+                if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                     CUS_LOGGER.info("那一定是个不同以往的浪漫故事。")
                     key_mouse_manager.press('f', force=True)
                     key_mouse_manager.wait()

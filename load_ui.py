@@ -376,7 +376,6 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
     def font_set(self) -> None:
         """
         加载字体文件并设置应用程序默认字体
-        通过文件名精确匹配排除base.ttf
         """
         font_dir = PATHS["font"]
         font_database = QFontDatabase()
@@ -385,8 +384,6 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         if os.path.exists(font_dir):
             font_files = os.listdir(font_dir)
             for font_file in font_files:
-                if font_file == "base.ttf":
-                    continue
                 if font_file.endswith(".ttf") or font_file.endswith(".otf"):
                     font_path = os.path.join(font_dir, font_file)
                     font_id = font_database.addApplicationFont(font_path)

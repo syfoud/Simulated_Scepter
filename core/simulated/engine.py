@@ -446,12 +446,12 @@ class SimulatedUniverse(UniverseUtils):
     def do_interaction(self):
         # is_killed：是否是禁用的交互（沉浸奖励、复活装置、下载装置）
         is_killed = False
-        if self.check("f", mask=MASK["f_key"], threshold=0.96, fresh=True):
+        if self.check("interact", mask=MASK["interact_icon"], threshold=0.96, fresh=True):
             for _ in range(4):
-                img = self.get_small_interaction_img(MASK["f_text"])
+                img = self.get_small_interaction_img(MASK["interact_text"])
                 text = self.ts.similar_list(self.tk.interacts, img)
                 if text is None:
-                    img = self.get_small_interaction_img(MASK["f_text_2"])
+                    img = self.get_small_interaction_img(MASK["interact_text_2"])
                     text = self.ts.similar_list(self.tk.interacts, img)
                 if text is not None:
                     break
