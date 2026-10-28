@@ -2,13 +2,14 @@
 结算界面（来自黑塔的分析报告）的接线测试。
 
 背景：结算界面里标题与下方的「点击空白处继续」同时存在，动画里标题比「点击空白处继续」
-早出现约一到两帧（录屏实测），两者都渲染完成之后整屏 OCR 能稳定认出标题。因此结算只由
-「结算界面」这一个事件负责：认出标题就一次做完结算、点掉界面、切分录像；没认出来就不点，
-界面留在屏幕上，下一轮重新识别，比让别的「点击空白」事件把界面点掉更安全。
+早出现约一到两帧（录屏实测），而界面接受点击还要再晚约 0.3~0.5 秒，所以首次识别到标题时的
+那一次点击有概率不生效。因此结算只由「结算界面」这一个事件负责、整段结算交给内核的
+settle_university 一个动作：认不出标题就不点，界面留在屏幕上，下一轮重新识别；点不掉界面时
+下一轮再命中只会补一次点击，不会重复记账（见 test_settle_university.py 对闸门的测试）。
 
-这里锁定 insect.json 的接线：结算界面识别的文字与识别框、结算动作与点击落点、不再有
+这里锁定 insect.json 的接线：结算界面识别的文字与识别框、结算只用一个内核动作、不再有
 独立的「点击空白结算」和兜底的「点击空白」事件（避免漏检时有另一条点击路径把界面点掉）、
-以及脚本动作都能在内核上找到同名方法。
+「结束并结算」连点结算按钮与确认框、以及脚本动作都能在内核上找到同名方法。
 """
 
 import json
@@ -28,8 +29,8 @@ INSECT_JSON = ROOT / "core" / "any_fate" / "actions" / "insect.json"
 REPORT_TITLE = "来自黑塔的分析报告"
 # 结算界面标题的识别框（与 insect.json「结算界面」同值：改实现时这里要跟着改）
 TITLE_BOX = [716, 1013, 217, 252]
-# 结算界面上的点击落点（与 insect.json「结算界面」同值）
-SETTLE_CLICK = [900, 1000]
+# 「结束并结算」后连点的两处：结算按钮、随后弹出的确认框
+CONFIRM_CLICKS = [{"position": [1393, 948]}, {"position": [1147, 676]}]
 
 
 def load_insect():
@@ -43,16 +44,13 @@ def event_index(events, name):
 class SettlementJsonTest(unittest.TestCase):
     """锁定 insect.json 里结算相关的接线，脚本里删事件、改动作顺序都会在这里报错。"""
 
-    def test_settlement_event_settles_clicks_and_restarts_in_one_iteration(self):
-        """「结算界面」一次做完结算、点掉界面、切分录像，不再依赖下一轮的「点击空白结算」。"""
+    def test_settlement_event_settles_through_one_kernel_action(self):
+        """「结算界面」一次做完记账、点掉界面、切分录像，不再依赖下一轮的「点击空白结算」。"""
         events = load_insect()
 
         event = events[event_index(events, "结算界面")]
 
-        self.assertEqual(
-            event["actions"],
-            ["end_of_university", {"position": SETTLE_CLICK}, "restart_recording"],
-        )
+        self.assertEqual(event["actions"], ["settle_university"])
 
     def test_settlement_event_matches_the_report_title(self):
         """结算界面靠标题文字识别，识别文字与识别框必须与实测画面一致。"""
@@ -62,6 +60,15 @@ class SettlementJsonTest(unittest.TestCase):
 
         self.assertEqual(trigger["text"], REPORT_TITLE)
         self.assertEqual(trigger["box"], TITLE_BOX)
+
+    def test_settings_screen_clicks_button_and_confirmation(self):
+        """「结束并结算」要连点结算按钮与确认框，只点第一处会停在确认框上。"""
+        events = load_insect()
+
+        event = events[event_index(events, "设置界面进行结算")]
+
+        self.assertEqual(event["actions"], CONFIRM_CLICKS)
+        self.assertEqual(event["trigger"]["condition"], "exit")
 
     def test_the_separate_settlement_blank_event_is_gone(self):
         """「点击空白结算」已删除：结算界面的点击由「结算界面」自己完成，避免漏检时两套点击并存。"""

@@ -67,7 +67,7 @@ class ParameterFields(QWidget):
         self.table.setMinimumHeight(80)
         self.table.setHorizontalHeaderLabels(["参数名称", "参数值（JSON）"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.setToolTip('文字需加双引号，例如 "end"；坐标例如 [960, 540]；开关用 true / false。')
+        self.table.setToolTip('文字需加双引号，例如 "exit"；坐标例如 [960, 540]；开关用 true / false。')
         layout.addWidget(self.table)
         toolbar = QHBoxLayout()
         self.key_combo = QComboBox(self)

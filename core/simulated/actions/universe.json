@@ -1,5 +1,17 @@
 [
     {
+        "name": "结算界面",
+        "trigger":{
+            "text": "来自黑塔的分析报告",
+            "box": [716, 1013, 217, 252],
+            "redundancy": 30
+        },
+        "actions":
+        [
+            "settle_university"
+        ]
+    },
+    {
         "name": "模拟宇宙外",
         "trigger":{
             "text": "模拟宇宙",
@@ -298,6 +310,7 @@
         "trigger":{
             "text": "结束并结算",
             "box": [1321, 1465, 931, 964],
+            "interval": 1,
             "redundancy": 30,
             "condition": "exit"
         },
@@ -305,8 +318,7 @@
         [
             {
                 "position": [1393, 948]
-            },
-            "end_of_university"
+            }
         ]
     },
     {
@@ -331,22 +343,6 @@
         "actions":
         [
             "auto_battle"
-        ]
-    },
-    {
-        "name": "点击空白结算",
-        "trigger":{
-            "text": "点击空白",
-            "box": [873, 1047, 878, 909],
-            "redundancy": 30,
-            "condition": "end"
-        },
-        "actions":
-        [
-            {
-                "position": [900, 1000]
-            },
-            "restart_recording"
         ]
     },
     {
