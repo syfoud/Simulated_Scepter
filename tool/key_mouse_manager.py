@@ -8,30 +8,13 @@ import win32con
 
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
-from tool.utils.game_window import BASE_HEIGHT, BASE_WIDTH
 
 # 程序目前仅支持 1920x1080 这一种游戏分辨率；
 # 云游戏窗口因浏览器边框允许 8px 误差，内部分辨率同样是 1920x1080；
 # 代码里写死的坐标、日志里打印的坐标统一用像素坐标：
 # 原点在客户区左上角，x 向右、y 向下。
-# BASE_WIDTH/BASE_HEIGHT 与 game_window.py 的分辨率契约同源，不在这里另写一份。
-
-
-def ratio_to_point(x, y):
-    """浮点数镜像坐标 -> 1920x1080 像素坐标（左上角原点）。
-
-    镜像坐标以右下角为原点：x=y=0 落在客户区右下角，x=y=1 落在左上角。
-    用右下角当原点是因为各机器标题栏高度不同，
-    窗口上边界会漂，而客户区右下角始终紧贴窗口右下角。
-
-    取整用 round 而不是 int：int 向零截断，会把往返换算压掉 1px。
-    """
-    return round((1 - x) * BASE_WIDTH), round((1 - y) * BASE_HEIGHT)
-
-
-def point_to_ratio(px, py):
-    """1920x1080 像素坐标（左上角原点）-> 浮点数镜像坐标（右下角原点）。"""
-    return 1 - px / BASE_WIDTH, 1 - py / BASE_HEIGHT
+# 客户区左上角的屏幕坐标由右、下边界减客户区尺寸反推：各机器标题栏高度不同，
+# 客户区上边界会漂，而右下角始终紧贴窗口右下角，从右下角反推才不会偏。
 
 
 # 游戏内键位配置的来源：user/gui_settings.json 的 game_keys 字段，
@@ -193,7 +176,6 @@ class KeyMouseManager:
         self.y0 = 0
         self.xx = 1
         self.yy = 1
-        self.full = False
         self.multi = 1.0
         self.scale = 1.0
         # 用于支持强制操作中断睡眠
@@ -216,16 +198,18 @@ class KeyMouseManager:
         if hasattr(config, 'scale'):
             self.scale = config.scale
 
-    def set_screen_params(self, x1, y1, xx, yy, full=False):
+    def set_screen_params(self, x1, y1, xx, yy):
         """
         设置屏幕参数，用于坐标转换
+
+        客户区左上角的屏幕坐标由右、下边界减客户区尺寸反推：
+        各机器标题栏高度不同，客户区上边界会漂，而右下角始终紧贴窗口右下角。
 
         Args:
             x1: 屏幕右边界坐标
             y1: 屏幕下边界坐标
             xx: 屏幕宽度
             yy: 屏幕高度
-            full: 是否全屏模式
         """
         self.x1 = x1
         self.y1 = y1
@@ -233,7 +217,6 @@ class KeyMouseManager:
         self.yy = yy
         self.x0 = x1-xx
         self.y0 = y1-yy
-        self.full = False
 
     def start(self):
         """
@@ -294,77 +277,31 @@ class KeyMouseManager:
                 time.sleep(0.01)
         CUS_LOGGER.info("键鼠管理器线程已停止")
 
-    def _convert_coordinates(self, x, y):
-        """
-        转换坐标格式
-
-        Args:
-            x: x坐标（可能是浮点数比例，也可能是游戏实际坐标）
-            y: y坐标（可能是浮点数比例，也可能是有游戏实际坐标）
-
-        Returns:
-            (actual_x, actual_y): 实际的屏幕坐标
-        """
-        # 浮点数是镜像比例坐标（原点在客户区右下角），先翻转再按客户区尺寸换算。
-        # 取整用 round：int 的向零截断会让 point_to_ratio -> 屏幕坐标的往返偏移 1px。
-        if isinstance(x, float):
-            actual_x, actual_y = self.x1 - round(x * self.xx), self.y1 - round(y * self.yy)
-        else:
-            actual_x, actual_y = self.x1-self.xx+x, self.y1-self.yy+y
-        # 全屏模式会有一个偏移
-        if self.full:
-            actual_x += 9
-            actual_y += 9
-
-        return actual_x, actual_y
-
-    def _display_point(self, x, y):
-        """把请求坐标换成 1920x1080 像素坐标，仅用于日志展示。
-
-        内部传输仍用浮点镜像坐标（换算时直接对应底层鼠标事件）。
-        """
-        if isinstance(x, float):
-            return ratio_to_point(x, y)
-        return x, y
-
-    def _display_operation(self, operation):
-        """生成日志用副本：把操作字典里的坐标字段换成 1920x1080 像素坐标。"""
-        shown = dict(operation)
-        if 'x' in shown and 'y' in shown:
-            shown['x'], shown['y'] = self._display_point(shown['x'], shown['y'])
-        for axis in ('start', 'end'):
-            key_x, key_y = f'{axis}_x', f'{axis}_y'
-            if key_x in shown and key_y in shown:
-                shown[key_x], shown[key_y] = self._display_point(shown[key_x], shown[key_y])
-        return shown
-
     def _game_point(self, op_type, x, y):
         """
-        换算坐标并确认落点在游戏窗口内
+        把 1920x1080 像素坐标换算成屏幕坐标，并确认落点在游戏窗口内
 
-        落点在游戏窗口之外时（例如归一化 y 变成负数会换算到窗口下边界以下），
+        落点在游戏窗口之外时（例如像素坐标超出 1920x1080 会换算到窗口外），
         照常移动光标会把点击送给别的窗口、抢走游戏前台，因此放弃这次操作，
         并按同一偏离只警告一次记录原因。
 
         Args:
             op_type: 操作名称，用于日志
-            x: 请求的x坐标（浮点比例或实际坐标）
-            y: 请求的y坐标（浮点比例或实际坐标）
+            x: 请求的 x 像素坐标
+            y: 请求的 y 像素坐标
 
         Returns:
             (actual_x, actual_y): 游戏窗口内的屏幕坐标；越界时返回None
         """
-        actual_x, actual_y = self._convert_coordinates(x, y)
+        actual_x, actual_y = self.x0 + x, self.y0 + y
         if self.x0 <= actual_x <= self.x1 and self.y0 <= actual_y <= self.y1:
             return actual_x, actual_y
         if self.skipped_pointer != (op_type, x, y):
             self.skipped_pointer = (op_type, x, y)
-            want_x, want_y = self._display_point(x, y)
             CUS_LOGGER.warning(
-                "%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，请求坐标(%s, %s)（1920x1080 像素坐标）"
-                "换算为屏幕坐标(%s, %s)已越界，跳过本次操作",
+                "%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，请求坐标(%s, %s)换算为屏幕坐标(%s, %s)已越界，跳过本次操作",
                 op_type, self.x0, self.y0, self.x1, self.y1,
-                want_x, want_y, actual_x, actual_y
+                x, y, actual_x, actual_y
             )
         return None
 
@@ -376,7 +313,7 @@ class KeyMouseManager:
             operation: 操作字典，包含操作类型和参数
         """
         op_type = operation['type']
-        CUS_LOGGER.debug(f"执行操作{self._display_operation(operation)}，当前队列长度{len(self.operation_queue)}")
+        CUS_LOGGER.debug(f"执行操作{operation}，当前队列长度{len(self.operation_queue)}")
         if op_type == 'keyDown':
             pyautogui.keyDown(resolve_key(operation['key']))
 
@@ -528,6 +465,21 @@ class KeyMouseManager:
             with self.queue_lock:
                 self.operation_queue.appendleft(operation)
 
+    def _enqueue(self, operation):
+        """
+        把操作放进队列
+
+        强制操作插到队首，并抢在可中断的 sleep 之前执行。
+
+        Args:
+            operation: 操作字典，需自带 force 字段
+        """
+        if operation['force']:
+            self._handle_force_operation(operation)
+        else:
+            with self.queue_lock:
+                self.operation_queue.append(operation)
+
     def wait(self):
         """
         等待操作队列及正在执行的动作全部完成，停止时提前返回。
@@ -558,11 +510,7 @@ class KeyMouseManager:
             'key': key,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)
 
     def keyUp(self, key, force=False):
         """
@@ -577,11 +525,7 @@ class KeyMouseManager:
             'key': key,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)
 
     def press(self, key, duration=0, allow_e=1, force=False):
         """
@@ -600,35 +544,7 @@ class KeyMouseManager:
             'allow_e': allow_e,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
-
-    def click(self, x, y, force=False):
-        """
-        点击指定位置（底层接口，内部按浮点数镜像比例坐标换算）
-
-        业务代码请用 click_point 传 1920x1080 像素坐标；本接口保留给内部换算和旧调用点，
-        传客户区像素坐标时走整数分支，同样按像素处理。
-
-        Args:
-            x: 屏幕x坐标（浮点数镜像比例，或客户区像素坐标）
-            y: 屏幕y坐标（浮点数镜像比例，或客户区像素坐标）
-            force: 是否为强制操作
-        """
-        operation = {
-            'type': 'click',
-            'x': x,
-            'y': y,
-            'force': force
-        }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)
 
     def turn(self, degrees, fine=1, force=False):
         """
@@ -645,83 +561,30 @@ class KeyMouseManager:
             'fine': fine,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
-
-    def scroll(self, direct=1, x=0.5, y=0.5, force=False):
-        """
-        滚动鼠标滚轮（底层接口，内部按浮点数镜像比例坐标换算）
-
-        业务代码用 scroll_point 传 1920x1080 像素坐标。
-        坐标用浮点数镜像比例，或客户区像素坐标。
-
-        Args:
-            x: 滚动位置x坐标
-            y: 滚动位置y坐标
-            direct: 滚动方向和次数，正数向上滚动，负数向下滚动
-            force: 是否为强制操作
-        """
-        operation = {
-            'type': 'scroll',
-            'x': x,
-            'y': y,
-            'direct': direct,
-            'force': force
-        }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
-
-    def drag(self, start_x, start_y, end_x, end_y, duration=0.4, force=False):
-        """
-        拖拽操作（底层接口，内部按浮点数镜像比例坐标换算）
-
-        业务代码用 drag_point 传 1920x1080 像素坐标。
-        坐标用浮点数镜像比例，或客户区像素坐标。
-
-        Args:
-            start_x: 起始点x坐标
-            start_y: 起始点y坐标
-            end_x: 结束点x坐标
-            end_y: 结束点y坐标
-            duration: 拖拽持续时间（秒）
-            force: 是否为强制操作
-        """
-        operation = {
-            'type': 'drag',
-            'start_x': start_x,
-            'start_y': start_y,
-            'end_x': end_x,
-            'end_y': end_y,
-            'duration': duration,
-            'force': force
-        }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)
 
     def click_point(self, x, y, force=False):
-        """按 1920x1080 像素坐标点击，原点在游戏客户区左上角。
+        """
+        按 1920x1080 像素坐标点击，原点在游戏客户区左上角。
 
-        调用方传入的坐标就是日志里看到的坐标，不需要再自己算镜像比例；
-        镜像换算只在 click 内部做一次，保证落点和传入的像素一一对应。
+        入队的就是像素坐标本身，换算成屏幕坐标在 _game_point 里统一做，
+        所以日志里打印的坐标和这里传的完全一致。
 
         Args:
             x: 1920x1080 坐标系下的 x 坐标，向右为正
             y: 1920x1080 坐标系下的 y 坐标，向下为正
             force: 是否为强制操作
         """
-        self.click(*point_to_ratio(x, y), force=force)
+        self._enqueue({
+            'type': 'click',
+            'x': x,
+            'y': y,
+            'force': force
+        })
 
     def scroll_point(self, x, y, direct=1, force=False):
-        """在 1920x1080 像素坐标处滚动滚轮。
+        """
+        在 1920x1080 像素坐标处滚动滚轮。
 
         Args:
             x: 1920x1080 坐标系下的 x 坐标
@@ -729,26 +592,35 @@ class KeyMouseManager:
             direct: 滚动方向和次数，正数向上滚动，负数向下滚动
             force: 是否为强制操作
         """
-        ratio_x, ratio_y = point_to_ratio(x, y)
-        self.scroll(direct=direct, x=ratio_x, y=ratio_y, force=force)
+        self._enqueue({
+            'type': 'scroll',
+            'x': x,
+            'y': y,
+            'direct': direct,
+            'force': force
+        })
 
     def drag_point(self, start_x, start_y, end_x, end_y, duration=0.4, force=False):
-        """按 1920x1080 像素坐标拖拽。
+        """
+        按 1920x1080 像素坐标拖拽。
 
         Args:
-            start_x: 起始点 x 坐标
-            start_y: 起始点 y 坐标
-            end_x: 结束点 x 坐标
-            end_y: 结束点 y 坐标
+            start_x: 起始点 x 像素坐标
+            start_y: 起始点 y 像素坐标
+            end_x: 结束点 x 像素坐标
+            end_y: 结束点 y 像素坐标
             duration: 拖拽持续时间（秒）
             force: 是否为强制操作
         """
-        ratio_start_x, ratio_start_y = point_to_ratio(start_x, start_y)
-        ratio_end_x, ratio_end_y = point_to_ratio(end_x, end_y)
-        self.drag(
-            ratio_start_x, ratio_start_y, ratio_end_x, ratio_end_y,
-            duration=duration, force=force,
-        )
+        self._enqueue({
+            'type': 'drag',
+            'start_x': start_x,
+            'start_y': start_y,
+            'end_x': end_x,
+            'end_y': end_y,
+            'duration': duration,
+            'force': force
+        })
 
     def sleep(self, duration, force=False):
         """
@@ -763,8 +635,4 @@ class KeyMouseManager:
             'duration': duration,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)

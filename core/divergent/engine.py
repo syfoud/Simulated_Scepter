@@ -62,7 +62,7 @@ class DivergentUniverse(UniverseUtils):
         # 设置并启动键鼠管理器
         key_mouse_manager.set_config(config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
 
         self.is_get_team = True #首次进入差分宇宙后,获取队伍成员
         self.team_detect = {} #队伍成员检测

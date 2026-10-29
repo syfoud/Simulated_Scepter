@@ -499,7 +499,6 @@ class CheatFlowTest(unittest.TestCase):
         engine.cheat()
         self.assertEqual(self.manager.scroll_point.call_count, 2)
         self.manager.drag_point.assert_not_called()
-        self.manager.drag.assert_not_called()
         self.assertClicked(FLESH_TITLE["box"], CONFIRM["box"])
         self.assertIsNone(engine.cheat_target)
 
@@ -517,9 +516,8 @@ class CheatFlowTest(unittest.TestCase):
         """旧的盲拖 + 盲点 (571, 622) 就是把窗点关掉的元凶：所有点击必须落在识别到的文字中心。"""
         engine = self.make_engine([[FLESH_TITLE]] * 4, dialog_open=True)
         engine.cheat()
-        # 新旧两套拖拽接口都不许出现：列表只靠滚轮滚
+        # 拖拽接口不许出现：列表只靠滚轮滚
         self.manager.drag_point.assert_not_called()
-        self.manager.drag.assert_not_called()
         self.assertClicked(FLESH_TITLE["box"], CONFIRM["box"])
 
     def test_escapes_without_confirming_when_the_target_row_is_missing(self):

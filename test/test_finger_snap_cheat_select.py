@@ -272,9 +272,8 @@ class FingerSnapCheatSelectTest(unittest.TestCase):
         self.engine = None
 
     def tearDown(self):
-        # 整张列表只能用滚轮滚，任何用例都不许出现拖拽（新旧两套接口都查）。
+        # 整张列表只能用滚轮滚，任何用例都不许出现拖拽。
         self.manager.drag_point.assert_not_called()
-        self.manager.drag.assert_not_called()
 
     # ---- 构造与断言辅助 ----
 
@@ -597,12 +596,12 @@ class FingerSnapCheatSelectTest(unittest.TestCase):
         # 目标在第一屏：一个滚轮操作都不发
         engine = self.make_engine([CIHUAI_TITLE], dialog_open=True)
         engine.cheat()
-        self.manager.drag.assert_not_called()
+        self.manager.drag_point.assert_not_called()
         self.assertEqual(engine.scrolls, [])
         # 目标不在第一屏：只往下滚，仍然不拖
         engine = self.make_engine([OTHER_TITLE], dialog_open=True)
         engine.cheat()
-        self.manager.drag.assert_not_called()
+        self.manager.drag_point.assert_not_called()
         self.assertEqual(len(engine.scrolls), 3)
 
     def test_calculated_roll_has_no_cheat_dialog_guard(self):

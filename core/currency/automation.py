@@ -142,7 +142,7 @@ class SimulatedCurrency(CurrencyUtils):
         super ().__init__ (speed)
         key_mouse_manager.set_config (config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params (self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
         # 普通位面选择、立即奖励和延迟奖励的状态
         self.investment_tracker = InvestmentSelectionTracker()
         self.run_history = CurrencyRunHistory()

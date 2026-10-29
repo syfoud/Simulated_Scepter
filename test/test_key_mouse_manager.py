@@ -1,28 +1,25 @@
 """验证键鼠操作不会把光标送到游戏窗口之外。
 
-2026-10-11 12:18 前台丢失事故中，`core/any_fate/engine.py:1096` 传入的归一化 y
-在减去 0.1139 后变成负数，换算成屏幕坐标后落到游戏窗口下边界以下，
-点击因此送给了压在下面的自动化工具窗口，游戏前台被抢走、任务卡死。
-这里用真实队列固定住这次事故的坐标，确认越界操作被跳过。
+2026-10-11 12:18 前台丢失事故：core/any_fate/engine.py:1096 传入的浮点数 y
+减去 0.1139 后变成负数，换算成屏幕坐标落在游戏窗口下边界以下 15px，
+点击送给了窗口下方的自动化工具窗口，抢走游戏前台并卡住任务。
+本测试用事故当时的像素坐标走真实队列，确认越界操作被拦下。
 """
 
 import unittest
 from unittest.mock import patch
 
-from tool.key_mouse_manager import (
-    KeyMouseManager,
-    point_to_ratio,
-    ratio_to_point,
-)
+from tool.key_mouse_manager import KeyMouseManager
 
-# 游戏窗口右下角与客户区尺寸，与 test_common_runtime.py:52 的实机参数一致
+# 与实机参数一致：客户区 1920x1080 贴在窗口右下角，窗口右下角在屏幕 (1940, 1110)
 WINDOW_RIGHT = 1940
 WINDOW_BOTTOM = 1110
 CLIENT_WIDTH = 1920
 CLIENT_HEIGHT = 1080
-# 事故当次点击的请求坐标，换算后为 (1716, 1125)，在下边界 1110 之下 15 像素
-INCIDENT_X = 0.1167
-INCIDENT_Y = -0.013900000000000023
+
+# 事故请求点：换算成屏幕坐标是 (1716, 1125)，比窗口下边界 1110 低 15px
+INCIDENT_X = 1696
+INCIDENT_Y = 1095
 
 
 class KeyMouseBoundaryTests(unittest.TestCase):
@@ -39,122 +36,101 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.manager.start()
 
     def click_at(self, x, y):
-        self.manager.click(x, y)
+        self.manager.click_point(x, y)
         self.manager.wait()
 
+    def test_pixel_click_is_offset_by_client_origin(self):
+        """像素坐标加客户区左上角的屏幕坐标即得屏幕坐标；右下角边界算窗口内。"""
+        for (x, y), expected in (((0, 0), (20, 30)), ((1920, 1080), (1940, 1110))):
+            with self.subTest(x=x, y=y):
+                self.cursor.reset_mock()
+                self.click.reset_mock()
+                self.click_at(x, y)
+                self.cursor.assert_called_once_with(expected)
+                self.click.assert_called_once_with()
+
     def test_incident_click_below_window_is_skipped(self):
-        """事故坐标越界时既不移动光标也不点击，并记录一条说明原因的警告。"""
+        """事故坐标必须被跳过：不移动光标、不点击，并记录一次越界警告。"""
         self.click_at(INCIDENT_X, INCIDENT_Y)
         self.cursor.assert_not_called()
         self.click.assert_not_called()
         self.logger.warning.assert_called_once()
-        # 警告以参数化形式给出请求坐标与换算结果，最后两项即落到下边界外的 (1716, 1125)
+        # 警告参数：操作名、窗口范围、请求像素坐标、换算后的屏幕坐标
         self.assertEqual(self.logger.warning.call_args.args[1], "点击")
         self.assertEqual(self.logger.warning.call_args.args[-2:], (1716, 1125))
 
     def test_repeated_out_of_range_click_warns_once(self):
-        """同一偏离重复发生时不反复刷屏。"""
+        """同一个越界点反复请求只警告一次，避免刷屏。"""
         for _ in range(3):
             self.click_at(INCIDENT_X, INCIDENT_Y)
         self.cursor.assert_not_called()
+        self.click.assert_not_called()
         self.logger.warning.assert_called_once()
 
     def test_click_outside_other_edges_is_skipped(self):
-        """窗口上边界、左右边界之外同样跳过。"""
-        for x, y in ((-0.05, 0.5), (1.05, 0.5), (1940, 540)):
+        """左上、右、下三个方向越界同样跳过。"""
+        for x, y in ((-5, 540), (1925, 540), (960, 1085)):
             with self.subTest(x=x, y=y):
                 self.click_at(x, y)
         self.cursor.assert_not_called()
         self.click.assert_not_called()
 
     def test_click_on_window_boundary_is_allowed(self):
-        """y=0 对应窗口下边界，仍在窗口内。"""
-        self.click_at(INCIDENT_X, 0.0)
+        """下边界正好等于窗口下边界时允许点击。"""
+        self.click_at(INCIDENT_X, CLIENT_HEIGHT)
         self.cursor.assert_called_once_with((1716, 1110))
+        self.click.assert_called_once_with()
 
-    def test_ratio_click_inside_window_still_clicks(self):
-        self.click_at(INCIDENT_X, 0.5)
-        self.cursor.assert_called_once_with((1716, 570))
-        self.click.assert_called_once()
-
-    def test_actual_click_inside_window_still_clicks(self):
+    def test_click_inside_window_still_clicks(self):
+        """窗口内的正常点击不受越界拦截影响。"""
         self.click_at(215, 896)
         self.cursor.assert_called_once_with((235, 926))
-        self.click.assert_called_once()
+        self.click.assert_called_once_with()
 
-    def test_click_point_lands_on_same_screen_pixel_as_pixel_click(self):
-        """click_point(215, 896) 与 click(215, 896) 必须落到同一个屏幕像素。
-
-        像素接口只是把 1920x1080 坐标换成镜像比例再走一次换算，落点不能有 1 像素偏差。
-        """
-        self.manager.click_point(215, 896)
-        self.manager.wait()
-        self.cursor.assert_called_once_with((235, 926))
-        self.click.assert_called_once()
-
-    def test_click_point_out_of_range_warns_with_pixel_coordinates(self):
-        """越界告警里给出调用方传入的 1920x1080 坐标，而不是内部换出来的比例。"""
-        self.manager.click_point(1940, 540)
-        self.manager.wait()
+    def test_out_of_range_warning_reports_pixel_coordinates(self):
+        """越界警告打印调用方传入的像素坐标，而不是换算后的屏幕坐标。"""
+        self.click_at(1940, 540)
         self.cursor.assert_not_called()
-        # 告警参数依次是操作名、窗口范围、请求像素坐标、换算后的屏幕坐标
+        self.logger.warning.assert_called_once()
         self.assertEqual(self.logger.warning.call_args.args[1], "点击")
         self.assertEqual(self.logger.warning.call_args.args[-4:-2], (1940, 540))
 
     def test_turn_splits_degrees_into_steps_no_wider_than_thirty(self):
-        """turn(45) 拆成 30°+15° 两段，正角度向右转，所以鼠标横向位移为正。"""
+        """45 度按每段不超过 30 度拆成 30 + 15，正角度向右转。"""
         self.manager.turn(45)
         self.manager.wait()
         self.assertEqual(self.mouse_event.call_count, 2)
-        offsets = [call.args[1] for call in self.mouse_event.call_args_list]
-        self.assertTrue(all(offset > 0 for offset in offsets), offsets)
+        for call in self.mouse_event.call_args_list:
+            self.assertGreater(call.args[1], 0)
         self.click.assert_not_called()
 
     def test_scroll_inside_window_still_scrolls(self):
-        self.manager.scroll(direct=-1, x=0.5, y=0.5)
+        """窗口内滚轮：光标先移到指定像素点，方向为负时向下滚一格。"""
+        self.manager.scroll_point(960, 540, direct=-1)
         self.manager.wait()
         self.cursor.assert_called_once_with((980, 570))
         self.scroll.assert_called_once_with(-120)
 
     def test_scroll_outside_window_is_skipped(self):
-        self.manager.scroll(direct=-1, x=INCIDENT_X, y=INCIDENT_Y)
+        """越界滚轮直接跳过，不移动光标也不滚动。"""
+        self.manager.scroll_point(INCIDENT_X, INCIDENT_Y, direct=-1)
         self.manager.wait()
         self.cursor.assert_not_called()
         self.scroll.assert_not_called()
 
     def test_drag_inside_window_still_drags(self):
-        self.manager.drag(0.5, 0.5, 0.6, 0.6)
+        """窗口内拖拽：起始点移动光标并调用一次 dragTo。"""
+        self.manager.drag_point(960, 540, 768, 432)
         self.manager.wait()
         self.cursor.assert_called_once_with((980, 570))
-        self.drag_to.assert_called_once()
+        self.assertEqual(self.drag_to.call_args.args[:2], (788, 462))
 
     def test_drag_outside_window_is_skipped(self):
-        """终点越界时起点也不移动，避免拖拽中途丢开左键。"""
-        self.manager.drag(0.5, 0.5, INCIDENT_X, INCIDENT_Y)
+        """终点越界时连起点都不移动，否则左键会一直按在错误的位置上。"""
+        self.manager.drag_point(960, 540, INCIDENT_X, INCIDENT_Y)
         self.manager.wait()
         self.cursor.assert_not_called()
         self.drag_to.assert_not_called()
-
-
-class CoordinateHelperTests(unittest.TestCase):
-    """1920x1080 像素坐标与镜像比例互转的契约。"""
-
-    def test_round_trip_keeps_every_pixel(self):
-        """像素 -> 比例 -> 像素必须回到同一个像素。
-
-        取整一旦用 int 截断，部分像素会掉 1，所以两个方向都用 round。
-        """
-        for px in (0, 1, 123, 245, 490, 960, 1510, 1919, 1920):
-            for py in (0, 39, 187, 540, 829, 1079, 1080):
-                with self.subTest(px=px, py=py):
-                    self.assertEqual(ratio_to_point(*point_to_ratio(px, py)), (px, py))
-
-    def test_known_landmarks_map_to_expected_pixels(self):
-        """0.5 是客户区中心；右下角镜像原点对应像素 (1920, 1080)。"""
-        self.assertEqual(ratio_to_point(0.5, 0.5), (960, 540))
-        self.assertEqual(ratio_to_point(0.0, 0.0), (1920, 1080))
-        self.assertEqual(ratio_to_point(1.0, 1.0), (0, 0))
-        self.assertEqual(point_to_ratio(960, 540), (0.5, 0.5))
 
 
 if __name__ == "__main__":

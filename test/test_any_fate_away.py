@@ -167,7 +167,7 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         # 只按一次 esc：再按一次可能把已经弹出的暂停菜单关掉
         self.assertEqual(self._pressed_keys(), ["esc"])
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         engine.navigate_battle.assert_not_called()
         # 没离开跑图状态：状态与区域名都不动，界面也没换
         engine.update_state.assert_not_called()

@@ -55,7 +55,7 @@ class ScriptKernel(StateKernel):
                 self.sct = Screen(self.xx, self.yy)
                 key_mouse_manager.set_config(None)
                 key_mouse_manager.multi = key_mouse_manager.scale = 1.0
-                key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
+                key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
                 return
             if time.monotonic() >= deadline:
                 raise TimeoutError("等待游戏窗口超过 300 秒，请启动游戏并将游戏窗口置于前台。")

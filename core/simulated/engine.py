@@ -61,7 +61,7 @@ class SimulatedUniverse(UniverseUtils):
         CUS_LOGGER.debug("当前命途：" + self.fate)
         key_mouse_manager.set_config(config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
 
         #停止运行标志
         self._stop = True

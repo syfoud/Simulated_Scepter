@@ -49,7 +49,7 @@ class CommonRuntimeTests(unittest.TestCase):
             self.assertIsInstance(engine, registry.load_class("Common"))
             self.assertIs(engine.get_screen(), self.frame)
             self.manager.set_config.assert_called_once_with(None)
-            self.manager.set_screen_params.assert_called_once_with(1940, 1110, 1920, 1080, False)
+            self.manager.set_screen_params.assert_called_once_with(1940, 1110, 1920, 1080)
 
     def test_real_action_loop_recognizes_text_and_executes_coordinates_then_stops(self):
         engine = self.kernel()
