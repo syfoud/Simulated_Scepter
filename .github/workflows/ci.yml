@@ -57,3 +57,6 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
         run: uv run python -c "import new_gui; print('Startup import OK')"
+
+      - name: Verify frozen process metrics
+        run: uv run --no-sync --offline python -m unittest test.test_process_metrics_packaging
