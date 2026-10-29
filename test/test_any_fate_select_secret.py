@@ -1,10 +1,9 @@
 """
 「秘闻」事件与事件选项选择的点击目标回归测试。
 
-背景：select_secret / select_event 原来的 else 分支会盲点 `click(self.tx, self.ty)` 与
-`click(0.1167, ty - 0.1139)`，而这两个坐标取自进入函数时的 `self.tx/self.ty`——它是上一次
-check() 留下的位置（即使那次匹配失败也会写入），与当前界面元素无关，既可能误触别的控件，
-也可能换算到游戏窗口之外、点到别的窗口上抢走游戏前台。
+背景：select_secret / select_event 原来的 else 分支会盲点进入函数时的 `self.tx/self.ty`
+（它是上一次 check() 留下的位置，即使那次匹配失败也会写入，与当前界面元素无关）以及一个
+写死的「确定」偏移，既可能误触别的控件，也可能点到游戏窗口之外、抢走游戏前台。
 
 现在的行为（`select_secret` 的点击优先级）：
 对话条右下角的金色 ▼（`arrow_dialog`）→「选择」栏里的白色 →（`arrow`）→ 命途选项卡
@@ -38,39 +37,40 @@ load_all_images_from_directory(str(ROOT / "resource" / "imgs"))
 from core.any_fate.engine import AnyFateUniverse
 from core.simulated.engine import SimulatedUniverse
 
-# 进入函数时 self.tx/self.ty 的残留值（旧实现会照这个坐标盲点）
-STALE_POINT = (0.5000, 0.5000)
-# 命途图标（选项卡左上角）、对话箭头的匹配位置
-FATE_POINT = (0.2865, 0.6250)
-ARROW_POINT = (0.3044145833333333, 0.15833333333333333)
+# 进入函数时 self.tx/self.ty 的残留值（旧实现会照这个坐标盲点）；坐标单位是 1920x1080 像素
+STALE_POINT = (960, 540)
+# 命途图标（选项卡）、对话箭头的匹配位置。check() 现在直接返回 1920x1080 像素坐标，
+# 引擎把这些值原样交给 click_point，所以下面这些常量就是断言里期望的点击点。
+FATE_POINT = (1370, 405)
+ARROW_POINT = (1336, 909)
 # 对话条右下角金色 ▼（arrow_dialog）的匹配位置
-DIALOG_POINT = (0.178125, 0.3250)
+DIALOG_POINT = (1578, 729)
 # 左侧图标列里的三个推进图标（arrow / arrow_1 / shop_herta）的匹配位置：只在比较点击落点时区分
-ICON_POINT = (0.2865, 0.5000)
-ARROW_1_POINT = (0.2865, 0.4800)
-SHOP_HERTA_POINT = (0.2865, 0.4600)
-# 选项卡 → 它下方「确定」按钮的手量固定偏移
-CONFIRM_OFFSET = (0.1167, 0.1139)
+ICON_POINT = (1370, 540)
+ARROW_1_POINT = (1370, 562)
+SHOP_HERTA_POINT = (1370, 583)
+# 选项卡 → 它下方「确定」按钮的手量固定偏移：x 固定 1696（按钮中心），y = 选项卡 y + 123。
+# 这两个数现在直接写在 AnyFateUniverse.select_secret 里，测试里留一份同值常量，改 real 代码时这里要跟着改。
+FATE_CONFIRM_X = 1696
+FATE_CONFIRM_GAP = 123
+FATE_FIXED_POINT = (FATE_CONFIRM_X, FATE_POINT[1] + FATE_CONFIRM_GAP)
 # select_event 兜底时 OCR 里识别到的选项（raw_text, 屏幕文本框 [x1,x2,y1,y2]）
 OPTION_TEXT = "把它放回族群"
 OPTION_BOX = [1330, 1690, 640, 680]
-# 兜底点击的落点：选项中心换算成键鼠管理器的比例坐标（以窗口右下角为原点，故取 1 - v）
-OPTION_POINT = (1 - 1510 / 1920, 1 - 660 / 1080)
+# 兜底点击的落点：选项文本框中心，click_event_option 直接点这个像素坐标
+OPTION_POINT = ((OPTION_BOX[0] + OPTION_BOX[1]) / 2, (OPTION_BOX[2] + OPTION_BOX[3]) / 2)
 # click_event_option 用 find_text 拿到的选项文本框（四角顺序与真实现一致）
 OPTION_OCR_BOX = [[1330, 640], [1690, 640], [1690, 680], [1330, 680]]
-# 兜底/优选项点中选项后，「确定」按钮的固定偏移落点：x 恒为 0.1135（屏幕 x≈1702），
-# y = 选项文字行底边 + 76 px（≈ 星号行 + 90）。这两个数现在直接写在 SimulatedUniverse.confirm_point 里，
+# 兜底/优选项点中选项后，「确定」按钮的固定偏移落点：x 恒为 1702（按钮中心），
+# y = 选项文字行底边 + 76 px。这两个数现在直接写在 SimulatedUniverse.confirm_point 里，
 # 测试里留一份同值常量，改 real 代码时这里要跟着改。
-CONFIRM_FIXED_X = 0.1135
+CONFIRM_FIXED_X = 1702
 CONFIRM_TEXT_GAP = 76
-CONFIRM_FIXED_POINT = (
-    CONFIRM_FIXED_X,
-    1 - (OPTION_BOX[3] + CONFIRM_TEXT_GAP) / 1080,
-)
+CONFIRM_FIXED_POINT = (CONFIRM_FIXED_X, OPTION_BOX[3] + CONFIRM_TEXT_GAP)
 # 「确定」按钮的 OCR 文本框（logs/log_2026-10-15-21-11.txt 实测 [1676,1728,482,512]，
 # 中心 (1702,497)）：固定偏移没点中时按这个框的中心补点。
 CONFIRM_TEXT_BOX = [1676, 1728, 482, 512]
-CONFIRM_TEXT_POINT = (1 - 1702 / 1920, 1 - 497 / 1080)
+CONFIRM_TEXT_POINT = (1702, 497)
 # logs/log_2026-10-15-21-11.txt（3/4 轮普通事件卡死那一帧）选项区的 OCR 原文：
 # 被点中的选项折成两行（393~460）、「确定」按钮文字被读成 [1676,1728,482,512]（中心 1702,497），
 # 后面跟着第二个选项的两行（564~640）。
@@ -81,8 +81,6 @@ WRAPPED_OPTION_LINES = [
     {"raw_text": "※ 走开。", "box": [637, 1747, 564, 602]},
     {"raw_text": "小心有诈！", "box": [420, 1770, 611, 640]},
 ]
-# 什么都不识别时的最终兜底：点左上角「事件」文字的固定落点（1 - x/xx, 1 - y/yy）
-EVENT_LABEL_CLICK = (0.9479166666666666, 0.9564814814814815)
 
 # 下面这几个区域/文字，真实现已内联进各自的函数（core/simulated/engine.py 的
 # event_ui_label / read_event_name / confirm_text_box / event_option_rows），测试里留一份同值副本：
@@ -94,7 +92,7 @@ EVENT_OPTION_BOX = [1320, 1850, 110, 1010]  # 右侧选项面板：点击点校�
 CONFIRM_BOX = [1590, 1830, 240, 1070]  # 右侧竖条：只在这里找「确定」文字（覆盖 5 条选项）
 CONFIRM_LABEL = "确定"
 # 星号（※）在左侧图标列里的屏幕 x（实测模板左边界 1342 + 模板宽 50/2 ≈ 1367）；
-# 横条 = [星号 x − 30, 选项面板右边] × [星号 y − 30, 星号 y + 68]（与 event_option_rows 同值；
+# 横条 = [星号 x − 30, 选项面板右边] × [星号 y − 30, 星号 y + 20]（与 event_option_rows 同值；
 # 左缘往回让 30 px 是因为整屏 OCR 会把 ※ 和选项文字并进同一个框）
 STAR_X = 1367
 STAR_BAND_GAP = (-30, 30, 20)
@@ -175,7 +173,6 @@ class _StubEngine:
         # 「确定」按钮的固定偏移用真实现：选项文字折行时要按整块底边算，不能只看被点那一行
         self.confirm_point = SimulatedUniverse.confirm_point.__get__(self)
         # 「确定」按钮的复核/补点用真实现：OCR 右侧竖条里的「确定」文字，按文字框中心点
-        self.scaled_box = SimulatedUniverse.scaled_box.__get__(self)
         self.confirm_text_box = SimulatedUniverse.confirm_text_box.__get__(self)
         self.click_confirm_text = SimulatedUniverse.click_confirm_text.__get__(self)
         # 「确定」按钮的点击默认打桩（要测它时用 SimulatedUniverse 的真实现显式换回来）
@@ -218,7 +215,7 @@ class _StubEngine:
 
     def _ocr_in_box(self, box=None, **kwargs):
         """让 ts.find_with_box 按区域分流：右侧竖条给「确定」文字，星号横条给这条选项的文字行。"""
-        if box is not None and list(box) == self.scaled_box(self.CONFIRM_BOX):
+        if box is not None and list(box) == self.CONFIRM_BOX:
             if self.confirm_box is None:
                 return []
             return [{"raw_text": self.CONFIRM_LABEL, "box": list(self.confirm_box)}]
@@ -308,7 +305,8 @@ class SelectSecretTest(unittest.TestCase):
         return engine
 
     def _clicks(self):
-        return [call.args for call in self.manager.click.call_args_list]
+        # 内核统一用 click_point(1920x1080 像素坐标)，断言直接比对像素落点
+        return [call.args for call in self.manager.click_point.call_args_list]
 
     def test_dialog_chevron_wins_over_bar_arrow_and_fate_icon(self):
         """点击优先级第一位是金色 ▼：它和「选择」栏箭头、命途选项卡同时在场时只点它。"""
@@ -332,7 +330,7 @@ class SelectSecretTest(unittest.TestCase):
         """两个对话推进图标都没匹配上时，退回点「秘闻」文字（点画面任意位置都会把剧情推下去）。"""
         engine = self._run({})
 
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         engine.click_text.assert_called_once_with(text="秘闻", box=[197, 233, 887, 906])
 
     def test_fate_icon_clicked_then_fixed_offset_then_confirm(self):
@@ -343,7 +341,7 @@ class SelectSecretTest(unittest.TestCase):
             self._clicks(),
             [
                 FATE_POINT,
-                (CONFIRM_OFFSET[0], FATE_POINT[1] - CONFIRM_OFFSET[1]),
+                FATE_FIXED_POINT,
                 CONFIRM_TEXT_POINT,
             ],
         )
@@ -354,7 +352,7 @@ class SelectSecretTest(unittest.TestCase):
 
         self.assertEqual(
             self._clicks(),
-            [FATE_POINT, (CONFIRM_OFFSET[0], FATE_POINT[1] - CONFIRM_OFFSET[1])],
+            [FATE_POINT, FATE_FIXED_POINT],
         )
         # 复核走的是右侧竖条的 OCR，不再有 confirm 图片匹配
         self.assertEqual(
@@ -414,8 +412,8 @@ class SelectEventTest(unittest.TestCase):
         SimulatedUniverse.select_event(engine)
 
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
-            [(1 - 1510 / 1920, 1 - 660 / 1080)],
+            [call.args for call in self.manager.click_point.call_args_list],
+            [OPTION_POINT],
         )
         # 优选项这条路也要把「确定」的固定偏移传下去（按命中选项的文本框算）
         self.assertEqual(engine.confirm_event.call_args.kwargs["point"], CONFIRM_FIXED_POINT)
@@ -445,15 +443,15 @@ class SelectEventTest(unittest.TestCase):
         SimulatedUniverse.select_event(engine)
 
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
-            [(1 - 1550 / 1920, 1 - 599 / 1080)],
+            [call.args for call in self.manager.click_point.call_args_list],
+            [(1550, 599)],
         )
 
     def test_empty_option_area_clicks_nothing_while_leaving_the_event(self):
         """选项区一个字都没有（选完选项正在进战斗）：不点、不刷三次 warning。"""
         self._run({}, {"休息区": True})
 
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.assertEqual(self._error_messages(), [])
         self.assertFalse(
             any("一个都没匹配上" in call.args[0] for call in self.logger.warning.call_args_list)
@@ -464,7 +462,7 @@ class SelectEventTest(unittest.TestCase):
         """顺序是金色▼在前（对话阶段），两者同帧命中时点▼，推进图标这一帧不再判定。"""
         engine = self._run({"arrow": ICON_POINT, "arrow_dialog": DIALOG_POINT}, {"休息区": False})
 
-        self.assertEqual([call.args for call in self.manager.click.call_args_list], [DIALOG_POINT])
+        self.assertEqual([call.args for call in self.manager.click_point.call_args_list], [DIALOG_POINT])
         self.assertEqual([call.args[0] for call in engine.check.call_args_list], ["arrow_dialog"])
 
     def test_push_icons_are_checked_in_the_old_json_order(self):
@@ -473,7 +471,7 @@ class SelectEventTest(unittest.TestCase):
             {"shop_herta": SHOP_HERTA_POINT, "arrow_1": ARROW_1_POINT}, {"休息区": False}
         )
 
-        self.assertEqual([call.args for call in self.manager.click.call_args_list], [ARROW_1_POINT])
+        self.assertEqual([call.args for call in self.manager.click_point.call_args_list], [ARROW_1_POINT])
         self.assertEqual(
             [call.args[0] for call in engine.check.call_args_list],
             ["arrow_dialog", "arrow", "arrow_1"],
@@ -489,7 +487,7 @@ class SelectEventTest(unittest.TestCase):
         # 两遍匹配：先只认 ※（names=("star",)），没命中优选项才补认命途图标（见 select_event）
         engine.event_option_icons.assert_called_once_with(("star",))
         # 认到图标但选项横条里没文字：这是原有行为（debug + 不点击），不该报「未识别到有效触发器」
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.assertFalse(
             any("未识别到有效触发器" in msg for msg in self._warning_messages())
         )
@@ -500,7 +498,7 @@ class SelectEventTest(unittest.TestCase):
         # 同一个引擎再跑一帧：状态没变，不该再打第二条
         SimulatedUniverse.select_event(engine)
 
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         infos = [msg for msg in self._info_messages() if "救世主" in msg]
         self.assertEqual(len(infos), 1)
 
@@ -508,7 +506,7 @@ class SelectEventTest(unittest.TestCase):
         """没匹配到优选项（没有战斗的事件）：在识别到的选项里挑一个点，避免卡在事件界面。"""
         engine = self._run_with_options()
 
-        self.assertEqual([call.args for call in self.manager.click.call_args_list], [OPTION_POINT])
+        self.assertEqual([call.args for call in self.manager.click_point.call_args_list], [OPTION_POINT])
         self.assertTrue(engine.confirm_event.called)
 
     def test_unmatched_prior_only_adds_the_fate_pass(self):
@@ -534,7 +532,7 @@ class SelectEventTest(unittest.TestCase):
         """事件选项匹配上但「确认」一直没出现：同样挑一个识别到的选项，再点它的「确定」。"""
         engine = self._run_with_options()
 
-        self.assertEqual([call.args for call in self.manager.click.call_args_list], [OPTION_POINT])
+        self.assertEqual([call.args for call in self.manager.click_point.call_args_list], [OPTION_POINT])
         self.assertTrue(engine.confirm_event.called)
 
     def test_rest_area_still_clicks_its_own_hit_point(self):
@@ -546,8 +544,9 @@ class SelectEventTest(unittest.TestCase):
         SimulatedUniverse.select_event(engine)
 
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
-            [(1 - 1510 / 1920, 1 - 660 / 1080), (0.1667, 0.2592)],
+            [call.args for call in self.manager.click_point.call_args_list],
+            # 第一下是选项中心，第二下是「休息区」命中后写死在 select_event 里的像素点
+            [OPTION_POINT, (1600, 800)],
         )
         # 没有落进「连续 3 次没匹配到优选项」的兜底分支
         self.assertEqual(self._error_messages(), [])
@@ -563,7 +562,7 @@ class SelectEventTest(unittest.TestCase):
             )
             SimulatedUniverse.select_event(engine)
 
-            self.manager.click.assert_not_called()
+            self.manager.click_point.assert_not_called()
             self.assertTrue(any(label[:2] in msg for msg in self._debug_messages()))
 
     def test_ui_label_is_reread_every_frame(self):
@@ -575,7 +574,7 @@ class SelectEventTest(unittest.TestCase):
         )
 
         SimulatedUniverse.select_event(engine)
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.assertTrue(any("奇物商店" in msg for msg in self._debug_messages()))
 
         self.logger.debug.reset_mock()
@@ -672,7 +671,7 @@ class SelectEventTest(unittest.TestCase):
         )
         SimulatedUniverse.select_event(engine)
 
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.assertTrue(
             any("兜底选项点击点不在选项面板内" in msg for msg in self._warning_messages()),
             self._warning_messages(),
@@ -703,8 +702,9 @@ class SelectEventTest(unittest.TestCase):
         SimulatedUniverse.select_event(engine)
 
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
-            [(1 - 1474 / 1920, 1 - 278.5 / 1080)],
+            [call.args for call in self.manager.click_point.call_args_list],
+            # 文本框中心 = ((1357+1591)/2, (265+292)/2)
+            [(1474, 278.5)],
         )
         self.assertTrue(
             any("点击「购买一个钻石盒。」" in msg for msg in self._warning_messages()),
@@ -729,7 +729,7 @@ class SelectEventTest(unittest.TestCase):
         engine._option_shown_at = None  # 面板这一帧刚认到选项
         SimulatedUniverse.select_event(engine)
 
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.assertTrue(
             any("本帧不点击" in msg for msg in self._debug_messages()),
             self._debug_messages(),
@@ -739,13 +739,13 @@ class SelectEventTest(unittest.TestCase):
         # self.clock 每被 time() 读一次前进 0.1 s，故把起点往前挪 0.9 s，到判定时正好过了 1.0 s。
         engine._option_shown_at = self.clock.now - 0.9
         SimulatedUniverse.select_event(engine)
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
 
         # 已经等满 1.5 s：照旧走兜底
         engine._option_shown_at = self.clock.now - 2.0
         SimulatedUniverse.select_event(engine)
 
-        self.assertEqual([call.args for call in self.manager.click.call_args_list], [OPTION_POINT])
+        self.assertEqual([call.args for call in self.manager.click_point.call_args_list], [OPTION_POINT])
 
 
     def test_fate_icon_option_is_matched_after_the_star_pass_misses(self):
@@ -783,12 +783,13 @@ class SelectEventTest(unittest.TestCase):
         )
         # 命途图标那条选项照常走优选项路径：点选项文字的中心，再按整条文字底边点「确定」
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
-            [(1 - 1420 / 1920, 1 - 299 / 1080)],
+            [call.args for call in self.manager.click_point.call_args_list],
+            # 文本框中心 = ((1354+1486)/2, (283+315)/2)
+            [(1420, 299)],
         )
         self.assertEqual(
             engine.confirm_event.call_args.kwargs["point"],
-            (0.1135, 1 - (315 + 76) / 1080),
+            (1702, 315 + CONFIRM_TEXT_GAP),
         )
 
     def test_fate_icons_are_only_matched_when_no_prior_hits(self):
@@ -809,8 +810,9 @@ class SelectEventTest(unittest.TestCase):
 
         self.assertEqual(len(engine.event_option_icons.call_args_list), 1)
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
-            [(1 - 1476 / 1920, 1 - 226.5 / 1080)],
+            [call.args for call in self.manager.click_point.call_args_list],
+            # 文本框中心 = ((1357+1595)/2, (211+242)/2)
+            [(1476, 226.5)],
         )
 
 
@@ -844,7 +846,7 @@ class ConfirmEventClickTest(unittest.TestCase):
         engine = self._run({})
 
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
+            [call.args for call in self.manager.click_point.call_args_list],
             [OPTION_POINT, CONFIRM_FIXED_POINT],
         )
         # 复核一次就够：选项横条只在 ※/命途两遍里各过滤一次，右侧竖条只查一次；没有轮询、也没有图片匹配
@@ -861,7 +863,7 @@ class ConfirmEventClickTest(unittest.TestCase):
         engine = self._run({}, confirm_box=CONFIRM_TEXT_BOX)
 
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
+            [call.args for call in self.manager.click_point.call_args_list],
             [OPTION_POINT, CONFIRM_FIXED_POINT, CONFIRM_TEXT_POINT],
         )
         # 补点位置取自实测帧的文字框 [1676,1728,482,512]（中心 1702,497），不再有 confirm 图片匹配
@@ -888,9 +890,10 @@ class ConfirmEventClickTest(unittest.TestCase):
         point = SimulatedUniverse.confirm_point(engine, row)
         point2 = SimulatedUniverse.confirm_point(engine, row2)
 
+        # x 恒为按钮中心的 1702；y = 选项文字行底边 + 76（421、599 是两行文字的底边）
         self.assertEqual(point[0], CONFIRM_FIXED_X)
-        self.assertAlmostEqual((1 - point[1]) * 1080, 497, delta=2)
-        self.assertAlmostEqual((1 - point2[1]) * 1080, 676, delta=2)
+        self.assertAlmostEqual(point[1], 421 + CONFIRM_TEXT_GAP, delta=2)
+        self.assertAlmostEqual(point2[1], 599 + CONFIRM_TEXT_GAP, delta=2)
         # 说明行不再进横条，所以余量是「选项文字行底边 → 按钮中心」的 76（= 星号行 + 90 − 14）
         self.assertEqual(CONFIRM_TEXT_GAP, 76)
 
@@ -917,7 +920,7 @@ class ConfirmEventClickTest(unittest.TestCase):
         point = SimulatedUniverse.confirm_point(engine, rows[0])
         # 「确定」那一行被剔掉：底边取两行里更靠下的 460，+76 → 536；若把它算进来（底边 512）
         # 就会落到 588，比按钮中心低 91 px，点不到
-        self.assertAlmostEqual((1 - point[1]) * 1080, 460 + CONFIRM_TEXT_GAP, delta=1)
+        self.assertAlmostEqual(point[1], 460 + CONFIRM_TEXT_GAP, delta=1)
         self.assertGreater(CONFIRM_TEXT_BOX[3] + CONFIRM_TEXT_GAP - 497, 80)
 
     def test_option_rows_are_read_per_star_band(self):
@@ -946,9 +949,9 @@ class ConfirmEventClickTest(unittest.TestCase):
             [row["raw_text"] for row in rows], ["购买1个1星祝福。", "强化2个随机祝福。"]
         )
         self.assertEqual([row["lines"] for row in rows], [lines_a, lines_b])
-        # 「确定」的偏移按整条（选项行 + 说明行）的底边算：474 + 36
+        # 「确定」的偏移按整条（选项行 + 说明行）的底边算：474 + 76
         point = SimulatedUniverse.confirm_point(engine, rows[0])
-        self.assertAlmostEqual((1 - point[1]) * 1080, 474 + CONFIRM_TEXT_GAP, delta=1)
+        self.assertAlmostEqual(point[1], 474 + CONFIRM_TEXT_GAP, delta=1)
 
     def test_all_option_icons_are_found_not_only_the_best_one(self):
         """check() 只拿得到最高分的那个图标：一帧 3~4 条选项时要靠多目标匹配把它们都认出来；

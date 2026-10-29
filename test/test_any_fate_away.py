@@ -137,7 +137,8 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         self.assertEqual(self._pressed_keys(), ["esc"])
         self.manager.keyUp.assert_called_once_with("move_w")
-        self.manager.click.assert_not_called()  # 空打一拳是 click(0.5, 0.5)
+        # 空打一拳（旧实现是 click(0.5, 0.5)，现为 click_point(960, 540)）不能发生。
+        self.manager.click_point.assert_not_called()
         engine.navigate_battle.assert_not_called()
         engine.switch_current_role.assert_not_called()
         engine.ts.find_with_box.assert_not_called()  # 区域名 OCR 属于走图逻辑

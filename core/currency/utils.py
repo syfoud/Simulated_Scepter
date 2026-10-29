@@ -504,7 +504,7 @@ class CurrencyUtils(StateKernel):
         sub = (sub + 180) % 360 - 180
         if  mode==2 and sub==0:
             sub=1e-9
-        key_mouse_manager.mouse_move(sub)
+        key_mouse_manager.turn(sub)
         CUS_LOGGER.debug(f"当前人物角度为：{str(self.ang)}变换后角度{ang},视角移动{sub}")
         # 此处变换为了目标角度
         self.ang = ang

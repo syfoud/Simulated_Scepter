@@ -6,7 +6,8 @@
 
 本测试纯打桩，不连游戏、不真点击/真滚轮、不真 sleep、不依赖真实屏幕：
 `ts.find_with_box` 按区域返回 OCR 结果，`click_text` 只记录文字点击（判断窗口还在不在
-时只 OCR 标题、不点击），键鼠的 click/scroll/press 全部记录下来。断言锁定：
+时只 OCR 标题、不点击），键鼠的 click_point/scroll_point/press 全部记录下来（坐标一律是
+1920x1080 像素坐标，原点在客户区左上角）。断言锁定：
 
 - 点「作弊」按钮成功才记 `cheat_target` / `_cheat_requested_effect`（只是请求，作弊还没落地）；
   `cheat()` 确认之后才记回显用的 `_pending_cheat_effect`；点失败什么都不记。
@@ -46,11 +47,6 @@ EFFECT_BOX = [1339, 1576, 429, 464]    # 当前骰面效果文本
 def line(text, box):
     """一行 OCR 结果：raw_text + 屏幕像素框 [左,右,上,下]。"""
     return {"raw_text": text, "box": list(box)}
-
-
-def mirror(point, xx=XX, yy=YY):
-    """图像像素坐标 → 键鼠 manager 用的镜像比例坐标。"""
-    return 1 - point[0] / xx, 1 - point[1] / yy
 
 
 def center(box):
@@ -160,11 +156,11 @@ class StubFingerSnap(FingerSnap):
 
     def _ocr(self, box=None, **kwargs):
         box = box or [0, self.xx, 0, self.yy]
-        if box == self.scaled_box(LIST_BOX):
+        if box == LIST_BOX:
             items = self._window_lines()
-        elif box == self.scaled_box(CONFIRM_BOX):
+        elif box == CONFIRM_BOX:
             items = [CONFIRM_HINT, CONFIRM] if self.confirm_visible else []
-        elif box == self.scaled_box(BUTTON_BOX):
+        elif box == BUTTON_BOX:
             items = [DICE_BUTTON] if self.button_ok else []
         elif box == EFFECT_BOX:
             observed = observed_line(self.observed_text)
@@ -178,13 +174,15 @@ class StubFingerSnap(FingerSnap):
     # ---- 截图打桩 ----
 
     def get_screen(self):
-        """造一帧假画面：被选中那一行铺上紫色高亮（选中判定的唯一依据）。"""
+        """造一帧假画面：被选中那一行铺上紫色高亮（选中判定的唯一依据）。
+
+        高亮区域和引擎 ``cheat_option_selected`` 的字面量一致（1920x1080 像素）：
+        左右 [470, 1450]，上下为标题 y-8 ~ y+88。
+        """
         screen = np.zeros((self.yy, self.xx, 3), dtype=np.uint8)
         if self.selected_box is not None:
-            left, right = [int(value * self.xx / 1920) for value in (470, 1450)]
-            top = max(int(self.selected_box[2] - 8 * self.yy / 1080), 0)
-            bottom = max(int(self.selected_box[2] + 88 * self.yy / 1080), 0)
-            screen[top:bottom, left:right] = (200, 80, 120)
+            title_top = int(self.selected_box[2])
+            screen[max(title_top - 8, 0):max(title_top + 88, 0), 470:1450] = (200, 80, 120)
         self.screen = screen
         return screen
 
@@ -209,28 +207,30 @@ class StubFingerSnap(FingerSnap):
     # ---- 键鼠打桩 ----
 
     def install_pointer(self, key_mouse_manager):
-        key_mouse_manager.click.side_effect = self._click
-        key_mouse_manager.scroll.side_effect = self._scroll
+        # 生产代码只调 1920x1080 像素入参的 pointer 接口，替身挂在同一层，
+        # 记录的坐标就是引擎实际传的像素坐标；旧的 click/scroll 已是内部实现，不再打桩。
+        key_mouse_manager.click_point.side_effect = self._click
+        key_mouse_manager.scroll_point.side_effect = self._scroll
         key_mouse_manager.press.side_effect = self._press
 
     def _near(self, point, box, tolerance=1.0):
+        """点击坐标是否落在 box 中心；两边都是 1920x1080 像素坐标，直接比。"""
         cx, cy = center(box)
         return abs(point[0] - cx) <= tolerance and abs(point[1] - cy) <= tolerance
 
     def _click(self, x, y):
-        point = ((1 - x) * self.xx, (1 - y) * self.yy)
         self.clicks.append((x, y))
-        if self._near(point, BUTTON_BOX):
+        if self._near((x, y), BUTTON_BOX):
             self.dialog_open = True
             return
         if not self.dialog_open:
             return
-        if self._near(point, CONFIRM["box"]):
+        if self._near((x, y), CONFIRM["box"]):
             if self.confirm_closes:
                 self.dialog_open = False
             return
         for item in self.list_lines:
-            if not self._near(point, item["box"]):
+            if not self._near((x, y), item["box"]):
                 continue
             # 点在列表某一行上：游戏真的选中了才会有高亮
             self.select_attempts += 1
@@ -238,9 +238,9 @@ class StubFingerSnap(FingerSnap):
                 self.selected_box = item["box"]
             return
 
-    def _scroll(self, direct, x=0.5, y=0.5):
-        self.scrolls.append(
-            (direct, round((1 - x) * self.xx), round((1 - y) * self.yy)))
+    def _scroll(self, x, y, direct=1):
+        # 列表滚动落点也是 1920x1080 像素坐标，原样记下来供断言「滚在列表区域中心」
+        self.scrolls.append((direct, round(x), round(y)))
 
     def _press(self, key, *args, **kwargs):
         self.presses.append(key)
@@ -272,7 +272,8 @@ class FingerSnapCheatSelectTest(unittest.TestCase):
         self.engine = None
 
     def tearDown(self):
-        # 整张列表只能用滚轮滚，任何用例都不许再出现 drag。
+        # 整张列表只能用滚轮滚，任何用例都不许出现拖拽（新旧两套接口都查）。
+        self.manager.drag_point.assert_not_called()
         self.manager.drag.assert_not_called()
 
     # ---- 构造与断言辅助 ----
@@ -284,7 +285,8 @@ class FingerSnapCheatSelectTest(unittest.TestCase):
         return engine
 
     def assertClicks(self, engine, *boxes):
-        expected = [mirror(center(box)) for box in boxes]
+        # 点击必须落在识别到的文字中心：记录的坐标就是引擎传入的 1920x1080 像素坐标
+        expected = [center(box) for box in boxes]
         self.assertEqual(len(engine.clicks), len(expected),
                          msg=f"点击次数不对：{engine.clicks}")
         for clicked, want in zip(engine.clicks, expected):

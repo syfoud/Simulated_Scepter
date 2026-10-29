@@ -443,28 +443,28 @@ class UniverseUtils(StateKernel):
             if dx is None:
                 CUS_LOGGER.debug('…找到那个新生的「我」…让他延续三千万世的徒劳。')
                 for k in [60,120,60,60,30,30,-60,-60,-60,-60,-60,-60]:
-                    key_mouse_manager.mouse_move(-k)
+                    key_mouse_manager.turn(-k)
                     key_mouse_manager.wait()
                     off += k
                     dx = self.get_end_point(device=device)
                     if dx is not None:
                         break
                 if dx is None:
-                    key_mouse_manager.mouse_move(off*1.03)
+                    key_mouse_manager.turn(off*1.03)
                     key_mouse_manager.wait()
                     CUS_LOGGER.warning(f"即便理智随身形一起化作焦炭，{factor}也会记得自己的使命……(旋转未找到终点)")
                     return 0
         CUS_LOGGER.debug(f"移动面向终点 参数{i}移动距离{dx}")
         if i == 0:
-            key_mouse_manager.mouse_move(dx / 3)
+            key_mouse_manager.turn(dx / 3)
             key_mouse_manager.wait()
         else:
-            key_mouse_manager.mouse_move(dx / 5)
+            key_mouse_manager.turn(dx / 5)
             key_mouse_manager.wait()
         if i == 0 and abs(dx / 3) > 30:
             dx = self.get_end_point(1,device=device)
             if dx is not None:
-                key_mouse_manager.mouse_move(dx / 4)
+                key_mouse_manager.turn(dx / 4)
                 key_mouse_manager.wait()
         return 1
 
@@ -1015,7 +1015,7 @@ class UniverseUtils(StateKernel):
         sub = (sub + 180) % 360 - 180
         if  mode==2 and sub==0:
             sub=1e-9
-        key_mouse_manager.mouse_move(sub)
+        key_mouse_manager.turn(sub)
         CUS_LOGGER.debug(f"当前人物角度为：{str(self.ang)}变换后角度{ang},视角移动{sub}")
         # 此处变换为了目标角度
         self.ang = ang
@@ -1771,7 +1771,7 @@ class UniverseUtils(StateKernel):
             else:
                 self.map_data_load(create=False)
                 if int(self.now_map)==27793:
-                    key_mouse_manager.mouse_move(15)
+                    key_mouse_manager.turn(15)
                 else:
                     self.has_target=self.move_direct_to_text()
             CUS_LOGGER.info(f"{factor}需要在此驻足片刻，消化那千万次循环中沉积的悲伤、痛苦和挣扎。")
@@ -2553,11 +2553,11 @@ class UniverseUtils(StateKernel):
                 CUS_LOGGER.debug(
                     f"检测到文字候选{pos}，取最左侧{pos[0]}，距中心点{960 - pos[0][0]}，进行旋转"
                 )
-                key_mouse_manager.mouse_move((pos[0][0] - 960) / 16.5)
+                key_mouse_manager.turn((pos[0][0] - 960) / 16.5)
                 find=True
                 key_mouse_manager.wait()
                 break
-            key_mouse_manager.mouse_move(-k)
+            key_mouse_manager.turn(-k)
             key_mouse_manager.wait()
         self.moving_direct = False
         if not find:

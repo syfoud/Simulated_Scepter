@@ -33,6 +33,7 @@ from core.iron_blood.engine import IronBloodUniverse  # noqa: E402
 
 AREA = "战斗"
 NOW_MAP = 24047
+# 节点中心的 1920x1080 像素坐标；内核现在用 click_point 原样传像素坐标，不再自己换算比例。
 CLICK_POINT = (100, 200)
 SCREEN = np.zeros((1080, 1920, 3), dtype=np.uint8)
 
@@ -63,7 +64,7 @@ class AnyFateSelectGoTest(unittest.TestCase):
         engine.try_analysis_map = Mock(return_value=True)
         engine.record_map_visit = Mock(return_value=277)
         self.key_mouse_manager = Mock()
-        for name in ("wait", "clean", "keyUp", "press", "click"):
+        for name in ("wait", "clean", "keyUp", "press", "click_point"):
             setattr(self.key_mouse_manager, name, Mock())
         self.enterContext(
             patch("core.any_fate.engine.key_mouse_manager", self.key_mouse_manager))
@@ -78,7 +79,7 @@ class AnyFateSelectGoTest(unittest.TestCase):
         self.assertEqual(engine.area, "")
         self.assertIs(engine.new_node, True)
         engine.record_map_visit.assert_called_once_with(NOW_MAP)
-        self.key_mouse_manager.click.assert_called_once_with(*CLICK_POINT)
+        self.key_mouse_manager.click_point.assert_called_once_with(*CLICK_POINT)
 
     def test_next_life_dialog_keeps_area_name(self):
         """「下一世」对话里没有移动，区域名不清，否则会白跑一次区域识别。"""
@@ -134,7 +135,7 @@ class IronBloodSelectGoTest(unittest.TestCase):
         self.assertEqual(engine.area, "")
         self.assertIs(engine.new_node, True)
         engine.record_map_visit.assert_called_once_with(NOW_MAP)
-        self.key_mouse_manager.click.assert_called_once_with(*CLICK_POINT)
+        self.key_mouse_manager.click_point.assert_called_once_with(*CLICK_POINT)
 
 
 class FingerSnapSelectGoTest(unittest.TestCase):
@@ -181,7 +182,7 @@ class FingerSnapSelectGoTest(unittest.TestCase):
         self.assertEqual(engine.area, "")
         self.assertIs(engine.new_node, True)
         engine.record_map_visit.assert_called_once_with(NOW_MAP)
-        self.key_mouse_manager.click.assert_called_once_with(*CLICK_POINT)
+        self.key_mouse_manager.click_point.assert_called_once_with(*CLICK_POINT)
 
 
 class FingerSnapInitingMapTest(unittest.TestCase):

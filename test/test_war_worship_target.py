@@ -50,11 +50,13 @@ class WarWorshipTargetTest(unittest.TestCase):
                 patch.object(engine_module, "key_mouse_manager", manager):
             universe.select_doing()
 
-        if not manager.click.called:
+        # 生产代码用 click_point 传 1920x1080 像素坐标（节点 cx/cy 取整），
+        # 所以「有没有点」与落点都要在 click_point 上断言。
+        if not manager.click_point.called:
             self.assertTrue(universe.abandon_confirm.called)
             return None
-        self.assertEqual(1, manager.click.call_count)
-        return manager.click.call_args.args
+        self.assertEqual(1, manager.click_point.call_count)
+        return manager.click_point.call_args.args
 
     def test_path_battle_with_blessing_pig_is_replaced(self):
         """最佳路径上的战斗格带祝福扑满：替换它（路径优先的行为保持不变）。"""

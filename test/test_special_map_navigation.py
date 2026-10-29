@@ -146,7 +146,9 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
         ):
             universe.get_path_with_big_map()
 
-        manager.click.assert_called_once_with(0.5, 0.5)
+        # 带信任标记的红色攻击目标：普攻点画面中心的 1920x1080 像素坐标 (960,540)，
+        # 内核用 click_point 原样传出，不再换算成镜像比例 (0.5,0.5)。
+        manager.click_point.assert_called_once_with(960, 540)
         universe.use_e.assert_not_called()
         universe.check.assert_not_called()
         self.assertNotIn(red_target, universe.target)
@@ -359,7 +361,7 @@ class HertaInteractionTest(unittest.TestCase):
 
         self.assertEqual(1, result)
         self.assertEqual(100, universe.quit)
-        manager.press.assert_called_once_with("f", force=True)
+        manager.press.assert_called_once_with("interact", force=True)
 
     def test_herta_during_cooldown_does_not_press_again(self):
         universe = self.make_universe(quit_time=90)

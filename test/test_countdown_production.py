@@ -89,8 +89,8 @@ class CountdownProductionTests(unittest.TestCase):
             select_doing.index("try_analysis_map(mode=2, target_selection=True)"),
             select_doing.index("countdown_agent.recommend_target()"))
         self.assertNotIn('click_text(text="确认目标"', select_doing)
-        self.assertIn("key_mouse_manager.click(1685, 982)", select_doing)
-        confirm_click = select_doing.index("key_mouse_manager.click(1685, 982)")
+        self.assertIn("key_mouse_manager.click_point(1685, 982)", select_doing)
+        confirm_click = select_doing.index("key_mouse_manager.click_point(1685, 982)")
         self.assertIn("self._pending_target = None", select_doing[confirm_click:])
         self.assertIn("self._target_decided = False", select_doing[confirm_click:])
         self.assertNotIn("countdown_agent.apply_target", select_go)

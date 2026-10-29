@@ -59,7 +59,8 @@ class CommonRuntimeTests(unittest.TestCase):
             path.write_text(json.dumps([{"name": "确认", "trigger": {"text": "确认", "box": [0, 100, 0, 100]},
                                         "actions": [{"position": [960, 540]}, {"press": "f"}, "stop"]}]), encoding="utf-8")
             engine.start(path)
-        self.manager.click.assert_called_once_with(0.5, 0.5)
+        # 脚本 actions 里的 position 就是 1920x1080 像素坐标；内核直接交给 click_point，不再换算镜像比例。
+        self.manager.click_point.assert_called_once_with(960, 540)
         self.manager.press.assert_called_once_with("f", 0)
         self.assertEqual(engine.action_history, ["确认"])
         self.assertTrue(engine._stop)
@@ -68,12 +69,14 @@ class CommonRuntimeTests(unittest.TestCase):
     def test_shared_template_match_and_position_crop_use_game_coordinates(self):
         engine = self.kernel()
         engine.get_screen()
+        # 模板切成画面 (960,540) 附近的 10x10 切片：匹配中心应原样解析回该像素坐标，
+        # 说明 check() 的 x,y 与 self.tx,self.ty 用的都是 1920x1080 像素坐标。
         template = self.frame[535:545, 955:965].copy()
         self.assertTrue(engine.click_target(template, 0.99, flag=False))
         with patch("core.common.engine.find_image_by_name", return_value=template):
-            self.assertTrue(engine.check("button", 0.5, 0.5, threshold=0.99))
-        self.assertAlmostEqual(engine.tx, 0.5)
-        self.assertAlmostEqual(engine.ty, 0.5)
+            self.assertTrue(engine.check("button", 960, 540, threshold=0.99))
+        self.assertAlmostEqual(engine.tx, 960)
+        self.assertAlmostEqual(engine.ty, 540)
 
     def test_wrong_resolution_rejects_input_and_capture(self):
         self.window.return_value = GameWindow(1, "local", "game", "UnityWndClass", 1280, 720)

@@ -71,8 +71,9 @@ class ScriptDebugTests(unittest.TestCase):
                     release.wait(2)
                     worker()
 
-                def enqueue(*args):
-                    click(*args)
+                # 生产代码经 click_point 走底层 click，调用时会带 force 关键字参数。
+                def enqueue(*args, **kwargs):
+                    click(*args, **kwargs)
                     queued.set()
 
                 click = self.manager.click
@@ -92,8 +93,8 @@ class ScriptDebugTests(unittest.TestCase):
                 self.assertFalse(thread.is_alive())
                 self.assertIn("完成", self.results[0])
                 self.click.assert_called_once_with()
-                # 保留原有比例坐标换算：浮点数经整数截断后横坐标为 1511。
-                self.cursor.assert_called_once_with((1511, 529))
+                # click_point(1510, 529) 先转成镜像比例再换算回屏幕坐标，round 后仍落在 (1510, 529)。
+                self.cursor.assert_called_once_with((1510, 529))
                 self.assertFalse(self.manager.running)
 
     def test_stop_during_press_releases_key_and_discards_following_click(self):

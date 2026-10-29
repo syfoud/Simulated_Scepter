@@ -166,7 +166,7 @@ class DivergentUniverse(UniverseUtils):
                 self.area()
                 self.last_action_time = time.time()
 
-            elif self.check("auto_battle", 0.988, 0.1028, threshold=0.925):
+            elif self.check("auto_battle",23,969, threshold=0.925):
                 # 未检查到自动战斗,已经入站,清除秘技持续
                 self.da_hei_ta_effecting = False
                 self.press("V")
@@ -188,8 +188,8 @@ class DivergentUniverse(UniverseUtils):
                             break
                 else:
                     if time.time() - self.last_action_time > 60:
-                        self.click((0.5, 0.1))
-                        self.click((0.5, 0.25))
+                        self.click_point(960, 972)
+                        self.click_point(960, 810)
                         self.last_action_time = time.time()
         else:
             self.last_action_time = time.time()
@@ -316,11 +316,11 @@ class DivergentUniverse(UniverseUtils):
 
             res = self.get_text_type(self.area_text, ['事件', '奖励', '遭遇', '商店', '首领', '战斗', '财富', '休整', '位面'])
             if (res == '位面' or res is None) and deep == 0:
-                self.mouse_move(20)
+                self.turn(20)
                 scr = self.screen
                 time.sleep(0.3)
                 self.get_screen()
-                self.mouse_move(-20)
+                self.turn(-20)
                 res = self.get_now_area(deep=1)
                 self.screen = scr
             return res
@@ -367,7 +367,7 @@ class DivergentUniverse(UniverseUtils):
         # win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, int(-200 * self.multi * self.scale))
         while abs(self.portal_bias(portal)) > 50:
             angle = bisect.bisect_left(config.angles, self.portal_bias(portal)) - zero
-            self.mouse_move(angle)
+            self.turn(angle)
             if abs(self.portal_bias(portal)) < 200:
                 return portal
             time.sleep(0.2)
@@ -433,7 +433,7 @@ class DivergentUniverse(UniverseUtils):
             # win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, int(100 * self.multi * self.scale))
             angles = [0, 90, 90, 90, 45, -90, -90, -90, -45]
             for i,angle in enumerate(angles):
-                self.mouse_move(angle)
+                self.turn(angle)
                 time.sleep(0.2)
                 portal = self.find_portal()
                 if portal['score']:
@@ -444,7 +444,7 @@ class DivergentUniverse(UniverseUtils):
                     portal_type = portal['type']
                     bias = 0
                     for i in range(i+1, len(angles)):
-                        self.mouse_move(angles[i])
+                        self.turn(angles[i])
                         bias += angles[i]
                         time.sleep(0.2)
                         portal_after = self.find_portal()
@@ -453,7 +453,7 @@ class DivergentUniverse(UniverseUtils):
                             break
                     if portal['type'] == portal_type:
                         portal = portal_pre
-                        self.mouse_move(-bias)
+                        self.turn(-bias)
         tm = time.time()
         while time.time() - tm < 5 + 2 * (portal['score'] != 0):
             if aimed == 0:
@@ -531,9 +531,9 @@ class DivergentUniverse(UniverseUtils):
             self.get_screen()
             # 图标都在左侧图标列（实测 x≈1367~1374）：搜索窗口 MASK["event_icon"]
             if self.check("arrow", mask=MASK["event_icon"]):
-                self.click((self.tx, self.ty))
+                self.click_point(self.tx, self.ty)
             elif self.check("arrow_1", mask=MASK["event_icon"]):
-                self.click((self.tx, self.ty))
+                self.click_point(self.tx, self.ty)
             # 事件选择界面
             elif self.check("star", mask=MASK["event_icon"], threshold=0.95):
                 if self.debug and event_id[0] == -1:
@@ -577,10 +577,10 @@ class DivergentUniverse(UniverseUtils):
                             clicked = 1
                             break
                 if not clicked:
-                    self.click((tx, ty))
+                    self.click_point(tx, ty)
                     time.sleep(0.4)
                     if not self.confirm_text():
-                        self.click((0.1167, ty - 0.4685 + 0.3546 + 0.02))
+                        self.click_point(1696, round(ty + 101.4))
                 time.sleep(0.8)
                 start = 0
             else:
@@ -589,11 +589,11 @@ class DivergentUniverse(UniverseUtils):
                     self.ts.forward(self.get_screen())
                     if '事件' not in merge_text(self.ts.find_with_box([92, 195, 54, 88])):
                         return
-                self.click((0.9479, 0.9565))
-                self.click((0.9479, 0.9565))
+                self.click_point(100, 47)
+                self.click_point(100, 47)
                 if start:
-                    self.click((0.9479, 0.9565))
-                    self.click((0.9479, 0.9565))
+                    self.click_point(100, 47)
+                    self.click_point(100, 47)
                 self.ts.forward(self.get_screen())
 
     def find_event_text(self, save=0):
@@ -734,7 +734,7 @@ class DivergentUniverse(UniverseUtils):
 
     def check_dead(self):
         self.get_screen()
-        if self.check("divergent/sile", 0.5010,0.7519, threshold=0.96):
+        if self.check("divergent/sile",958,268, threshold=0.96):
             self.click_position([1188, 813])
             time.sleep(2.5)
 
@@ -811,7 +811,7 @@ class DivergentUniverse(UniverseUtils):
                 self.press(self.long_range)
 
         self.get_screen()
-        if self.check("divergent/arrow", 0.7833,0.9231, threshold=0.95):
+        if self.check("divergent/arrow",416,83, threshold=0.95):
             keyops.keyDown('alt')
             time.sleep(0.2)
             self.click_position([413, 79])
@@ -1209,9 +1209,11 @@ class DivergentUniverse(UniverseUtils):
 
     def goto_diver_universe(self):
         CUS_LOGGER.info("前往差分宇宙")
-        if self.check("smartphone", 0.9833,0.9380, threshold=0.95,fresh=True):
+        if self.check("smartphone",32,67, threshold=0.95,fresh=True):
             key_mouse_manager.press("interastral_peace_guide")
             self.click_target(find_image_by_name('universe.jpg'),threshold=0.9,click=True)
+            # click_target 内部的点击走队列异步执行，必须等它生效，后面的 click_text 才会截到新画面
+            key_mouse_manager.wait()
             self.click_text(text="差分宇宙",after_delay=0.5,box=[301, 429, 433, 470])
             self.click_text(text="前往参与",after_delay=5,box=[1443, 1539, 856, 884])
 

@@ -573,7 +573,7 @@ class SimulatedUniverse(UniverseUtils):
         False 表示优选项都没命中、挑了一个识别到的选项兜底。
         """
         # 选项面板在右侧 [左, 右, 上, 下]（1920x1080 基准）：点击点必须落在里面才算点到了选项。
-        left, right, top, bottom = self.scaled_box([1320, 1850, 110, 1010])
+        left, right, top, bottom = [1320, 1850, 110, 1010]
         x = (row["box"][0] + row["box"][1]) / 2
         y = (row["box"][2] + row["box"][3]) / 2
         text = row["raw_text"]
@@ -629,24 +629,12 @@ class SimulatedUniverse(UniverseUtils):
         # 76 是按钮中心在选项文字行底边下方的距离；x 取按钮中心固定的 1702。
         return 1702, bottom + 76
 
-    def scaled_box(self, box):
-        """把 1920x1080 基准的区域框 [左,右,上,下] 缩放到当前分辨率（寰宇蝗灾各模块的界面区域共用）。"""
-        left, right, top, bottom = box
-        if (self.xx, self.yy) == (1920, 1080):
-            return list(box)
-        return [
-            int(left * self.xx / 1920),
-            int(right * self.xx / 1920),
-            int(top * self.yy / 1080),
-            int(bottom * self.yy / 1080),
-        ]
-
     def confirm_text_box(self):
         """
         在框内寻找「确定」文字，返回它的屏幕文本框 [x0,x1,y0,y1]，没有返回 None。
         find_with_box(forward=1, re_screen=True) 会重新截一帧、只对这条竖条进行 OCR。
         """
-        box = self.scaled_box([1590, 1830, 240, 1070])
+        box = [1590, 1830, 240, 1070]
         for res in self.ts.find_with_box(box=box, forward=True, re_screen=True):
             if isinstance(res, dict) and "确定" in res.get("raw_text", ""):
                 return list(res["box"])
@@ -1195,7 +1183,7 @@ class SimulatedUniverse(UniverseUtils):
         CUS_LOGGER.info("打开地图")
         key_mouse_manager.press("map")
     def goto_survival_room(self):
-        key_mouse_manager.mouse_move(15)
+        key_mouse_manager.turn(15)
         key_mouse_manager.keyDown("move_w")
         sprint()
         key_mouse_manager.sleep(4)

@@ -410,11 +410,10 @@ class KeyMouseManager:
             win32api.SetCursorPos(point)
             pyautogui.click()
 
-        elif op_type == 'mouse_move':
-            dx = operation['dx']
+        elif op_type == 'turn':
+            degrees = operation['degrees']
             fine = operation.get('fine', 1)
-            # 仿照UniverseUtils.mouse_move实现
-            self._direct_mouse_move(dx, fine)
+            self._direct_turn(degrees, fine)
 
         elif op_type == 'scroll':
             x, y = operation['x'], operation['y']
@@ -449,26 +448,29 @@ class KeyMouseManager:
             duration = operation.get('duration', 0)
             self._sleep(duration)
 
-    def _direct_mouse_move(self, x, fine=1):
+    def _direct_turn(self, degrees, fine=1):
         """
-        直接执行鼠标移动，不通过队列
+        直接执行视角转动，不通过队列
+
+        以逐段移动鼠标的方式转动视角：一次最多转 30/fine 度，每度对应的鼠标
+        横向移动量约为 16.5 像素，再乘以玩家的灵敏度倍率（multi）与 DPI 缩放比（scale）。
 
         Args:
-            dx: x轴移动距离
-            fine: 精细度控制参数
+            degrees: 转动角度，单位为度；正数向右转（俯视顺时针），负数向左转
+            fine: 精细度控制参数，越大单段转动的角度上限越小、越慢
         """
-        if x > 30 // fine:
-            y = 30 // fine
-        elif x < -30 // fine:
-            y = -30 // fine
+        if degrees > 30 // fine:
+            step = 30 // fine
+        elif degrees < -30 // fine:
+            step = -30 // fine
         else:
-            y = x
-        dx = int(16.5 * y * self.multi * self.scale)
-        CUS_LOGGER.debug(f"旋转{x}°，精度{fine},移动距离{dx}，倍率{self.multi}，缩放比{self.scale}")
+            step = degrees
+        dx = int(16.5 * step * self.multi * self.scale)
+        CUS_LOGGER.debug(f"旋转{degrees}°，精度{fine},移动距离{dx}，倍率{self.multi}，缩放比{self.scale}")
         win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, 0)  # 进行视角移动
         self._sleep(0.05 * fine)
-        if x != y:
-            self._direct_mouse_move(x - y, fine)
+        if degrees != step:
+            self._direct_turn(degrees - step, fine)
 
     def _sleep(self, duration):
         """
@@ -637,20 +639,9 @@ class KeyMouseManager:
             fine: 精细度控制参数，越大单次转动越细碎、越慢
             force: 是否为强制操作
         """
-        self.mouse_move(degrees, fine=fine, force=force)
-
-    def mouse_move(self, dx, fine=1, force=False):
-        """
-        水平转动视角（turn 的别名，保留原名以兼容既有调用点）
-
-        Args:
-            dx: 转动角度，单位为度；正数向右转（俯视顺时针），负数向左转
-            fine: 精细度控制参数
-            force: 是否为强制操作
-        """
         operation = {
-            'type': 'mouse_move',
-            'dx': dx,
+            'type': 'turn',
+            'degrees': degrees,
             'fine': fine,
             'force': force
         }

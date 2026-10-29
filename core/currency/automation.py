@@ -397,7 +397,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         if not matched and not self.has_fresh:
             CUS_LOGGER.info ("未匹配到必选环境，点击刷新按钮")
-            key_mouse_manager.click (672, 984)  # 刷新按钮坐标
+            key_mouse_manager.click_point(672, 984)  # 刷新按钮坐标
             key_mouse_manager.wait()
             self.has_fresh=True
             return
@@ -436,7 +436,7 @@ class SimulatedCurrency(CurrencyUtils):
             centers.append((cx, cy))
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
-        key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
+        key_mouse_manager.click_point(centers[selected_idx][0], centers[selected_idx][1])
         key_mouse_manager.wait()
 
         self._confirm_environment_selection()
@@ -650,7 +650,7 @@ class SimulatedCurrency(CurrencyUtils):
                 f"检测到{special_investment}：登记1次立即奖励和下一边界1次延迟奖励"
             )
 
-        key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
+        key_mouse_manager.click_point(centers[selected_idx][0], centers[selected_idx][1])
 
         self.click_text (text = "确认", box = [948, 1005, 968, 999], click = True)
         CUS_LOGGER.info ("投资策略选择完成")

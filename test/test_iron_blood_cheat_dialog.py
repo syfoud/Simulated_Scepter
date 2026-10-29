@@ -44,11 +44,6 @@ from core.iron_blood import engine as iron_blood_engine
 from core.iron_blood.engine import IronBloodUniverse
 
 
-def mirror(point, xx=1920, yy=1080):
-    """真实像素坐标 → click() 用的镜像比例坐标（与 click_cheat_option 同一套换算）。"""
-    return 1 - point[0] / xx, 1 - point[1] / yy
-
-
 def center(box):
     return (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
 
@@ -100,10 +95,12 @@ class CalculatedRollTest(unittest.TestCase):
             if path == "fast_roll":
                 return fast_rolled
             if path == "zero":
-                # 0.3046 是「作弊」按钮的位置，0.1297 是「重投」按钮的位置
-                if (x, y) == (0.3046, 0.3324):
+                # check 的 x/y 是 1920x1080 像素坐标（原点客户区左上角）：
+                # 「作弊」按钮点 (1335, 721)，「重投」按钮点 (1671, 722)。
+                # 用精确点位而不是「随便什么点」断言生产代码真的在对应的按钮上取样。
+                if (x, y) == (1335, 721):
                     return not cheating
-                if (x, y) == (0.1297, 0.3315):
+                if (x, y) == (1671, 722):
                     return not redo
                 raise AssertionError(f"未预料的「zero」点位：{x}, {y}")
             raise AssertionError(f"未预料的 check 调用：{path}")
@@ -391,19 +388,16 @@ class _StubIronBloodCheatEngine(IronBloodUniverse):
             raise AssertionError("作弊流程不允许 click_text 直接点击")
         return text in "".join(item["raw_text"] for item in self._ocr(box))
 
-    def _highlight_span_x(self):
-        # 行卡片左右边界，和引擎里判定高亮时用的数值一致
-        return [int(value * self.xx / 1920) for value in (470, 1450)]
-
     def get_screen(self):
-        """画一帧假画面：被选中的那一行铺上紫色高亮。"""
+        """画一帧假画面：被选中的那一行铺上紫色高亮。
+
+        高亮区域用引擎 ``cheat_option_selected`` 里同一套 1920x1080 像素字面量：
+        左右 [470, 1450]，上下为标题 y-8 ~ y+88。
+        """
         screen = np.zeros((self.yy, self.xx, 3), dtype=np.uint8)
         if self.selected_box is not None:
-            left, right = self._highlight_span_x()
             title_top = int(self.selected_box[2])
-            top = max(int(title_top - 8 * self.yy / 1080), 0)
-            bottom = max(int(title_top + 88 * self.yy / 1080), 0)
-            screen[top:bottom, left:right] = (200, 80, 120)
+            screen[max(title_top - 8, 0):max(title_top + 88, 0), 470:1450] = (200, 80, 120)
         self.screen = screen
         return screen
 
@@ -417,7 +411,7 @@ class _StubIronBloodCheatEngine(IronBloodUniverse):
         if box is None:
             box = [0, self.xx, 0, self.yy]
         lines = self._window_lines()
-        if box == self.scaled_box([420, 1500, 240, 960]):
+        if box == [420, 1500, 240, 960]:
             # 先取当前帧再推进，否则 frame 0 永远用不到，「还在滑动的坐标不能用」就断言不出来
             lines = list(self._window_lines())
             self.frame_index += 1
@@ -425,11 +419,10 @@ class _StubIronBloodCheatEngine(IronBloodUniverse):
                 if box[0] <= item["box"][0] and item["box"][1] <= box[1]
                 and box[2] <= item["box"][2] and item["box"][3] <= box[3]]
 
-    def _near(self, normalized, box, tolerance=1.0):
-        px = (1 - normalized[0]) * self.xx
-        py = (1 - normalized[1]) * self.yy
+    def _near(self, point, box, tolerance=1.0):
+        """点击坐标是否落在 box 中心；两边都是 1920x1080 像素坐标，直接比。"""
         cx, cy = center(box)
-        return abs(px - cx) <= tolerance and abs(py - cy) <= tolerance
+        return abs(point[0] - cx) <= tolerance and abs(point[1] - cy) <= tolerance
 
     def _click(self, x, y):
         self.clicks.append((round(x, 6), round(y, 6)))
@@ -448,8 +441,9 @@ class _StubIronBloodCheatEngine(IronBloodUniverse):
                     self.selected_box = item["box"]
             return
 
-    def _scroll(self, direct, x=0.5, y=0.5):
-        self.scrolls.append((direct, round((1 - x) * self.xx), round((1 - y) * self.yy)))
+    def _scroll(self, x, y, direct=1):
+        # 列表滚动落点也是 1920x1080 像素坐标，原样记下来供断言「滚在列表区域中心」
+        self.scrolls.append((direct, round(x), round(y)))
 
     def _press(self, key, *args, **kwargs):
         self.presses.append(key)
@@ -462,9 +456,11 @@ class CheatFlowTest(unittest.TestCase):
 
     def setUp(self):
         self.manager = Mock()
-        self.manager.click = Mock(side_effect=lambda x, y: self.engine._click(x, y))
-        self.manager.scroll = Mock(
-            side_effect=lambda direct, x=0.5, y=0.5: self.engine._scroll(direct, x, y))
+        # 生产代码只走 1920x1080 像素入参的 pointer 接口；旧的比例接口 click/scroll/drag
+        # 现在只作为 click_point 等的内部实现，测试替身跟着迁移，断言仍然对得上传参。
+        self.manager.click_point = Mock(side_effect=lambda x, y: self.engine._click(x, y))
+        self.manager.scroll_point = Mock(
+            side_effect=lambda x, y, direct=1: self.engine._scroll(x, y, direct))
         self.manager.press = Mock(side_effect=lambda key, *a, **k: self.engine._press(key))
         self.enterContext(patch("core.any_fate.engine.key_mouse_manager", self.manager))
         self.logger = self.enterContext(patch("core.any_fate.engine.CUS_LOGGER", Mock()))
@@ -476,9 +472,10 @@ class CheatFlowTest(unittest.TestCase):
         return self.engine
 
     def assertClicked(self, *boxes):
+        """点击必须落在识别到的文字中心：替身记录的坐标就是 1920x1080 像素坐标。"""
         self.assertEqual(len(self.engine.clicks), len(boxes))
         for clicked, box in zip(self.engine.clicks, boxes):
-            expected = mirror(center(box))
+            expected = center(box)
             self.assertAlmostEqual(clicked[0], expected[0], places=6)
             self.assertAlmostEqual(clicked[1], expected[1], places=6)
 
@@ -500,7 +497,8 @@ class CheatFlowTest(unittest.TestCase):
         ]
         engine = self.make_engine(frames, dialog_open=True)
         engine.cheat()
-        self.assertEqual(self.manager.scroll.call_count, 2)
+        self.assertEqual(self.manager.scroll_point.call_count, 2)
+        self.manager.drag_point.assert_not_called()
         self.manager.drag.assert_not_called()
         self.assertClicked(FLESH_TITLE["box"], CONFIRM["box"])
         self.assertIsNone(engine.cheat_target)
@@ -510,8 +508,8 @@ class CheatFlowTest(unittest.TestCase):
         engine = self.make_engine([[FLESH_TITLE]] * 4, dialog_open=True)
         engine.cheat()
         # 只有 skip_first_ocr 那一次滚动；第一屏就认到了目标，循环里不再滚
-        self.assertEqual(self.manager.scroll.call_count, 1)
-        self.assertEqual(self.manager.scroll.call_args[0][0], -15)
+        self.assertEqual(self.manager.scroll_point.call_count, 1)
+        self.assertEqual(self.manager.scroll_point.call_args.kwargs["direct"], -15)
         self.assertIn("跳过首次识别", str(self.logger.debug.call_args_list))
         self.assertClicked(FLESH_TITLE["box"], CONFIRM["box"])
 
@@ -519,6 +517,8 @@ class CheatFlowTest(unittest.TestCase):
         """旧的盲拖 + 盲点 (571, 622) 就是把窗点关掉的元凶：所有点击必须落在识别到的文字中心。"""
         engine = self.make_engine([[FLESH_TITLE]] * 4, dialog_open=True)
         engine.cheat()
+        # 新旧两套拖拽接口都不许出现：列表只靠滚轮滚
+        self.manager.drag_point.assert_not_called()
         self.manager.drag.assert_not_called()
         self.assertClicked(FLESH_TITLE["box"], CONFIRM["box"])
 
@@ -541,7 +541,7 @@ class CheatFlowTest(unittest.TestCase):
         engine.cheat()
         self.assertEqual(len(engine.clicks), 5)
         for clicked in engine.clicks:
-            expected = mirror(center(FLESH_TITLE["box"]))
+            expected = center(FLESH_TITLE["box"])
             self.assertAlmostEqual(clicked[0], expected[0], places=6)
             self.assertAlmostEqual(clicked[1], expected[1], places=6)
         self.assertEqual(engine.presses, ["esc"])

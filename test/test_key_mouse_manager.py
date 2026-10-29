@@ -9,7 +9,11 @@
 import unittest
 from unittest.mock import patch
 
-from tool.key_mouse_manager import KeyMouseManager
+from tool.key_mouse_manager import (
+    KeyMouseManager,
+    point_to_ratio,
+    ratio_to_point,
+)
 
 # 游戏窗口右下角与客户区尺寸，与 test_common_runtime.py:52 的实机参数一致
 WINDOW_RIGHT = 1940
@@ -31,6 +35,7 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.click = self.enterContext(patch("tool.key_mouse_manager.pyautogui.click"))
         self.drag_to = self.enterContext(patch("tool.key_mouse_manager.pyautogui.dragTo"))
         self.scroll = self.enterContext(patch("tool.key_mouse_manager.pyautogui.scroll"))
+        self.mouse_event = self.enterContext(patch("tool.key_mouse_manager.win32api.mouse_event"))
         self.manager.start()
 
     def click_at(self, x, y):
@@ -77,6 +82,34 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.cursor.assert_called_once_with((235, 926))
         self.click.assert_called_once()
 
+    def test_click_point_lands_on_same_screen_pixel_as_pixel_click(self):
+        """click_point(215, 896) 与 click(215, 896) 必须落到同一个屏幕像素。
+
+        像素接口只是把 1920x1080 坐标换成镜像比例再走一次换算，落点不能有 1 像素偏差。
+        """
+        self.manager.click_point(215, 896)
+        self.manager.wait()
+        self.cursor.assert_called_once_with((235, 926))
+        self.click.assert_called_once()
+
+    def test_click_point_out_of_range_warns_with_pixel_coordinates(self):
+        """越界告警里给出调用方传入的 1920x1080 坐标，而不是内部换出来的比例。"""
+        self.manager.click_point(1940, 540)
+        self.manager.wait()
+        self.cursor.assert_not_called()
+        # 告警参数依次是操作名、窗口范围、请求像素坐标、换算后的屏幕坐标
+        self.assertEqual(self.logger.warning.call_args.args[1], "点击")
+        self.assertEqual(self.logger.warning.call_args.args[-4:-2], (1940, 540))
+
+    def test_turn_splits_degrees_into_steps_no_wider_than_thirty(self):
+        """turn(45) 拆成 30°+15° 两段，正角度向右转，所以鼠标横向位移为正。"""
+        self.manager.turn(45)
+        self.manager.wait()
+        self.assertEqual(self.mouse_event.call_count, 2)
+        offsets = [call.args[1] for call in self.mouse_event.call_args_list]
+        self.assertTrue(all(offset > 0 for offset in offsets), offsets)
+        self.click.assert_not_called()
+
     def test_scroll_inside_window_still_scrolls(self):
         self.manager.scroll(direct=-1, x=0.5, y=0.5)
         self.manager.wait()
@@ -101,6 +134,27 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.manager.wait()
         self.cursor.assert_not_called()
         self.drag_to.assert_not_called()
+
+
+class CoordinateHelperTests(unittest.TestCase):
+    """1920x1080 像素坐标与镜像比例互转的契约。"""
+
+    def test_round_trip_keeps_every_pixel(self):
+        """像素 -> 比例 -> 像素必须回到同一个像素。
+
+        取整一旦用 int 截断，部分像素会掉 1，所以两个方向都用 round。
+        """
+        for px in (0, 1, 123, 245, 490, 960, 1510, 1919, 1920):
+            for py in (0, 39, 187, 540, 829, 1079, 1080):
+                with self.subTest(px=px, py=py):
+                    self.assertEqual(ratio_to_point(*point_to_ratio(px, py)), (px, py))
+
+    def test_known_landmarks_map_to_expected_pixels(self):
+        """0.5 是客户区中心；右下角镜像原点对应像素 (1920, 1080)。"""
+        self.assertEqual(ratio_to_point(0.5, 0.5), (960, 540))
+        self.assertEqual(ratio_to_point(0.0, 0.0), (1920, 1080))
+        self.assertEqual(ratio_to_point(1.0, 1.0), (0, 0))
+        self.assertEqual(point_to_ratio(960, 540), (0.5, 0.5))
 
 
 if __name__ == "__main__":

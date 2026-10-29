@@ -155,7 +155,7 @@
         "name": "自动战斗检测",
         "trigger":{
             "photo": "auto_battle",
-            "pos": {"x":0.9891,"y":0.1491},
+            "pos": {"x":21,"y":919},
             "threshold":0.9
         },
         "actions":
@@ -167,7 +167,7 @@
         "name": "战斗状态检测",
         "trigger":{
             "photo": "battle",
-            "pos": {"x":0.9594,"y":0.9778},
+            "pos": {"x":78,"y":24},
             "threshold":0.97
         },
         "actions":
@@ -883,7 +883,7 @@
         "name": "大世界",
         "trigger":{
             "photo": "smartphone",
-            "pos": {"x":0.9833,"y":0.9380},
+            "pos": {"x":32,"y":67},
             "threshold":0.96
         },
         "actions":
@@ -894,7 +894,7 @@
         "name": "可能处于模拟宇宙中",
         "trigger":{
             "photo": "big_world",
-            "pos": {"x":0.0620,"y":0.1287},
+            "pos": {"x":1801,"y":941},
             "threshold":0.98
         },
         "actions":

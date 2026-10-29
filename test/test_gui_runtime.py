@@ -434,7 +434,9 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
                         self.app.processEvents()
                         self.assertIn("完成", collector.call_args.args[1]["message"])
                         engine.stop.assert_called_once()
-                        cursor.assert_called_once_with((1511, 529))
+                        # click_point(1510, 529) 先换算成镜像比例再映射回屏幕坐标，
+                        # 换算全程用 round 而非整数截断，因此横坐标仍是 1510。
+                        cursor.assert_called_once_with((1510, 529))
                     finally:
                         release.set()
                         if self.window.task_thread is not None:

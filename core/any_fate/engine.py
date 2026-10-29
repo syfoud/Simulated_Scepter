@@ -333,7 +333,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 else:
                     #背景有光污染，未能成功识别区域名
                     self.area=""
-                    key_mouse_manager.mouse_move(1)
+                    key_mouse_manager.turn(1)
                     key_mouse_manager.wait()
             else:
                 # 暂离或提前结算前不做任何走动和施法，否则 esc 会被动画吞掉
@@ -1124,7 +1124,7 @@ class AnyFateUniverse(SimulatedUniverse):
         entries = []
         # 列表区域：窗口内的效果列表（可滚动），连同底部按钮都在框内，不用再细分
         for res in self.ts.find_with_box(
-                box=self.scaled_box([420, 1500, 240, 960]), forward=True, re_screen=True):
+                box=[420, 1500, 240, 960], forward=True, re_screen=True):
             if not isinstance(res, dict):
                 continue
             text = (res.get("raw_text") or "").strip()
@@ -1154,7 +1154,7 @@ class AnyFateUniverse(SimulatedUniverse):
         x = (entry["box"][0] + entry["box"][1]) / 2
         y = (entry["box"][2] + entry["box"][3]) / 2
         # 列表区域，和 cheat_option_entries 里识别时用的同一个框
-        left, right, top, bottom = self.scaled_box([420, 1500, 240, 960])
+        left, right, top, bottom = [420, 1500, 240, 960]
         if not (left <= x <= right and top <= y <= bottom):
             CUS_LOGGER.error(f"作弊效果「{entry['raw_text']}」位置 ({x:.0f}, {y:.0f}) 不在作弊界面选项列表区域内，放弃点击")
             return None
@@ -1199,7 +1199,7 @@ class AnyFateUniverse(SimulatedUniverse):
             # 没认出目标行就把列表往下滚三行再看。用滚轮不用拖拽：拖拽松手后有惯性，
             # 列表在截图之后还在滑，按截图坐标点击就会点偏；滚轮没有惯性，滚完等一会儿
             # 画面就停了。落点用识别列表时那个框的中心，往列表上滚，别滚到底部按钮上。
-            left, right, top, bottom = self.scaled_box([420, 1500, 240, 960])
+            left, right, top, bottom = [420, 1500, 240, 960]
             key_mouse_manager.scroll_point((left + right) // 2,(top + bottom) // 2,direct=-15,)
             key_mouse_manager.wait()
             key_mouse_manager.sleep(0.3)
@@ -1242,7 +1242,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 return True
             entry = None
             # 底部「确认」的区域；左侧「取消」不在框内
-            for res in self.ts.find_with_box(box=self.scaled_box([900, 1520, 700, 1030]), forward=True, re_screen=True):
+            for res in self.ts.find_with_box(box=[900, 1520, 700, 1030], forward=True, re_screen=True):
                 if not isinstance(res, dict) or "确认" not in (res.get("raw_text") or ""):
                     continue
                 if entry is None or res["box"][3] > entry["box"][3]:
