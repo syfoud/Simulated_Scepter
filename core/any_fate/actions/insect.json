@@ -8,11 +8,7 @@
         },
         "actions":
         [
-            "end_of_university",
-            {
-                "position": [900, 1000]
-            },
-            "restart_recording"
+            "settle_university"
         ]
     },
     {
@@ -290,9 +286,6 @@
         [
             {
                 "position": [1393, 948]
-            },
-            {
-                "delay": 1000
             },
             {
                 "position": [1147, 676]
@@ -881,8 +874,9 @@
             "redundancy": 30
         },
         "actions":
-        [
-            position: [1205, 990]
+        [   {
+                "position": [1205, 990]
+            }
         ]
     },
     {
