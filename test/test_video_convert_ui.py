@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PyQt5 import QtCore, QtWidgets, uic
 
-from load_ui import QMainWindowLoadUI
+from tool.gui.appearance import apply_appearance
 
 UI_PATH = Path(__file__).resolve().parents[1] / "resource" / "ui" / "UI.ui"
 
@@ -26,7 +26,7 @@ class VideoConvertUiTests(unittest.TestCase):
 
         cls.window = QtWidgets.QMainWindow()
         # 直接加载 .ui 不会执行主窗口的字体初始化，测量前复用正式字体。
-        QMainWindowLoadUI.font_set(cls.window)
+        apply_appearance()
         cls.window.setFont(cls.app.font())
         uic.loadUi(str(UI_PATH), cls.window)
         cls.window.resize(900, 900)
@@ -35,7 +35,7 @@ class VideoConvertUiTests(unittest.TestCase):
         # 切到进阶设置页，让该页布局真正生效
         tabs = cls.window.findChild(QtWidgets.QTabWidget)
         for index in range(tabs.count()):
-            if tabs.tabText(index) == "进阶设置":
+            if tabs.widget(index) is cls.window.AbyssTab:
                 tabs.setCurrentIndex(index)
                 break
         cls._settle()

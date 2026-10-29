@@ -32,6 +32,7 @@ from tool.cleanup import (
 )
 from tool.GLOBAL import get_global_stop_flag, set_global_stop_flag
 from tool.gui.advanced_features import show_unlock_dialog
+from tool.gui.appearance import AnimatedButton
 from tool.gui.schedule_dialog import ScheduleDialog, ScheduleTimer
 from tool.gui.script_editor import ScriptEditor
 from tool.log import CUS_LOGGER, log_emitter
@@ -533,7 +534,7 @@ class MainWindow(QMainWindowLog):
         self._task_thread = task_thread
         task_thread.start()
         # 更新任务状态标签为"运行中"
-        self.Label_RunningState.setText("任务序列线程状态: 运行中")
+        self.Label_RunningState.setText("运行中")
 
         # 任务开始后再执行任务启动时触发的清理，避免清理耗时拖后任务启动
         self.cleanup_at("task_start")
@@ -559,7 +560,7 @@ class MainWindow(QMainWindowLog):
         self.current_task = None
         set_global_stop_flag(False)
 
-        self.Label_RunningState.setText("任务序列线程状态: 未运行")
+        self.Label_RunningState.setText("尚未开始")
         self._task_monitor_timer.stop()
 
         # 任务结束触发时机：此时任务线程已经退出，任务占用的文件已释放
@@ -587,7 +588,7 @@ class MainWindow(QMainWindowLog):
             self.current_task.stop()
 
         # 不在 Qt 主线程中 join，避免阻塞 GUI
-        self.Label_RunningState.setText("任务序列线程状态: 停止中")
+        self.Label_RunningState.setText("正在停止…")
 
         # 确保异步监控正在运行
         if not self._task_monitor_timer.isActive():
@@ -909,14 +910,16 @@ class MainWindow(QMainWindowLog):
             row = QWidget(self.kernel_buttons)
             layout = QHBoxLayout(row)
             layout.setContentsMargins(0, 0, 0, 0)
-            button = QPushButton(spec.button, row)
+            button = AnimatedButton(spec.button, row)
+            button.setProperty("variant", "primary")
+            button.setProperty("wrap", True)
             button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-            button.setToolTip(spec.description)
+            button.setToolTip(f"{spec.button}\n{spec.description}")
             gear = QToolButton(row)
             gear.setProperty("kernelSettings", True)
             gear.setToolTip(f"{spec.description}配置")
-            gear.setFixedWidth(30)
-            gear.setMinimumHeight(24)
+            gear.setFixedWidth(32)
+            gear.setFixedHeight(32)
             button.clicked.connect(lambda checked=False, key=spec.id: self.run_kernel(key))
             gear.clicked.connect(lambda checked=False, key=spec.id: self.open_engine_settings(key))
             layout.addWidget(button, 1)
@@ -1316,6 +1319,7 @@ class MainWindow(QMainWindowLog):
 
     def set_find_path_state(self, text:str):
         self.state_text.setText(text)
+        self.state_text.setToolTip(text)
     def set_kill_num(self, num:str):
         self.kill_num_text.setText(num)
 

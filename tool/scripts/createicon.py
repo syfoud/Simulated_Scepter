@@ -17,6 +17,21 @@ def create_qt_icon(q_color, mode):
     painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
     match mode:
+        case "sun":
+            painter.setPen(QtGui.QPen(q_color, 1.5))
+            painter.drawEllipse(QtCore.QRectF(5, 5, 6, 6))
+            for index in range(8):
+                angle = index * math.pi / 4
+                painter.drawLine(
+                    QtCore.QPointF(8 + 5 * math.cos(angle), 8 + 5 * math.sin(angle)),
+                    QtCore.QPointF(8 + 7 * math.cos(angle), 8 + 7 * math.sin(angle)),
+                )
+        case "moon":
+            moon = QtGui.QPainterPath()
+            moon.addEllipse(QtCore.QRectF(2, 2, 12, 12))
+            cutout = QtGui.QPainterPath()
+            cutout.addEllipse(QtCore.QRectF(6, 0, 12, 12))
+            painter.fillPath(moon.subtracted(cutout), q_color)
         case "gear":
             painter.setPen(QtGui.QPen(q_color, 1))
             painter.setBrush(q_color)

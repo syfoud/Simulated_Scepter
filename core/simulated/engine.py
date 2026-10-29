@@ -670,10 +670,12 @@ class SimulatedUniverse(UniverseUtils):
             time.sleep(0.2)  # 等游戏把「确定」按钮收掉，再复核它是不是真被点掉了
             box = self.confirm_text_box()
             if box is None:
+                self._option_shown_at = None
                 return True
             name = event_name or self.event_name_for_log(getattr(self, "screen", None))
             CUS_LOGGER.warning(f"事件「{name}」按固定偏移没点中「确定」，按文字识别的位置补点")
             self.click_confirm_text(box)
+            self._option_shown_at = None
             return True
         tm = time.time()
         while time.time() - tm < timeout:
@@ -681,6 +683,7 @@ class SimulatedUniverse(UniverseUtils):
             if box is not None:
                 CUS_LOGGER.debug("选项已选中，点击「确定」推进事件")
                 self.click_confirm_text(box)
+                self._option_shown_at = None
                 return True
         return False
 
