@@ -214,7 +214,7 @@ class AnyFateUniverse(SimulatedUniverse):
         """使用秘技；银狼秘技勾选，一号位为黄泉/白厄且秘技点不足银狼释放时，改用普通攻击以保留秘技点。"""
         if not fixed and self.silver_wolf_manager.should_skip_skill():
             CUS_LOGGER.debug("银狼秘技：为保留秘技点，本次改为普通攻击")
-            key_mouse_manager.click(0.5, 0.5)
+            key_mouse_manager.click_point(960, 540)
             key_mouse_manager.wait()
             return
         super().use_e(face=face, fixed=fixed)
@@ -227,9 +227,9 @@ class AnyFateUniverse(SimulatedUniverse):
         if self.state=="run":
             CUS_LOGGER.info("那朵微弱的火苗，启程之初便已种进他的心里。")
             # 检查黄泉和白厄
-            if not self.quan and self.check("huangquan", 0.0578,0.7083):
+            if not self.quan and self.check("huangquan",1809,315):
                 self.quan = 1
-            elif not self.bai_e and self.check("bai_e", 0.0625,0.7092):
+            elif not self.bai_e and self.check("bai_e",1800,314):
                 self.bai_e = 1
             #上次交互时间
             self.last_interact_time = bk_lst_changed
@@ -262,7 +262,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 if "黑塔的办公" not in self.area:
                     # 空打一拳，5秒内不重复操作
                     if self.auto_attack_breakable and time.time() - self.attack_time >= 5:
-                        key_mouse_manager.click(0.5, 0.5)
+                        key_mouse_manager.click_point(960, 540)
                         CUS_LOGGER.debug("尝试空打一拳")
                         self.attack_time = time.time()
                         key_mouse_manager.sleep(0.6)
@@ -695,8 +695,8 @@ class AnyFateUniverse(SimulatedUniverse):
         con = self.click_text(text="继续进度",box=[1610, 1762, 937, 1023],click=False,ocr_line=False,warning=False)
         if not con:
             #点击最低难度
-            key_mouse_manager.click(0.9375, 0.8565)
-        key_mouse_manager.click(0.1083, 0.1009)
+            key_mouse_manager.click_point(120, 155)
+        key_mouse_manager.click_point(1712, 971)
         if con:
             CUS_LOGGER.info("继续，燃烧下去。只要我们不曾熄灭……逐火就不会终结…")
             return
@@ -1093,20 +1093,20 @@ class AnyFateUniverse(SimulatedUniverse):
                     black_first = i
         if strange_index!=-1:
             CUS_LOGGER.debug(f"优先选择第{strange_index}个奇物")
-            key_mouse_manager.click(*self.calc_point(MASK["strange_name"], res[0][strange_index]))
-            key_mouse_manager.click(0.1365, 0.1093)
+            key_mouse_manager.click_point(*self.calc_point(MASK["strange_name"], res[0][strange_index]))
+            key_mouse_manager.click_point(1658, 962)
             key_mouse_manager.wait()
         else:
             can_use_list=[i for i in range(len(res[0])) if i not in black_index_list]
             if len(can_use_list)>0:
                 CUS_LOGGER.debug(f"任意选择第{can_use_list[0]}个奇物")
-                key_mouse_manager.click(*self.calc_point(MASK["strange_name"], res[0][can_use_list[0]]))
-                key_mouse_manager.click(0.1365, 0.1093)
+                key_mouse_manager.click_point(*self.calc_point(MASK["strange_name"], res[0][can_use_list[0]]))
+                key_mouse_manager.click_point(1658, 962)
                 key_mouse_manager.wait()
             else:
                 CUS_LOGGER.warning(f"极差情况，选择第{black_first}个奇物,齿轮或大乐透")
-                key_mouse_manager.click(*self.calc_point(MASK["strange_name"], res[0][black_first]))
-                key_mouse_manager.click(0.1365, 0.1093)
+                key_mouse_manager.click_point(*self.calc_point(MASK["strange_name"], res[0][black_first]))
+                key_mouse_manager.click_point(1658, 962)
                 key_mouse_manager.wait()
 
     # 作弊选项窗：点击「作弊」按钮后弹出的窗口。寰宇蝗灾中各命途骰面效果不一样，但窗口布局一致；
@@ -1148,7 +1148,7 @@ class AnyFateUniverse(SimulatedUniverse):
 
     def click_cheat_option(self, entry):
         """
-        点作弊效果那一行的文字中心，返回被点中的文字（与 click_event_option 一样用镜像比例坐标）。
+        点作弊效果那一行的文字中心，返回被点中的文字。
         位置落在作弊界面选项列表区域外就放弃。
         """
         x = (entry["box"][0] + entry["box"][1]) / 2
@@ -1159,21 +1159,19 @@ class AnyFateUniverse(SimulatedUniverse):
             CUS_LOGGER.error(f"作弊效果「{entry['raw_text']}」位置 ({x:.0f}, {y:.0f}) 不在作弊界面选项列表区域内，放弃点击")
             return None
         CUS_LOGGER.debug(f"点击作弊效果：「{entry['raw_text']}」")
-        key_mouse_manager.click(1 - x / self.xx, 1 - y / self.yy)
+        key_mouse_manager.click_point(x, y)
         key_mouse_manager.wait()
         return entry["raw_text"]
 
     def cheat_option_selected(self, entry):
         """判断作弊界面选项列表里指定选项是不是真的被选中了：被选中的行整条会高亮成紫色。"""
         screen = self.get_screen()
-        # 高亮范围只给左右边界，scaled_box 要 4 个数，这里自己按 1920 基准缩放。
         # 行卡片左右 [470, 1450]、上下 = 标题 y-8 ~ 标题 y+88，卡片自身高约 100 px。
-        left, right = [int(value * self.xx / 1920) for value in (470, 1450)]
-        x0 = max(int(left), 0)
-        x1 = min(int(right), int(screen.shape[1]))
+        x0 = 470
+        x1 = min(1450, int(screen.shape[1]))
         title_top = int(entry["box"][2])
-        y0 = max(int(title_top - 8 * self.yy / 1080), 0)
-        y1 = min(int(title_top + 88 * self.yy / 1080), int(screen.shape[0]))
+        y0 = max(title_top - 8, 0)
+        y1 = min(title_top + 88, int(screen.shape[0]))
         if x1 - x0 < 10 or y1 - y0 < 10:
             return False
         patch = np.ascontiguousarray(screen[y0:y1, x0:x1])
@@ -1202,11 +1200,7 @@ class AnyFateUniverse(SimulatedUniverse):
             # 列表在截图之后还在滑，按截图坐标点击就会点偏；滚轮没有惯性，滚完等一会儿
             # 画面就停了。落点用识别列表时那个框的中心，往列表上滚，别滚到底部按钮上。
             left, right, top, bottom = self.scaled_box([420, 1500, 240, 960])
-            key_mouse_manager.scroll(
-                -15,
-                1 - (left + right) / 2 / self.xx,
-                1 - (top + bottom) / 2 / self.yy,
-            )
+            key_mouse_manager.scroll_point((left + right) // 2,(top + bottom) // 2,direct=-15,)
             key_mouse_manager.wait()
             key_mouse_manager.sleep(0.3)
 
@@ -1258,7 +1252,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 return False
             x = (entry["box"][0] + entry["box"][1]) / 2
             y = (entry["box"][2] + entry["box"][3]) / 2
-            key_mouse_manager.click(1 - x / self.xx, 1 - y / self.yy)
+            key_mouse_manager.click_point(x, y)
             key_mouse_manager.wait()
         # 刚点完的「确认」也要等淡出，否则标题还认得出来，会被误判成没关窗
         time.sleep(0.05)
@@ -1315,15 +1309,15 @@ class AnyFateUniverse(SimulatedUniverse):
         res_down = self.ts.split_and_find(self.tk.secondary, img_down, mode="bless")
         if res_up[1] == 2:
             CUS_LOGGER.debug("识别到具体祝福")
-            key_mouse_manager.click(*self.calc_point(MASK["bless_name"], res_up[0]))
+            key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
             key_mouse_manager.wait()
         elif res_down[1] >= 2:
             CUS_LOGGER.debug("识别到匹配命途")
-            key_mouse_manager.click(*self.calc_point(MASK["bless_path"], res_down[0]))
+            key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
             key_mouse_manager.wait()
         elif self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False,allow_fail=True):
             CUS_LOGGER.debug("未识别到具体祝福,随便选一个")
-            key_mouse_manager.click(*self.calc_point(MASK["bless_name"], res_up[0]))
+            key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
             key_mouse_manager.wait()
         self.click_text(text="确认",box=[1663, 1719, 949, 979],need_fresh=False,ocr_line=True,warning=True)
         key_mouse_manager.wait()
@@ -1342,7 +1336,7 @@ class AnyFateUniverse(SimulatedUniverse):
             if self.next_node is not None:
                 self.start_nodes=self.next_node
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
-                key_mouse_manager.click(x,y)
+                key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
                 self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
                 if self.area != "" and self.now_map!=-1:
@@ -1390,7 +1384,7 @@ class AnyFateUniverse(SimulatedUniverse):
             key_mouse_manager.wait()
             return
         self.read_action_counts()
-        if not self.check("fast_roll", 0.1281,0.9074, threshold=0.9):
+        if not self.check("fast_roll",1674,100, threshold=0.9):
             self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
         self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
         self.init_map()
@@ -1425,8 +1419,8 @@ class AnyFateUniverse(SimulatedUniverse):
             elif '齿星系' in strange or '分裂咕咕钟' in strange or '血锦之纪' in strange or '星际大乐透' in strange or '机械齿轮' in strange:
                 black_index_list.append(i)
         for i in strange_index_list:
-            key_mouse_manager.click(*self.calc_point(MASK["strange_name"], res[0][i]))
-            key_mouse_manager.click(0.1365, 0.1093)
+            key_mouse_manager.click_point(*self.calc_point(MASK["strange_name"], res[0][i]))
+            key_mouse_manager.click_point(1658, 962)
             key_mouse_manager.wait()
             for _ in range(5):
                 self.click_text(text="点击空白", box=[872, 1048, 729, 1015],warning=False)
@@ -1437,11 +1431,11 @@ class AnyFateUniverse(SimulatedUniverse):
     def select_secret(self):
         # 点击优先级：对话条金色 ▼ →「选择」栏白色箭头 → 命途选项卡 → 都不在时点「秘闻」
         if self.check("arrow_dialog", mask=MASK["dialog"], fresh=True):
-            key_mouse_manager.click(self.tx, self.ty)
+            key_mouse_manager.click_point(self.tx, self.ty)
             return
         # 图标（白色右箭头、命途选项卡）都在左侧图标列，与 select_event 用同一套区域
         if self.check("arrow", mask=MASK["event_icon"], fresh=True):
-            key_mouse_manager.click(self.tx, self.ty)
+            key_mouse_manager.click_point(self.tx, self.ty)
             return
         success = False
         CUS_LOGGER.info("没错，我们会尽己所能将其诠释：比世界的命运更为沉重之物……")
@@ -1456,9 +1450,9 @@ class AnyFateUniverse(SimulatedUniverse):
             return
         # 命途选项卡已经出现：先用「选项卡 → 确定」的固定偏移快速点一下，再由 confirm_event 用文字识别复核
         CUS_LOGGER.info("原来那浑身着火的恶魔，满脑子幻想的都是要成为「救世主」哪！")
-        key_mouse_manager.click(self.tx, self.ty)
-        # 固定偏移：x=0.1167 是按钮中心屏幕 x≈1696 的比例坐标，y = 选项卡 y - 0.1139
-        self.confirm_event(point=(0.1167, self.ty - 0.1139), timeout=0.5)
+        key_mouse_manager.click_point(self.tx, self.ty)
+        # 固定偏移：x 固定 1696 是按钮中心，y = 选项卡 y + 123
+        self.confirm_event(point=(1696, self.ty + 123), timeout=0.5)
 
     # 寰宇命途（以及铁血战士、弹指一挥）的选项除了普通选项的星号（※），个别事件还会给某个选项
     # 配一张自己的命途图标。只认星号会漏掉这一条，优选项就永远匹配不上，所以这里补上八个命途图标。
@@ -1603,7 +1597,7 @@ class AnyFateUniverse(SimulatedUniverse):
         # 超时、停止或未出现确认弹窗时，均不点击固定坐标
         if self._stop or not appeared:
             return False
-        key_mouse_manager.click(1147, 676)
+        key_mouse_manager.click_point(1147, 676)
         # 此方法的调用点存在后续识图，统一在这里建立同步边界
         key_mouse_manager.wait()
         return True

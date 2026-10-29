@@ -7,7 +7,7 @@ import numpy as np
 
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER, log_emitter
-from tool.mask import MASK, crop_region, region_center
+from tool.mask import MASK, crop_region, region_center_point
 from tool.public_ocr import load_actions, merge_text
 from tool.utils.image_tool import find_image_by_name
 
@@ -133,9 +133,10 @@ class StateKernel:
         elif "press" in action:
             self.action_press(action["press"], action.get("time", 0))
         elif "drag" in action:
-            key_mouse_manager.drag(*action["drag"])
+            key_mouse_manager.drag_point(*action["drag"])
         elif "scroll" in action:
-            key_mouse_manager.scroll(action["scroll"])
+            # 滚动落点固定在画面中心，脚本里只写滚动格数
+            key_mouse_manager.scroll_point(960, 540, direct=action["scroll"])
         elif "set_state" in action:
             self.update_state(action["set_state"])
         else:
@@ -178,7 +179,7 @@ class StateKernel:
                 CUS_LOGGER.debug(f"全局图像匹配度{result['max_val']}")
                 points = self.calculated(result, target.shape)
                 if click:
-                    key_mouse_manager.click(*points)
+                    key_mouse_manager.click_point(*points)
                 return True
             if not flag:
                 return False
@@ -186,8 +187,9 @@ class StateKernel:
                 threshold -= 0.01
 
     def get_local(self, x, y, size, large=True):
+        """按 1920x1080 像素坐标截取 (x, y) 附近的画面，供模板匹配使用。"""
         sx, sy = size[0] + 60 * large, size[1] + 60 * large
-        bx, by = self.xx - int(x * self.xx), self.yy - int(y * self.yy)
+        bx, by = int(x), int(y)
         return self.screen[
             max(0, by - sx // 2) : min(self.yy, by + sx // 2),
             max(0, bx - sy // 2) : min(self.xx, bx + sy // 2),
@@ -198,7 +200,7 @@ class StateKernel:
         """
         判断截图中指定区域或匹配中心点附近是否存在匹配模板
         path：匹配模板的路径，
-        x,y：匹配中心点，
+        x,y：匹配中心点，1920x1080 像素坐标（原点在客户区左上角），
         mask：识别区域 [x1, x2, y1, y2]（见 tool/mask.py），给出时忽略 x,y，
         threshold：匹配阈值
         """
@@ -220,7 +222,7 @@ class StateKernel:
             center_x, center_y = x, y
             local_screen = self.get_local(x, y, target.shape)
         else:
-            center_x, center_y = region_center(mask, self.xx, self.yy)
+            center_x, center_y = region_center_point(mask)
             local_screen = crop_region(self.screen, mask)
         if use_binary:
             # 将截图和模板图像转换为灰度图
@@ -247,8 +249,11 @@ class StateKernel:
                 CUS_LOGGER.error(f"{path}匹配失败，源图像{local_screen.shape}，目标图像{target.shape}")
                 raise
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
-        self.tx = center_x - (max_loc[0] - 0.5 * local_screen.shape[1] + 0.5 * target.shape[1]) / self.xx
-        self.ty = center_y - (max_loc[1] - 0.5 * local_screen.shape[0] + 0.5 * target.shape[0]) / self.yy
+        # 匹配框中心相对局部截图中心的像素偏移，叠加到请求中心点上即为实际匹配中心
+        offset_x = max_loc[0] - 0.5 * local_screen.shape[1] + 0.5 * target.shape[1]
+        offset_y = max_loc[1] - 0.5 * local_screen.shape[0] + 0.5 * target.shape[0]
+        self.tx = center_x + offset_x
+        self.ty = center_y + offset_y
         self.tm = max_val
         if max_val > threshold:
             if self.last_info != path:
@@ -276,17 +281,18 @@ class StateKernel:
         点击给定坐标框的中心位置
 
         Args:
-            box: 坐标框，格式为[x1, x2, y1, y2]，其中x1,x2为横向坐标，y1,y2为纵向坐标
+            box: 坐标框，格式为[x1, x2, y1, y2]，其中x1,x2为横向坐标，y1,y2为纵向坐标，
+                单位是 1920x1080 像素坐标（原点在客户区左上角）
         """
         x = (box[0] + box[1]) / 2
         y = (box[2] + box[3]) / 2
-        key_mouse_manager.click(1 - x / self.xx, 1 - y / self.yy)
+        key_mouse_manager.click_point(x, y)
 
     def click_position(self, position):
         """
         点击给定位置坐标
 
         Args:
-            position: 位置坐标，格式为[x, y]，其中x为横向坐标，y为纵向坐标
+            position: 位置坐标，格式为[x, y]，单位为 1920x1080 像素坐标（原点在客户区左上角）
         """
-        self.click_box([position[0], position[0], position[1], position[1]])
+        key_mouse_manager.click_point(position[0], position[1])

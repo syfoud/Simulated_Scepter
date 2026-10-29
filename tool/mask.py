@@ -49,3 +49,9 @@ def region_center(region, width, height):
     """区域中心的归一化坐标，与 check 的 x、y 使用同一套镜像坐标。"""
     x1, x2, y1, y2 = region
     return 1 - (x1 + x2) / 2 / width, 1 - (y1 + y2) / 2 / height
+
+
+def region_center_point(region):
+    """区域中心的 1920x1080 像素坐标（原点在客户区左上角）。"""
+    x1, x2, y1, y2 = region
+    return (x1 + x2) / 2, (y1 + y2) / 2

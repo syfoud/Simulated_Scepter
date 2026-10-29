@@ -232,7 +232,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 return
             if self.replace_idx is not None:
                 x,y=int(self.nodes[self.replace_idx]["cx"]),int(self.nodes[self.replace_idx]["cy"])
-                key_mouse_manager.click(x,y)
+                key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
                 self.click_text(text="确认目标", box=[1635, 1735, 968, 996])
             else:
@@ -261,7 +261,7 @@ class IronBloodUniverse(AnyFateUniverse):
             )
             if target_node is not None:
                 x, y = int(target_node["cx"]), int(target_node["cy"])
-                key_mouse_manager.click(x, y)
+                key_mouse_manager.click_point(x, y)
                 key_mouse_manager.wait()
                 self.click_text(text="确认目标", box=[1635, 1735, 968, 996])
             else:
@@ -314,7 +314,7 @@ class IronBloodUniverse(AnyFateUniverse):
                     return
                 self.start_nodes=self.next_node
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
-                key_mouse_manager.click(x,y)
+                key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
                 self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
                 if self.area != "" and self.now_map!=-1:
@@ -348,18 +348,18 @@ class IronBloodUniverse(AnyFateUniverse):
             key_mouse_manager.wait()
             return
         _, cheat_count = self.read_action_counts()
-        if not self.check("fast_roll", 0.1281,0.9074, threshold=0.9):
+        if not self.check("fast_roll",1674,100, threshold=0.9):
             self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
         if self.plane_floor in [2,3]:
             text = self.ts.find_with_box(box=[1339, 1576, 429, 464], forward=True, re_screen=False)
             text = merge_text(text) if len(text) else ""
             CUS_LOGGER.info(f"拿去吧…我背负的一切。(当前效果{text})")
             if "肉体" not in text:
-                cheating =not self.check("zero", 0.3046,0.3324, threshold=0.95)
+                cheating =not self.check("zero",1335,721, threshold=0.95)
                 if cheat_count == 0:
                     # 作弊次数 0（含没解锁作弊功能）就没法作弊，别去点那个不存在的「作弊」按钮
                     cheating = False
-                redo=not self.check("zero", 0.1297,0.3315, threshold=0.95)
+                redo=not self.check("zero",1671,722, threshold=0.95)
                 CUS_LOGGER.debug(f"决策可用动作{cheating},{redo}")
                 if cheating or redo:
                     best_path, best_weight, best_end_idx, self.replace_idx, delta, discounted_delta = evaluate_best_single_replacement(

@@ -359,8 +359,12 @@ class KeyMouseManager:
             return actual_x, actual_y
         if self.skipped_pointer != (op_type, x, y):
             self.skipped_pointer = (op_type, x, y)
-            CUS_LOGGER.warning("%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，请求坐标(%s, %s)已越界，跳过本次操作",
-                op_type, self.x0, self.y0, self.x1, self.y1, actual_x, actual_y
+            want_x, want_y = self._display_point(x, y)
+            CUS_LOGGER.warning(
+                "%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，请求坐标(%s, %s)（1920x1080 像素坐标）"
+                "换算为屏幕坐标(%s, %s)已越界，跳过本次操作",
+                op_type, self.x0, self.y0, self.x1, self.y1,
+                want_x, want_y, actual_x, actual_y
             )
         return None
 
@@ -602,11 +606,14 @@ class KeyMouseManager:
 
     def click(self, x, y, force=False):
         """
-        点击指定位置
+        点击指定位置（底层接口，内部按浮点数镜像比例坐标换算）
+
+        业务代码请用 click_point 传 1920x1080 像素坐标；本接口保留给内部换算和旧调用点，
+        传客户区像素坐标时走整数分支，同样按像素处理。
 
         Args:
-            x: 屏幕x坐标（支持浮点数比例坐标和实际坐标）
-            y: 屏幕y坐标（支持浮点数比例坐标和实际坐标）
+            x: 屏幕x坐标（浮点数镜像比例，或客户区像素坐标）
+            y: 屏幕y坐标（浮点数镜像比例，或客户区像素坐标）
             force: 是否为强制操作
         """
         operation = {
@@ -621,12 +628,23 @@ class KeyMouseManager:
             with self.queue_lock:
                 self.operation_queue.append(operation)
 
-    def mouse_move(self, dx, fine=1, force=False):
+    def turn(self, degrees, fine=1, force=False):
         """
-        移动鼠标
+        水平转动视角
 
         Args:
-            dx: x轴移动距离
+            degrees: 转动角度，单位为度；正数向右转（俯视顺时针），负数向左转
+            fine: 精细度控制参数，越大单次转动越细碎、越慢
+            force: 是否为强制操作
+        """
+        self.mouse_move(degrees, fine=fine, force=force)
+
+    def mouse_move(self, dx, fine=1, force=False):
+        """
+        水平转动视角（turn 的别名，保留原名以兼容既有调用点）
+
+        Args:
+            dx: 转动角度，单位为度；正数向右转（俯视顺时针），负数向左转
             fine: 精细度控制参数
             force: 是否为强制操作
         """
@@ -644,11 +662,14 @@ class KeyMouseManager:
 
     def scroll(self, direct=1, x=0.5, y=0.5, force=False):
         """
-        滚动鼠标滚轮
+        滚动鼠标滚轮（底层接口，内部按浮点数镜像比例坐标换算）
+
+        业务代码用 scroll_point 传 1920x1080 像素坐标。
+        坐标用浮点数镜像比例，或客户区像素坐标。
 
         Args:
-            x: 滚动位置x坐标（支持浮点数比例坐标和实际坐标）
-            y: 滚动位置y坐标（支持浮点数比例坐标和实际坐标）
+            x: 滚动位置x坐标
+            y: 滚动位置y坐标
             direct: 滚动方向和次数，正数向上滚动，负数向下滚动
             force: 是否为强制操作
         """
@@ -667,13 +688,16 @@ class KeyMouseManager:
 
     def drag(self, start_x, start_y, end_x, end_y, duration=0.4, force=False):
         """
-        拖拽操作
+        拖拽操作（底层接口，内部按浮点数镜像比例坐标换算）
+
+        业务代码用 drag_point 传 1920x1080 像素坐标。
+        坐标用浮点数镜像比例，或客户区像素坐标。
 
         Args:
-            start_x: 起始点x坐标（支持浮点数比例坐标和实际坐标）
-            start_y: 起始点y坐标（支持浮点数比例坐标和实际坐标）
-            end_x: 结束点x坐标（支持浮点数比例坐标和实际坐标）
-            end_y: 结束点y坐标（支持浮点数比例坐标和实际坐标）
+            start_x: 起始点x坐标
+            start_y: 起始点y坐标
+            end_x: 结束点x坐标
+            end_y: 结束点y坐标
             duration: 拖拽持续时间（秒）
             force: 是否为强制操作
         """
@@ -721,10 +745,10 @@ class KeyMouseManager:
         """按 1920x1080 像素坐标拖拽。
 
         Args:
-            start_x: 起始点 x 坐标（1920x1080 坐标系）
-            start_y: 起始点 y 坐标（1920x1080 坐标系）
-            end_x: 结束点 x 坐标（1920x1080 坐标系）
-            end_y: 结束点 y 坐标（1920x1080 坐标系）
+            start_x: 起始点 x 坐标
+            start_y: 起始点 y 坐标
+            end_x: 结束点 x 坐标
+            end_y: 结束点 y 坐标
             duration: 拖拽持续时间（秒）
             force: 是否为强制操作
         """

@@ -310,7 +310,7 @@ class UniverseUtils(StateKernel):
             match = self.ts.ocr_one_row(img, box)
             CUS_LOGGER.info(f"尝试匹配：{text}匹配结果：{match}")
             if len(match) and click:
-                key_mouse_manager.click(
+                key_mouse_manager.click_point(
                     (box[0] + box[1]) // 2,
                     (box[2] + box[3]) // 2
                 )
@@ -320,9 +320,9 @@ class UniverseUtils(StateKernel):
         pt = self.ts.find_text(img, text, find_all)
         if pt is not None:
             if click:
-                key_mouse_manager.click(
-                    1 - (pt[0][0] + pt[1][0]) / 2 / self.xx,
-                    1 - (pt[0][1] + pt[2][1]) / 2 / self.yy
+                key_mouse_manager.click_point(
+                    (pt[0][0] + pt[1][0]) / 2,
+                    (pt[0][1] + pt[2][1]) / 2
                 )
             if after_delay:
                 time.sleep(after_delay)

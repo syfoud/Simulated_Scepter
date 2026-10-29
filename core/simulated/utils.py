@@ -29,7 +29,7 @@ from tool.GLOBAL import (
     set_global_stop_flag,
 )
 from tool.log import CUS_LOGGER, log_emitter
-from tool.mask import MASK, crop_region, region_center
+from tool.mask import MASK, crop_region, region_center_point
 from tool.screenshot import Screen
 from core.simulated.config import config
 from core.simulated.ocr import get_global_my_ts
@@ -265,7 +265,7 @@ class UniverseUtils(StateKernel):
         time.sleep(1)
         return 1
 
-    # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
+    # example: self.wait_fig(lambda:self.check("strange",112,56), 1.4)
     def wait_flag(self, f, timeout=3.0):
         tm = time.time()
         while time.time() - tm < timeout:
@@ -287,33 +287,36 @@ class UniverseUtils(StateKernel):
         return self.run_static()[1]
     def use_it(self, x, y):
         if x != 1 or y != 1:
-            key_mouse_manager.click(0.903 - 0.06 * (x - 1), 0.827 - 0.14 * (y - 1))
+            # 消耗品网格：横向步长 115.2px、纵向步长 151.2px，起点为 (186.24, 186.84)
+            key_mouse_manager.click_point(
+                round(186.24 + 115.2 * (x - 1)), round(186.84 + 151.2 * (y - 1))
+            )
         # 点击使用
-        key_mouse_manager.click(0.154,0.088)
+        key_mouse_manager.click_point(1624, 985)
         self.wait_flag(lambda:not self.click_text(text="确认",box=[1126, 1252, 716, 812],click=False,ocr_line=False,warning=False), 1.2)
         # 点击确认
-        key_mouse_manager.click(0.386,0.294)
+        key_mouse_manager.click_point(1179, 762)
         r = self.wait_flag(lambda:not self.click_text(text="替换同类",box=[816, 1006, 284, 380],click=False,warning=False), 0.8)
         if r:
             # 覆盖效果
-            key_mouse_manager.click(0.386,0.294)
+            key_mouse_manager.click_point(1179, 762)
 
     def use_consumable(self, x=1, y=1):
         """
         使用x排，y列的消耗品
         """
         key_mouse_manager.press("inventory")
-        if self.wait_flag(lambda:not self.check("use_package", 0.5182, 0.9407), 3):
-            key_mouse_manager.click(0.3677,0.0861)
+        if self.wait_flag(lambda:not self.check("use_package",925,64), 3):
+            key_mouse_manager.click_point(1214, 987)
             self.get_screen()
-            if self.wait_flag(lambda:not self.check("use_star", 0.8828, 0.8648, threshold=0.9), 0.8):
+            if self.wait_flag(lambda:not self.check("use_star",225,146, threshold=0.9), 0.8):
                 self.use_it(x, y)
-                if self.wait_flag(lambda:not self.check("use_def", 0.3198, 0.0880), 2.2):
-                    key_mouse_manager.click(0.3198,0.0880)
+                if self.wait_flag(lambda:not self.check("use_def",1306,985), 2.2):
+                    key_mouse_manager.click_point(1306, 985)
                     self.get_screen()
-                    if self.wait_flag(lambda:not self.check("use_star", 0.8828, 0.8648, threshold=0.9), 0.6):
+                    if self.wait_flag(lambda:not self.check("use_star",225,146, threshold=0.9), 0.6):
                         self.use_it(x, y)
-                        self.wait_flag(lambda:not self.check("use_package", 0.5182, 0.9407), 2)
+                        self.wait_flag(lambda:not self.check("use_package",925,64), 2)
                     key_mouse_manager.press("esc")
             else:
                 key_mouse_manager.press("esc")
@@ -327,12 +330,12 @@ class UniverseUtils(StateKernel):
         """
         把识别结果相对匹配中心的偏移换算成点击坐标
 
-        point：归一化坐标，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
-        offset：识别结果相对匹配中心的像素偏移
+        point：1920x1080 像素坐标点，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
+        offset：识别结果相对匹配中心的像素偏移，与像素坐标同向（右下为正），因此直接相加
         """
         if len(point) == 4:
-            point = region_center(point, self.xx, self.yy)
-        return point[0] - offset[0] / self.xx, point[1] - offset[1] / self.yy
+            point = region_center_point(point)
+        return point[0] + offset[0], point[1] + offset[1]
 
     def click_text(self, text,delay=0,box=None,after_delay=0,click=True,find_all=False,warning=True,ocr_line=True,need_fresh=True,allow_fail=False):
         if delay:
@@ -355,7 +358,7 @@ class UniverseUtils(StateKernel):
             # 检查匹配结果是否包含目标文本
             if len(match) and text in match:
                 if click:
-                    key_mouse_manager.click(
+                    key_mouse_manager.click_point(
                         (box[0]+box[1])//2,
                         (box[2]+box[3])//2
                     )
@@ -367,9 +370,9 @@ class UniverseUtils(StateKernel):
         pt = self.ts.find_text(img, text,find_all)
         if pt is not None:
             if click:
-                key_mouse_manager.click(
-                        1 - (pt[0][0] + pt[1][0]) / 2 / self.xx,
-                        1 - (pt[0][1] + pt[2][1]) / 2 / self.yy
+                key_mouse_manager.click_point(
+                        (pt[0][0] + pt[1][0]) / 2,
+                        (pt[0][1] + pt[2][1]) / 2
                 )
             if after_delay:
                 time.sleep(after_delay)
@@ -390,7 +393,7 @@ class UniverseUtils(StateKernel):
 
     def get_end_point(self, mask=0,device=0):
         self.get_screen()
-        local_screen = self.get_local(0.4979, 0.6296, (715, 1399))
+        local_screen = self.get_local(964, 400, (715, 1399))
         white = np.array([255, 255, 255])
         black = np.array([0, 0, 0])
         bw_map = np.zeros(local_screen.shape[:2], dtype=np.uint8)
@@ -601,7 +604,7 @@ class UniverseUtils(StateKernel):
         old_floor= self.floor
         self.get_screen()
         for i in range(13, 0, -1):
-            if self.check("floor/ff" + str(i), 0.0589, 0.8796):
+            if self.check("floor/ff" + str(i),1807,130):
                 self.update_floor(i)
                 CUS_LOGGER.info(f"当前层数：{i}")
                 self.floor_init = 1
@@ -1252,7 +1255,7 @@ class UniverseUtils(StateKernel):
                         return
                     key_mouse_manager.press("move_w")
                 else:
-                    key_mouse_manager.click(0.5, 0.5)
+                    key_mouse_manager.click_point(960, 540)
             if self.target_type == 3:
                 self.set_path_state("当前寻找终点")
                 for i in range(9):
@@ -1379,7 +1382,7 @@ class UniverseUtils(StateKernel):
     #0.2~0.25s
     def is_run(self,check=True):
         if check:
-            if not self.check("big_world", 0.0620, 0.1287, threshold=0.98, fresh=True):
+            if not self.check("big_world",1801,941, threshold=0.98, fresh=True):
                 self.update_state("no_run")
                 return False
         # loc_scr = get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True)
@@ -1433,7 +1436,7 @@ class UniverseUtils(StateKernel):
         #打补给罐子
         if self.mini_state==1 and self.floor in [5,9,12]:
             key_mouse_manager.press("move_w",0.55)
-            key_mouse_manager.click(0.5,0.5)
+            key_mouse_manager.click_point(960, 540)
             key_mouse_manager.press("move_w")
             key_mouse_manager.wait()
         #13层并且不要奖励
@@ -1456,16 +1459,16 @@ class UniverseUtils(StateKernel):
                 if not self.check_bonus:
                     break
                 #领取沉浸奖励
-                if self.check('bonus_c',0.2385,0.6685,fresh=True):
-                    key_mouse_manager.click(0.4453,0.3250)
+                if self.check('bonus_c',1462,358,fresh=True):
+                    key_mouse_manager.click_point(1065, 729)
                     key_mouse_manager.wait()
                     if self.click_text(text="储存沉浸器",box=[838, 1070, 298, 400],click=False,ocr_line=False,warning=False):
                         self.check_bonus = 0
-                    key_mouse_manager.click(0.5062, 0.1454)
+                    key_mouse_manager.click_point(948, 923)
                     key_mouse_manager.wait()
             key_mouse_manager.keyUp("move_w")
-            if self.check('bonus_c',0.2385,0.6685,fresh=True):
-                key_mouse_manager.click(0.2385,0.6685)
+            if self.check('bonus_c',1462,358,fresh=True):
+                key_mouse_manager.click_point(1462, 358)
             self.mini_state=5
             if self.floor==13:
                 self.should_update_map = False
@@ -1566,7 +1569,7 @@ class UniverseUtils(StateKernel):
                 else:
                     CUS_LOGGER.info("未检测到黑塔")
                     key_mouse_manager.keyUp("move_w")
-            if self.check("auto_2", 0.0583, 0.0769):
+            if self.check("auto_2",1808,997):
                 CUS_LOGGER.info("检测到位于战斗中")
                 key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
@@ -1612,7 +1615,6 @@ class UniverseUtils(StateKernel):
                             # 仅检测存在性，不需要排序，使用第一个检测到的点
                             target = ((rd[1][0], rd[0][0]), 3)
                             self.get_screen()
-                            # local_screen = self.get_local(0.9333, 0.8657, shape)
                             ds=self.update_direction_data(mode=2,target=target)
                             if not ds:
                                 break
@@ -1659,7 +1661,7 @@ class UniverseUtils(StateKernel):
                         else:
                             key_mouse_manager.keyDown("move_w")
                     else:
-                        key_mouse_manager.click(0.5,0.5)
+                        key_mouse_manager.click_point(960, 540)
                     if iters + self.quan == 2:
                         key_mouse_manager.press("move_d",0.85)
                         key_mouse_manager.press("move_a",0.3)
@@ -1690,7 +1692,7 @@ class UniverseUtils(StateKernel):
                     key_mouse_manager.press("move_d",0.45)
                     key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
-                        key_mouse_manager.click(0.5,0.5)
+                        key_mouse_manager.click_point(960, 540)
                     key_mouse_manager.wait()
 
                 break
@@ -1733,7 +1735,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.info(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
-            key_mouse_manager.click(0.5,0.5)
+            key_mouse_manager.click_point(960, 540)
             self.should_update_map = False
     def get_event_only_minimap(self):
         """
@@ -1838,7 +1840,7 @@ class UniverseUtils(StateKernel):
                     key_mouse_manager.press("move_d",0.45)
                     key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
-                        key_mouse_manager.click(0.5,0.5)
+                        key_mouse_manager.click_point(960, 540)
                     key_mouse_manager.wait()
                 break
         self.stop_move=1
@@ -1888,7 +1890,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
-            key_mouse_manager.click(0.5,0.5)
+            key_mouse_manager.click_point(960, 540)
             self.should_update_map = False
     def get_rest_only_minimap(self):
         """
@@ -1906,7 +1908,7 @@ class UniverseUtils(StateKernel):
         #打补给罐子
         if self.mini_state==1:
             key_mouse_manager.press("move_w",0.55)
-            key_mouse_manager.click(0.5,0.5)
+            key_mouse_manager.click_point(960, 540)
             key_mouse_manager.press("move_w")
             key_mouse_manager.wait()
         self.stop_move=0
@@ -2018,7 +2020,7 @@ class UniverseUtils(StateKernel):
                     key_mouse_manager.press("move_d",0.45)
                     key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
-                        key_mouse_manager.click(0.5,0.5)
+                        key_mouse_manager.click_point(960, 540)
                     key_mouse_manager.wait()
                 break
         self.stop_move=1
@@ -2055,7 +2057,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
-            key_mouse_manager.click(0.5,0.5)
+            key_mouse_manager.click_point(960, 540)
             self.should_update_map = False
     def get_adventure(self):
         """
@@ -2287,7 +2289,7 @@ class UniverseUtils(StateKernel):
                     key_mouse_manager.press("move_d",0.45)
                     key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
-                        key_mouse_manager.click(0.5,0.5)
+                        key_mouse_manager.click_point(960, 540)
                     key_mouse_manager.wait()
                 break
         self.stop_move=1
@@ -2324,7 +2326,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
-            key_mouse_manager.click(0.5,0.5)
+            key_mouse_manager.click_point(960, 540)
             self.should_update_map = False
     def get_path_only_minimap(self,fixed=False):
         """
@@ -2397,7 +2399,7 @@ class UniverseUtils(StateKernel):
                     if not self.is_run():
                         return
                 break
-            if self.check("auto_2", 0.0583, 0.0769):
+            if self.check("auto_2",1808,997):
                 CUS_LOGGER.info("「逐火是不断失却的旅途，在那一切当中，生命也微不足惜。」")
                 key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
@@ -2476,7 +2478,7 @@ class UniverseUtils(StateKernel):
                         self.should_update_map = False
                         return
                     else:
-                        key_mouse_manager.click(0.5,0.5)
+                        key_mouse_manager.click_point(960, 540)
                     if iters + self.quan == 2:
                         key_mouse_manager.press("move_d",0.85)
                         key_mouse_manager.press("move_a",0.3)
@@ -2540,7 +2542,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
-            key_mouse_manager.click(0.5,0.5)
+            key_mouse_manager.click_point(960, 540)
             self.should_update_map = False
     def move_direct_to_text(self):
         find=False
@@ -2581,7 +2583,7 @@ class UniverseUtils(StateKernel):
                 key_mouse_manager.press("technique")
             key_mouse_manager.wait()
         else:
-            key_mouse_manager.click(0.5, 0.5)
+            key_mouse_manager.click_point(960, 540)
             key_mouse_manager.wait()
 
 
@@ -2780,7 +2782,7 @@ class UniverseUtils(StateKernel):
             return
         if self.trust_annotated_attack_targets and self.target_type == 1:
             CUS_LOGGER.debug("已到达特殊地图红色点位，执行一次普通攻击")
-            key_mouse_manager.click(0.5, 0.5)
+            key_mouse_manager.click_point(960, 540)
             self.last_interact_time = time.time()
             self.target.discard((self.target_loc, 1))
             return
@@ -2836,7 +2838,7 @@ class UniverseUtils(StateKernel):
                     return
                 key_mouse_manager.press("move_w")
             else:
-                key_mouse_manager.click(0.5, 0.5)
+                key_mouse_manager.click_point(960, 540)
         if self.target_type == 3:
             CUS_LOGGER.info("何不…让愤怒…焚化命运…？卡…厄斯……")
             for i in range(9):
