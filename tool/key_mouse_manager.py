@@ -8,6 +8,31 @@ import win32con
 
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
+from tool.utils.game_window import BASE_HEIGHT, BASE_WIDTH
+
+# 程序目前仅支持 1920x1080 这一种游戏分辨率；
+# 云游戏窗口因浏览器边框允许 8px 误差，内部分辨率同样是 1920x1080；
+# 代码里写死的坐标、日志里打印的坐标统一用像素坐标：
+# 原点在客户区左上角，x 向右、y 向下。
+# BASE_WIDTH/BASE_HEIGHT 与 game_window.py 的分辨率契约同源，不在这里另写一份。
+
+
+def ratio_to_point(x, y):
+    """浮点数镜像坐标 -> 1920x1080 像素坐标（左上角原点）。
+
+    镜像坐标以右下角为原点：x=y=0 落在客户区右下角，x=y=1 落在左上角。
+    用右下角当原点是因为各机器标题栏高度不同，
+    窗口上边界会漂，而客户区右下角始终紧贴窗口右下角。
+
+    取整用 round 而不是 int：int 向零截断，会把往返换算压掉 1px。
+    """
+    return round((1 - x) * BASE_WIDTH), round((1 - y) * BASE_HEIGHT)
+
+
+def point_to_ratio(px, py):
+    """1920x1080 像素坐标（左上角原点）-> 浮点数镜像坐标（右下角原点）。"""
+    return 1 - px / BASE_WIDTH, 1 - py / BASE_HEIGHT
+
 
 # 游戏内键位配置的来源：user/gui_settings.json 的 game_keys 字段，
 # 默认值在 resource/gui_settings_default.json，形如 {"interact": "f", "move_w": "w", ...}。
@@ -280,9 +305,10 @@ class KeyMouseManager:
         Returns:
             (actual_x, actual_y): 实际的屏幕坐标
         """
-        # 如果是浮点数表示，则计算实际坐标
+        # 浮点数是镜像比例坐标（原点在客户区右下角），先翻转再按客户区尺寸换算。
+        # 取整用 round：int 的向零截断会让 point_to_ratio -> 屏幕坐标的往返偏移 1px。
         if isinstance(x, float):
-            actual_x, actual_y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
+            actual_x, actual_y = self.x1 - round(x * self.xx), self.y1 - round(y * self.yy)
         else:
             actual_x, actual_y = self.x1-self.xx+x, self.y1-self.yy+y
         # 全屏模式会有一个偏移
@@ -291,6 +317,26 @@ class KeyMouseManager:
             actual_y += 9
 
         return actual_x, actual_y
+
+    def _display_point(self, x, y):
+        """把请求坐标换成 1920x1080 像素坐标，仅用于日志展示。
+
+        内部传输仍用浮点镜像坐标（换算时直接对应底层鼠标事件）。
+        """
+        if isinstance(x, float):
+            return ratio_to_point(x, y)
+        return x, y
+
+    def _display_operation(self, operation):
+        """生成日志用副本：把操作字典里的坐标字段换成 1920x1080 像素坐标。"""
+        shown = dict(operation)
+        if 'x' in shown and 'y' in shown:
+            shown['x'], shown['y'] = self._display_point(shown['x'], shown['y'])
+        for axis in ('start', 'end'):
+            key_x, key_y = f'{axis}_x', f'{axis}_y'
+            if key_x in shown and key_y in shown:
+                shown[key_x], shown[key_y] = self._display_point(shown[key_x], shown[key_y])
+        return shown
 
     def _game_point(self, op_type, x, y):
         """
@@ -313,10 +359,8 @@ class KeyMouseManager:
             return actual_x, actual_y
         if self.skipped_pointer != (op_type, x, y):
             self.skipped_pointer = (op_type, x, y)
-            CUS_LOGGER.warning(
-                "%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，"
-                "请求坐标(%s, %s)换算为屏幕坐标(%s, %s)已越界，跳过本次操作。",
-                op_type, self.x0, self.y0, self.x1, self.y1, x, y, actual_x, actual_y
+            CUS_LOGGER.warning("%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，请求坐标(%s, %s)已越界，跳过本次操作",
+                op_type, self.x0, self.y0, self.x1, self.y1, actual_x, actual_y
             )
         return None
 
@@ -328,7 +372,7 @@ class KeyMouseManager:
             operation: 操作字典，包含操作类型和参数
         """
         op_type = operation['type']
-        CUS_LOGGER.debug(f"执行操作{operation}，当前队列长度{len(self.operation_queue)}")
+        CUS_LOGGER.debug(f"执行操作{self._display_operation(operation)}，当前队列长度{len(self.operation_queue)}")
         if op_type == 'keyDown':
             pyautogui.keyDown(resolve_key(operation['key']))
 
@@ -647,6 +691,49 @@ class KeyMouseManager:
         else:
             with self.queue_lock:
                 self.operation_queue.append(operation)
+
+    def click_point(self, x, y, force=False):
+        """按 1920x1080 像素坐标点击，原点在游戏客户区左上角。
+
+        调用方传入的坐标就是日志里看到的坐标，不需要再自己算镜像比例；
+        镜像换算只在 click 内部做一次，保证落点和传入的像素一一对应。
+
+        Args:
+            x: 1920x1080 坐标系下的 x 坐标，向右为正
+            y: 1920x1080 坐标系下的 y 坐标，向下为正
+            force: 是否为强制操作
+        """
+        self.click(*point_to_ratio(x, y), force=force)
+
+    def scroll_point(self, x, y, direct=1, force=False):
+        """在 1920x1080 像素坐标处滚动滚轮。
+
+        Args:
+            x: 1920x1080 坐标系下的 x 坐标
+            y: 1920x1080 坐标系下的 y 坐标
+            direct: 滚动方向和次数，正数向上滚动，负数向下滚动
+            force: 是否为强制操作
+        """
+        ratio_x, ratio_y = point_to_ratio(x, y)
+        self.scroll(direct=direct, x=ratio_x, y=ratio_y, force=force)
+
+    def drag_point(self, start_x, start_y, end_x, end_y, duration=0.4, force=False):
+        """按 1920x1080 像素坐标拖拽。
+
+        Args:
+            start_x: 起始点 x 坐标（1920x1080 坐标系）
+            start_y: 起始点 y 坐标（1920x1080 坐标系）
+            end_x: 结束点 x 坐标（1920x1080 坐标系）
+            end_y: 结束点 y 坐标（1920x1080 坐标系）
+            duration: 拖拽持续时间（秒）
+            force: 是否为强制操作
+        """
+        ratio_start_x, ratio_start_y = point_to_ratio(start_x, start_y)
+        ratio_end_x, ratio_end_y = point_to_ratio(end_x, end_y)
+        self.drag(
+            ratio_start_x, ratio_start_y, ratio_end_x, ratio_end_y,
+            duration=duration, force=force,
+        )
 
     def sleep(self, duration, force=False):
         """
