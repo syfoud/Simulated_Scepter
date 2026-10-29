@@ -23,8 +23,6 @@ class Config:
         self.bonus = 0
         self.timezones = ['America', 'Asia', 'Europe', 'Default']
         self.timezone = 'Default'
-        self.origin_key = ['f','m','shift','v','e','w','a','s','d','1','2','3','4']
-        self.mapping = self.origin_key
         self.max_run = 34
         self.read()
 
@@ -64,7 +62,6 @@ class Config:
         self.timezone = config['timezone']
         self.slow_mode = config['slow_mode']
         self.max_run = config['max_run']
-        self.mapping = data['key_mapping']
 
     def save(self):
         """保存既有配置项，保留配置中的共享字段。"""
@@ -89,8 +86,7 @@ class Config:
                     "timezone": self.timezone,
                     "max_run": self.max_run
                 },
-                "prior": data["prior"],
-                "key_mapping": self.mapping
+                "prior": data["prior"]
             })
 
 

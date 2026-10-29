@@ -1626,6 +1626,25 @@
                       </layout>
                      </item>
                      <item>
+                      <widget class="AnimatedButton" name="custom_keybinding_btn">
+                       <property name="text">
+                        <string>游戏内键位设置</string>
+                       </property>
+                       <property name="maximumSize">
+                        <size>
+                         <width>160</width>
+                         <height>16777215</height>
+                        </size>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>0</height>
+                        </size>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
                       <widget class="AnimatedButton" name="hotkey_save_btn">
                        <property name="text">
                         <string>保存快捷键设置</string>
@@ -1673,12 +1692,29 @@
                        <property name="role" stdset="0">
                         <string>heading</string>
                        </property>
+                       <property name="toolTip">
+                       <string>清理规则：只会检查命名中带有时间格式的文件或文件夹，其他文件不会被清理。
+可为三类文件独立选择清理模式：
+1. 永不清理——不执行清理，数值与时间单位仍然显示但不可修改，清理按钮不可用。
+2. 手动清理——点击按钮时依据所设时间进行清理：
+ - 数值与单位代表一个时间段，保存时间超过该时间段的文件会被清理。
+ - 若数值为0，则清理全部相关文件。
+3. 周期清理——达到触发时机时，首先检查距离上次清理时间是否达到所设的时间周期：
+ - 若达到，则检查并清理全部相关文件；
+ - 若未达到，则不执行清理。
+ - 若数值为0，则每次达到触发时机都会自动执行清理。
+ - 可以看作每次都会清理全部文件的“手动清理”。
+4. 自动清理——达到触发时机时依据所设时间进行清理：
+ - 数值与单位代表一个时间段，保存时间超过该时间段的文件会被清理。
+ - 若数值为0，则触发时清理全部相关文件。
+ - 可以看作自动触发的“手动清理”。</string>
+                       </property>
                       </widget>
                      </item>
                      <item>
                       <widget class="QLabel" name="cleanup_panel_note">
                        <property name="text">
-                        <string>仅处理名称中带有时间格式的文件或文件夹。鼠标悬停可查看规则说明。</string>
+                        <string>仅处理名称中带有时间格式的文件或文件夹。鼠标悬停于标题上可查看规则说明。</string>
                        </property>
                        <property name="role" stdset="0">
                         <string>muted</string>

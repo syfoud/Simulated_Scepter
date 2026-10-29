@@ -295,7 +295,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.update_state("init")
         CUS_LOGGER.info("前往货币战争")
         CUS_LOGGER.info("打开")
-        key_mouse_manager.press('f4')
+        key_mouse_manager.press("interastral_peace_guide")
 
     def is_one (self):
         try:
@@ -376,7 +376,7 @@ class SimulatedCurrency(CurrencyUtils):
 
     def auto_battle(self):
         # 需要打开自动战斗
-        key_mouse_manager.press("v")
+        key_mouse_manager.press("V")
 
 
 

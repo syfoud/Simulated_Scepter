@@ -195,11 +195,11 @@ class UniverseUtils(StateKernel):
         self.sct = Screen()
 
     def press(self, c, t=0):
-        if c not in "3r":
+        if c not in ("role_3", "quest_item"):
             CUS_LOGGER.debug(f"按下按钮 {c}，等待 {t} 秒后释放")
-        if c=='e' and self.allow_e==0:
+        if c == 'technique' and self.allow_e == 0:
             return
-        if self.slow and c=='shift':
+        if self.slow and c == 'sprint':
             return
         if self._stop == 0:
             keyops.keyDown(c)
@@ -210,9 +210,9 @@ class UniverseUtils(StateKernel):
 
     def sprint(self):
         if config.long_press_sprint:
-            keyops.keyDown('shift')
+            keyops.keyDown('sprint')
         else:
-            self.press('shift')
+            self.press('sprint')
 
     # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
     def wait_fig(self, f, timeout=3):
@@ -240,7 +240,7 @@ class UniverseUtils(StateKernel):
 
     # 使用x排，y列的消耗品
     def use_consumable(self, x=1, y=1):
-        self.press("b")
+        self.press("inventory")
         if self.wait_fig(lambda:not self.check("use_package",0.5182,0.9407), 3):
             time.sleep(0.4)
             self.click((0.3677,0.0861))
@@ -512,6 +512,11 @@ class UniverseUtils(StateKernel):
             threshold = self.threshold
         # 按名称查图像记忆切片，不拼接扩展名：模板中 jpg 与 png 混用
         target = find_image_by_name(path)
+        if target is None:
+            # 模板名写错/文件缺失时直接判定为未匹配：否则 target.shape 会抛 AttributeError，
+            # 中断整个任务线程，且现场已无法判断是哪个模板名写错了
+            CUS_LOGGER.error(f"模板 {path} 不存在，本次匹配判定为未匹配")
+            return False
         target = cv.resize(
             target,
             dsize=(int(self.scx * target.shape[1]), int(self.scx * target.shape[0])),
@@ -825,7 +830,7 @@ class UniverseUtils(StateKernel):
             self.get_screen()
         time.sleep(max(0, (self.fail_count - 1) * 10))
         time.sleep(1)
-        self.press("m", 0.2)
+        self.press("map", 0.2)
         time.sleep(2.5)
         tm = time.time()
         self.floor_init = 0
@@ -837,7 +842,7 @@ class UniverseUtils(StateKernel):
                     CUS_LOGGER.info(f"当前层数：{i + 1}")
                     self.floor_init = 1
                     break
-        self.press("m", 0.2)
+        self.press("map", 0.2)
         time.sleep(1)
 
     def check_f(self, is_in=[], check_text=1):
@@ -1001,7 +1006,7 @@ class UniverseUtils(StateKernel):
         self.loc_off = 0
         self.get_loc(bw_map, rg = 40 - self.find * 10)
         if self.find == 1:
-            self.press("w", 0.2)
+            self.press("move_w", 0.2)
         self.get_screen()
         local_screen = self.get_local(0.9333, 0.8657, shape)
         # 录图模式，将小地图覆盖到录制的大地图中
@@ -1011,7 +1016,7 @@ class UniverseUtils(StateKernel):
         # 寻路模式
         else:
             if self.now_map == '19787':
-                self.press('w',0.3)
+                self.press("move_w",0.3)
                 self.get_screen()
                 local_screen = self.get_local(0.9333, 0.8657, shape)
                 self.now_map = '19788'
@@ -1041,7 +1046,7 @@ class UniverseUtils(StateKernel):
             self.ang = ang
             ps = [13,9 + self.quan*7,11,7]
             if self._stop == 0:
-                keyops.keyDown("w")
+                keyops.keyDown("move_w")
             time.sleep(0.25)
             sft = 0
             if sft == 0 and type != 3:
@@ -1061,7 +1066,7 @@ class UniverseUtils(StateKernel):
             c = 0
             for i in range(3000):
                 if self._stop == 1:
-                    keyops.keyUp("w")
+                    keyops.keyUp("move_w")
                     return
                 bw_map = self.get_bw_map()
                 if bw_map is None:
@@ -1097,10 +1102,10 @@ class UniverseUtils(StateKernel):
                 if dls[0] <= nds:
                     ts = " da"
                     if t > 0:
-                        keyops.keyUp("w")
-                        self.press("s", 0.35)
-                        self.press(ts[t], 0.2*random.randint(1,3))
-                        self.press("w", 0.3)
+                        keyops.keyUp("move_w")
+                        self.press("move_s", 0.35)
+                        self.press(f"move_{ts[t]}", 0.2*random.randint(1,3))
+                        self.press("move_w", 0.3)
                         self.move = 1
                         self.get_screen()
                         threading.Thread(target=self.keep_move).start()
@@ -1116,7 +1121,7 @@ class UniverseUtils(StateKernel):
                         c = 0
                         sft = 1
                     else:
-                        keyops.keyUp("w")
+                        keyops.keyUp("move_w")
                         break
                 if nds <= ps[type]:
                     if type == 0:
@@ -1132,18 +1137,18 @@ class UniverseUtils(StateKernel):
                         ds = self.get_dis(self.real_loc, loc)
                         t = 2
                     else:
-                        keyops.keyUp("w")
+                        keyops.keyUp("move_w")
                         break
                 else:
                     self.get_screen()
                     if type == 3 and self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-                        self.press('f')
-                        keyops.keyUp("w")
+                        self.press("interact")
+                        keyops.keyUp("move_w")
                         if self.nof(must_be='tp'):
                             CUS_LOGGER.info('大图识别到传送点!')
                             return
                     elif (type != 3 and self.goodf()) or not self.isrun():
-                        keyops.keyUp("w")
+                        keyops.keyUp("move_w")
                         break
                 ds = nds
                 dls.append(ds)
@@ -1160,22 +1165,22 @@ class UniverseUtils(StateKernel):
                     if self._stop == 0:
                         pyautogui.click()
                     time.sleep(1.1)
-                    self.press("s")
+                    self.press("move_s")
                     if self._stop == 0:
                         pyautogui.click()
                     time.sleep(0.8)
                     if len(self.target) <= 2:
                         time.sleep(0.3)
-                        self.press("s")
+                        self.press("move_s")
                         pyautogui.click()
                         time.sleep(0.6)
-                        self.press("s", 0.5)
+                        self.press("move_s", 0.5)
                         pyautogui.click()
                         time.sleep(0.5)
-                        self.press("w", 1.6)
+                        self.press("move_w", 1.6)
                         pyautogui.click()
                 else:
-                    keyops.keyUp("w")
+                    keyops.keyUp("move_w")
                     for ii in range(2):
                         self.use_e()
                         if ii:
@@ -1186,7 +1191,7 @@ class UniverseUtils(StateKernel):
                             continue
                         self.get_loc(bw_map, fbw=1, offset=self.get_offset(2), rg=24)
                         self.get_real_loc(1)
-                        self.press('w')
+                        self.press("move_w")
                         self.bless()
             if type == 3:
                 for i in range(9):
@@ -1195,7 +1200,7 @@ class UniverseUtils(StateKernel):
                         return
                     if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         CUS_LOGGER.info("大图识别到传送点")
-                        self.press('f')
+                        self.press("interact")
                         if self.nof(must_be='tp'):
                             time.sleep(1.5)
                             break
@@ -1203,7 +1208,7 @@ class UniverseUtils(StateKernel):
                     if self.isrun():
                         if i in [0,4]:
                             self.move_to_end()
-                        self.press('w', 0.5)
+                        self.press("move_w", 0.5)
                         time.sleep(0.2)
             # 离目标点挺近了，准备找下一个目标点
             elif nds <= 20 or self.quan:
@@ -1215,14 +1220,14 @@ class UniverseUtils(StateKernel):
                     pass
 
     def keep_move(self):
-        op = 'ws'
+        op = ('move_w', 'move_s')
         i = 0
         while self.move and not self._stop:
             self.press(op[i], 0.05)
             time.sleep(0.08)
             i ^= 1
         if not self._stop:
-            keyops.keyDown("w")
+            keyops.keyDown("move_w")
 
     # 视角转动x度
     def mouse_move(self, x, fine=1):
@@ -1469,29 +1474,29 @@ class UniverseUtils(StateKernel):
             time.sleep(0.6)
             self.mouse_move(-self.ang_off*1.2)
             time.sleep(0.3)
-            self.press('w',0.3)
+            self.press("move_w",0.3)
         if self.mini_state==1 and self.floor in [4,8,11]:
             time.sleep(0.5)
-            self.press('w',0.55)
+            self.press("move_w",0.55)
             pyautogui.click()
             time.sleep(1.2)
-            self.press('w')
+            self.press("move_w")
             time.sleep(0.4)
         if self.mini_state==3 and self.floor==12 and not self.check_bonus:
             self.mini_state+=2
             return
         if self.mini_state==3 and self.floor in [3,7,12] and self.check_bonus:
-            self.press('d',0.6)
-            keyops.keyDown('w')
+            self.press("move_d",0.6)
+            keyops.keyDown("move_w")
             nt = time.time()
             while time.time()-nt<1.3:
                 self.get_screen()
                 if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-                    self.press('f')
-                    keyops.keyUp('w')
+                    self.press("interact")
+                    keyops.keyUp("move_w")
                     break
-            keyops.keyUp('w')
-            self.press('f')
+            keyops.keyUp("move_w")
+            self.press("interact")
             time.sleep(1)
             for _ in range(2):
                 if not self.check_bonus:
@@ -1505,14 +1510,14 @@ class UniverseUtils(StateKernel):
                         self.check_bonus = 0
                     self.click((0.5062, 0.1454))
                     time.sleep(1.4)
-            keyops.keyUp('w')
+            keyops.keyUp("move_w")
             self.get_screen()
             if self.check('bonus_c',0.2385,0.6685):
                 self.click((0.2385,0.6685))
             self.mini_state+=2
             if self.floor==12:
                 return
-            self.press('s',0.4)
+            self.press("move_s",0.4)
         self.ang_off=0
         self.stop_move=0
         self.ready=0
@@ -1527,7 +1532,7 @@ class UniverseUtils(StateKernel):
             if self.check("z", mask=MASK["monster_info"], threshold=0.95):
                 if self.floor == 11:
                     self.floor = 12
-        keyops.keyDown("w")
+        keyops.keyDown("move_w")
         wt = 3
         self.first_mini = 0
         if self.mini_state==1:
@@ -1541,38 +1546,38 @@ class UniverseUtils(StateKernel):
         while True:
             self.get_screen()
             if self._stop == 1:
-                keyops.keyUp("w")
+                keyops.keyUp("move_w")
                 self.stop_move=1
                 break
             if self.mini_target==1:
                 if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-                    self.press('f')
+                    self.press("interact")
                     CUS_LOGGER.info('发现事件交互')
                     self.stop_move=1
                     need_confirm = 1
                     if self.nof(must_be='event'):
-                        keyops.keyUp("w")
+                        keyops.keyUp("move_w")
                         return
                     break
             else:
                 if self.goodf() and not (self.ts.sim("黑塔") and time.time() - self.quit < 30):
                     if self.speed <= 0 or not self.ts.sim("黑塔"):
-                        self.press('f')
+                        self.press("interact")
                         CUS_LOGGER.info('need_confirm ' + self.ts.text)
                         self.stop_move=1
                         need_confirm = 1
                         if self.nof():
-                            keyops.keyUp("w")
+                            keyops.keyUp("move_w")
                             return
                         break
                     else:
                         self.quit = time.time()
-                        keyops.keyUp("w")
+                        keyops.keyUp("move_w")
                         self.stop_move=1
                         self.mini_state+=2
                         return
                 if self.check("auto_2", 0.0583, 0.0769):
-                    keyops.keyUp("w")
+                    keyops.keyUp("move_w")
                     self.stop_move=1
                     self.mini_state+=2
                     break
@@ -1580,10 +1585,10 @@ class UniverseUtils(StateKernel):
                     self.stop_move=1
                     time.sleep(1.7+self.slow*1.1-(self.quan and self.floor not in [3, 7, 12])*0.5)
                     if self.mini_state==1 and self.floor in [3, 7, 12] and not self.quan:
-                        keyops.keyUp("w")
+                        keyops.keyUp("move_w")
                         # 打首领层前先把队伍里的秘技依次放一遍，给全队挂增益
                         for i in range([3, 7, 12].index(self.floor)+2):
-                            self.press(str(i+1))
+                            self.press(f"role_{i+1}")
                             time.sleep(0.4)
                             self.use_e()
                             self.get_screen()
@@ -1591,14 +1596,14 @@ class UniverseUtils(StateKernel):
                                 break
                             if self._stop:
                                 break
-                        keyops.keyDown("w")
+                        keyops.keyDown("move_w")
                     iters = 0
                     while self.check("z", mask=MASK["monster_info"], threshold=0.95) and not self._stop:
                         iters+=1
                         if iters>4:
                             break
                         if self.quan:
-                            keyops.keyUp("w")
+                            keyops.keyUp("move_w")
                             self.use_e()
                             if self.floor not in [3, 7, 12]:
                                 for _ in range(3):
@@ -1606,18 +1611,18 @@ class UniverseUtils(StateKernel):
                                 self.stop_move=1
                                 self.mini_state+=2
                                 time.sleep(0.4)
-                                self.press('w')
+                                self.press("move_w")
                                 time.sleep(1.4)
                                 return
                             else:
                                 time.sleep(0.8)
-                                keyops.keyDown("w")
+                                keyops.keyDown("move_w")
                         else:
                             pyautogui.click()
                         if iters + self.quan == 2:
                             time.sleep(0.9)
-                            self.press('d',0.85)
-                            self.press('a',0.3)
+                            self.press("move_d",0.85)
+                            self.press("move_a",0.3)
                         else:
                             time.sleep(1.2)
                         self.get_screen()
@@ -1625,19 +1630,19 @@ class UniverseUtils(StateKernel):
                     break
             if time.time()-init_time>wt:
                 self.stop_move=1
-                keyops.keyUp("w")
+                keyops.keyUp("move_w")
                 self.mini_state+=2
                 if self.mini_state>=7:
                     self.lst_changed = 0
                     return
-                self.press('s',0.3)
-                self.press('a',0.7)
-                self.press('d',0.45)
-                self.press('w',0.5)
+                self.press("move_s",0.3)
+                self.press("move_a",0.7)
+                self.press("move_d",0.45)
+                self.press("move_w",0.5)
                 break
             time.sleep(0.1)
         self.stop_move=1
-        keyops.keyUp("w")
+        keyops.keyUp("move_w")
         if need_confirm or (first and self.mini_target!=2):
             for i in "sasddwwaa":
                 if self._stop:
@@ -1645,19 +1650,19 @@ class UniverseUtils(StateKernel):
                 self.get_screen()
                 if self.mini_target==1:
                     if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-                        self.press('f')
+                        self.press("interact")
                         if self.nof(must_be='event'):
                             return
                 elif self.goodf() and not (self.ts.sim("黑塔") and time.time() - self.quit < 30):
-                    self.press('f')
+                    self.press("interact")
                     if self.nof():
                         return
-                self.press(i, 0.25)
+                self.press(f"move_{i}", 0.25)
                 time.sleep(0.4)
             pyautogui.click()
 
     def use_e(self):
-        self.press('e')
+        self.press("technique")
         time.sleep(0.4)
         if not self.quan:
             time.sleep(0.8)

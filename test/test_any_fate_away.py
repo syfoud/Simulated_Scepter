@@ -136,7 +136,7 @@ class AwayBeforeMovementTest(unittest.TestCase):
         self.assertEqual(engine.normal(), 1)
 
         self.assertEqual(self._pressed_keys(), ["esc"])
-        self.manager.keyUp.assert_called_once_with("w")
+        self.manager.keyUp.assert_called_once_with("move_w")
         self.manager.click.assert_not_called()  # 空打一拳是 click(0.5, 0.5)
         engine.navigate_battle.assert_not_called()
         engine.switch_current_role.assert_not_called()

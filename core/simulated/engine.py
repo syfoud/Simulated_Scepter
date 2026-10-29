@@ -308,7 +308,7 @@ class SimulatedUniverse(UniverseUtils):
                 return 1
             if self.consumable and self.check_bonus and self.floor in [4, 8, 13][-self.consumable:]:
                 self.use_consumable(1, 1)
-            key_mouse_manager.press("1")
+            key_mouse_manager.press("role_1")
         # 录制模式，保存初始小地图
         if (not self.find) and self.first_save_map and self.floor in [1, 6]:
             self.first_save_map=False
@@ -318,9 +318,9 @@ class SimulatedUniverse(UniverseUtils):
                 cv.imwrite(self.map_file + "init.jpg", get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True))
                 self.best_match=self.pos_predictor.match_multiple_maps(self.screen,0)
                 self.start_pos=self.best_match['position']
-            key_mouse_manager.press("s")
+            key_mouse_manager.press("move_s")
             key_mouse_manager.wait()
-            key_mouse_manager.keyDown("w")
+            key_mouse_manager.keyDown("move_w")
         elif (not self.find) and self.floor not in [1, 6]:
             CUS_LOGGER.warning("非常规地图，将进行无地图寻路")
             # self.mini_state = 0
@@ -347,7 +347,7 @@ class SimulatedUniverse(UniverseUtils):
             # 刚进图，初始化一些数据
             if self.big_map_init == 0:
                 key_mouse_manager.clean()
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.wait()
                 if self._stop:
                     return 1
@@ -356,7 +356,7 @@ class SimulatedUniverse(UniverseUtils):
             if ((time.time() - self.last_interact_time >= 37 - 2 * self.debug + 8 * self.slow) and self.find == 1)or (self.floor == 13 and self.mini_state > 4):
                 key_mouse_manager.clean()
                 key_mouse_manager.wait()
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.press("esc")
                 self.update_state("ui")
                 self.init_map()
@@ -368,7 +368,7 @@ class SimulatedUniverse(UniverseUtils):
                 elif self.fail_count <= 1:
                     CUS_LOGGER.error(f"地图{self.now_map}未发现目标，当前层数:{self.floor},相似度{self.now_map_sim}，尝试暂离")
                     key_mouse_manager.click(0.2708, 0.2324)
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     self.fail_count += 1
                 else:
                     if self.debug == 0:
@@ -391,7 +391,7 @@ class SimulatedUniverse(UniverseUtils):
                 return 1
             if self.find:
                 key_mouse_manager.clean()
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.wait()
             if self.mini_state:
                 #无先验寻路
@@ -406,7 +406,7 @@ class SimulatedUniverse(UniverseUtils):
 
     def auto_battle(self):
         # 需要打开自动战斗
-        key_mouse_manager.press("v")
+        key_mouse_manager.press("V")
         if time.time() - self.f_time < 20:
             self.f_time = 0
             self.restore_map()
@@ -414,7 +414,7 @@ class SimulatedUniverse(UniverseUtils):
             self.mini_state=5
         if self.fate == "丰饶":
             if random.randint(0, 6) == 3:
-                key_mouse_manager.press("r")
+                key_mouse_manager.press("R")
         self.update_state("battle")
         return 1
     # 祝福界面/回响界面 （放在一起处理了）
@@ -491,18 +491,18 @@ class SimulatedUniverse(UniverseUtils):
                 # 与黑塔交互后30秒内禁止再次交互（防止死循环）
                 if time.time() - self.quit > 30:
                     self.quit = time.time()
-                    key_mouse_manager.press('f', force=True)
+                    key_mouse_manager.press("interact", force=True)
                 else:
                     is_killed = 1
             else:
                 if self.ts.similar("区域"):
                     # tele：区域-xx  exit：离开模拟宇宙
                     CUS_LOGGER.info("「众人将与一人离别，惟其人将觐见奇迹」")
-                    key_mouse_manager.press('f', force=True)
+                    key_mouse_manager.press("interact", force=True)
                     return self.nof()
                 is_killed = text in ["沉浸", "紧锁", "复活", "下载"]
                 if not is_killed:
-                    key_mouse_manager.press('f', force=True)
+                    key_mouse_manager.press("interact", force=True)
             if not is_killed:
                 return 1
             else:
@@ -1195,17 +1195,17 @@ class SimulatedUniverse(UniverseUtils):
         self.update_state("init")
         if self.click_text(text="模拟宇宙",box=[1231, 1360, 595, 631],click=False,allow_fail= True):
             CUS_LOGGER.info("已在办公室，打开模拟宇宙")
-            key_mouse_manager.press('f')
+            key_mouse_manager.press("interact")
             return
         CUS_LOGGER.info("前往黑塔办公室")
         CUS_LOGGER.info("打开地图")
-        key_mouse_manager.press('m')
+        key_mouse_manager.press("map")
     def goto_survival_room(self):
         key_mouse_manager.mouse_move(15)
-        key_mouse_manager.keyDown("w")
+        key_mouse_manager.keyDown("move_w")
         sprint()
         key_mouse_manager.sleep(4)
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
         self.update_state("survival_room")
 

@@ -57,9 +57,9 @@ def set_forground():
 def sprint():
     CUS_LOGGER.debug("「救世主，带领吾等前进吧。」")
     if config.long_press_sprint:
-        key_mouse_manager.keyDown('shift')
+        key_mouse_manager.keyDown('sprint')
     else:
-        key_mouse_manager.press('shift')
+        key_mouse_manager.press('sprint')
 
 
 def get_dis(x, y):
@@ -405,7 +405,7 @@ class CurrencyUtils(StateKernel):
                     ava = True
         if self.state=="run":
             if must_be!='challenge':
-                key_mouse_manager.press("s")
+                key_mouse_manager.press("move_s")
                 key_mouse_manager.wait()
                 if not self.is_run():
                     CUS_LOGGER.info("…我以为，那就是世间最极致的力量，再无其他。")

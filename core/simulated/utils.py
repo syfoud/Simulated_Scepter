@@ -76,9 +76,9 @@ def set_forground():
 def sprint():
     CUS_LOGGER.debug("「救世主，带领吾等前进吧。」")
     if config.long_press_sprint:
-        key_mouse_manager.keyDown('shift')
+        key_mouse_manager.keyDown('sprint')
     else:
-        key_mouse_manager.press('shift')
+        key_mouse_manager.press('sprint')
 
 
 def get_dis(x, y):
@@ -302,7 +302,7 @@ class UniverseUtils(StateKernel):
         """
         使用x排，y列的消耗品
         """
-        key_mouse_manager.press("b")
+        key_mouse_manager.press("inventory")
         if self.wait_flag(lambda:not self.check("use_package", 0.5182, 0.9407), 3):
             key_mouse_manager.click(0.3677,0.0861)
             self.get_screen()
@@ -593,7 +593,7 @@ class UniverseUtils(StateKernel):
 
     def get_level(self):
         if not self.floor_init:
-            key_mouse_manager.press("m", 0.3)
+            key_mouse_manager.press("map", 0.3)
             self.update_state("map")
         return 1
     def get_floor(self):
@@ -609,7 +609,7 @@ class UniverseUtils(StateKernel):
         if self.floor!=old_floor and old_floor!=0:
             CUS_LOGGER.warning(f"层数已更新为：{self.floor}")
             self.floor_change=True
-        key_mouse_manager.press("m", 0.2)
+        key_mouse_manager.press("map", 0.2)
         return 1
 
     def good_f(self,run=True):
@@ -629,7 +629,7 @@ class UniverseUtils(StateKernel):
             CUS_LOGGER.info(f'响应：「一▇▇▇▇徒劳的▇▇▇{text}▇▇▇。」')
         CUS_LOGGER.debug(f"交互最佳结果判断{text is not None and not is_killed}")
         if not (text is not None and not is_killed) and run:
-            key_mouse_manager.keyDown("w")
+            key_mouse_manager.keyDown("move_w")
             key_mouse_manager.wait()
         t_end=time.time()
         return text is not None and not is_killed, t_end-t_start
@@ -916,7 +916,7 @@ class UniverseUtils(StateKernel):
                     ava = True
         if self.state=="run":
             if must_be!='challenge':
-                key_mouse_manager.press("s")
+                key_mouse_manager.press("move_s")
                 key_mouse_manager.wait()
                 if not self.is_run():
                     CUS_LOGGER.info("…我以为，那就是世间最极致的力量，再无其他。")
@@ -1044,7 +1044,7 @@ class UniverseUtils(StateKernel):
                 CUS_LOGGER.warning("角度更新失败，不在大地图中")
                 return
             if not self._stop:
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
                 key_mouse_manager.wait()
             self.is_sprinting=0
             if self.target_type != 3:
@@ -1073,7 +1073,7 @@ class UniverseUtils(StateKernel):
                 self.set_path_state("开始定位寻路")
                 CUS_LOGGER.info(f"第{i}次定位寻路")
                 if self._stop == 1:
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     return
                 #预判实际点位
                 if not self.get_loc():
@@ -1156,7 +1156,7 @@ class UniverseUtils(StateKernel):
                             self.is_sprinting = 0
                         go_direct = 2
                     else:
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         break
                 self.set_path_state(f"获取当前距离目标距离{now_distance}")
                 # 检查是否位置卡住（连续3次距离过小）
@@ -1180,13 +1180,13 @@ class UniverseUtils(StateKernel):
                     ts = " da"
                     if go_direct > 0:
                         CUS_LOGGER.info(f"尝试绕过障碍向{ts[go_direct]}")
-                        key_mouse_manager.keyUp("w")
-                        key_mouse_manager.press("s", 0.35)
+                        key_mouse_manager.keyUp("move_w")
+                        key_mouse_manager.press("move_s", 0.35)
                         if go_direct==2:
-                            key_mouse_manager.press(ts[go_direct], go_time)
+                            key_mouse_manager.press(f"move_{ts[go_direct]}", go_time)
                         else:
-                            key_mouse_manager.press(ts[go_direct], go_time+random.uniform(0, 0.5))
-                        key_mouse_manager.keyDown("w")
+                            key_mouse_manager.press(f"move_{ts[go_direct]}", go_time+random.uniform(0, 0.5))
+                        key_mouse_manager.keyDown("move_w")
                         self.get_screen()
                         if not self.get_loc():
                             CUS_LOGGER.info("绕过障碍中不在大地图界面，返回")
@@ -1196,7 +1196,7 @@ class UniverseUtils(StateKernel):
                         go_direct -= 1
                     else:
                         CUS_LOGGER.info("尝试次数过多，不再尝试绕过障碍")
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         break
                 self.set_path_state("距离目标更近了")
                 retry_time += 1
@@ -1204,7 +1204,7 @@ class UniverseUtils(StateKernel):
             self.set_path_state("结束寻路")
             CUS_LOGGER.info(f"寻路判断已到达交互点附近 {now_distance}")
             key_mouse_manager.clean()
-            key_mouse_manager.keyUp("w")
+            key_mouse_manager.keyUp("move_w")
             key_mouse_manager.wait()
             if not self.get_loc():
                 CUS_LOGGER.info("结束寻路后后不在大地图界面，返回")
@@ -1238,19 +1238,19 @@ class UniverseUtils(StateKernel):
                     target = (tuple(enemy_coords[0]), 3)
                     self.update_direction_data(mode=2, target=target)
                 if self.quan:
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     for _ in range(2):
                         self.use_e()
                     if not self.get_loc():
                         CUS_LOGGER.info("开战后不在大地图界面，返回")
                         return
-                    key_mouse_manager.press('w')
+                    key_mouse_manager.press("move_w")
                 elif self.bai_e:
                     self.use_e()
                     if not self.get_loc():
                         CUS_LOGGER.info("开战后不在大地图界面，返回")
                         return
-                    key_mouse_manager.press('w')
+                    key_mouse_manager.press("move_w")
                 else:
                     key_mouse_manager.click(0.5, 0.5)
             if self.target_type == 3:
@@ -1262,7 +1262,7 @@ class UniverseUtils(StateKernel):
                         return
                     if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         CUS_LOGGER.info("大图识别到类型三传送点")
-                        key_mouse_manager.press('f',force= True)
+                        key_mouse_manager.press("interact",force= True)
                         key_mouse_manager.wait()
                         if self.nof(must_be='tp'):
                             return
@@ -1270,7 +1270,7 @@ class UniverseUtils(StateKernel):
                         return
                     if i in [0,4]:
                         self.move_to_end(mode=1)
-                    key_mouse_manager.press('w')
+                    key_mouse_manager.press("move_w")
                     key_mouse_manager.wait()
             # 离目标点挺近了，准备找下一个目标点
             elif now_distance <= 20:
@@ -1432,25 +1432,25 @@ class UniverseUtils(StateKernel):
             CUS_LOGGER.debug(f'当前状态{self.mini_state}')
         #打补给罐子
         if self.mini_state==1 and self.floor in [5,9,12]:
-            key_mouse_manager.press('w',0.55)
+            key_mouse_manager.press("move_w",0.55)
             key_mouse_manager.click(0.5,0.5)
-            key_mouse_manager.press('w')
+            key_mouse_manager.press("move_w")
             key_mouse_manager.wait()
         #13层并且不要奖励
         if self.mini_state==3 and self.floor==13 and not self.check_bonus:
             self.mini_state=5
         #4，8，13层领奖
         if self.mini_state==3 and self.floor in [4,8,13] and self.check_bonus:
-            key_mouse_manager.press('d',0.6)
-            key_mouse_manager.keyDown('w')
+            key_mouse_manager.press("move_d",0.6)
+            key_mouse_manager.keyDown("move_w")
             nt = time.time()
             while time.time()-nt<1.3:
                 if self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
-                    key_mouse_manager.press('f',force= True)
-                    key_mouse_manager.keyUp('w')
+                    key_mouse_manager.press("interact",force= True)
+                    key_mouse_manager.keyUp("move_w")
                     break
-            key_mouse_manager.keyUp('w')
-            key_mouse_manager.press('f',force= True)
+            key_mouse_manager.keyUp("move_w")
+            key_mouse_manager.press("interact",force= True)
             key_mouse_manager.wait()
             for _ in range(2):
                 if not self.check_bonus:
@@ -1463,14 +1463,14 @@ class UniverseUtils(StateKernel):
                         self.check_bonus = 0
                     key_mouse_manager.click(0.5062, 0.1454)
                     key_mouse_manager.wait()
-            key_mouse_manager.keyUp('w')
+            key_mouse_manager.keyUp("move_w")
             if self.check('bonus_c',0.2385,0.6685,fresh=True):
                 key_mouse_manager.click(0.2385,0.6685)
             self.mini_state=5
             if self.floor==13:
                 self.should_update_map = False
                 return
-            key_mouse_manager.press('s',0.4)
+            key_mouse_manager.press("move_s",0.4)
         self.stop_move=0
         self.ready=0
         self.is_target = 0
@@ -1497,7 +1497,7 @@ class UniverseUtils(StateKernel):
             time.sleep(0.1)
         if self.mini_state == 1 and self.floor == 12 and self.check("z", mask=MASK["monster_info"],threshold=0.95):
             self.update_floor(13)
-        key_mouse_manager.keyDown("w")
+        key_mouse_manager.keyDown("move_w")
         run_wait_time = 4
         self.first_mini = 0
         self.is_sprinting = 0
@@ -1513,18 +1513,18 @@ class UniverseUtils(StateKernel):
         while True:
             CUS_LOGGER.info("开始检测交互点循环")
             if self._stop == 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
                 break
-            key_mouse_manager.keyUp("w")
+            key_mouse_manager.keyUp("move_w")
             key_mouse_manager.wait()
             self.get_screen()
             have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("未检测到f交互")
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
             if have_f and self.target_type==1:
-                key_mouse_manager.press('f')
+                key_mouse_manager.press("interact")
                 CUS_LOGGER.info('发现事件交互')
                 self.stop_move=1
                 need_confirm = 1
@@ -1539,36 +1539,36 @@ class UniverseUtils(StateKernel):
                     CUS_LOGGER.info("不是黑塔或是黑塔但上次交互超过30秒")
                     if self.speed <= 0 or not self.ts.similar("黑塔"):
                         CUS_LOGGER.info("不是速通或并非黑塔")
-                        key_mouse_manager.press('f')
-                        key_mouse_manager.press('s',use_time)
+                        key_mouse_manager.press("interact")
+                        key_mouse_manager.press("move_s",use_time)
                         self.stop_move = 1
                         key_mouse_manager.wait()
                         need_confirm = 1
                         CUS_LOGGER.info('等待验证交互文本 ' + self.ts.text)
                         if self.nof():
                             CUS_LOGGER.info("未检测到f")
-                            key_mouse_manager.keyUp("w")
+                            key_mouse_manager.keyUp("move_w")
                             self.should_update_map = False
                             return
                         break
                     else:
                         self.quit = time.time()
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         self.stop_move=1
                         self.mini_state+=2
                         self.should_update_map = False
                         return
                 elif self.ts.similar("黑塔") and time.time() - self.quit < 30:
                     CUS_LOGGER.info("检测到黑塔,但上次交互时间过短")
-                    key_mouse_manager.press("w")
+                    key_mouse_manager.press("move_w")
                     self.mini_state+=2
                     self.should_update_map = False
                 else:
                     CUS_LOGGER.info("未检测到黑塔")
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
             if self.check("auto_2", 0.0583, 0.0769):
                 CUS_LOGGER.info("检测到位于战斗中")
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
                 self.mini_state+=2
                 key_mouse_manager.wait()
@@ -1577,10 +1577,10 @@ class UniverseUtils(StateKernel):
                 CUS_LOGGER.info("检测到怪物z标志")
                 self.stop_move=1
                 if self.mini_state==1 and self.floor in [4, 8, 13] and not (self.quan or self.bai_e):
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     # 打首领层前先把队伍里的秘技依次放一遍，给全队挂增益
                     for i in range([4, 8, 13].index(self.floor)+2):
-                        key_mouse_manager.press(str(i+1))
+                        key_mouse_manager.press(f"role_{i+1}")
                         key_mouse_manager.wait()
                         self.use_e()
                         self.get_screen()
@@ -1588,12 +1588,12 @@ class UniverseUtils(StateKernel):
                             break
                         if self._stop:
                             break
-                    key_mouse_manager.keyDown("w")
+                    key_mouse_manager.keyDown("move_w")
                     key_mouse_manager.wait()
                 iters = 0
                 while self.check("z", mask=MASK["monster_info"],threshold=0.95,fresh=True) and not self._stop:
                     CUS_LOGGER.info("检测到怪物，准备攻击")
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     iters+=1
                     if iters>4:
                         break
@@ -1620,7 +1620,7 @@ class UniverseUtils(StateKernel):
                             #没扫到红点，却有z的怪物标识，那红点可能被蓝色箭头挡住了，说明很近了
                             ds=0
                         if ds>28:
-                            key_mouse_manager.keyDown("w")
+                            key_mouse_manager.keyDown("move_w")
                             if self.is_sprinting:
                                 wait_time = (ds - 22.0) / 12
                                 CUS_LOGGER.debug(f"距离目标{ds},太远，等待{(ds - 22.0) / 12}秒(冲刺)")
@@ -1636,7 +1636,7 @@ class UniverseUtils(StateKernel):
                                     break
 
                     if self.quan:
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         self.use_e()
                         if self.floor not in [4, 8, 13]:
                             for _ in range(2):
@@ -1646,27 +1646,27 @@ class UniverseUtils(StateKernel):
                             self.should_update_map = False
                             return
                         else:
-                            key_mouse_manager.keyDown("w")
+                            key_mouse_manager.keyDown("move_w")
                     elif self.bai_e:
                         # key_mouse_manager.keyUp("w")
                         self.use_e(face=True)
                         if self.floor not in [4, 8, 13]:
                             self.stop_move = 1
                             self.mini_state += 2
-                            key_mouse_manager.press('w')
+                            key_mouse_manager.press("move_w")
                             self.should_update_map = False
                             return
                         else:
-                            key_mouse_manager.keyDown("w")
+                            key_mouse_manager.keyDown("move_w")
                     else:
                         key_mouse_manager.click(0.5,0.5)
                     if iters + self.quan == 2:
-                        key_mouse_manager.press('d',0.85)
-                        key_mouse_manager.press('a',0.3)
+                        key_mouse_manager.press("move_d",0.85)
+                        key_mouse_manager.press("move_a",0.3)
                 self.mini_state+=2
                 break
             if not self.is_run():
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move = 1
                 self.should_update_map = False
                 key_mouse_manager.wait()
@@ -1675,7 +1675,7 @@ class UniverseUtils(StateKernel):
             if time.time()-init_time>run_wait_time:
                 CUS_LOGGER.info(f"等待时间超时,是否有目标{self.has_target}")
                 self.stop_move=1
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.mini_state+=2
                 if self.mini_state>=7:
                     self.last_interact_time = 0
@@ -1685,17 +1685,17 @@ class UniverseUtils(StateKernel):
                     self.update_state("ui")
                     return
                 if self.has_target and self.target_type!=3:
-                    key_mouse_manager.press('s',0.3)
-                    key_mouse_manager.press('a',0.7)
-                    key_mouse_manager.press('d',0.45)
-                    key_mouse_manager.press('w',0.5)
+                    key_mouse_manager.press("move_s",0.3)
+                    key_mouse_manager.press("move_a",0.7)
+                    key_mouse_manager.press("move_d",0.45)
+                    key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
                         key_mouse_manager.click(0.5,0.5)
                     key_mouse_manager.wait()
 
                 break
         self.stop_move=1
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         self.update_state("check")
         if self.fresh_state()==1:
             self.should_update_map = False
@@ -1710,27 +1710,27 @@ class UniverseUtils(StateKernel):
                 if self.target_type==1:
                     CUS_LOGGER.info("必须找到交互点，尝试寻找")
                     if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-                        key_mouse_manager.press('f',force= True)
+                        key_mouse_manager.press("interact",force= True)
                         if self.nof(must_be='event'):
                             self.should_update_map = False
                             return
                 elif self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
-                    key_mouse_manager.keyUp(i)
+                    key_mouse_manager.keyUp(f"move_{i}")
                     key_mouse_manager.wait()
                     if self.good_f()[0] and not (self.ts.similar("黑塔") and time.time() - self.quit < 30):
                         CUS_LOGGER.info("找到最佳交互点")
-                        key_mouse_manager.press('f',force= True)
+                        key_mouse_manager.press("interact",force= True)
                         self.get_screen()
                         if self.nof():
                             self.should_update_map = False
                             return
                 if self.is_find_end==1 and self.mini_state > 2:
                     if self.move_to_end(mode=0):
-                        key_mouse_manager.press('w')
+                        key_mouse_manager.press("move_w")
                         key_mouse_manager.wait()
                 elif self.move_direct_to_text():
                     i="w"
-                key_mouse_manager.press(i, 0.25)
+                key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.info(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
             key_mouse_manager.click(0.5,0.5)
@@ -1777,7 +1777,7 @@ class UniverseUtils(StateKernel):
             self.has_target=True
             self.target_type = 1
         if not self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-            key_mouse_manager.keyDown("w")
+            key_mouse_manager.keyDown("move_w")
         run_wait_time = 2
         self.first_mini = 0
         self.is_sprinting = 0
@@ -1792,20 +1792,20 @@ class UniverseUtils(StateKernel):
             key_mouse_manager.wait()
             CUS_LOGGER.info("请求：「救世主，带领吾等前进吧。」")
             if self._stop == 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
                 break
             if self.mini_state>1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.wait()
             self.get_screen()
             have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("「但倘若黎明从一开始就不存在……」")
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
             if have_f:
-                key_mouse_manager.keyUp("w")
-                key_mouse_manager.press('f')
+                key_mouse_manager.keyUp("move_w")
+                key_mouse_manager.press("interact")
                 CUS_LOGGER.info('「那就让怒火燃尽此身，化作明日的烈阳！」')
                 self.stop_move=1
                 need_confirm = 1
@@ -1814,7 +1814,7 @@ class UniverseUtils(StateKernel):
                     return
                 break
             if not self.is_run():
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move = 1
                 self.should_update_map = False
                 key_mouse_manager.wait()
@@ -1823,7 +1823,7 @@ class UniverseUtils(StateKernel):
             if time.time()-init_time>run_wait_time:
                 CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.mini_state+=2
                 if self.mini_state>=7:
                     # self.last_interact_time = 0
@@ -1833,16 +1833,16 @@ class UniverseUtils(StateKernel):
                     # self.update_state("ui")
                     return
                 if self.has_target:
-                    key_mouse_manager.press('s',0.3)
-                    key_mouse_manager.press('a',0.7)
-                    key_mouse_manager.press('d',0.45)
-                    key_mouse_manager.press('w',0.5)
+                    key_mouse_manager.press("move_s",0.3)
+                    key_mouse_manager.press("move_a",0.7)
+                    key_mouse_manager.press("move_d",0.45)
+                    key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
                         key_mouse_manager.click(0.5,0.5)
                     key_mouse_manager.wait()
                 break
         self.stop_move=1
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         self.update_state("check")
         if not self.is_run():
             self.should_update_map = False
@@ -1858,12 +1858,12 @@ class UniverseUtils(StateKernel):
                 if self.target_type==1:
                     CUS_LOGGER.info("沿着他们的足迹……写下前所未有的结局。")
                     if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-                        key_mouse_manager.press('f',force= True)
+                        key_mouse_manager.press("interact",force= True)
                         if self.nof(must_be='event'):
                             self.should_update_map = False
                             return
                         else:
-                            key_mouse_manager.press('f')
+                            key_mouse_manager.press("interact")
                             if self.nof(must_be='event'):
                                 self.should_update_map = False
                                 return
@@ -1876,16 +1876,16 @@ class UniverseUtils(StateKernel):
                 elif self.move_direct_to_text():
                     i="w"
                 if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
-                    key_mouse_manager.press('f',force= True)
+                    key_mouse_manager.press("interact",force= True)
                     if self.nof(must_be='event'):
                         self.should_update_map = False
                         return
                     else:
-                        key_mouse_manager.press('f')
+                        key_mouse_manager.press("interact")
                         if self.nof(must_be='event'):
                             self.should_update_map = False
                             return
-                key_mouse_manager.press(i, 0.25)
+                key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
             key_mouse_manager.click(0.5,0.5)
@@ -1905,9 +1905,9 @@ class UniverseUtils(StateKernel):
             CUS_LOGGER.debug(f'当前状态{self.mini_state}')
         #打补给罐子
         if self.mini_state==1:
-            key_mouse_manager.press('w',0.55)
+            key_mouse_manager.press("move_w",0.55)
             key_mouse_manager.click(0.5,0.5)
-            key_mouse_manager.press('w')
+            key_mouse_manager.press("move_w")
             key_mouse_manager.wait()
         self.stop_move=0
         self.ready=0
@@ -1932,7 +1932,7 @@ class UniverseUtils(StateKernel):
         else:
             self.has_target=True
             self.target_type = 2
-        key_mouse_manager.keyDown("w")
+        key_mouse_manager.keyDown("move_w")
         run_wait_time = 2
         self.first_mini = 0
         self.is_sprinting = 0
@@ -1948,20 +1948,20 @@ class UniverseUtils(StateKernel):
             key_mouse_manager.wait()
             CUS_LOGGER.info(f"{factor}拒绝了「死亡」：他将灵魂化为烈火…为了将那「毁灭」的神像焚烧殆尽。")
             if self._stop == 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
                 break
             if self.mini_state > 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.wait()
             self.get_screen()
             have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("醒醒…迷途者啊……看清那黑暗中的火光…并非……")
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
             if have_f:
                 if self.mini_state <=1:
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                 CUS_LOGGER.info(" 火焰尚有缺欠。必须…助长火焰。")
                 judge, use_time = self.good_f()
                 if judge and not (self.ts.similar("黑塔") and time.time() - self.quit < 30):
@@ -1971,22 +1971,22 @@ class UniverseUtils(StateKernel):
                     else:
                         self.quit = time.time()
                         self.mini_state += 2
-                    key_mouse_manager.keyUp("w")
-                    key_mouse_manager.press('f')
-                    key_mouse_manager.press('s', use_time)
+                    key_mouse_manager.keyUp("move_w")
+                    key_mouse_manager.press("interact")
+                    key_mouse_manager.press("move_s", use_time)
                     self.stop_move = 1
                     key_mouse_manager.wait()
                     need_confirm = 1
                     self.should_update_map = False
                     if self.nof():
                         CUS_LOGGER.info("做出你们最大的努力抗争，或是接受命运，将火种交给他……")
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         self.should_update_map = False
                         return
                     break
                 elif self.ts.similar("黑塔") and time.time() - self.quit < 30:
                     CUS_LOGGER.info("也许你所行的根本不是拯救的道路，只是单纯地把这世界拖入火海而已。")
-                    key_mouse_manager.press("w")
+                    key_mouse_manager.press("move_w")
                     self.mini_state += 2
                     self.should_update_map = False
                 else:
@@ -1994,7 +1994,7 @@ class UniverseUtils(StateKernel):
                     need_confirm=1
                     break
             if not self.is_run():
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move = 1
                 self.should_update_map = False
                 key_mouse_manager.wait()
@@ -2003,7 +2003,7 @@ class UniverseUtils(StateKernel):
             if time.time()-init_time>run_wait_time:
                 CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.mini_state+=2
                 if self.mini_state>=7:
                     # self.last_interact_time = 0
@@ -2013,16 +2013,16 @@ class UniverseUtils(StateKernel):
                     # self.update_state("ui")
                     return
                 if self.has_target:
-                    key_mouse_manager.press('s',0.3)
-                    key_mouse_manager.press('a',0.7)
-                    key_mouse_manager.press('d',0.45)
-                    key_mouse_manager.press('w',0.5)
+                    key_mouse_manager.press("move_s",0.3)
+                    key_mouse_manager.press("move_a",0.7)
+                    key_mouse_manager.press("move_d",0.45)
+                    key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
                         key_mouse_manager.click(0.5,0.5)
                     key_mouse_manager.wait()
                 break
         self.stop_move=1
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         self.update_state("check")
         if not self.is_run():
             self.should_update_map = False
@@ -2037,7 +2037,7 @@ class UniverseUtils(StateKernel):
                 if self.target_type==2:
                     CUS_LOGGER.info("可是，告诉我……若当真如此，我们又为何会步入相同的结局？")
                     if self.good_f(run=False)[0]:
-                        key_mouse_manager.press('f',force= True)
+                        key_mouse_manager.press("interact",force= True)
                         if self.nof(must_be='event'):
                             self.should_update_map = False
                             self.mini_state+=2
@@ -2048,11 +2048,11 @@ class UniverseUtils(StateKernel):
                 elif self.move_to_event(rest=True):
                     i="w"
                 if self.good_f(run=False)[0]:
-                    key_mouse_manager.press('f',force= True)
+                    key_mouse_manager.press("interact",force= True)
                     if self.nof(must_be='event'):
                         self.should_update_map = False
                         return
-                key_mouse_manager.press(i, 0.25)
+                key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
             key_mouse_manager.click(0.5,0.5)
@@ -2083,7 +2083,7 @@ class UniverseUtils(StateKernel):
             self.has_target = bool(self.is_find_end)
             if self.has_target:
                 self.target_type = 4
-        key_mouse_manager.keyDown("w")
+        key_mouse_manager.keyDown("move_w")
         run_wait_time = 2
         self.first_mini = 0
         self.is_sprinting = 0
@@ -2098,29 +2098,29 @@ class UniverseUtils(StateKernel):
             key_mouse_manager.wait()
             CUS_LOGGER.info(f"{factor}请求：「成为回应世界期许，背负众人心愿的人。」")
             if self._stop == 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 break
             if self.mini_state > 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.wait()
             self.get_screen()
             have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("响应：「一个孑然一身的人。」")
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
             if have_f:
                 if self.mini_state <=1:
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                 judge, _ = self.good_f()
                 if judge:
-                    key_mouse_manager.keyUp("w")
-                    key_mouse_manager.press('f')
+                    key_mouse_manager.keyUp("move_w")
+                    key_mouse_manager.press("interact")
                     key_mouse_manager.wait()
                     self.should_update_map = False
                     first_visit = self.mini_state <= 1
                     if self.nof(must_be="challenge"):
                         CUS_LOGGER.info(f"最后一次，{factor}回想起那个朝阳初升的时刻，自己曾刻下理想的雏形…")
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         if not self.is_run():
                             break
                         if first_visit:
@@ -2138,14 +2138,14 @@ class UniverseUtils(StateKernel):
                 else:
                     CUS_LOGGER.info(f"{factor}为它取另外一个名字——「救世主」。而他自己的名，就此在记忆中零落。")
             if not self.is_run():
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.should_update_map = False
                 key_mouse_manager.wait()
                 CUS_LOGGER.info("警告：进度无法更新,检测到其它界面,退出循环")
                 return
             if time.time()-init_time>run_wait_time:
                 CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.mini_state+=2
                 if self.mini_state>=7:
                     # self.last_interact_time = 0
@@ -2155,7 +2155,7 @@ class UniverseUtils(StateKernel):
                     # self.update_state("ui")
                     return
                 break
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         self.update_state("check")
         self.should_update_map = False
         return
@@ -2203,7 +2203,7 @@ class UniverseUtils(StateKernel):
                 self.has_target = bool(self.is_find_end)
                 if self.has_target:
                     self.target_type = 4
-        key_mouse_manager.keyDown("w")
+        key_mouse_manager.keyDown("move_w")
         run_wait_time = 4
         self.first_mini = 0
         self.is_sprinting = 0
@@ -2217,20 +2217,20 @@ class UniverseUtils(StateKernel):
             key_mouse_manager.wait()
             CUS_LOGGER.info(f"每一个人的愿望…{factor}都铭记在心。")
             if self._stop == 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
                 break
             if self.mini_state > 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.wait()
             self.get_screen()
             have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info("听好，自往日而来的救世主——请回头吧——勿要惊扰它们，那众多鲜花的如泥死亡。")
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
             if have_f:
                 if self.mini_state<=1:
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                 CUS_LOGGER.info(f"{factor}…从未抛弃过。")
                 judge, use_time = self.good_f()
                 if judge and not (self.ts.similar("黑塔") and time.time() - self.quit < 30):
@@ -2240,22 +2240,22 @@ class UniverseUtils(StateKernel):
                     else:
                         self.quit = time.time()
                         self.mini_state += 2
-                    key_mouse_manager.keyUp("w")
-                    key_mouse_manager.press('f')
-                    key_mouse_manager.press('s', use_time)
+                    key_mouse_manager.keyUp("move_w")
+                    key_mouse_manager.press("interact")
+                    key_mouse_manager.press("move_s", use_time)
                     self.stop_move = 1
                     key_mouse_manager.wait()
                     need_confirm = 1
                     self.should_update_map = False
                     if self.nof():
                         CUS_LOGGER.info("…将这团火递给下一个我……无数次…无数次…无数次。")
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         self.should_update_map = False
                         return
                     break
                 elif self.ts.similar("黑塔") and time.time() - self.quit < 30:
                     CUS_LOGGER.info("你自己…无数个你自己的愿望…又是什么呢？")
-                    key_mouse_manager.press("w")
+                    key_mouse_manager.press("move_w")
                     self.mini_state += 2
                     self.should_update_map = False
                 else:
@@ -2263,7 +2263,7 @@ class UniverseUtils(StateKernel):
                     need_confirm=1
                     break
             if not self.is_run():
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move = 1
                 self.should_update_map = False
                 key_mouse_manager.wait()
@@ -2272,7 +2272,7 @@ class UniverseUtils(StateKernel):
             if time.time()-init_time>run_wait_time:
                 CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.mini_state+=2
                 if self.mini_state>=7:
                     # self.last_interact_time = 0
@@ -2282,16 +2282,16 @@ class UniverseUtils(StateKernel):
                     # self.update_state("ui")
                     return
                 if self.has_target:
-                    key_mouse_manager.press('s',0.3)
-                    key_mouse_manager.press('a',0.7)
-                    key_mouse_manager.press('d',0.45)
-                    key_mouse_manager.press('w',0.5)
+                    key_mouse_manager.press("move_s",0.3)
+                    key_mouse_manager.press("move_a",0.7)
+                    key_mouse_manager.press("move_d",0.45)
+                    key_mouse_manager.press("move_w",0.5)
                     if self.mini_state==3:
                         key_mouse_manager.click(0.5,0.5)
                     key_mouse_manager.wait()
                 break
         self.stop_move=1
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         self.update_state("check")
         if not self.is_run():
             self.should_update_map = False
@@ -2306,8 +2306,8 @@ class UniverseUtils(StateKernel):
                 if self.target_type==2:
                     CUS_LOGGER.info("……直到，逆转「再创世」揭示的残酷未来。")
                     if self.good_f(run=False)[0]:
-                        key_mouse_manager.press('f',force= True)
-                        key_mouse_manager.keyUp('w')
+                        key_mouse_manager.press("interact",force= True)
+                        key_mouse_manager.keyUp("move_w")
                         if self.nof(must_be='event'):
                             self.should_update_map = False
                             return
@@ -2317,11 +2317,11 @@ class UniverseUtils(StateKernel):
                 elif self.move_to_shop():
                     i="w"
                 if self.good_f(run=False)[0]:
-                    key_mouse_manager.press('f',force= True)
+                    key_mouse_manager.press("interact",force= True)
                     if self.nof(must_be='event'):
                         self.should_update_map = False
                         return
-                key_mouse_manager.press(i, 0.25)
+                key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
             key_mouse_manager.click(0.5,0.5)
@@ -2354,7 +2354,7 @@ class UniverseUtils(StateKernel):
     kwargs={"device":1}, name="移动").start()
             while not self.ready:
                 time.sleep(0.1)
-        key_mouse_manager.keyDown("w")
+        key_mouse_manager.keyDown("move_w")
         run_wait_time = 2
         self.first_mini = 0
         self.is_sprinting = 0
@@ -2372,34 +2372,34 @@ class UniverseUtils(StateKernel):
         while True:
             CUS_LOGGER.info(f"{factor}以「愤怒」铭记此世的全部。只要{factor}还在燃烧，他们就从未离去。")
             if self._stop == 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
                 break
             if self.has_target:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.wait()
             self.get_screen()
             have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
             if not have_f:
                 CUS_LOGGER.info(f"{factor}的悲伤从未消逝。恰恰相反，火种加诸此身，他心中的火焰前所未有地暴烈……")
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
             elif have_f:
                 CUS_LOGGER.info(f"然后，{factor}杀死了自己。")
-                key_mouse_manager.press('f')
+                key_mouse_manager.press("interact")
                 self.stop_move = 1
                 key_mouse_manager.wait()
                 need_confirm = 1
                 CUS_LOGGER.debug('等待验证交互文本 ' + self.ts.text)
                 if self.nof("tp"):
                     CUS_LOGGER.info(f"而后，{factor}在这次轮回中的一切努力，也会在同一时间化为泡影。")
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     self.should_update_map = False
                     if not self.is_run():
                         return
                 break
             if self.check("auto_2", 0.0583, 0.0769):
                 CUS_LOGGER.info("「逐火是不断失却的旅途，在那一切当中，生命也微不足惜。」")
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move=1
                 self.mini_state+=2
                 key_mouse_manager.wait()
@@ -2410,7 +2410,7 @@ class UniverseUtils(StateKernel):
                 iters = 0
                 while self.check("z", mask=MASK["monster_info"],threshold=0.95,fresh=True) and not self._stop:
                     CUS_LOGGER.info("「羁客」与「学士」兑现了他们的命运，再一次。")
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     iters+=1
                     if iters>4:
                         break
@@ -2430,7 +2430,7 @@ class UniverseUtils(StateKernel):
                             #没扫到红点，却有z的怪物标识，那红点可能被蓝色箭头挡住了，说明很近了
                             ds=0
                         if ds>28:
-                            key_mouse_manager.keyDown("w")
+                            key_mouse_manager.keyDown("move_w")
                             if self.is_sprinting:
                                 wait_time = (ds - 22.0) / 12
                                 CUS_LOGGER.debug(f"距离目标{ds},太远，等待{(ds - 22.0) / 12}秒(冲刺)")
@@ -2447,7 +2447,7 @@ class UniverseUtils(StateKernel):
                                     break
 
                     if self.quan:
-                        key_mouse_manager.keyUp("w")
+                        key_mouse_manager.keyUp("move_w")
                         skill_num=match_skill_numbers_in_region(self.get_screen())
                         if skill_num is not None:
                             self.skill_num=skill_num
@@ -2462,7 +2462,7 @@ class UniverseUtils(StateKernel):
                             self.should_update_map = False
                             return
                         else:
-                            key_mouse_manager.keyDown("w")
+                            key_mouse_manager.keyDown("move_w")
                     elif self.bai_e:
                         skill_num = match_skill_numbers_in_region(self.get_screen())
                         if skill_num is not None:
@@ -2472,18 +2472,18 @@ class UniverseUtils(StateKernel):
                         self.use_e(face=True,fixed=fixed)
                         self.stop_move = 1
                         self.mini_state += 2
-                        key_mouse_manager.press('w')
+                        key_mouse_manager.press("move_w")
                         self.should_update_map = False
                         return
                     else:
                         key_mouse_manager.click(0.5,0.5)
                     if iters + self.quan == 2:
-                        key_mouse_manager.press('d',0.85)
-                        key_mouse_manager.press('a',0.3)
+                        key_mouse_manager.press("move_d",0.85)
+                        key_mouse_manager.press("move_a",0.3)
                 self.mini_state+=2
                 break
             if not self.is_run():
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 self.stop_move = 1
                 self.should_update_map = False
                 key_mouse_manager.wait()
@@ -2492,7 +2492,7 @@ class UniverseUtils(StateKernel):
             if time.time()-init_time>run_wait_time:
                 CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
                 self.stop_move=1
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 if self.mini_state>=7:
                     # self.last_interact_time = 0
                     self.should_update_map = False
@@ -2503,7 +2503,7 @@ class UniverseUtils(StateKernel):
                 self.mini_state+=2
                 break
         self.stop_move=1
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         self.update_state("check")
         if not self.is_run():
             self.should_update_map = False
@@ -2516,28 +2516,28 @@ class UniverseUtils(StateKernel):
                     return
                 self.get_screen()
                 if self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
-                    key_mouse_manager.keyUp(i)
+                    key_mouse_manager.keyUp(f"move_{i}")
                     key_mouse_manager.wait()
-                    key_mouse_manager.press('f')
+                    key_mouse_manager.press("interact")
                     self.get_screen()
                     if self.nof():
                         self.should_update_map = False
                         return
                 if self.is_find_end==1 and self.mini_state > 2:
                     if self.move_to_end(mode=0,device=1):
-                        key_mouse_manager.press('w')
+                        key_mouse_manager.press("move_w")
                         key_mouse_manager.wait()
                 elif self.move_direct_to_text():
                     i="w"
                 elif self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
-                    key_mouse_manager.keyUp(i)
+                    key_mouse_manager.keyUp(f"move_{i}")
                     key_mouse_manager.wait()
-                    key_mouse_manager.press('f')
+                    key_mouse_manager.press("interact")
                     self.get_screen()
                     if self.nof():
                         self.should_update_map = False
                         return
-                key_mouse_manager.press(i, 0.25)
+                key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
             key_mouse_manager.click(0.5,0.5)
@@ -2564,21 +2564,21 @@ class UniverseUtils(StateKernel):
     def use_e(self,face=False,fixed=False):
         if not fixed:
             if self.quan:
-                key_mouse_manager.press('e',force= True)
+                key_mouse_manager.press("technique",force= True)
                 key_mouse_manager.wait()
             elif self.bai_e:
                 CUS_LOGGER.info(f"「{factor}」施放【莫因舍弃而哭泣】")
                 if face:
-                    key_mouse_manager.press('e',force= True)
+                    key_mouse_manager.press("technique",force= True)
                 else:
-                    key_mouse_manager.press('s')
-                    key_mouse_manager.press('e')
+                    key_mouse_manager.press("move_s")
+                    key_mouse_manager.press("technique")
                     key_mouse_manager.wait()
                     key_mouse_manager.sleep(1.6)
-                    key_mouse_manager.press('w')
-                    key_mouse_manager.press('e')
+                    key_mouse_manager.press("move_w")
+                    key_mouse_manager.press("technique")
             else:
-                key_mouse_manager.press('e')
+                key_mouse_manager.press("technique")
             key_mouse_manager.wait()
         else:
             key_mouse_manager.click(0.5, 0.5)
@@ -2601,7 +2601,7 @@ class UniverseUtils(StateKernel):
             CUS_LOGGER.warning("惟有…助长火焰。方能烧熔…那绝望的未来。")
             return
         if not self._stop:
-            key_mouse_manager.keyDown("w")
+            key_mouse_manager.keyDown("move_w")
             key_mouse_manager.wait()
         self.is_sprinting = 0
         if self.target_type != 3:
@@ -2638,10 +2638,10 @@ class UniverseUtils(StateKernel):
         for i in range(30):
             CUS_LOGGER.debug(f"第{i}次定位寻路")
             if self._stop == 1:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 return
             else:
-                key_mouse_manager.keyDown("w")
+                key_mouse_manager.keyDown("move_w")
             # 预判实际点位
             if not self.get_loc():
                 CUS_LOGGER.warning("它理应照亮众人，照亮前路，照亮翁法罗斯终将到来的黎明……")
@@ -2726,7 +2726,7 @@ class UniverseUtils(StateKernel):
                         self.is_sprinting = 0
                     go_direct = 2
                 else:
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     break
             CUS_LOGGER.info(f"但黑潮的阴影依旧笼罩，痛苦和绝望遍布在遥远的大地……(目标距离{now_distance})")
             # 检查是否位置卡住（连续3次距离过小）
@@ -2749,13 +2749,13 @@ class UniverseUtils(StateKernel):
                 ts = " da"
                 if go_direct > 0:
                     CUS_LOGGER.debug(f"尝试绕过障碍向{ts[go_direct]}")
-                    key_mouse_manager.keyUp("w")
-                    key_mouse_manager.press("s", 0.35)
+                    key_mouse_manager.keyUp("move_w")
+                    key_mouse_manager.press("move_s", 0.35)
                     if go_direct == 2:
-                        key_mouse_manager.press(ts[go_direct], go_time)
+                        key_mouse_manager.press(f"move_{ts[go_direct]}", go_time)
                     else:
-                        key_mouse_manager.press(ts[go_direct], go_time + random.uniform(0, 0.5))
-                    key_mouse_manager.keyDown("w")
+                        key_mouse_manager.press(f"move_{ts[go_direct]}", go_time + random.uniform(0, 0.5))
+                    key_mouse_manager.keyDown("move_w")
                     self.get_screen()
                     if not self.get_loc():
                         CUS_LOGGER.info(f"{factor}将侵晨刺入每一尊泰坦的心脏，金血沿指尖淌下，神火灼烧的剧痛几乎令他放弃了挣扎")
@@ -2765,7 +2765,7 @@ class UniverseUtils(StateKernel):
                     go_direct -= 1
                 else:
                     CUS_LOGGER.info("「毁灭」早已汇成烈阳，在这具脆弱的躯壳中翻涌，理智在纪元开端便燃烧殆尽…")
-                    key_mouse_manager.keyUp("w")
+                    key_mouse_manager.keyUp("move_w")
                     break
             CUS_LOGGER.info(" 若我们生来只是一串模拟生命的数字，那就是我所憧憬的形象，想要成为的样子。")
             retry_time += 1
@@ -2773,7 +2773,7 @@ class UniverseUtils(StateKernel):
         CUS_LOGGER.info("现在，一轮太阳将走向陨落，它顷刻便能将这荒诞的时空焚烧殆尽——")
         CUS_LOGGER.debug(f"寻路判断已到达交互点附近 {now_distance}")
         key_mouse_manager.clean()
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
         if not self.get_loc():
             CUS_LOGGER.info("「救世主」…我愿你…常战常胜。")
@@ -2812,7 +2812,7 @@ class UniverseUtils(StateKernel):
                 target = (tuple(enemy_coords[0]), 3)
                 self.update_direction_data(mode=2, target=target)
             if self.quan:
-                key_mouse_manager.keyUp("w")
+                key_mouse_manager.keyUp("move_w")
                 skill_num = match_skill_numbers_in_region(self.get_screen())
                 if skill_num is not None:
                     self.skill_num = skill_num
@@ -2823,7 +2823,7 @@ class UniverseUtils(StateKernel):
                 if not self.get_loc():
                     CUS_LOGGER.info("这是神明计算中的时刻。此后的旅途，与您熟知的一切并无区别。有人到来，有人离去，逐火者们身负微光，在长夜中艰难向前。")
                     return
-                key_mouse_manager.press('w')
+                key_mouse_manager.press("move_w")
             elif self.bai_e:
                 skill_num = match_skill_numbers_in_region(self.get_screen())
                 if skill_num is not None:
@@ -2834,7 +2834,7 @@ class UniverseUtils(StateKernel):
                 if not self.get_loc():
                     CUS_LOGGER.info("切莫……犹疑……PhiLia093在学习……她在利用……你的爱……")
                     return
-                key_mouse_manager.press('w')
+                key_mouse_manager.press("move_w")
             else:
                 key_mouse_manager.click(0.5, 0.5)
         if self.target_type == 3:
@@ -2846,7 +2846,7 @@ class UniverseUtils(StateKernel):
                     return
                 if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                     CUS_LOGGER.info("那一定是个不同以往的浪漫故事。")
-                    key_mouse_manager.press('f', force=True)
+                    key_mouse_manager.press("interact", force=True)
                     key_mouse_manager.wait()
                     if self.nof(must_be='tp'):
                         return
@@ -2854,7 +2854,7 @@ class UniverseUtils(StateKernel):
                     return
                 if i in [0, 4]:
                     self.move_to_end(mode=1,device=1)
-                key_mouse_manager.press('w')
+                key_mouse_manager.press("move_w")
                 key_mouse_manager.wait()
         # 离目标点挺近了，准备找下一个目标点
         elif now_distance <= 20:

@@ -9,6 +9,146 @@ import win32con
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
+# 游戏内键位配置的来源：user/gui_settings.json 的 game_keys 字段，
+# 默认值在 resource/gui_settings_default.json，形如 {"interact": "f", "move_w": "w", ...}。
+# 调用点一律传"逻辑键名"（如 "interact"、"move_w"），由 resolve_key 换成用户设置的物理键，
+# 这样键位改动只影响本文件，不需要改任何调用点。
+_GAME_KEYS = {}
+_DEFAULT_KEYS = {}
+_DEFAULT_KEY_TO_NAME = {}
+_game_keys_loaded = False
+_warned_keys = set()
+
+# 游戏内允许设置的键位范围：字母、数字、F1-F12、空格、Enter、左右 Ctrl/Shift/Alt。
+# 与设置界面里的校验规则保持一致。
+_ALLOWED_KEY_NAMES = (
+    set("abcdefghijklmnopqrstuvwxyz")
+    | set("0123456789")
+    | {f"f{i}" for i in range(1, 13)}
+    | {"space", "enter", "ctrlleft", "ctrlright", "shiftleft", "shiftright", "altleft", "altright"}
+)
+
+# 游戏界面上的写法（LeftShift/LeftAlt）与 pyautogui 的键名（shiftleft/altleft）不一致，
+# 裸修饰键也统一成"左"，便于配置比较与去重判断。
+_KEY_NAME_ALIASES = {
+    "leftshift": "shiftleft", "rightshift": "shiftright",
+    "leftctrl": "ctrlleft", "rightctrl": "ctrlright",
+    "leftalt": "altleft", "rightalt": "altright",
+    "leftcontrol": "ctrlleft", "rightcontrol": "ctrlright",
+    "control": "ctrlleft", "ctrl": "ctrlleft",
+    "shift": "shiftleft", "alt": "altleft",
+    # keyboard 库把左右修饰键写成带空格的形式，读旧配置时要能认出来
+    "left shift": "shiftleft", "right shift": "shiftright",
+    "left ctrl": "ctrlleft", "right ctrl": "ctrlright",
+    "left control": "ctrlleft", "right control": "ctrlright",
+    "left alt": "altleft", "right alt": "altright",
+    # 编辑键/扩展键同理：程序热键允许设置这些键，两套命名要能互相转换
+    "page up": "pageup", "page down": "pagedown",
+    "caps lock": "capslock", "num lock": "numlock",
+    "scroll lock": "scrolllock", "print screen": "printscreen",
+}
+
+
+def _normalize_key_name(name):
+    """归一化物理键名；不认识的键名原样返回，由调用方决定是否回退。"""
+    name = name.strip().lower()
+    return _KEY_NAME_ALIASES.get(name, name)
+
+
+def normalize_key_name(name):
+    """把界面或配置文件里的键名统一成 pyautogui 键名（LeftShift→shiftleft、Ctrl→ctrlleft）。"""
+    return _normalize_key_name(str(name))
+
+
+def is_valid_key_name(name):
+    """判断键名是否落在允许设置的范围内，键位设置界面用它做保存前校验。"""
+    return _normalize_key_name(str(name)) in _ALLOWED_KEY_NAMES
+
+
+def _warn_once(key, message):
+    if key in _warned_keys:
+        return
+    _warned_keys.add(key)
+    CUS_LOGGER.warning(message)
+
+
+def _load_game_keys():
+    """读取用户键位配置，缺失项回退到默认键位。"""
+    global _GAME_KEYS, _DEFAULT_KEYS, _DEFAULT_KEY_TO_NAME, _game_keys_loaded
+    # 延迟导入：导入 tool.GLOBAL 时就会构造 KeyMouseManager，而 load_settings 有写盘副作用，
+    # 不能在模块导入阶段读配置。
+    from tool.settings import load_default_settings, load_settings
+    try:
+        defaults = (load_default_settings() or {}).get("game_keys") or {}
+    except Exception as error:
+        CUS_LOGGER.error(f"读取默认键位配置失败，本轮按键将按逻辑名原样下发：{error}")
+        defaults = {}
+    try:
+        user = (load_settings() or {}).get("game_keys") or {}
+    except Exception as error:
+        CUS_LOGGER.error(f"读取用户键位配置失败，本轮按键使用默认键位：{error}")
+        user = {}
+
+    default_keys = {str(name): _normalize_key_name(str(value)) for name, value in defaults.items()}
+    merged = {}
+    for name, default_value in default_keys.items():
+        value = user.get(name)
+        value = _normalize_key_name(str(value)) if value else default_value
+        if value not in _ALLOWED_KEY_NAMES:
+            _warn_once(name, f"键位配置中 {name} 的值 {value!r} 不合法，已回退为默认键 {default_value}")
+            value = default_value
+        merged[name] = value
+
+    _DEFAULT_KEYS = default_keys
+    # 默认物理键→逻辑名，用于兼容 JSON 脚本和历史写法里的 press("f")、press("w")
+    _DEFAULT_KEY_TO_NAME = {}
+    for name, value in default_keys.items():
+        _DEFAULT_KEY_TO_NAME.setdefault(value, name)
+    _GAME_KEYS = merged
+    _game_keys_loaded = True
+
+
+def resolve_key(key):
+    """
+    把逻辑键名解析成 pyautogui 可用的物理键名
+
+    解析顺序：
+    0. 含大写字母的键名（"V"、"R"）→ 视为程序内固定键，绕过配置直接下发小写键
+    1. 命中 game_keys 的逻辑名（"interact"）→ 用户当前设置的物理键
+    2. 命中某逻辑名的默认物理键（"f"）→ 按该逻辑名解析，兼容 JSON 脚本参数
+    3. 其余原样小写下发（"esc" 等固定键走这条）
+
+    Args:
+        key: 逻辑键名或物理键名
+
+    Returns:
+        物理键名
+    """
+    if not _game_keys_loaded:
+        _load_game_keys()
+    if not isinstance(key, str):
+        key = str(key)
+    key = key.strip()
+    # 逻辑键名一律小写，所以"含大写字母"唯一含义就是程序内固定键（战斗内按键等）。
+    # pyautogui 对单个大写字母会自动补按 Shift，必须先转小写再下发。
+    if key != key.lower():
+        return key.lower()
+    name = _normalize_key_name(key)
+    if name in _GAME_KEYS:
+        return _GAME_KEYS[name]
+    logical_name = _DEFAULT_KEY_TO_NAME.get(name)
+    if logical_name:
+        return _GAME_KEYS.get(logical_name) or _DEFAULT_KEYS.get(logical_name, name)
+    return name
+
+
+def reload_game_keys():
+    """重新读取游戏内键位配置，保存键位设置后调用。"""
+    global _game_keys_loaded
+    _game_keys_loaded = False
+    _warned_keys.clear()
+    _load_game_keys()
+
 
 class KeyMouseManager:
     """
@@ -129,21 +269,6 @@ class KeyMouseManager:
                 time.sleep(0.01)
         CUS_LOGGER.info("键鼠管理器线程已停止")
 
-    def _get_mapping(self, key):
-        """
-        获取键位映射
-
-        Args:
-            key: 原始键位
-
-        Returns:
-            映射后的键位
-        """
-        if self.config and hasattr(self.config, 'origin_key') and hasattr(self.config, 'mapping'):
-            if key in self.config.origin_key:
-                key = self.config.mapping[self.config.origin_key.index(key)]
-        return key
-
     def _convert_coordinates(self, x, y):
         """
         转换坐标格式
@@ -205,27 +330,22 @@ class KeyMouseManager:
         op_type = operation['type']
         CUS_LOGGER.debug(f"执行操作{operation}，当前队列长度{len(self.operation_queue)}")
         if op_type == 'keyDown':
-            key = self._get_mapping(operation['key'])
-            pyautogui.keyDown(key)
+            pyautogui.keyDown(resolve_key(operation['key']))
 
         elif op_type == 'keyUp':
-            key = self._get_mapping(operation['key'])
-            # 特殊处理shift键
+            key = resolve_key(operation['key'])
+            # 长按加速：走 W 的时候把加速键一并松开，否则会一直处于加速状态
             if (self.config and hasattr(self.config, 'long_press_sprint') and
-                self.config.long_press_sprint and operation['key'] == 'w'):
-                pyautogui.keyUp(self._get_mapping('shift'))
+                self.config.long_press_sprint and operation['key'] == 'move_w'):
+                pyautogui.keyUp(resolve_key('sprint'))
             pyautogui.keyUp(key)
 
         elif op_type == 'press':
-            key = self._get_mapping(operation['key'])
+            key = resolve_key(operation['key'])
             duration = operation.get('duration', 0)
 
             # 检查是否需要跳过该按键
-            if operation.get('allow_e', 1) == 0 and key == 'e':
-                return
-
-            if (self.config and hasattr(self.config, 'slow') and
-                self.config.slow and key == 'shift'):
+            if operation.get('allow_e', 1) == 0 and operation['key'] == 'technique':
                 return
 
             pyautogui.keyDown(key)
@@ -418,9 +538,9 @@ class KeyMouseManager:
         按下并释放按键
 
         Args:
-            key: 要按下的键
+            key: 要按下的键，逻辑键名（"interact"）或含大写的固定键（"V"）
             duration: 按下持续时间（秒）
-            allow_e: 是否允许按下'e'键（用于特殊场景）
+            allow_e: 是否允许施放秘技（technique 键），0 表示跳过（用于特殊场景）
             force: 是否为强制操作
         """
         operation = {

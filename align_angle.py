@@ -8,7 +8,7 @@ from tool.log import CUS_LOGGER
 
 
 def get_angle(su):
-    key_mouse_manager.press("w")
+    key_mouse_manager.press("move_w")
     time.sleep(0.5)
     su.get_screen()
     r, d = su.pos_predictor.update_minimap_data(su.screen)

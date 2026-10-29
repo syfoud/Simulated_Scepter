@@ -231,7 +231,7 @@ class FingerSnap(AnyFateUniverse):
         CUS_LOGGER.debug(f"当前倒计时{self.countdown}")
         self.set_kill_num(str(self.countdown))
         key_mouse_manager.clean()
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
         if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996],click=False,allow_fail=True):
             if self.click_text(text="点击空白处关闭", box=[876, 1047, 1008, 1035],click=False,allow_fail=True):
@@ -266,7 +266,7 @@ class FingerSnap(AnyFateUniverse):
         if not self.debug:
             CUS_LOGGER.error("本功能为实验性功能，当前仅供开发人员测试，现已终止程序")
             return self.stop()
-        key_mouse_manager.keyUp("w")
+        key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[10, 220, 0, 112],click=False,warning=False):
             self.plane_floor=1
         elif self.click_text(text="浪潮",box=[10, 220, 0, 112],click=False,warning=False):
