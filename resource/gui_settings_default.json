@@ -42,5 +42,6 @@
     "recording_keep_long_run": false,
     "recording_keep_long_run_threshold": 1.2,
     "record_add_label": false,
-    "skin_type": 1
+    "appearance": "dark",
+    "resources_visible": true
 }
