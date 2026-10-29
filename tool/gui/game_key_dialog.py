@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PyQt5 import uic
 from PyQt5.QtCore import QEvent, QObject, Qt, pyqtSignal
+from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QSizePolicy
 
 from route import PATHS
@@ -112,11 +113,15 @@ _EXTENDED_KEY_NAMES = {
     0x91: "scrolllock",
 }
 
-# 高亮只用背景色：边框属于盒模型，加边框会改变输入框的尺寸建议，
-# 进入/退出录制时整行会跟着上下跳几像素。
-_CAPTURE_STYLE = "QLineEdit { background-color: #d9e8ff; }"
+# 高亮只改边框颜色加一层半透明主题色底，不改字色：主题的占位文字色取自文字色，
+# 若把底色换成固定的浅蓝，深色主题下"请按下新按键"会变成浅灰字压浅蓝底而看不见。
+# 控件级样式表会顶掉主题给这个控件的盒模型，录制期间另外锁死高度来避免整行跳动。
+_CAPTURE_STYLE = "QLineEdit {{ border: 1px solid {color}; background-color: rgba({rgb}, 60); }}"
 _CAPTURE_PLACEHOLDER = "请按下新按键"
 _INVALID_KEY_PLACEHOLDER = "该按键不可用，请重新按下"
+
+# Qt 的 QWIDGETSIZE_MAX，PyQt5 没有导出这个常量；解除高度限制时用它还原最大值
+_QWIDGETSIZE_MAX = 16777215
 
 
 def display_key_name(name):
@@ -240,7 +245,13 @@ class KeyCapture(QObject):
         # 所以录制期间改成左对齐，提示才画得出来
         self.edit.setAlignment(Qt.AlignLeft)
         self.edit.setPlaceholderText(_CAPTURE_PLACEHOLDER)
-        self.edit.setStyleSheet(_CAPTURE_STYLE)
+        highlight = self.edit.palette().color(QPalette.Highlight)
+        # 控件级样式表会顶掉主题给这个控件的盒模型（内边距、圆角、最小高度），
+        # 尺寸建议随之变化会让整行上下挪几像素；按进入前的实际高度锁死高度，行高就不会动
+        self._capture_height = self.edit.height()
+        self.edit.setFixedHeight(self._capture_height)
+        self.edit.setStyleSheet(
+            _CAPTURE_STYLE.format(color=highlight.name(), rgb=f"{highlight.red()},{highlight.green()},{highlight.blue()}"))
         self._install_app_filter()
         self.capture_state_changed.emit(True)
 
@@ -279,6 +290,9 @@ class KeyCapture(QObject):
         self.edit.setAlignment(self._idle_alignment)
         self.edit.setPlaceholderText("未设置" if self.allow_empty else "")
         self.edit.setStyleSheet("")
+        # 解除录制态锁死的高度，回到由主题尺寸建议决定的正常行高
+        self.edit.setMinimumHeight(0)
+        self.edit.setMaximumHeight(_QWIDGETSIZE_MAX)
 
     def _commit(self, name):
         self.key_name = normalize_key_name(name) if name else ""

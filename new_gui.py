@@ -351,16 +351,25 @@ class CleanupSettingsSection(QWidget):
         action_width = 150
 
         for category in CATEGORIES:
-            button = self.cleanup_btn[category]
-            trigger_combo = self.trigger_combo[category]
+            mode_combo = self.mode_combo[category]
+            row_widgets = (
+                self.cleanup_btn[category],
+                self.trigger_combo[category],
+                self.value_input[category],
+                self.unit_combo[category],
+            )
 
-            # 按钮与触发时机选择框在同一位置交替显示，统一高度以稳定行高，使其美观。
-            row_height = button.sizeHint().height()
-            trigger_combo.setMinimumHeight(row_height)
-            trigger_combo.setSizePolicy(
-                QSizePolicy.Preferred, QSizePolicy.Fixed)
+            # 按钮与触发时机选择框在同一位置交替显示。按钮的样式表最小尺寸比
+            # 选择框小，只约束其中一方时切换模式会让整行高矮变化，故取本轮所有
+            # 控件最小尺寸的最大值统一固定，行高在两种形态下保持一致。
+            row_height = max(
+                widget.minimumSizeHint().height() for widget in row_widgets)
+            for widget in row_widgets + (mode_combo,):
+                widget.setFixedHeight(row_height)
 
-            self.mode_combo[category].setFixedWidth(mode_width)
+            # 模式列按字体实际排版取宽，写死宽度会让「自动清理」被下拉箭头挤掉。
+            mode_combo.setFixedWidth(
+                max(mode_width, mode_combo.sizeHint().width()))
             self.value_input[category].setFixedWidth(60)
             self.unit_combo[category].setFixedWidth(action_width - 60)
 
