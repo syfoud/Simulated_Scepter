@@ -130,7 +130,6 @@ class SimulatedCurrency(CurrencyUtils):
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
     DIFFICULTY_MAX_STEPS = 120
-    DIFFICULTY_SETTLE_SECONDS = 0.6
     DIFFICULTY_SELECTED_EFFECT_BOX = [700, 1200, 350, 465]
     DIFFICULTY_DOWN_POSITION = (960, 844)
     ENVIRONMENT_TITLE_BOX = [897, 1018, 80, 114]
@@ -369,6 +368,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
+        self.has_fresh = False
         self.run_history.start_run()
         CUS_LOGGER.info("货币战争对局计时开始")
         return True

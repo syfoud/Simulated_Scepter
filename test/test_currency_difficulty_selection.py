@@ -42,21 +42,26 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         )
 
     @patch("core.currency.automation.key_mouse_manager")
-    def test_complete_selection_clears_drag_queue_and_updates_state(self, manager):
+    def test_complete_selection_resets_per_run_flags(self, manager):
+        """开局点击后重置本局标志；has_fresh 漏重置会吃掉下一局的刷新额度。
+
+        状态不在这里推进：投资环境选择结束时由 select_envir 置为 1-1。
+        """
         currency = self.make_currency()
+        currency.has_fresh = True  # 上一局刷过刷新、并因此刷出了必选环境
 
         self.assertTrue(currency.complete_difficulty_selection())
 
         manager.clean.assert_called_once_with()
         manager.click.assert_called_once_with(1692, 965, force=True)
         manager.wait.assert_called_once_with()
-        currency.update_state.assert_called_once_with("currency_main")
-        self.assertEqual(currency.state, "currency_main")
         self.assertEqual(currency.exit_plane, 2)
         self.assertFalse(currency.prior_environment_found)
         self.assertFalse(currency.exit_requested)
         self.assertFalse(currency.exit_started)
+        self.assertFalse(currency.has_fresh)
         currency.run_history.start_run.assert_called_once_with()
+        currency.update_state.assert_not_called()
 
     @patch("core.currency.automation.key_mouse_manager")
     def test_complete_selection_is_idempotent_after_state_advanced(self, manager):
@@ -105,9 +110,10 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         self.assertTrue(currency.select_difficulty_start())
 
         manager.clean.assert_called_once_with()
+        self.assertEqual(currency.get_screen.call_count, 2)  # 每次向下选择前都重新截图
         manager.click.assert_called_once_with(*currency.DIFFICULTY_DOWN_POSITION)
         manager.wait.assert_called_once_with()
-        sleep.assert_called_once_with(currency.DIFFICULTY_SETTLE_SECONDS)
+        sleep.assert_not_called()  # 固定等待已删，改为等主循环下一帧重新识别
 
     @patch("core.currency.automation.time.sleep")
     @patch("core.currency.automation.key_mouse_manager")

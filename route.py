@@ -34,7 +34,6 @@ def build_paths(root):
         "image": os.path.join(root, "resource", "imgs"),
         "logo": os.path.join(root, "resource", "logo"),
         "model": os.path.join(root, "resource", "models"),
-        "theme": os.path.join(root, "resource", "theme"),
         "ui": os.path.join(root, "resource", "ui"),
         # 临时文件
         "temp": os.path.join(root, "temp"),

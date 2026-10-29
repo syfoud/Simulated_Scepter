@@ -10,6 +10,7 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency = object.__new__(SimulatedCurrency)
         currency.prior_envir = []
         currency.envir = [[], [], [], []]
+        currency.has_fresh = False
         currency.ts = Mock()
         currency.get_screen = Mock(return_value=object())
         currency.ENVIR_BOXES = [
@@ -37,6 +38,13 @@ class CurrencyInteractionTests(unittest.TestCase):
                 currency.update_state = Mock()
                 manager.reset_mock()
 
+                # 第一帧：没刷出必选 → 点一次刷新就返回，不改状态、不选卡
+                self.assertIsNone(currency.select_envir())
+                self.assertTrue(currency.has_fresh)
+                self.assertEqual(manager.click.call_args, call(672, 984))
+                currency.update_state.assert_not_called()
+
+                # 第二帧：刷新过仍未命中必选 → 按优先级组兜底选卡
                 self.assertEqual(currency.select_envir(), 1)
                 self.assertEqual(manager.click.call_args, call(438, 394))
                 currency.update_state.assert_called_once_with("1-1")
@@ -94,6 +102,9 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.investment_tracker = Mock()
         currency.update_state = Mock()
 
+        # 第一帧只点刷新，第二帧才真正选中并处理蓝海额外环境
+        self.assertIsNone(currency.select_envir())
+        currency._select_blue_ocean_extra_environment.assert_not_called()
         self.assertEqual(currency.select_envir(), 1)
 
         currency._select_blue_ocean_extra_environment.assert_called_once_with()
@@ -116,7 +127,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.investment_tracker = Mock()
         currency.update_state = Mock()
 
-        self.assertEqual(currency.select_envir(), 0)
+        self.assertIsNone(currency.select_envir())   # 第一帧点刷新
+        self.assertEqual(currency.select_envir(), 0)  # 第二帧蓝海额外环境失败，不推进状态
 
         currency.investment_tracker.reset.assert_not_called()
         currency.update_state.assert_not_called()

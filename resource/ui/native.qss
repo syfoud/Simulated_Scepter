@@ -1,0 +1,40 @@
+/* 白色不透明原皮：保留 Qt 的原生按钮、输入框和选择控件。 */
+QMainWindow, QWidget#CentralWidget, QTabWidget, QStackedWidget,
+QWidget#Tab1, QWidget#AbyssTab, QWidget#AboutTab,
+QWidget#advanced_settings_main_page, QWidget#advanced_settings_scroll_contents {
+    background: transparent;
+}
+QLabel { background: transparent; }
+QLabel[role="muted"] { color: #647184; font-size: 9pt; }
+QLabel[role="heading"] { color: #202734; font-size: 12pt; font-weight: 600; }
+QLabel[role="resource_value"] { color: #202734; font-size: 9pt; font-weight: 600; }
+AnimatedButton[variant="window"] { background: transparent; border: none; padding: 0px; }
+QLabel#Title_Text_2 { font-size: 13pt; font-weight: 600; }
+QLabel#Title_Version { color: #53677f; background: #edf1f6; border-radius: 6px; padding: 3px 7px; font-size: 8pt; }
+QLabel#Label_RunningState { color: #3b6289; background: #edf3f9; border-radius: 6px; padding: 6px; font-size: 9pt; }
+QTabWidget::pane { border: none; }
+QTabBar::tab { background: transparent; color: #647184; border: none; border-bottom: 2px solid transparent; padding: 9px 22px; margin: 0px 6px 10px 0px; }
+QTabBar::tab:selected { color: #2869ac; border-bottom-color: #3977b7; }
+QLineEdit[role="metric"] { background: transparent; border: none; padding: 2px 0px; color: #202734; font-weight: 600; }
+QTextBrowser#TextBrowser { background: white; border: none; padding: 0px; }
+QScrollArea { background: transparent; border: none; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+QToolButton#Button_Resources { color: #46678c; background: #f7f9fc; border: 1px solid #d9e3ef; border-radius: 6px; padding: 4px 8px; }
+QToolButton#Button_Resources:hover { background: #edf3fb; border-color: #a9bdd9; }
+QToolButton#Button_Resources:checked { background: #eaf1fa; border-color: #bdcfe5; }
+QScrollBar:vertical { background: transparent; width: 8px; margin: 2px 0px; }
+QScrollBar::handle:vertical { background: #c2ccd9; border-radius: 4px; min-height: 32px; }
+QScrollBar::handle:vertical:hover { background: #95a7bd; }
+QScrollBar::handle:vertical:pressed { background: #758ca9; }
+QScrollBar::handle:vertical:disabled { background: #e0e6ee; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: transparent; border: none; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QScrollBar:horizontal { background: transparent; height: 8px; margin: 0px 2px; }
+QScrollBar::handle:horizontal { background: #c2ccd9; border-radius: 4px; min-width: 32px; }
+QScrollBar::handle:horizontal:hover { background: #95a7bd; }
+QScrollBar::handle:horizontal:pressed { background: #758ca9; }
+QScrollBar::handle:horizontal:disabled { background: #e0e6ee; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; background: transparent; border: none; }
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }
+QScrollBar::up-arrow, QScrollBar::down-arrow, QScrollBar::left-arrow, QScrollBar::right-arrow { width: 0px; height: 0px; }
+QAbstractScrollArea::corner { background: transparent; }
