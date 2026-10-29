@@ -147,7 +147,6 @@ class AnyFateUniverse(SimulatedUniverse):
         self.need_end=False
         self.silver_wolf_manager.silver_wolf_slot = None  # 重置银狼位置缓存
         self.init_map()
-        CUS_LOGGER.info(f'{factor}再度踏上轮回……')
 
     def update_count(self, read=True):
         """

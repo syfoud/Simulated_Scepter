@@ -176,6 +176,7 @@ class SimulatedUniverse(UniverseUtils):
         if self._stop:
             return
         self.click_position([900, 1000])
+        CUS_LOGGER.info(f'{factor}再度踏上轮回……')
         self.restart_recording()
 
     def end_of_university(self):
