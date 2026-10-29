@@ -4,27 +4,23 @@ import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QFontDatabase, QIcon
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QMenu, QSystemTrayIcon
 
 from route import PATHS
 from tool import EXTRA
+from tool.gui.appearance import apply_appearance
 from tool.scripts.createicon import create_qt_icon
-from tool.settings import ensure_settings
-
-ZOOM_RATE = None
-
-
-def readQss(style):
-    with open(style) as f:
-        return f.read()
+from tool.settings import ensure_settings, update_settings
 
 
 class QMainWindowLoadUI(QtWidgets.QMainWindow):
+    appearance_changed = QtCore.pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
 
+        apply_appearance()
         self.opt = None
 
         uic.loadUi(os.path.join(PATHS["ui"], "UI.ui"), self)
@@ -35,18 +31,32 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
         self.Title_Version.setText(EXTRA.VERSION)
 
-        self.theme = self.get_theme()
-
-        self.theme_highlight_color = QtWidgets.QApplication.palette().color(QtGui.QPalette.ColorRole.Highlight).name()
-
         self.tray_icon = None
         self.init_tray_icon()
 
         self.json_to_opt(str(ensure_settings()))
-        self.skin_set()
-        self.font_set()
-
-        self.tabWidget.setTabVisible(self.tabWidget.indexOf(self.Tab6), False)
+        self.theme = self.opt.get("appearance", "dark")
+        if self.theme not in ("dark", "light"):
+            self.theme = "dark"
+        self.setWindowFlag(Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.set_appearance(self.theme)
+        self.Button_Appearance.clicked.connect(self.toggle_appearance)
+        self.Title_Logo.setPixmap(QtGui.QPixmap(
+            os.path.join(PATHS["logo"], "圆角-FetDeathWing-450x.png")
+        ).scaled(36, 36, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        self.MainFrame.set_image(os.path.join(PATHS["ui"], "background.png"))
+        self.TextBrowser.document().setDefaultStyleSheet(
+            "p { margin-top: 0px; margin-bottom: 7px; line-height: 145%; }"
+        )
+        self.TextBrowser.document().setMaximumBlockCount(1000)
+        self.page_animation = QtCore.QPropertyAnimation(self)
+        self.page_animation.setPropertyName(b"opacity")
+        self.page_animation.setDuration(180)
+        self.page_animation.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        self.animated_page = None
+        self.page_animation.finished.connect(self.finish_page_animation)
+        self.tabWidget.currentChanged.connect(self.animate_page)
 
         self.Button_MostMinimized.clicked.connect(self.minimize_to_tray)
 
@@ -59,6 +69,9 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         self.setMouseTracking(True)
         # 为所有子控件也启用鼠标跟踪
         self.enable_mouse_tracking_for_children()
+        self.set_resources_visible(self.opt.get("resources_visible", True))
+        self.Button_Resources.clicked.connect(self.toggle_resources)
+        self.resource_panel.start_monitor()
 
     def enable_mouse_tracking_for_children(self):
         """为所有子控件启用鼠标跟踪"""
@@ -71,145 +84,91 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         """事件过滤器，处理子控件的鼠标事件"""
         if event.type() == QtCore.QEvent.MouseMove:
             # 将子控件的鼠标移动事件传递给主窗口处理
-            self.update_cursor(event.pos())
+            self.update_cursor(obj.mapTo(self, event.pos()))
 
         return super().eventFilter(obj, event)
-
-    def get_theme(self):
-        if self.palette().color(QtGui.QPalette.ColorRole.Window).lightness() < 128:
-            theme = "dark"
-        else:
-            theme = "light"
-        return theme
-
-    def set_theme_common(self):
-        self.set_no_border()
-
-        self.set_logo_shadow()
-
-        self.set_exit_and_minimized_btn_icon()
-
-        self.set_image_resource()
-
-    def set_common_theme(self):
-
-        style_sheet = self.styleSheet()
-
-        style_sheet += "#MainFrame{border-radius: 8px; border: 1px solid #3c3d3e;} "
-
-        style_sheet = self.styleSheet()
-
-        match self.theme:
-            case "dark":
-                style_sheet += "#MainFrame{background-color: #1e1e1e;}"
-            case "light":
-                style_sheet += "#MainFrame{background-color: #FFFFFF;}"
-
-        self.setStyleSheet(style_sheet)
-
-    def set_logo_shadow(self):
-        effect_shadow = QtWidgets.QGraphicsDropShadowEffect(self)
-        effect_shadow.setOffset(0, 0)
-        effect_shadow.setBlurRadius(6)
-        effect_shadow.setColor(QtCore.Qt.GlobalColor.gray)
-        self.Title_Logo.setGraphicsEffect(effect_shadow)
-
-    def set_no_border(self):
-        self.setWindowFlag(QtCore.Qt.WindowType.FramelessWindowHint)
-
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
 
     def set_exit_and_minimized_btn_icon(self):
         q_color = QtGui.QColor(240, 240, 240) if self.theme == "dark" else QtGui.QColor(15, 15, 15)
         self.Button_Exit.setIcon(create_qt_icon(q_color=q_color, mode="x"))
         self.Button_Minimized.setIcon(create_qt_icon(q_color=q_color, mode="-"))
         self.Button_MostMinimized.setIcon(create_qt_icon(q_color=q_color, mode="v"))
+        self.Button_Appearance.setIcon(create_qt_icon(
+            q_color=q_color, mode="sun" if self.theme == "dark" else "moon"))
         for button in self.findChildren(QtWidgets.QToolButton):
             if button is self.engine_settings_btn or button.property("kernelSettings"):
                 button.setIcon(create_qt_icon(q_color=q_color, mode="gear"))
 
+    def toggle_appearance(self):
+        theme = "light" if self.theme == "dark" else "dark"
+        try:
+            self.opt = update_settings({"appearance": theme})
+        except (OSError, ValueError) as error:
+            QtWidgets.QMessageBox.warning(self, "保存失败", f"外观设置无法保存：{error}")
+            return
+        self.set_appearance(theme)
 
-    def set_image_resource(self):
+    def set_appearance(self, theme):
+        self.theme = theme
+        apply_appearance(theme)
+        self.set_exit_and_minimized_btn_icon()
+        caption = "切换到白色原皮" if theme == "dark" else "切换到毛玻璃外观"
+        self.Button_Appearance.setToolTip(caption)
+        self.Button_Appearance.setAccessibleName(caption)
+        self.appearance_changed.emit(theme)
+        self.update()
 
-        cus_path = os.path.join(PATHS["logo"], "圆角-FetDeathWing-450x.png")
+    def toggle_resources(self, visible):
+        """合并保存展开状态，保存失败时还原按钮和当前布局。"""
+        try:
+            self.opt = update_settings({"resources_visible": visible})
+        except (OSError, ValueError) as error:
+            self.Button_Resources.setChecked(not self.resource_panel.isHidden())
+            QtWidgets.QMessageBox.warning(self, "保存失败", f"性能栏设置无法保存：{error}")
+            return
+        self.set_resources_visible(visible)
 
-        pixmap = QtGui.QPixmap(cus_path).scaled(
-            40,
-            40,
-            QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-            QtCore.Qt.TransformationMode.SmoothTransformation
-        )
-        self.Title_Logo.setPixmap(pixmap)
-        self.Title_Logo.setFixedSize(40, 40)
-        self.Title_Logo.setScaledContents(True)
+    def set_resources_visible(self, visible):
+        was_visible = not self.resource_panel.isHidden()
+        window_size = self.size()
+        if visible != was_visible:
+            panel_width = self.resource_panel.width() + self.Lay_Tab1.spacing()
+            window_size.setWidth(window_size.width() + (panel_width if visible else -panel_width))
+        self.resource_panel.setVisible(visible)
+        self.Button_Resources.setChecked(visible)
+        self.Button_Resources.setArrowType(Qt.LeftArrow if visible else Qt.RightArrow)
+        caption = "收起性能栏" if visible else "展开性能栏"
+        self.Button_Resources.setToolTip(caption)
+        self.Button_Resources.setAccessibleName(caption)
+        # 启动时父窗口尚未显示，显式刷新祖先布局，避免最小宽度仍包含已收起的栏。
+        widget = self.resource_panel.parentWidget()
+        while widget is not None:
+            layout = widget.layout()
+            if layout is not None:
+                layout.invalidate()
+                layout.activate()
+            widget.updateGeometry()
+            widget = widget.parentWidget()
+        if visible != was_visible:
+            # 随性能栏调整整窗宽度，保留输出框宽度和窗口高度。
+            self.resize(window_size)
 
-        cus_path = os.path.join(PATHS["ui"], "background.png").replace(os.sep, "/")
-        style_sheet = f"""
-            #SkinWidget{{
-            background-image: url({cus_path});
-            background-repeat: no-repeat;
-            background-position: center;
-            border: none;
-            }}
-        """
+    def animate_page(self, index):
+        """页面切换时短暂淡入；完成后移除效果以免持续重绘。"""
+        self.page_animation.stop()
+        self.finish_page_animation()
+        self.animated_page = self.tabWidget.widget(index)
+        effect = QtWidgets.QGraphicsOpacityEffect(self.animated_page)
+        self.animated_page.setGraphicsEffect(effect)
+        self.page_animation.setTargetObject(effect)
+        self.page_animation.setStartValue(0.35)
+        self.page_animation.setEndValue(1.0)
+        self.page_animation.start()
 
-        self.SkinWidget.setStyleSheet(style_sheet)
-
-    def set_theme_default(self):
-
-        self.MainFrame.setStyleSheet("")
-
-        self.set_tab_bar_style()
-
-    def set_main_window_shadow(self):
-        effect_shadow = QtWidgets.QGraphicsDropShadowEffect(self)
-        effect_shadow.setOffset(0, 0)
-        effect_shadow.setBlurRadius(8)
-        effect_shadow.setColor(QtCore.Qt.GlobalColor.black)
-        self.MainFrame.setGraphicsEffect(effect_shadow)
-
-    def set_tab_bar_style(self):
-
-        style_sheet = self.MainFrame.styleSheet()
-        selected_text_color = "#FFFFFF" if self.theme == "dark" else "#000000"
-
-        style_sheet += f"""
-            QTabBar::tab {{
-                min-width: 136px;
-                height: 20px;
-                border-style: solid;
-                border-top-color: transparent;
-                border-right-color: transparent;
-                border-left-color: transparent;
-                border-bottom-color: transparent;
-                border-bottom-width: 1px;
-                border-style: solid;
-                color: #808086;
-                padding: 3px;
-                margin-left:3px;
-            }}
-            QTabBar::tab:selected, QTabBar::tab:last:selected, QTabBar::tab:hover {{
-                border-style: solid;
-                border-top-color: transparent;
-                border-right-color: transparent;
-                border-left-color: transparent;
-                border-bottom-color: {self.theme_highlight_color};
-                border-bottom-width: 2px;
-                border-style: solid;
-                color: {selected_text_color};
-                padding-left: 3px;
-                padding-bottom: 2px;
-                margin-left:3px;
-            }}
-            QTabWidget::tab-bar {{
-                alignment: center;
-            }}
-            QTabWidget::pane{{
-                border:none;
-            }}
-            """
-
-        self.MainFrame.setStyleSheet(style_sheet)
+    def finish_page_animation(self):
+        if self.animated_page is not None:
+            self.animated_page.setGraphicsEffect(None)
+            self.animated_page = None
 
     def init_tray_icon(self):
         self.tray_icon = QSystemTrayIcon(self)
@@ -273,7 +232,8 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
         super().mouseMoveEvent(a0)
 
     def mousePressEvent(self, a0: QtGui.QMouseEvent):
-        if self.childAt(a0.pos().x(), a0.pos().y()).objectName() == "FrameTitle":
+        child = self.childAt(a0.pos())
+        if child is not None and (child is self.FrameTitle or self.FrameTitle.isAncestorOf(child)) and not isinstance(child, QtWidgets.QAbstractButton):
             if a0.button() == QtCore.Qt.MouseButton.LeftButton:
                 self._isTracking = True
                 self._startPos = QtCore.QPoint(a0.pos().x(), a0.pos().y())
@@ -296,106 +256,6 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
             self._endPos = None
             self.resize_mode = None
             self.original_geometry = None
-
-    def on_skin_state_changed(self, checked):
-
-        sender = self.sender()
-
-        skin_dict = {
-            self.skin1: 1,
-            self.skin2: 2,
-            self.skin3: 3,
-            self.skin4: 4,
-            self.skin5: 5,
-            self.skin6: 6,
-            self.skin7: 7,
-            self.skin8: 8,
-            self.skin9: 9,
-            self.skin10: 10,
-            self.skin11: 11
-        }
-        if checked:
-            current_option = skin_dict[sender]
-            self.change_style(current_option)
-
-
-    def getstylefile(self, num):
-        skin_path_dict = {
-            1: None,
-            2: PATHS["theme"] + "\\feiyang\\blacksoft.css",
-            3: PATHS["theme"] + "\\feiyang\\flatgray.css",
-            4: PATHS["theme"] + "\\feiyang\\lightblue.css",
-            5: PATHS["theme"] + "\\GTRONICK\\ElegantDark.qss",
-            6: PATHS["theme"] + "\\GTRONICK\\MaterialDark.qss",
-            7: PATHS["theme"] + "\\GTRONICK\\NeonButtons.qss",
-            8: PATHS["theme"] + "\\GTRONICK\\Aqua.qss",
-            9: PATHS["theme"] + "\\GTRONICK\\ManjaroMix.qss",
-            10: PATHS["theme"] + "\\GTRONICK\\MacOS.qss",
-            11: PATHS["theme"] + "\\GTRONICK\\Ubuntu.qss"
-        }
-
-        path = skin_path_dict.get(num)
-        return path
-
-    def skin_set(self) -> None:
-        my_opt = self.opt["skin_type"]
-        self.skin_dict = {
-            1: self.skin1,
-            2: self.skin2,
-            3: self.skin3,
-            4: self.skin4,
-            5: self.skin5,
-            6: self.skin6,
-            7: self.skin7,
-            8: self.skin8,
-            9: self.skin9,
-            10: self.skin10,
-            11: self.skin11
-        }
-        for skin in self.skin_dict.values():
-            skin.toggled.connect(self.on_skin_state_changed)
-
-        skin = self.skin_dict.get(my_opt)
-        if skin:
-            skin.setChecked(True)
-        self.change_style(my_opt)
-    def change_style(self,setting):
-
-        styleFile = self.getstylefile(setting)
-        if styleFile is not None:
-            qssStyle = readQss(styleFile)
-            self.set_theme_common()
-            self.MainFrame.setStyleSheet(qssStyle)
-            self.set_common_theme()
-
-        else:
-            self.set_theme_common()
-            self.set_theme_default()
-            self.set_common_theme()
-
-    def font_set(self) -> None:
-        """
-        加载字体文件并设置应用程序默认字体
-        """
-        font_dir = PATHS["font"]
-        font_database = QFontDatabase()
-        first_font_family = None
-        valid_font_count = 0
-        if os.path.exists(font_dir):
-            font_files = os.listdir(font_dir)
-            for font_file in font_files:
-                if font_file.endswith(".ttf") or font_file.endswith(".otf"):
-                    font_path = os.path.join(font_dir, font_file)
-                    font_id = font_database.addApplicationFont(font_path)
-                    if font_id != -1:
-                        family_names = font_database.applicationFontFamilies(font_id)
-                        if valid_font_count == 0 and family_names:
-                            first_font_family = family_names[0]
-                        valid_font_count += 1
-
-        if first_font_family:
-            font = QFont(first_font_family, 8)
-            QtWidgets.QApplication.setFont(font)
 
     def check_resize_mode(self, pos):
         """检查鼠标位置是否在窗口边缘，确定缩放模式"""
@@ -447,7 +307,7 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
 
         geometry = QtCore.QRect(self.original_geometry)
         pos = self.mapFromGlobal(global_pos)
-        min_width, min_height = 300, 200  # 最小窗口尺寸
+        min_width, min_height = self.minimumSizeHint().width(), self.minimumSizeHint().height()
 
         if self.resize_mode == "top_left":
             new_width = geometry.width() - pos.x()

@@ -9,12 +9,11 @@ from pathlib import Path
 from threading import Event
 from unittest.mock import Mock, patch
 
-from PyQt5.QtCore import QEvent, Qt
+from PyQt5.QtCore import QEvent, QRect, Qt
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import (
     QApplication,
     QDialog,
-    QLayout,
     QMessageBox,
     QStyle,
     QStyleOptionComboBox,
@@ -67,7 +66,7 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
         self.window.deleteLater()
         self.app.sendPostedEvents(None, QEvent.DeferredDelete)
 
-    def show_window(self, width=930):
+    def show_window(self, width=1240):
         self.window.resize(width, 760)
         self.window.show()
         self.app.processEvents()
@@ -87,7 +86,7 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
                 f"第 {count + 1} 条运行日志：已完成地图识别，正在检查交易、休整及奖励节点，继续计算下一步路径。",
                 color="555555", time=True,
             )
-        for width in (930, 1500):
+        for width in (1240, 1800):
             with self.subTest(width=width):
                 self.set_mode(False)
                 self.show_window(width)
@@ -95,21 +94,22 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
                 self.set_mode(True)
                 self.show_window(width)
                 self.assertGreaterEqual(self.window.TextBrowser.width(), normal_width)
-                self.assertGreater(self.window.TextBrowser.width(), self.window.Tab1.width() * 0.65)
+                self.assertGreater(self.window.TextBrowser.width(), self.window.side_panel.width() + self.window.resource_panel.width())
+                self.assertGreaterEqual(self.window.TextBrowser.width(), 584)
                 self.assertGreater(self.window.engine_combo.width(), 0)
                 self.assertGreater(self.window.script_combo.width(), 0)
 
     def test_long_status_text_and_script_name_do_not_enlarge_controls(self):
         self.set_mode(True)
         self.show_window()
-        right = self.window.findChild(QLayout, "Lay_Tab1_Right")
-        original = (self.window.TextBrowser.width(), right.geometry().width())
+        right = self.window.side_panel
+        original = (self.window.TextBrowser.width(), right.width())
         self.window.set_find_path_state("正在搜索可用路径与目标节点" * 30)
         self.window.set_kill_num("当前击杀数及累计统计" * 30)
         self.window.script_combo.addItem("long_script_name_" * 30, "long.json")
         self.window.script_combo.setCurrentIndex(self.window.script_combo.count() - 1)
         self.show_window()
-        self.assertEqual((self.window.TextBrowser.width(), right.geometry().width()), original)
+        self.assertEqual((self.window.TextBrowser.width(), right.width()), original)
 
     def test_engine_and_script_controls_use_separate_rows(self):
         self.set_mode(True)
@@ -139,6 +139,25 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
             Path(script.itemData(script.currentIndex(), Qt.ToolTipRole)).name,
             Path(script.currentData()).name,
         )
+
+    def test_kernel_labels_wrap_fully_and_remain_reachable_with_larger_font(self):
+        self.set_mode(False)
+        for theme in ("dark", "light"):
+            self.window.set_appearance(theme)
+            for scale in (1, 1.25):
+                font = self.app.font()
+                font.setPointSizeF(font.pointSizeF() * scale)
+                self.window.side_panel.setFont(font)
+                self.show_window()
+                for button, _gear in self.window.kernel_rows.values():
+                    self.window.control_scroll.ensureWidgetVisible(button)
+                    self.app.processEvents()
+                    bounds = button.fontMetrics().boundingRect(
+                        QRect(0, 0, button.width() - 20, 1000), Qt.TextWordWrap, button.text())
+                    self.assertGreaterEqual(button.height() - 16, bounds.height())
+                    self.assertTrue(self.window.control_scroll.viewport().rect().intersects(
+                        QRect(button.mapTo(self.window.control_scroll.viewport(), button.rect().topLeft()), button.size())))
+                self.assertTrue(self.window.stop_btn.isVisible())
 
     def test_main_window_keeps_only_general_configuration_controls(self):
         self.assertFalse(hasattr(self.window, "homeTab"))

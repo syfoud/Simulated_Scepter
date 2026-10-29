@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
 from route import PATHS
 from test.core_fixture import copy_core
 from test.test_task_completion import load_task
+from tool.gui.appearance import AnimatedButton
 from tool.registry import KernelRegistry
 from tool.script_files import discover_scripts, read_script, script_key, script_path
 from tool.settings import load_settings, update_settings
@@ -79,7 +80,8 @@ class GuiPreferencesTests(unittest.TestCase):
             "os": os, "json": json, "shutil": shutil, "pyqtSlot": pyqtSlot,
             "time": SimpleNamespace(localtime=lambda: SimpleNamespace(tm_hour=12)),
             "Qt": Qt, "QSignalBlocker": QSignalBlocker, "QWidget": QWidget, "QHBoxLayout": QHBoxLayout,
-            "QPushButton": QPushButton, "QSizePolicy": QSizePolicy, "QToolButton": QToolButton,
+            "QPushButton": QPushButton, "AnimatedButton": AnimatedButton,
+            "QSizePolicy": QSizePolicy, "QToolButton": QToolButton,
             "CUS_LOGGER": self.logger, "QMessageBox": self.dialogs,
             "run_action_script": self.script_runner,
             "discover_scripts": discover_scripts, "read_script": read_script,
@@ -144,12 +146,13 @@ class GuiPreferencesTests(unittest.TestCase):
         window = self.gui.TextBrowser.window()
         for debug in (True, False):
             self.set_mode(debug)
-            for width in (930, 1500):
+            for width in (1240, 1800):
                 with self.subTest(debug=debug, width=width):
                     window.resize(width, 760)
                     window.show()
                     self.app.processEvents()
-                    self.assertGreater(self.gui.TextBrowser.width(), window.Tab1.width() * 0.6)
+                    self.assertGreater(self.gui.TextBrowser.width(), self.gui.side_panel.width() + self.gui.resource_panel.width())
+                    self.assertGreaterEqual(self.gui.TextBrowser.width(), 584)
                     self.assertGreater(self.gui.TextBrowser.width(), self.gui.engine_combo.width())
 
     def test_buttons_stay_close_to_separator_when_window_grows(self):
@@ -160,7 +163,7 @@ class GuiPreferencesTests(unittest.TestCase):
             self.set_mode(debug)
             for height in (760, 1000):
                 with self.subTest(debug=debug, height=height):
-                    window.resize(930, height)
+                    window.resize(1240, height)
                     window.show()
                     self.app.processEvents()
                     first = self.gui.engine_combo if debug else self.gui.kernel_buttons

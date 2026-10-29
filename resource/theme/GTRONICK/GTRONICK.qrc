@@ -1,9 +1,0 @@
-<RCC>
-  <qresource prefix="qss">
-    <file>QSS_IMG/go-down-symbolic.symbolic.png</file>
-    <file>QSS_IMG/go-next-symbolic.symbolic.png</file>
-    <file>QSS_IMG/go-previous-symbolic.symbolic.png</file>
-    <file>QSS_IMG/go-up-symbolic.symbolic.png</file>
-    <file>QSS_IMG/object-select-symbolic.symbolic.png</file>
-  </qresource>
-</RCC>

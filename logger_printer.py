@@ -1,18 +1,19 @@
 import base64
 import datetime
+from pathlib import Path
 
 import cv2
 import numpy
 import numpy as np
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QColor, QTextCursor
 from PyQt5.QtWidgets import QApplication
 
 from load_ui import QMainWindowLoadUI
-from tool import GLOBAL
-from pathlib import Path
 from route import PATHS
+from tool import GLOBAL
+
 
 class QMainWindowLog(QMainWindowLoadUI):
     signal_dialog = pyqtSignal(str, str)  # 标题, 正文
@@ -28,6 +29,7 @@ class QMainWindowLog(QMainWindowLoadUI):
 
         # 并不是直接输出, 其emit方法是 一个可以输入 缺省的颜色 或 时间参数 来生成文本 调用 signal_print_to_ui_1
         GLOBAL.PRINT_TO_UI = self.MidSignalPrint(signal_1=self.signal_print_to_ui, theme=self.theme)
+        self.appearance_changed.connect(self.update_log_theme)
 
         # 真正的 发送信息激活 print 的函数, 被链接到直接发送信息到ui的函数
         self.signal_print_to_ui.connect(self.print_to_ui)
@@ -54,6 +56,9 @@ class QMainWindowLog(QMainWindowLoadUI):
         def __init__(self, signal_1, theme):
             super().__init__()
             self.signal_1 = signal_1
+            self.set_theme(theme)
+
+        def set_theme(self, theme):
             match theme:
                 case 'light':
                     self.color_scheme = {
@@ -69,15 +74,15 @@ class QMainWindowLog(QMainWindowLoadUI):
                     }
                 case 'dark':
                     self.color_scheme = {
-                        1: "FF4C4C",  # 鲜红色
-                        2: "FFA500",  # 橙色
-                        3: "00FF00",  # 亮绿色
-                        4: "20B2AA",  # 浅海绿色
-                        5: "1E90FF",  # 道奇蓝
-                        6: "4682B4",  # 钢蓝色
-                        7: "9370DB",  # 中兰花紫
-                        8: "8A2BE2",  # 蓝紫色
-                        9: "CCCCCC",  # 浅灰色
+                        1: "F0A5B4",  # 错误
+                        2: "E6C28C",  # 警告
+                        3: "A9CCBA",  # 成功
+                        4: "91A7C2",  # 诊断
+                        5: "CDDCEF",  # 普通进展
+                        6: "A5C6E8",
+                        7: "BCB5DC",
+                        8: "BAABD3",
+                        9: "CBD6E6",  # 默认正文
                     }
 
         def emit(self, text, color_level=9, color=None, time=True, is_line=False, line_type="normal"):
@@ -130,12 +135,12 @@ class QMainWindowLog(QMainWindowLoadUI):
         if self.check_model_file():
             GLOBAL.PRINT_TO_UI.emit(
                 text="您好，高级用户！！！欢迎使用ω- u13权杖系统。本系统将用于求解铁血战士计算的终点,一道完美的「毁灭」方程式……",
-                color_level=1,
+                color_level=5,
                 time=False)
         else:
             GLOBAL.PRINT_TO_UI.emit(
                 text="用户，您好！欢迎使用ω- u13权杖系统。本系统将用于求解铁血战士第一因。",
-                color_level=2,
+                color_level=5,
                 time=False)
 
         GLOBAL.PRINT_TO_UI.emit(
@@ -146,6 +151,38 @@ class QMainWindowLog(QMainWindowLoadUI):
             text="项目开源地址:https://github.com/syfoud/Simulated_Scepter 一群:1072802257（已满）二群:870863632",
             color_level=3,
             time=False)
+
+    def update_log_theme(self, theme):
+        """切换语义日志颜色，同时保留已有内容、选区与滚动位置。"""
+        printer = GLOBAL.PRINT_TO_UI
+        old_colors = printer.color_scheme
+        printer.set_theme(theme)
+        colors = {value.upper(): printer.color_scheme[level] for level, value in old_colors.items()}
+        document = self.TextBrowser.document()
+        changes = []
+        block = document.begin()
+        while block.isValid():
+            fragments = block.begin()
+            while not fragments.atEnd():
+                fragment = fragments.fragment()
+                if fragment.isValid():
+                    color = fragment.charFormat().foreground().color().name()[1:].upper()
+                    if color in colors:
+                        changes.append((fragment.position(), fragment.length(), colors[color]))
+                fragments += 1
+            block = block.next()
+        scroll = self.TextBrowser.verticalScrollBar()
+        position = scroll.value()
+        cursor = QTextCursor(document)
+        cursor.beginEditBlock()
+        for start, length, color in changes:
+            cursor.setPosition(start)
+            cursor.setPosition(start + length, QTextCursor.KeepAnchor)
+            formatting = cursor.charFormat()
+            formatting.setForeground(QColor(f"#{color}"))
+            cursor.mergeCharFormat(formatting)
+        cursor.endEditBlock()
+        scroll.setValue(position)
 
     # 用于展示弹窗信息的方法
     @QtCore.pyqtSlot(str, str)
@@ -201,17 +238,6 @@ class QMainWindowLog(QMainWindowLoadUI):
 
         # 颜色文本
         text_all = f'<span style="color:#{color};">{text_time}{text}</span>'
-
-        # 限制最大行数为1000行，避免内存爆炸
-        max_lines = 1000
-        document = self.TextBrowser.document()
-        if document.blockCount() > max_lines:
-            # 删除最旧的日志块
-            cursor = self.TextBrowser.textCursor()
-            cursor.movePosition(cursor.Start)
-            cursor.select(cursor.BlockUnderCursor)
-            cursor.removeSelectedText()
-            cursor.deleteChar()  # 删除换行符
 
         # 输出到输出框
         self.TextBrowser.append(text_all)
