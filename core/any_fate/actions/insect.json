@@ -874,8 +874,9 @@
             "redundancy": 30
         },
         "actions":
-        [
-            position: [1205, 990]
+        [   {
+                "position": [1205, 990]
+            }
         ]
     },
     {
