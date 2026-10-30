@@ -293,10 +293,10 @@ class UniverseUtils(StateKernel):
             )
         # 点击使用
         key_mouse_manager.click_point(1624, 985)
-        self.wait_flag(lambda:not self.click_text(text="确认",box=[1126, 1252, 716, 812],click=False,ocr_line=False,warning=False), 1.2)
+        self.wait_flag(lambda:not self.click_text(text="确认",box=[1126, 716, 1252, 812],click=False,ocr_line=False,warning=False), 1.2)
         # 点击确认
         key_mouse_manager.click_point(1179, 762)
-        r = self.wait_flag(lambda:not self.click_text(text="替换同类",box=[816, 1006, 284, 380],click=False,warning=False), 0.8)
+        r = self.wait_flag(lambda:not self.click_text(text="替换同类",box=[816, 284, 1006, 380],click=False,warning=False), 0.8)
         if r:
             # 覆盖效果
             key_mouse_manager.click_point(1179, 762)
@@ -330,7 +330,7 @@ class UniverseUtils(StateKernel):
         """
         把识别结果相对匹配中心的偏移换算成点击坐标
 
-        point：1920x1080 像素坐标点，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
+        point：1920x1080 像素坐标点，或 MASK 中的识别区域 [x1, y1, x2, y2]（取区域中心）
         offset：识别结果相对匹配中心的像素偏移，与像素坐标同向（右下为正），因此直接相加
         """
         if len(point) == 4:
@@ -359,8 +359,8 @@ class UniverseUtils(StateKernel):
             if len(match) and text in match:
                 if click:
                     key_mouse_manager.click_point(
-                        (box[0]+box[1])//2,
-                        (box[2]+box[3])//2,
+                        (box[0]+box[2])//2,
+                        (box[1]+box[3])//2,
                         box=box
                     )
                 if after_delay:
@@ -387,7 +387,7 @@ class UniverseUtils(StateKernel):
         """
         截取识别区域对应的画面
 
-        mask：识别区域 [x1, x2, y1, y2]（见 tool/mask.py）
+        mask：识别区域 [x1, y1, x2, y2]（见 tool/mask.py）
         """
         if fresh:
             self.get_screen()
@@ -522,7 +522,7 @@ class UniverseUtils(StateKernel):
             re_screen：是否重新截图
             大小是186*186
         """
-        if re_screen and self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False) or self.state!="run":
+        if re_screen and self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False) or self.state!="run":
             CUS_LOGGER.warning("未找到大地图，可能在其它游戏界面")
         white = np.array([210, 210, 210])
         gray = np.array([55, 55, 55])
@@ -1293,15 +1293,15 @@ class UniverseUtils(StateKernel):
 
     def cut_map(self, pos, map):
         """
-        [左上x,右下x,左上y,右下y]
+        [左上x,左上y,右下x,右下y]
         """
         radius=93
         x,y=map.shape[1],map.shape[0]
         if self.cut_pos is None:
-            self.cut_pos=[max(0,pos[0]-radius * POSITION_SEARCH_SCALE), min(x,pos[0]+radius * POSITION_SEARCH_SCALE),max(0,pos[1]-radius * POSITION_SEARCH_SCALE), min(y,pos[1]+radius * POSITION_SEARCH_SCALE)]
+            self.cut_pos=[max(0,pos[0]-radius * POSITION_SEARCH_SCALE), max(0,pos[1]-radius * POSITION_SEARCH_SCALE), min(x,pos[0]+radius * POSITION_SEARCH_SCALE), min(y,pos[1]+radius * POSITION_SEARCH_SCALE)]
         else:
             old_pos=self.cut_pos.copy()
-            self.cut_pos=[max(0,min(old_pos[0],pos[0]-radius * POSITION_SEARCH_SCALE)), min(x,max(old_pos[1],pos[0]+radius * POSITION_SEARCH_SCALE)),max(0,min(old_pos[2],pos[1]-radius * POSITION_SEARCH_SCALE)), min(y,max(old_pos[3],pos[1]+radius * POSITION_SEARCH_SCALE))]
+            self.cut_pos=[max(0,min(old_pos[0],pos[0]-radius * POSITION_SEARCH_SCALE)), max(0,min(old_pos[1],pos[1]-radius * POSITION_SEARCH_SCALE)), min(x,max(old_pos[2],pos[0]+radius * POSITION_SEARCH_SCALE)), min(y,max(old_pos[3],pos[1]+radius * POSITION_SEARCH_SCALE))]
         self.cut_pos=np.array(self.cut_pos, dtype=np.float64)
         self.cut_pos= np.round(self.cut_pos).astype(int)
         CUS_LOGGER.debug(f"裁剪地图范围{self.cut_pos}")
@@ -1333,7 +1333,7 @@ class UniverseUtils(StateKernel):
         """
         写入地图
         """
-        small_map_set=crop(map, [self.cut_pos[0],self.cut_pos[2],self.cut_pos[1],self.cut_pos[3]])
+        small_map_set=crop(map, self.cut_pos)
         if self.start_pos[0]==0 and self.start_pos[1]==0:
             self.start_pos=self.now_loc
         CUS_LOGGER.debug(f"地图保存至{self.map_file},起点{self.start_pos}")
@@ -1349,9 +1349,9 @@ class UniverseUtils(StateKernel):
                    radius=1,
                    color=(0, 255, 0),  # 绿色
                    thickness=-1)
-        small_map_set = crop(map_color, [self.cut_pos[0], self.cut_pos[2], self.cut_pos[1], self.cut_pos[3]])
+        small_map_set = crop(map_color, self.cut_pos)
         self.debug_map=deepcopy(small_map_set)
-        cv.imwrite(self.map_file + f"target_{self.cut_pos[0]}_{self.cut_pos[2]}.jpg", small_map_set)
+        cv.imwrite(self.map_file + f"target_{self.cut_pos[0]}_{self.cut_pos[1]}.jpg", small_map_set)
 
     # 匹配地图，找到最相似的地图，确定当前房间对应的地图
     def match_scr(self, img):
@@ -1464,7 +1464,7 @@ class UniverseUtils(StateKernel):
                 if self.check('bonus_c',1462,358,fresh=True):
                     key_mouse_manager.click_point(1065, 729)
                     key_mouse_manager.wait()
-                    if self.click_text(text="储存沉浸器",box=[838, 1070, 298, 400],click=False,ocr_line=False,warning=False):
+                    if self.click_text(text="储存沉浸器",box=[838, 298, 1070, 400],click=False,ocr_line=False,warning=False):
                         self.check_bonus = 0
                     key_mouse_manager.click_point(948, 923)
                     key_mouse_manager.wait()

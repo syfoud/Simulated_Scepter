@@ -30,7 +30,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency.ts.find_with_box.return_value = [
             {
                 "raw_text": "开局时获得【精密拆装扳手】",
-                "box": [747, 1060, 378, 409],
+                "box": [747, 378, 1060, 409],
             }
         ]
 

@@ -56,11 +56,11 @@ SHOP_HERTA_POINT = (1370, 583)
 FATE_CONFIRM_X = 1696
 FATE_CONFIRM_GAP = 123
 FATE_FIXED_POINT = (FATE_CONFIRM_X, FATE_POINT[1] + FATE_CONFIRM_GAP)
-# select_event 兜底时 OCR 里识别到的选项（raw_text, 屏幕文本框 [x1,x2,y1,y2]）
+# select_event 兜底时 OCR 里识别到的选项（raw_text, 屏幕文本框 [x1,y1,x2,y2]）
 OPTION_TEXT = "把它放回族群"
-OPTION_BOX = [1330, 1690, 640, 680]
+OPTION_BOX = [1330, 640, 1690, 680]
 # 兜底点击的落点：选项文本框中心，click_event_option 直接点这个像素坐标
-OPTION_POINT = ((OPTION_BOX[0] + OPTION_BOX[1]) / 2, (OPTION_BOX[2] + OPTION_BOX[3]) / 2)
+OPTION_POINT = ((OPTION_BOX[0] + OPTION_BOX[2]) / 2, (OPTION_BOX[1] + OPTION_BOX[3]) / 2)
 # click_event_option 用 find_text 拿到的选项文本框（四角顺序与真实现一致）
 OPTION_OCR_BOX = [[1330, 640], [1690, 640], [1690, 680], [1330, 680]]
 # 兜底/优选项点中选项后，「确定」按钮的固定偏移落点：x 恒为 1702（按钮中心），
@@ -69,29 +69,29 @@ OPTION_OCR_BOX = [[1330, 640], [1690, 640], [1690, 680], [1330, 680]]
 CONFIRM_FIXED_X = 1702
 CONFIRM_TEXT_GAP = 76
 CONFIRM_FIXED_POINT = (CONFIRM_FIXED_X, OPTION_BOX[3] + CONFIRM_TEXT_GAP)
-# 「确定」按钮的 OCR 文本框（logs/log_2026-10-15-21-11.txt 实测 [1676,1728,482,512]，
+# 「确定」按钮的 OCR 文本框（logs/log_2026-10-15-21-11.txt 实测 [1676,482,1728,512]，
 # 中心 (1702,497)）：固定偏移没点中时按这个框的中心补点。
-CONFIRM_TEXT_BOX = [1676, 1728, 482, 512]
+CONFIRM_TEXT_BOX = [1676, 482, 1728, 512]
 CONFIRM_TEXT_POINT = (1702, 497)
 # logs/log_2026-10-15-21-11.txt（3/4 轮普通事件卡死那一帧）选项区的 OCR 原文：
-# 被点中的选项折成两行（393~460）、「确定」按钮文字被读成 [1676,1728,482,512]（中心 1702,497），
+# 被点中的选项折成两行（393~460）、「确定」按钮文字被读成 [1676,482,1728,512]（中心 1702,497），
 # 后面跟着第二个选项的两行（564~640）。
 WRAPPED_OPTION_LINES = [
-    {"raw_text": "※ 开展一次*完美型男*挑战！", "box": [625, 1810, 393, 418]},
-    {"raw_text": "花费40宇宙碎片。", "box": [657, 1875, 435, 460]},
-    {"raw_text": "确定", "box": [1676, 1728, 482, 512]},
-    {"raw_text": "※ 走开。", "box": [637, 1747, 564, 602]},
-    {"raw_text": "小心有诈！", "box": [420, 1770, 611, 640]},
+    {"raw_text": "※ 开展一次*完美型男*挑战！", "box": [625, 393, 1810, 418]},
+    {"raw_text": "花费40宇宙碎片。", "box": [657, 435, 1875, 460]},
+    {"raw_text": "确定", "box": [1676, 482, 1728, 512]},
+    {"raw_text": "※ 走开。", "box": [637, 564, 1747, 602]},
+    {"raw_text": "小心有诈！", "box": [420, 611, 1770, 640]},
 ]
 
 # 下面这几个区域/文字，真实现已内联进各自的函数（core/simulated/engine.py 的
 # event_ui_label / read_event_name / confirm_text_box / event_option_rows），测试里留一份同值副本：
 # 改真实现的数字时，这几行要跟着改。
-EVENT_LABEL_BOX = [93, 230, 50, 100]  # 左上角界面标题（「事件」「奇物商店」「祝福强化」）
-EVENT_NAME_BOX = [190, 800, 960, 1000]  # 左下角地图标签里的事件名
+EVENT_LABEL_BOX = [93, 50, 230, 100]  # 左上角界面标题（「事件」「奇物商店」「祝福强化」）
+EVENT_NAME_BOX = [190, 960, 800, 1000]  # 左下角地图标签里的事件名
 # 上边界是 110（不是老值 320）：面板纵向位置随事件浮动，320 会把浮动到靠上的首行选项判成「不在面板内」
-EVENT_OPTION_BOX = [1320, 1850, 110, 1010]  # 右侧选项面板：点击点校验 + 星号横条右边界
-CONFIRM_BOX = [1590, 1830, 240, 1070]  # 右侧竖条：只在这里找「确定」文字（覆盖 5 条选项）
+EVENT_OPTION_BOX = [1320, 110, 1850, 1010]  # 右侧选项面板：点击点校验 + 星号横条右边界
+CONFIRM_BOX = [1590, 240, 1830, 1070]  # 右侧竖条：只在这里找「确定」文字（覆盖 5 条选项）
 CONFIRM_LABEL = "确定"
 # 星号（※）在左侧图标列里的屏幕 x（实测模板左边界 1342 + 模板宽 50/2 ≈ 1367）；
 # 横条 = [星号 x − 30, 选项面板右边] × [星号 y − 30, 星号 y + 20]（与 event_option_rows 同值；
@@ -199,7 +199,7 @@ class _StubEngine:
         """按「星号在选项文字行上方 16 px」造一个星号，让横条正好盖住这一条选项。"""
         if not options:
             return []
-        top = min(res["box"][2] for res in options)
+        top = min(res["box"][1] for res in options)
         return [{"x": STAR_X, "y": top + 16, "score": 0.99}]
 
     # 替身代表 any_fate 一系的内核：先只认星号，没命中优选项再补认八个命途图标。
@@ -215,8 +215,8 @@ class _StubEngine:
         gap, up, down = STAR_BAND_GAP
         return [
             int(star["x"] + gap),
-            self.EVENT_OPTION_BOX[1],
             int(star["y"] - up),
+            self.EVENT_OPTION_BOX[2],
             int(star["y"] + down),
         ]
 
@@ -338,7 +338,7 @@ class SelectSecretTest(unittest.TestCase):
         engine = self._run({})
 
         self.manager.click_point.assert_not_called()
-        engine.click_text.assert_called_once_with(text="秘闻", box=[197, 233, 887, 906])
+        engine.click_text.assert_called_once_with(text="秘闻", box=[197, 887, 233, 906])
 
     def test_fate_icon_clicked_then_fixed_offset_then_confirm(self):
         """命中命途选项卡：先点选项卡本体、再点固定偏移的「确定」，最后按 OCR 文字补点。"""
@@ -440,10 +440,10 @@ class SelectEventTest(unittest.TestCase):
             stars=stars,
             bands={
                 tuple(engine._star_band(stars[0])): [
-                    {"raw_text": "离开。", "box": [1396, 1600, 410, 432]}
+                    {"raw_text": "离开。", "box": [1396, 410, 1600, 432]}
                 ],
                 tuple(engine._star_band(stars[1])): [
-                    {"raw_text": "选择事件", "box": [1400, 1700, 588, 610]}
+                    {"raw_text": "选择事件", "box": [1400, 588, 1700, 610]}
                 ],
             },
         )
@@ -700,7 +700,7 @@ class SelectEventTest(unittest.TestCase):
             return_value=[
                 {
                     "raw_text": "米购买一个钻石盒。",
-                    "box": [1357, 1591, 265, 292],
+                    "box": [1357, 265, 1591, 292],
                     "lines": [],
                     "icon": {},
                 }
@@ -769,13 +769,13 @@ class SelectEventTest(unittest.TestCase):
             fate_stars=[fate_icon],
             bands={
                 tuple(engine._star_band(fate_icon)): [
-                    {"raw_text": "进入虫巢，绞杀它们！", "box": [1354, 1486, 283, 315]}
+                    {"raw_text": "进入虫巢，绞杀它们！", "box": [1354, 283, 1486, 315]}
                 ],
                 tuple(engine._star_band(stars[0])): [
-                    {"raw_text": "深入虫巢。", "box": [1354, 1486, 462, 494]}
+                    {"raw_text": "深入虫巢。", "box": [1354, 462, 1486, 494]}
                 ],
                 tuple(engine._star_band(stars[1])): [
-                    {"raw_text": "止步于巢穴门口。", "box": [1354, 1584, 641, 672]}
+                    {"raw_text": "止步于巢穴门口。", "box": [1354, 641, 1584, 672]}
                 ],
             },
         )
@@ -807,7 +807,7 @@ class SelectEventTest(unittest.TestCase):
         engine.stub_ocr(
             bands={
                 tuple(engine._star_band(star)): [
-                    {"raw_text": "购买1个1星祝福。", "box": [1357, 1595, 211, 242]}
+                    {"raw_text": "购买1个1星祝福。", "box": [1357, 211, 1595, 242]}
                 ]
             },
         )
@@ -873,7 +873,7 @@ class ConfirmEventClickTest(unittest.TestCase):
             [call.args for call in self.manager.click_point.call_args_list],
             [OPTION_POINT, CONFIRM_FIXED_POINT, CONFIRM_TEXT_POINT],
         )
-        # 补点位置取自实测帧的文字框 [1676,1728,482,512]（中心 1702,497），不再有 confirm 图片匹配
+        # 补点位置取自实测帧的文字框 [1676,482,1728,512]（中心 1702,497），不再有 confirm 图片匹配
         self.assertEqual(
             [call.args[0] for call in engine.check.call_args_list].count("confirm"), 0
         )
@@ -883,14 +883,14 @@ class ConfirmEventClickTest(unittest.TestCase):
         engine = _StubEngine({})
         row = {
             "raw_text": "购买1个1星祝福。",
-            "box": [1357, 1595, 390, 421],  # 星号行 407 → 选项文字行占 393~421
-            "lines": [{"raw_text": "购买1个1星祝福。", "box": [1357, 1595, 390, 421]}],
+            "box": [1357, 390, 1595, 421],  # 星号行 407 → 选项文字行占 393~421
+            "lines": [{"raw_text": "购买1个1星祝福。", "box": [1357, 390, 1595, 421]}],
             "icon": {"x": STAR_X, "y": 407, "score": 0.99},
         }
         row2 = {
             "raw_text": "强化2个随机祝福。",
-            "box": [1357, 1595, 568, 599],  # 星号行 585
-            "lines": [{"raw_text": "强化2个随机祝福。", "box": [1357, 1595, 568, 599]}],
+            "box": [1357, 568, 1595, 599],  # 星号行 585
+            "lines": [{"raw_text": "强化2个随机祝福。", "box": [1357, 568, 1595, 599]}],
             "icon": {"x": STAR_X, "y": 585, "score": 0.99},
         }
 
@@ -935,12 +935,12 @@ class ConfirmEventClickTest(unittest.TestCase):
         engine = _StubEngine({})
         stars = [{"x": STAR_X, "y": 424, "score": 0.99}, {"x": STAR_X, "y": 602, "score": 0.99}]
         lines_a = [
-            {"raw_text": "购买1个1星祝福。", "box": [1396, 1750, 410, 432]},
-            {"raw_text": "消耗80宇宙碎片。", "box": [1396, 1702, 451, 474]},
+            {"raw_text": "购买1个1星祝福。", "box": [1396, 410, 1750, 432]},
+            {"raw_text": "消耗80宇宙碎片。", "box": [1396, 451, 1702, 474]},
         ]
         lines_b = [
-            {"raw_text": "强化2个随机祝福。", "box": [1396, 1760, 588, 610]},
-            {"raw_text": "消耗180宇宙碎片。", "box": [1396, 1720, 629, 652]},
+            {"raw_text": "强化2个随机祝福。", "box": [1396, 588, 1760, 610]},
+            {"raw_text": "消耗180宇宙碎片。", "box": [1396, 629, 1720, 652]},
         ]
         engine.stub_ocr(
             stars=stars,
@@ -995,10 +995,10 @@ class DisabledOptionTest(unittest.TestCase):
     DIM = 57
     ENABLED = 181
     REST_AREA_OPTIONS = [
-        ("米购买1个1星祝福", [1357, 1595, 211, 242], DIM, 228),
-        ("米购买1个奇物。", [1357, 1520, 390, 421], DIM, 407),
-        ("米强化2个随机祝福", [1357, 1620, 568, 599], DIM, 585),
-        ("米离开。", [1357, 1435, 746, 777], ENABLED, 763),
+        ("米购买1个1星祝福", [1357, 211, 1595, 242], DIM, 228),
+        ("米购买1个奇物。", [1357, 390, 1520, 421], DIM, 407),
+        ("米强化2个随机祝福", [1357, 568, 1620, 599], DIM, 585),
+        ("米离开。", [1357, 746, 1435, 777], ENABLED, 763),
     ]
 
     def setUp(self):
@@ -1021,7 +1021,7 @@ class DisabledOptionTest(unittest.TestCase):
         stars = []
         bands = {}
         for text, box, brightness, star_y in self.REST_AREA_OPTIONS:
-            frame[box[2]:box[3], box[0]:box[1]] = brightness
+            frame[box[1]:box[3], box[0]:box[2]] = brightness
             star = {"x": STAR_X, "y": star_y, "score": 0.99, "icon": "star"}
             stars.append(star)
             bands[tuple(engine._star_band(star))] = [{"raw_text": text, "box": list(box)}]
@@ -1058,11 +1058,11 @@ class DisabledOptionTest(unittest.TestCase):
         engine.event_prior = ["1个1星祝福"]
         SimulatedUniverse.select_event(engine)
 
-        # 点击接口收 1920x1080 像素坐标：选项文本框 [1357, 1435, 746, 777] 的中心即 (1396, 761.5)；
+        # 点击接口收 1920x1080 像素坐标：选项文本框 [1357, 746, 1435, 777] 的中心即 (1396, 761.5)；
         # box 一并传入，日志里能看出这一下点的是哪个框。
         self.assertEqual(
             [(call.args, call.kwargs["box"]) for call in self.manager.click_point.call_args_list],
-            [((1396, 761.5), [1357, 1435, 746, 777])],
+            [((1396, 761.5), [1357, 746, 1435, 777])],
         )
         self.assertTrue(any("置灰" in msg for msg in self._debug_messages()), self._debug_messages())
 

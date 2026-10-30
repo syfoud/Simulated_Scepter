@@ -63,7 +63,7 @@ def script_fixture(kernel_id, path):
     engine.switch_current_role = Mock()
     engine.ts = Mock()
     engine.ts.find_with_box.side_effect = lambda box, **_: (
-        [{"raw_text": "战斗", "box": box}] if box == [55, 164, 12, 40] else [])
+        [{"raw_text": "战斗", "box": box}] if box == [55, 12, 164, 40] else [])
     phases = ["big_world"]
     frame = np.full((24, 24, 3), 100, dtype=np.uint8)
 

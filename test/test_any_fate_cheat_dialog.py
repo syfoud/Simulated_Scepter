@@ -36,8 +36,8 @@ from core.any_fate.engine import AnyFateUniverse
 
 
 def center(box):
-    """OCR 文本框 [左,右,上,下] 的中心，即引擎点击的 1920x1080 像素坐标。"""
-    return (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
+    """OCR 文本框 [左,上,右,下] 的中心，即引擎点击的 1920x1080 像素坐标。"""
+    return (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
 
 
 def line(text, box):
@@ -45,17 +45,17 @@ def line(text, box):
 
 
 # 底部按钮
-CONFIRM = line("确认", [1168, 1223, 811, 841])
+CONFIRM = line("确认", [1168, 811, 1223, 841])
 # 标题里也带「确认」两个字的情形：按钮在它下面，点的时候必须挑最下面那个
-CONFIRM_TITLE = line("确认丢弃祝福「无根据颂歌」？", [900, 1200, 720, 750])
+CONFIRM_TITLE = line("确认丢弃祝福「无根据颂歌」？", [900, 720, 1200, 750])
 
 # 丰饶（弹指一挥）作弊列表里的行
-CIHUAI_TITLE = line("【丰饶·慈怀】", [470, 700, 828, 854])
-CIHUAI_DESC = line("选择1个区域，为其附加【慈怀】效果", [560, 1440, 860, 887])
-GUIXIN_TITLE = line("【丰饶·归心】", [470, 700, 690, 716])
+CIHUAI_TITLE = line("【丰饶·慈怀】", [470, 828, 700, 854])
+CIHUAI_DESC = line("选择1个区域，为其附加【慈怀】效果", [560, 860, 1440, 887])
+GUIXIN_TITLE = line("【丰饶·归心】", [470, 690, 700, 716])
 # 说明文字里带「慈怀」、但标题是别的效果：不能被匹配到
 JIAOGUAN_DESC = line(
-    "立即为当前位面所有带有【慈怀】效果的区域的1个相邻区域附加【慈怀】效果", [560, 1440, 700, 727])
+    "立即为当前位面所有带有【慈怀】效果的区域的1个相邻区域附加【慈怀】效果", [560, 700, 1440, 727])
 
 
 class _StubCheatEngine(AnyFateUniverse):
@@ -97,7 +97,7 @@ class _StubCheatEngine(AnyFateUniverse):
             # 行卡片左右边界，和引擎里判定高亮时用的数值一致（1920x1080 像素）
             left, right = 470, 1450
             right = left + max(int((right - left) * self.highlight_fraction), 1)
-            title_top = self.selected_box[2]
+            title_top = self.selected_box[1]
             top = max(title_top - 8, 0)
             bottom = title_top + 88
             # BGR；换算成 HSV 落在引擎判定的紫色区间里
@@ -115,25 +115,25 @@ class _StubCheatEngine(AnyFateUniverse):
         return list(self.confirm_lines)
 
     def _ocr(self, box=None, **kwargs):
-        box = box or [0, self.xx, 0, self.yy]
-        if box == [420, 1500, 240, 960]:
+        box = box or [0, 0, self.xx, self.yy]
+        if box == [420, 240, 1500, 960]:
             # 先取当前帧再推进：否则第 0 帧永远用不到
             items = self._frame_lines()
             self.frame_index += 1
-        elif box == [900, 1520, 700, 1030]:
+        elif box == [900, 700, 1520, 1030]:
             items = self._confirm_lines()
         else:
             items = []
         return [item for item in items
-                if box[0] <= item["box"][0] and item["box"][1] <= box[1]
-                and box[2] <= item["box"][2] and item["box"][3] <= box[3]]
+                if box[0] <= item["box"][0] and box[1] <= item["box"][1]
+                and item["box"][2] <= box[2] and item["box"][3] <= box[3]]
 
     # ---- 假 click_text ----
     def click_text(self, text, delay=0, box=None, after_delay=0, click=True,
                    find_all=False, warning=True, ocr_line=True, need_fresh=True,
                    allow_fail=False):
         # 窗口顶部的「作弊」标题：只探测、不点击（本类只测窗口内的逻辑，不开窗）
-        if text == "作弊" and box == [923, 996, 230, 270]:
+        if text == "作弊" and box == [923, 230, 996, 270]:
             return self.dialog_open
         return False
 
@@ -251,7 +251,7 @@ class CheatOptionClickTest(CheatDialogTest):
     def test_click_cheat_option_refuses_points_outside_the_list(self):
         engine = self.make_engine([[CIHUAI_TITLE]], dialog_open=True)
         # 框在列表上方（y 40~66），换算出来的点击位置不在列表区域内
-        self.assertIsNone(engine.click_cheat_option(line("【丰饶·慈怀】", [470, 700, 40, 66])))
+        self.assertIsNone(engine.click_cheat_option(line("【丰饶·慈怀】", [470, 40, 700, 66])))
         self.assertEqual(engine.clicks, [])
 
     def test_cheat_option_selected_reads_the_highlight(self):
@@ -290,7 +290,7 @@ class SelectCheatOptionTest(CheatDialogTest):
             [[GUIXIN_TITLE], [GUIXIN_TITLE]] + [[CIHUAI_TITLE, CIHUAI_DESC]] * 7, dialog_open=True)
         self.assertEqual(engine.select_cheat_option(("慈怀",)), CIHUAI_TITLE["raw_text"])
         self.assertEqual(len(engine.scrolls), 2)
-        left, right, top, bottom = [420, 1500, 240, 960]
+        left, top, right, bottom = [420, 240, 1500, 960]
         for direct, x, y in engine.scrolls:
             # 一次滚 15 格约三行，方向只能往下
             self.assertEqual(direct, -15)

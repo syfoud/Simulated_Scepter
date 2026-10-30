@@ -8,8 +8,8 @@ import numpy as np
 
 def sort_text(text):
     def compare(item1, item2):
-        x1, _, y1, _ = item1['box']
-        x2, _, y2, _ = item2['box']
+        x1, y1, _, _ = item1['box']
+        x2, y2, _, _ = item2['box']
         if abs(y1 - y2) <= 7:
             return x1 - x2
         return y1 - y2
@@ -41,9 +41,9 @@ def merge(text):
     res = []
     merged = text[0]
     for i in range(1, len(text)):
-        if abs(text[i]['box'][2] - merged['box'][2]) <= 10 and abs(text[i]['box'][3] - merged['box'][3]) <= 10 and abs(text[i]['box'][0] - merged['box'][1]) <= 35:
+        if abs(text[i]['box'][1] - merged['box'][1]) <= 10 and abs(text[i]['box'][3] - merged['box'][3]) <= 10 and abs(text[i]['box'][0] - merged['box'][2]) <= 35:
             merged['raw_text'] += text[i]['raw_text']
-            merged['box'][1] = text[i]['box'][1]
+            merged['box'][2] = text[i]['box'][2]
         else:
             res.append(merged)
             merged = text[i]
@@ -75,7 +75,7 @@ def box_contain(box_out, box_in, redundancy):
     """
     是否在目标范围与误差内包含指定的文本框
     Args:
-        :param box_out: 一个指定的范围框[左上x,右下x,左上y,右下y]
+        :param box_out: 一个指定的范围框[左上x, 左上y, 右下x, 右下y]
         :param redundancy: 误差范围
         :param box_in:获取到的范围框
 
@@ -86,4 +86,4 @@ def box_contain(box_out, box_in, redundancy):
         r = redundancy
     else:
         r = (redundancy, redundancy)
-    return box_out[0]<=box_in[0]+r[0] and box_out[1]>=box_in[1]-r[0] and box_out[2]<=box_in[2]+r[1] and box_out[3]>=box_in[3]-r[1]
+    return box_out[0]<=box_in[0]+r[0] and box_out[2]>=box_in[2]-r[0] and box_out[1]<=box_in[1]+r[1] and box_out[3]>=box_in[3]-r[1]

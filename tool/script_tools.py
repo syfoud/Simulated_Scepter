@@ -84,7 +84,7 @@ def marker_path(event_name):
 
 def save_marker(screen, box, path):
     """保存独立图片标志，并按 1920x1080 像素坐标记录匹配中心。"""
-    left, right, top, bottom = box
+    left, top, right, bottom = box
     height, width = screen.shape[:2]
     if not (0 <= left < right <= width and 0 <= top < bottom <= height):
         raise ValueError("图片框选范围必须位于截图内且具有有效面积")

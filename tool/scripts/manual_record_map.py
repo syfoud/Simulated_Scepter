@@ -125,15 +125,15 @@ def update_cut(cut_pos, position, big):
     if cut_pos is None:
         return [
             max(0, pos[0] - radius * POSITION_SEARCH_SCALE),
-            min(x_limit, pos[0] + radius * POSITION_SEARCH_SCALE),
             max(0, pos[1] - radius * POSITION_SEARCH_SCALE),
+            min(x_limit, pos[0] + radius * POSITION_SEARCH_SCALE),
             min(y_limit, pos[1] + radius * POSITION_SEARCH_SCALE),
         ]
-    left, right, top, bottom = cut_pos
+    left, top, right, bottom = cut_pos
     return [
         max(0, min(left, pos[0] - radius * POSITION_SEARCH_SCALE)),
-        min(x_limit, max(right, pos[0] + radius * POSITION_SEARCH_SCALE)),
         max(0, min(top, pos[1] - radius * POSITION_SEARCH_SCALE)),
+        min(x_limit, max(right, pos[0] + radius * POSITION_SEARCH_SCALE)),
         min(y_limit, max(bottom, pos[1] + radius * POSITION_SEARCH_SCALE)),
     ]
 
@@ -144,7 +144,7 @@ def write_map(map_file, big, cut_pos, start_pos, trace, interactions, map_number
     与示例一致的标注约定：绿色起点 / 蓝色路径 / 黄绿交互点 / 纯黄终点
     （事件房间没有攻击目标，不画红色攻击点）。
     """
-    left, right, top, bottom = (
+    left, top, right, bottom = (
         int(cut_pos[0]), int(cut_pos[1]), int(cut_pos[2]), int(cut_pos[3])
     )
     if right <= left or bottom <= top:
