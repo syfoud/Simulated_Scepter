@@ -142,7 +142,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
     background: var(--bg);
     color: var(--text);
-    padding: 32px 20px 64px;
+    padding: 32px 20px 96px; /* 为末尾板块跨出边框的手柄预留滚动空间。 */
     line-height: 1.5;
     transition: background-color .2s, color .2s;
   }
@@ -405,6 +405,94 @@
     .chart-canvas-wrap { order: 2; height: 320px; }
     .chart-sidebar { order: 3; }
     .chart-legend { flex-direction: row; flex-wrap: wrap; gap: 10px 16px; }
+  }
+
+  /* 表格板块：标题固定，内容仅在外边框内滚动，底部手柄控制展示高度。 */
+  .table-block {
+    position: relative; display: flex; flex-direction: column; overflow: visible;
+    transition: height .16s ease, background-color .2s, border-color .2s;
+  }
+  .table-block > .section-title, .table-block > .result-block-header { flex: none; }
+  .table-block .result-block-title {
+    display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%;
+  }
+  .table-title-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .table-block .result-block-title::before {
+    content: ''; flex: none; width: 3px; height: 14px;
+    background: var(--accent); border-radius: 2px;
+  }
+  .table-block .section-title::before { flex: none; }
+  .table-toggle {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 22px; padding: 0; border: 0; background: transparent;
+    color: var(--text-dim); font: inherit; font-size: 11px; cursor: pointer;
+    transform: rotate(90deg); transition: transform .16s ease;
+  }
+  .table-toggle:hover { color: var(--accent); }
+  .table-block-collapsed .table-toggle { transform: rotate(0deg); }
+  .table-block-collapsed > .result-block-header { border-bottom-color: transparent; }
+  .table-block-collapsed .result-block-status { visibility: hidden; }
+  .table-viewport { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .table-viewport::-webkit-scrollbar { width: 0; height: 8px; }
+  .table-viewport::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .table-content { display: flow-root; }
+  .table-resizer {
+    /* 内容由 viewport 裁剪，手柄跨在下边框上，不占用表格高度。 */
+    position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%);
+    width: 64px; height: 24px; padding: 0; border: 0; background: transparent;
+    color: var(--text-dim);
+    cursor: ns-resize; touch-action: none; z-index: 2;
+  }
+  .table-resizer svg {
+    display: block; width: 100%; height: 100%; pointer-events: none;
+    filter: drop-shadow(0 1px 1px rgb(0 0 0 / .08));
+  }
+  .table-resizer-body { fill: var(--panel-2); transition: fill .15s; }
+  .table-resizer:hover, .table-block-resizing .table-resizer { color: var(--accent); }
+  .table-resizer:hover .table-resizer-body, .table-block-resizing .table-resizer-body {
+    fill: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  }
+  .table-block-collapsed .table-resizer { display: none; }
+  .table-block-resizing { transition: none; user-select: none; }
+  .table-scrollbar {
+    position: absolute; right: 5px; bottom: 20px; width: 9px;
+    background: var(--bg); border-radius: 6px; cursor: pointer; touch-action: none;
+  }
+  .table-scrollbar[hidden] { display: none; }
+  .table-scroll-thumb {
+    position: absolute; left: 1px; right: 1px; top: 0; min-height: 0;
+    border-radius: 5px; background: var(--text-dim); cursor: ns-resize;
+  }
+  .table-scrollbar:hover .table-scroll-thumb { background: var(--accent); }
+  /* 整页滚动时的标题和表头浮层；原表格仍按原位置布局、裁剪和滚动。 */
+  .table-freeze {
+    --table-freeze-offset: 8px;
+    position: fixed; top: var(--table-freeze-offset); z-index: 40; box-sizing: border-box;
+    background: color-mix(in srgb, var(--panel) 96%, transparent);
+    backdrop-filter: blur(6px); pointer-events: none;
+    border: 1px solid var(--border); border-radius: 12px 12px 0 0;
+    border-bottom-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+    box-shadow: 0 3px 9px -4px color-mix(in srgb, var(--accent) 38%, transparent);
+  }
+  .table-freeze[hidden] { display: none; }
+  .table-freeze::before {
+    content: ''; position: absolute; left: -1px; right: -1px;
+    top: calc(-1 * var(--table-freeze-offset) - 1px); height: var(--table-freeze-offset);
+    background: var(--bg);
+  }
+  .table-freeze::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -4px; height: 5px;
+    background: linear-gradient(color-mix(in srgb, var(--accent) 12%, transparent), transparent);
+    filter: blur(2px);
+  }
+  .table-freeze .table-toggle { pointer-events: auto; }
+  .table-freeze-head { overflow: hidden; }
+  .table-freeze table { table-layout: fixed; margin: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .table-toggle:focus-visible, .table-resizer:focus-visible, .table-scrollbar:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: -2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .table-block, .table-toggle { transition: none; }
   }
 </style>
 </head>
@@ -804,9 +892,9 @@
     const total = p.total;
     document.getElementById('selectedExpectation').textContent = selectedExpectation.toFixed(2);
     document.getElementById('eligibleRecordCount').textContent = total;
-    document.getElementById('twoProbability').textContent = total ? ((p.two / total) * 100).toFixed(2) + '%' : '0.00%';
-    document.getElementById('threeProbability').textContent = total ? ((p.three / total) * 100).toFixed(2) + '%' : '0.00%';
-    document.getElementById('combinedProbability').textContent = total ? (((p.two + p.three) / total) * 100).toFixed(2) + '%' : '0.00%';
+    document.getElementById('twoProbability').innerHTML = `${total ? ((p.two / total) * 100).toFixed(2) : '0.00'}%<span style="color: var(--text-dim); font-weight: normal;">（</span>${p.two}<span style="color: var(--text-dim); font-weight: normal;"> 条）</span>`;
+    document.getElementById('threeProbability').innerHTML = `${total ? ((p.three / total) * 100).toFixed(2) : '0.00'}%<span style="color: var(--text-dim); font-weight: normal;">（</span>${p.three}<span style="color: var(--text-dim); font-weight: normal;"> 条）</span>`;
+    document.getElementById('combinedProbability').innerHTML = `${total ? (((p.two + p.three) / total) * 100).toFixed(2) : '0.00'}%<span style="color: var(--text-dim); font-weight: normal;">（</span>${p.two + p.three}<span style="color: var(--text-dim); font-weight: normal;"> 条）</span>`;
   }
 
   function updateLineSelectionSummary(value) {
@@ -814,9 +902,9 @@
     const p = calculateLineProbabilities(e);
     document.getElementById('lineSelectedExpectation').textContent = e.toFixed(2);
     document.getElementById('lineEligibleRecordCount').textContent = p.total;
-    document.getElementById('lineTwoProbability').textContent = p.twoPercent.toFixed(2) + '%';
-    document.getElementById('lineThreeProbability').textContent = p.threePercent.toFixed(2) + '%';
-    document.getElementById('lineCombinedProbability').textContent = p.combinedPercent.toFixed(2) + '%';
+    document.getElementById('lineTwoProbability').innerHTML = `${p.twoPercent.toFixed(2)}%<span style="color: var(--text-dim); font-weight: normal;">（</span>${p.two}<span style="color: var(--text-dim); font-weight: normal;"> 条）</span>`;
+    document.getElementById('lineThreeProbability').innerHTML = `${p.threePercent.toFixed(2)}%<span style="color: var(--text-dim); font-weight: normal;">（</span>${p.three}<span style="color: var(--text-dim); font-weight: normal;"> 条）</span>`;
+    document.getElementById('lineCombinedProbability').innerHTML = `${p.combinedPercent.toFixed(2)}%<span style="color: var(--text-dim); font-weight: normal;">（</span>${p.two + p.three}<span style="color: var(--text-dim); font-weight: normal;"> 条）</span>`;
   }
 
   function niceYAxis(values) {
@@ -1871,12 +1959,414 @@
     return html;
   }
 
+  // height=null 表示始终完全展开；数字表示用户设定的外边框高度，单位为像素。
+  // 各模块按“汇总、详情、异常记录”的固定顺序使用独立的本地记忆键。
+  const tablePanels = new WeakMap();
+  const pinnedTables = new Set();
+  let tablePinFrame = 0;
+
+  function requestTablePins() {
+    if (tablePinFrame) return;
+    tablePinFrame = requestAnimationFrame(() => {
+      tablePinFrame = 0;
+      for (const refresh of pinnedTables) refresh();
+    });
+  }
+  window.addEventListener('scroll', requestTablePins, { passive: true });
+  window.addEventListener('resize', requestTablePins);
+
+  function setupTablePin(block, heading, viewport, toggle) {
+    const table = viewport.querySelector('table');
+    if (!table || !table.tHead || !table.tBodies.length) return () => {};
+
+    // 只复制标题和表头用于展示，避免把原表头移出内容区而影响尺寸与内部滚动。
+    const pin = document.createElement('div');
+    pin.className = 'table-freeze';
+    pin.hidden = true;
+    pin.setAttribute('aria-hidden', 'true');
+    const pinHeading = heading.cloneNode(true);
+    pinHeading.style.margin = '0';
+    const pinHead = document.createElement('div');
+    pinHead.className = 'table-freeze-head';
+    const pinTable = document.createElement('table');
+    pinTable.style.minWidth = '0';
+    const columns = document.createElement('colgroup');
+    for (const cell of table.tHead.rows[0].cells) columns.appendChild(document.createElement('col'));
+    pinTable.append(columns, table.tHead.cloneNode(true));
+    pinHead.appendChild(pinTable);
+    pin.append(pinHeading, pinHead);
+    for (const element of pin.querySelectorAll('[id]')) element.removeAttribute('id');
+    for (const button of pin.querySelectorAll('button')) button.tabIndex = -1;
+    pin.addEventListener('click', event => {
+      if (event.target.closest('.table-toggle')) toggle.click();
+    });
+    block.appendChild(pin);
+
+    function refresh() {
+      if (!block.isConnected || !block.getClientRects().length
+          || block.classList.contains('table-block-collapsed')) {
+        pin.hidden = true;
+        return;
+      }
+      const headingRect = heading.getBoundingClientRect();
+      const viewportRect = viewport.getBoundingClientRect();
+      const blockRect = block.getBoundingClientRect();
+      const offset = parseFloat(getComputedStyle(pin).getPropertyValue('--table-freeze-offset'));
+      // 外框上沿到达预留位置时开始冻结，标题保留原板块内的上方留白。
+      if (blockRect.top > offset || viewportRect.bottom <= 0) {
+        pin.hidden = true;
+        return;
+      }
+      const rows = table.tBodies[0].rows;
+      // 按内容区实际露出的行计算边界；仅一行或被缩到只剩一行时不冻结。
+      // 二分查找避免在长表格的每次整页滚动中遍历全部记录。
+      let low = 0, high = rows.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (rows[middle].getBoundingClientRect().bottom <= viewportRect.top) low = middle + 1;
+        else high = middle;
+      }
+      const first = low;
+      low = first;
+      high = rows.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (rows[middle].getBoundingClientRect().top < viewportRect.bottom) low = middle + 1;
+        else high = middle;
+      }
+      const last = low - 1;
+      if (last <= first) {
+        pin.hidden = true;
+        return;
+      }
+
+      const blockStyle = getComputedStyle(block);
+      const tableRect = table.getBoundingClientRect();
+      const headRect = table.tHead.getBoundingClientRect();
+      pin.style.left = `${blockRect.left}px`;
+      pin.style.width = `${blockRect.width}px`;
+      pin.style.paddingTop = blockStyle.paddingTop;
+      pin.style.paddingLeft = blockStyle.paddingLeft;
+      pin.style.paddingRight = blockStyle.paddingRight;
+      pin.style.borderTopLeftRadius = blockStyle.borderTopLeftRadius;
+      pin.style.borderTopRightRadius = blockStyle.borderTopRightRadius;
+      pinTable.style.width = `${tableRect.width}px`;
+      const cells = table.tHead.rows[0].cells;
+      for (let index = 0; index < cells.length; index++) {
+        columns.children[index].style.width = `${cells[index].getBoundingClientRect().width}px`;
+      }
+      pinHead.style.marginTop = `${Math.max(0, viewportRect.top - headingRect.bottom)}px`;
+      pinHead.style.height = `${headRect.height + parseFloat(getComputedStyle(table).borderTopWidth)}px`;
+      pinTable.style.transform = `translateX(${-viewport.scrollLeft}px)`;
+      pin.hidden = false;
+      // 保持原来的末行上沿判定：最后一行推着冻结区退出，反向滚动同样适用。
+      const top = Math.min(offset, rows[last].getBoundingClientRect().top - pin.getBoundingClientRect().height);
+      pin.style.top = `${top}px`;
+      pin.hidden = top + pin.getBoundingClientRect().height <= 0;
+    }
+
+    pinnedTables.add(refresh);
+    requestTablePins();
+    return () => {
+      pinnedTables.delete(refresh);
+      pin.remove();
+    };
+  }
+
+  function mountTableBlocks(panel, module) {
+    for (const dispose of tablePanels.get(panel) || []) dispose();
+    const blocks = panel.querySelectorAll(':scope > .result-block, :scope > .full-width');
+    tablePanels.set(panel, Array.from(blocks, (block, index) =>
+      setupTableBlock(block, `round-stats-table-${module}-${index}`)
+    ));
+  }
+
+  function setupTableBlock(block, storageKey) {
+    let state = { height: null, collapsed: false };
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey));
+      if (saved && (saved.height === null || (Number.isFinite(saved.height) && saved.height > 0))) {
+        state = { height: saved.height, collapsed: saved.collapsed === true };
+      }
+    } catch (error) {
+      console.warn('读取表格展示位置失败', error);
+    }
+
+    const heading = block.querySelector('.result-block-header, .section-title');
+    const title = heading.querySelector('.result-block-title') || heading;
+    const toggle = document.createElement('button');
+    toggle.className = 'table-toggle';
+    toggle.type = 'button';
+    toggle.textContent = '▶';
+    const titleText = document.createElement('span');
+    titleText.className = 'table-title-text';
+    while (title.firstChild) titleText.appendChild(title.firstChild);
+    title.append(toggle, titleText);
+
+    const viewport = document.createElement('div');
+    viewport.className = 'table-viewport';
+    viewport.id = `${storageKey}-viewport`;
+    toggle.setAttribute('aria-controls', viewport.id);
+    const content = document.createElement('div');
+    content.className = 'table-content';
+    while (heading.nextSibling) content.appendChild(heading.nextSibling);
+    viewport.appendChild(content);
+
+    const resizer = document.createElement('button');
+    resizer.type = 'button';
+    resizer.className = 'table-resizer';
+    resizer.innerHTML = `<svg viewBox="0 0 64 24" aria-hidden="true" focusable="false"
+      stroke="currentColor" stroke-linejoin="round">
+      <path class="table-resizer-body" stroke-width="1.2"
+        d="M5.2 10.2 13.6 2.8Q14.6 2 16 2H48Q49.4 2 50.4 2.8L58.8 10.2Q60.6 12 58.8 13.8L50.4 21.2Q49.4 22 48 22H16Q14.6 22 13.6 21.2L5.2 13.8Q3.4 12 5.2 10.2Z"/>
+      <path d="M24 9H40M24 15H40" fill="none" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>`;
+    resizer.title = '上下拖动调整展示高度；方向键微调，Home 最小，End 完全展开';
+    resizer.setAttribute('aria-label', '调整表格展示高度');
+    const track = document.createElement('div');
+    track.className = 'table-scrollbar';
+    track.tabIndex = 0;
+    track.hidden = true;
+    track.setAttribute('role', 'scrollbar');
+    track.setAttribute('aria-label', '滚动表格内容');
+    track.setAttribute('aria-orientation', 'vertical');
+    track.setAttribute('aria-controls', viewport.id);
+    const thumb = document.createElement('div');
+    thumb.className = 'table-scroll-thumb';
+    track.appendChild(thumb);
+    block.append(viewport, resizer, track);
+    block.classList.add('table-block');
+    const disposePin = setupTablePin(block, heading, viewport, toggle);
+
+    let minHeight = 0, fullHeight = 0, closedHeight = 0;
+    let drag = null;
+    let frame = 0;
+    let resizeFrame = 0;
+    let expandedScroll = 0;
+
+    function save() {
+      try { localStorage.setItem(storageKey, JSON.stringify(state)); }
+      catch (error) { console.warn('保存表格展示位置失败', error); }
+    }
+
+    function updateScrollbar() {
+      requestTablePins();
+      const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      track.hidden = state.collapsed || maxScroll <= 1 || viewport.clientHeight <= 0;
+      if (track.hidden) return;
+      track.style.top = `${viewport.offsetTop}px`;
+      const length = Math.min(track.clientHeight,
+        Math.max(24, track.clientHeight * viewport.clientHeight / viewport.scrollHeight));
+      thumb.style.height = `${length}px`;
+      thumb.style.transform = `translateY(${(track.clientHeight - length) * viewport.scrollTop / maxScroll}px)`;
+      track.setAttribute('aria-valuemin', '0');
+      track.setAttribute('aria-valuemax', String(maxScroll));
+      track.setAttribute('aria-valuenow', String(Math.round(viewport.scrollTop)));
+    }
+
+    function applyHeight() {
+      if (!block.getClientRects().length) return; // 隐藏的标签页在显示后重新测量。
+      const style = getComputedStyle(block);
+      const bottom = parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth);
+      const top = viewport.getBoundingClientRect().top - block.getBoundingClientRect().top;
+      const head = content.querySelector('thead');
+      const headerHeight = head
+        ? head.getBoundingClientRect().bottom - content.getBoundingClientRect().top + 1
+        : Math.min(40, content.offsetHeight);
+      const horizontalBar = viewport.offsetHeight - viewport.clientHeight;
+      fullHeight = top + content.getBoundingClientRect().height + horizontalBar + bottom;
+      minHeight = Math.min(fullHeight, Math.ceil(top + headerHeight + horizontalBar + bottom));
+      closedHeight = Math.ceil(title.getBoundingClientRect().bottom - block.getBoundingClientRect().top + bottom);
+      // 数据减少后若已能完整显示，转为完全展开状态，后续新增记录时随内容增长。
+      if (state.height !== null && state.height >= fullHeight - 1) {
+        state.height = null;
+        save();
+      }
+      const height = state.collapsed ? closedHeight
+        : state.height === null ? fullHeight : Math.max(minHeight, Math.min(fullHeight, state.height));
+      block.style.height = `${height}px`;
+      block.classList.toggle('table-block-collapsed', state.collapsed);
+      toggle.setAttribute('aria-expanded', String(!state.collapsed));
+      toggle.setAttribute('aria-label', state.collapsed ? '展开表格' : '折叠表格');
+      toggle.title = state.collapsed ? '展开表格' : '折叠表格';
+      viewport.inert = state.collapsed;
+      viewport.setAttribute('aria-hidden', String(state.collapsed));
+      updateScrollbar();
+    }
+
+    function setHeight(height) {
+      state.height = height >= fullHeight - 1 ? null : Math.max(minHeight, Math.min(fullHeight, height));
+      applyHeight();
+    }
+
+    function scrollWhileResizing(time) {
+      resizeFrame = 0;
+      if (!drag || drag.kind !== 'resize') return;
+      // 距窗口上下沿 64px 内按距离逐渐加速，越界后保持最高速度。
+      const edge = Math.min(64, window.innerHeight / 4);
+      let speed = 0;
+      if (drag.y > window.innerHeight - edge) {
+        speed = Math.min(1, (drag.y - window.innerHeight + edge) / edge);
+      } else if (drag.y < edge) {
+        speed = -Math.min(1, (edge - drag.y) / edge);
+      }
+      if (!speed) return;
+      const elapsed = drag.time ? Math.min(32, time - drag.time) : 16;
+      drag.time = time;
+      const height = block.getBoundingClientRect().height;
+      // 最高每秒 900px；先改变高度以产生滚动空间，再同步滚动整页。
+      setHeight(height + speed * 900 * elapsed / 1000);
+      const resized = block.getBoundingClientRect().height;
+      const scrollStart = window.scrollY;
+      window.scrollBy({ top: resized - height, behavior: 'instant' });
+      if (speed > 0 && resized >= fullHeight - 1) {
+        // 完全展开后仍需露出整个手柄，下方另留 64px 避开任务栏等遮挡。
+        const visible = window.visualViewport;
+        const bottom = Math.min(window.innerHeight,
+          visible ? visible.offsetTop + visible.height : window.innerHeight) - 64;
+        const hidden = resizer.getBoundingClientRect().bottom - bottom;
+        if (hidden > 1) {
+          window.scrollBy({ top: Math.min(hidden, Math.max(1, speed * 900 * elapsed / 1000)), behavior: 'instant' });
+        }
+        if (resizer.getBoundingClientRect().bottom > bottom + 1 && window.scrollY > scrollStart) {
+          resizeFrame = requestAnimationFrame(scrollWhileResizing);
+        }
+        return;
+      }
+      if (speed < 0 && resized <= minHeight + 1) {
+        // 收到最小高度后仍需露出整个手柄，并避开窗口上沿及当前冻结区。
+        const visible = window.visualViewport;
+        let top = (visible ? visible.offsetTop : 0) + 64;
+        const handle = resizer.getBoundingClientRect();
+        for (const pin of document.querySelectorAll('.table-freeze:not([hidden])')) {
+          const rect = pin.getBoundingClientRect();
+          if (rect.bottom > 0 && rect.left < handle.right && rect.right > handle.left) {
+            top = Math.max(top, rect.bottom + 16);
+          }
+        }
+        const hidden = top - handle.top;
+        if (hidden > 1) {
+          window.scrollBy({ top: -Math.min(hidden, Math.max(1, -speed * 900 * elapsed / 1000)), behavior: 'instant' });
+        }
+        if (resizer.getBoundingClientRect().top < top - 1 && window.scrollY < scrollStart) {
+          resizeFrame = requestAnimationFrame(scrollWhileResizing);
+        }
+        return;
+      }
+      if (Math.abs(resized - height) < 0.01) return;
+      if ((speed > 0 && resized < fullHeight - 1) || (speed < 0 && resized > minHeight)) {
+        resizeFrame = requestAnimationFrame(scrollWhileResizing);
+      }
+    }
+
+    toggle.addEventListener('click', () => {
+      if (!state.collapsed) expandedScroll = viewport.scrollTop;
+      state.collapsed = !state.collapsed;
+      applyHeight();
+      if (!state.collapsed) viewport.scrollTop = expandedScroll;
+      save();
+    });
+    resizer.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || state.collapsed) return;
+      event.preventDefault();
+      drag = { kind: 'resize', id: event.pointerId, y: event.clientY, time: 0 };
+      block.classList.add('table-block-resizing');
+      resizer.setPointerCapture(event.pointerId);
+      resizeFrame = requestAnimationFrame(scrollWhileResizing);
+    });
+    resizer.addEventListener('keydown', event => {
+      let height = block.getBoundingClientRect().height;
+      if (event.key === 'ArrowUp') height -= event.shiftKey ? 20 : 4;
+      else if (event.key === 'ArrowDown') height += event.shiftKey ? 20 : 4;
+      else if (event.key === 'Home') height = minHeight;
+      else if (event.key === 'End') height = fullHeight;
+      else return;
+      event.preventDefault();
+      setHeight(height);
+      save();
+    });
+    track.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const travel = track.clientHeight - thumb.offsetHeight;
+      if (travel <= 0) return;
+      if (event.target !== thumb) {
+        const y = event.clientY - track.getBoundingClientRect().top - thumb.offsetHeight / 2;
+        viewport.scrollTop = y / travel * (viewport.scrollHeight - viewport.clientHeight);
+      }
+      drag = { kind: 'scroll', id: event.pointerId, y: event.clientY, scroll: viewport.scrollTop };
+      track.setPointerCapture(event.pointerId);
+    });
+    track.addEventListener('keydown', event => {
+      if (event.key === 'ArrowUp') viewport.scrollTop -= 40;
+      else if (event.key === 'ArrowDown') viewport.scrollTop += 40;
+      else if (event.key === 'PageUp') viewport.scrollTop -= viewport.clientHeight;
+      else if (event.key === 'PageDown') viewport.scrollTop += viewport.clientHeight;
+      else if (event.key === 'Home') viewport.scrollTop = 0;
+      else if (event.key === 'End') viewport.scrollTop = viewport.scrollHeight;
+      else return;
+      event.preventDefault();
+    });
+    block.addEventListener('pointermove', event => {
+      if (!drag || event.pointerId !== drag.id) return;
+      if (drag.kind === 'resize') {
+        // 只计入鼠标本身的位移，避免自动滚页被 pageY 再次算作高度增量。
+        const delta = event.clientY - drag.y;
+        drag.y = event.clientY;
+        setHeight(block.getBoundingClientRect().height + delta);
+        if (!resizeFrame) {
+          drag.time = 0;
+          resizeFrame = requestAnimationFrame(scrollWhileResizing);
+        }
+      } else {
+        const travel = track.clientHeight - thumb.offsetHeight;
+        if (travel > 0) viewport.scrollTop = drag.scroll + (event.clientY - drag.y)
+          / travel * (viewport.scrollHeight - viewport.clientHeight);
+      }
+    });
+    function endDrag(event) {
+      if (!drag || (event.pointerId !== undefined && event.pointerId !== drag.id)) return;
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = 0;
+      const source = drag.kind === 'resize' ? resizer : track;
+      const pointerId = drag.id;
+      if (drag.kind === 'resize') save();
+      drag = null;
+      block.classList.remove('table-block-resizing');
+      if (source.hasPointerCapture(pointerId)) source.releasePointerCapture(pointerId);
+    }
+    block.addEventListener('pointerup', endDrag);
+    block.addEventListener('pointercancel', endDrag);
+    block.addEventListener('lostpointercapture', endDrag);
+    window.addEventListener('blur', endDrag);
+    viewport.addEventListener('scroll', updateScrollbar);
+
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(applyHeight);
+    });
+    observer.observe(content);
+    observer.observe(heading);
+    const viewportObserver = new ResizeObserver(updateScrollbar);
+    viewportObserver.observe(viewport);
+    applyHeight();
+    return () => {
+      endDrag({});
+      window.removeEventListener('blur', endDrag);
+      disposePin();
+      observer.disconnect();
+      viewportObserver.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }
+
   function renderTiePanel(fileStats) {
     const panel = document.getElementById('panel-tie');
     panel.innerHTML = '';
 
     if (fileStats.length === 0) {
       panel.innerHTML = '<div class="empty">未找到 kill_record*.txt 文件</div>';
+      mountTableBlocks(panel, 'tie');
       return;
     }
 
@@ -1899,7 +2389,8 @@
 
     const detailDiv = document.createElement('div');
     detailDiv.className = 'full-width';
-    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">三面详细记录（击杀数 &gt; ${TIE_THREE_THRESHOLD}）</div>` + buildTieDetailTable(allRecords);
+    const detailCount = allRecords.filter(r => !r.missing && r.value > TIE_THREE_THRESHOLD).length;
+    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">三面详细记录（击杀数 &gt; ${TIE_THREE_THRESHOLD}）（共 ${detailCount} 条）</div>` + buildTieDetailTable(allRecords);
     panel.appendChild(detailDiv);
 
     // 异常开局期望值记录：只统计负数，没有异常则不显示整个板块。
@@ -1954,6 +2445,8 @@
       panel.appendChild(abnormalDiv);
     }
     
+    mountTableBlocks(panel, 'tie');
+
     const validRecords = allRecords
       .filter(r => !r.missing && Number.isFinite(r.openingExpectation) && r.openingExpectation > 0)
       .map(r => ({
@@ -2004,6 +2497,7 @@
 
     if (fileStats.length === 0) {
       panel.innerHTML = '<div class="empty">未找到 countdown*.txt 文件</div>';
+      mountTableBlocks(panel, 'tan');
       return;
     }
 
@@ -2026,8 +2520,10 @@
 
     const detailDiv = document.createElement('div');
     detailDiv.className = 'full-width';
-    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">高倒计时详细记录（倒计时 &gt; ${TAN_HIGH_THRESHOLD}）</div>` + buildTanDetailTable(allRecords);
+    const detailCount = allRecords.filter(r => !r.missing && r.value > TAN_HIGH_THRESHOLD).length;
+    detailDiv.innerHTML = `<div class="section-title" style="margin-top:0;">高倒计时详细记录（倒计时 &gt; ${TAN_HIGH_THRESHOLD}）（共 ${detailCount} 条）</div>` + buildTanDetailTable(allRecords);
     panel.appendChild(detailDiv);
+    mountTableBlocks(panel, 'tan');
   }
 
   async function loadFromCurrentHandle() {
@@ -2217,6 +2713,8 @@
     currentHandle = null;
     document.getElementById('panel-tie').innerHTML = '';
     document.getElementById('panel-tan').innerHTML = '';
+    mountTableBlocks(document.getElementById('panel-tie'), 'tie');
+    mountTableBlocks(document.getElementById('panel-tan'), 'tan');
     chartRecords = [];
     scatterZoom = { x: null, y: null };
     lineZoom = { x: null, y: null };
