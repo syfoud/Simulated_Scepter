@@ -9,6 +9,8 @@
 import unittest
 from unittest.mock import patch
 
+import numpy as np
+
 from tool.key_mouse_manager import KeyMouseManager
 
 # 与实机参数一致：客户区 1920x1080 贴在窗口右下角，窗口右下角在屏幕 (1940, 1110)
@@ -131,6 +133,32 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.manager.wait()
         self.cursor.assert_not_called()
         self.drag_to.assert_not_called()
+
+    def test_float_center_from_ocr_is_rounded_to_integer(self):
+        """识别框中心是 (x1 + x2) / 2 算出来的小数，入队前要四舍五入到整像素。
+
+        视觉识别拿到的框边界常是 numpy 整数，求和除以 2 会变成 np.float64，
+        而 win32api.SetCursorPos 只接受整数；不在入队前收口就会抛 TypeError 中断任务。
+        """
+        for (x, y), expected in (
+                ((np.float64(1290.0), np.float64(796.5)), (1310, 826)),
+                ((np.float64(1290.6), np.float64(796.6)), (1311, 827))):
+            with self.subTest(x=float(x), y=float(y)):
+                self.cursor.reset_mock()
+                self.manager.click_point(x, y)
+                self.manager.wait()
+                self.cursor.assert_called_once_with(expected)
+                # Mock 不校验类型，必须显式确认进 win32api 的是 python 整数
+                for value in self.cursor.call_args.args[0]:
+                    self.assertIsInstance(value, int)
+
+    def test_drag_with_float_center_is_rounded_to_integer(self):
+        """拖拽的两个端点同样要收成整像素再入队。"""
+        self.manager.drag_point(np.float64(960.4), np.float64(540.6),
+                                np.float64(768.6), np.float64(432.6))
+        self.manager.wait()
+        self.cursor.assert_called_once_with((980, 571))
+        self.assertEqual(self.drag_to.call_args.args[:2], (789, 463))
 
 
 if __name__ == "__main__":

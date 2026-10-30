@@ -569,12 +569,15 @@ class KeyMouseManager:
 
         入队的就是像素坐标本身，换算成屏幕坐标在 _game_point 里统一做，
         所以日志里打印的坐标和这里传的完全一致。
+        视觉识别算出的中心常带小数（如 (1263 + 1317) / 2 = 1290.0、796.5），
+        而 win32api 只接受整数坐标，入队前四舍五入到整像素。
 
         Args:
             x: 1920x1080 坐标系下的 x 坐标，向右为正
             y: 1920x1080 坐标系下的 y 坐标，向下为正
             force: 是否为强制操作
         """
+        x, y = int(round(x)), int(round(y))
         self._enqueue({
             'type': 'click',
             'x': x,
@@ -592,6 +595,8 @@ class KeyMouseManager:
             direct: 滚动方向和次数，正数向上滚动，负数向下滚动
             force: 是否为强制操作
         """
+        # 与点击一致：识别算出的中心可能带小数，入队前四舍五入到整像素。
+        x, y = int(round(x)), int(round(y))
         self._enqueue({
             'type': 'scroll',
             'x': x,
@@ -612,6 +617,9 @@ class KeyMouseManager:
             duration: 拖拽持续时间（秒）
             force: 是否为强制操作
         """
+        # 与点击一致：识别算出的中心可能带小数，入队前四舍五入到整像素。
+        start_x, start_y = int(round(start_x)), int(round(start_y))
+        end_x, end_y = int(round(end_x)), int(round(end_y))
         self._enqueue({
             'type': 'drag',
             'start_x': start_x,
