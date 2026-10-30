@@ -531,9 +531,9 @@ class DivergentUniverse(UniverseUtils):
             self.get_screen()
             # 图标都在左侧图标列（实测 x≈1367~1374）：搜索窗口 MASK["event_icon"]
             if self.check("arrow", mask=MASK["event_icon"]):
-                self.click_point(self.tx, self.ty)
+                self.click_point(self.tx, self.ty, box=self.tb)
             elif self.check("arrow_1", mask=MASK["event_icon"]):
-                self.click_point(self.tx, self.ty)
+                self.click_point(self.tx, self.ty, box=self.tb)
             # 事件选择界面
             elif self.check("star", mask=MASK["event_icon"], threshold=0.95):
                 if self.debug and event_id[0] == -1:
@@ -1081,7 +1081,7 @@ class DivergentUniverse(UniverseUtils):
         CUS_LOGGER.debug(f"Blesses: {blesses}")
         box = blesses[0]['box']
         if not self.click_img("new"):
-            self.click_position([(box[0] + box[1]) // 2, 500])
+            self.click_position([(box[0] + box[1]) // 2, 500], box=box)
         if blood:
             self.click_position([960, 975])
         else:

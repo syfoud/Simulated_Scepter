@@ -436,7 +436,7 @@ class SimulatedCurrency(CurrencyUtils):
             centers.append((cx, cy))
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
-        key_mouse_manager.click_point(centers[selected_idx][0], centers[selected_idx][1])
+        key_mouse_manager.click_point(*centers[selected_idx], box=boxes[selected_idx])
         key_mouse_manager.wait()
 
         self._confirm_environment_selection()
@@ -482,7 +482,7 @@ class SimulatedCurrency(CurrencyUtils):
     def _confirm_environment_selection(self):
         # 普通环境与蓝海额外环境的确认按钮位置相同。
         box = self.ENVIRONMENT_CONFIRM_BOX
-        key_mouse_manager.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2)
+        key_mouse_manager.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2, box=box)
         key_mouse_manager.wait()
 
     def _select_blue_ocean_extra_environment(self, max_attempts=6):
@@ -516,7 +516,7 @@ class SimulatedCurrency(CurrencyUtils):
 
             self._apply_environment_effects([selected_text])
 
-            key_mouse_manager.click_point(*centers[selected_idx])
+            key_mouse_manager.click_point(*centers[selected_idx], box=self.ENVIR_BOXES[selected_idx])
             key_mouse_manager.wait()
             self._confirm_environment_selection()
 
@@ -650,7 +650,7 @@ class SimulatedCurrency(CurrencyUtils):
                 f"检测到{special_investment}：登记1次立即奖励和下一边界1次延迟奖励"
             )
 
-        key_mouse_manager.click_point(centers[selected_idx][0], centers[selected_idx][1])
+        key_mouse_manager.click_point(*centers[selected_idx], box=boxes[selected_idx])
 
         self.click_text (text = "确认", box = [948, 1005, 968, 999], click = True)
         CUS_LOGGER.info ("投资策略选择完成")

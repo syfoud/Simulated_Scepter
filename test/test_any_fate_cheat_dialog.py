@@ -177,7 +177,7 @@ class CheatDialogTest(unittest.TestCase):
     def setUp(self):
         self.manager = Mock()
         # 内核已统一改用 *_point 接口（1920x1080 像素坐标），替身与断言都跟着迁过来
-        self.manager.click_point.side_effect = lambda x, y: self.engine._click(x, y)
+        self.manager.click_point.side_effect = lambda x, y, **kwargs: self.engine._click(x, y)
         self.manager.scroll_point.side_effect = lambda x, y, direct=1: self.engine._scroll(direct, x, y)
         self.manager.press.side_effect = lambda key, *a, **k: self.engine._press(key)
         self.manager.wait = Mock()

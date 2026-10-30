@@ -563,7 +563,7 @@ class KeyMouseManager:
         }
         self._enqueue(operation)
 
-    def click_point(self, x, y, force=False):
+    def click_point(self, x, y, force=False, box=None):
         """
         按 1920x1080 像素坐标点击，原点在游戏客户区左上角。
 
@@ -576,14 +576,19 @@ class KeyMouseManager:
             x: 1920x1080 坐标系下的 x 坐标，向右为正
             y: 1920x1080 坐标系下的 y 坐标，向下为正
             force: 是否为强制操作
+            box: 这次点击来源的框 [x1, x2, y1, y2]（同一坐标系），只写进日志，
+                用来核对落点是不是点在了框该在的位置
         """
         x, y = int(round(x)), int(round(y))
-        self._enqueue({
+        operation = {
             'type': 'click',
             'x': x,
             'y': y,
             'force': force
-        })
+        }
+        if box is not None:
+            operation['box'] = [int(round(value)) for value in box]
+        self._enqueue(operation)
 
     def scroll_point(self, x, y, direct=1, force=False):
         """

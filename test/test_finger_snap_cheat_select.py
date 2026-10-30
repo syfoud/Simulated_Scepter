@@ -209,7 +209,8 @@ class StubFingerSnap(FingerSnap):
     def install_pointer(self, key_mouse_manager):
         # 生产代码只调 1920x1080 像素入参的 pointer 接口，替身挂在同一层，
         # 记录的坐标就是引擎实际传的像素坐标；旧的 click/scroll 已是内部实现，不再打桩。
-        key_mouse_manager.click_point.side_effect = self._click
+        # click_point 现在会带 box 关键字参数（源框只用于写日志）
+        key_mouse_manager.click_point.side_effect = lambda x, y, **kwargs: self._click(x, y)
         key_mouse_manager.scroll_point.side_effect = self._scroll
         key_mouse_manager.press.side_effect = self._press
 

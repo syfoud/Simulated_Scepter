@@ -13,6 +13,7 @@ from core.common.engine import StateKernel
 from core.common.ocr import get_global_my_ts
 from route import PATHS
 from tool.GLOBAL import get_global_stop_flag, key_mouse_manager
+from tool.mask import quad_box
 from tool.screenshot import Screen
 from tool.utils.game_window import (
     BASE_HEIGHT,
@@ -109,7 +110,8 @@ class ScriptKernel(StateKernel):
         if click:
             self.prepare_script()
             self.click_position(((box[0][0] + box[1][0]) / 2,
-                                 (box[0][1] + box[2][1]) / 2))
+                                 (box[0][1] + box[2][1]) / 2),
+                                box=quad_box(box))
             key_mouse_manager.wait()
         return True
 

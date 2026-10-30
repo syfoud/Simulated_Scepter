@@ -134,6 +134,8 @@ class _StubEngine:
         fate_stars=None,
     ):
         self.tx, self.ty = STALE_POINT
+        # 真实现的 check() 每次都会落框；替身的 check 不打桩落框，点击时就没有框可打印
+        self.tb = None
         self.matched = matched
         self.event_prior = ["选择事件"]
         self.fate = "存护"

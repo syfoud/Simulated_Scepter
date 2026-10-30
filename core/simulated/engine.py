@@ -590,7 +590,7 @@ class SimulatedUniverse(UniverseUtils):
         else:
             name = event_name or self.event_name_for_log(self.screen)
             CUS_LOGGER.warning(f"「{name}」选项列表里没有优选项命中，点击「{text}」")
-        key_mouse_manager.click_point(x, y)
+        key_mouse_manager.click_point(x, y, box=row["box"])
         return True
 
     def click_event_prior(self, event_name, rows):
@@ -644,7 +644,7 @@ class SimulatedUniverse(UniverseUtils):
         """点按钮文字框的中心（「确定」「确认」共用，与 click_text 一致，用 1920x1080 像素坐标）。"""
         center_x = (box[0] + box[1]) / 2
         center_y = (box[2] + box[3]) / 2
-        key_mouse_manager.click_point(center_x, center_y)
+        key_mouse_manager.click_point(center_x, center_y, box=box)
 
     def confirm_event(self, event_name=None, point=None, timeout=1.5):
         """
@@ -828,11 +828,11 @@ class SimulatedUniverse(UniverseUtils):
     def select_event(self):
         screen = self.get_screen()
         if self.check("arrow_dialog", mask=MASK["dialog"]):
-            key_mouse_manager.click_point(self.tx, self.ty)
+            key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
             return
         for photo in ("arrow", "arrow_1", "shop_herta"):
             if self.check(photo, mask=MASK["event_icon"]):
-                key_mouse_manager.click_point(self.tx, self.ty)
+                key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
                 return
         # 若检测到切换到奇物商店或祝福强化界面：交给对应动作处理
         label = self.event_ui_label(screen)

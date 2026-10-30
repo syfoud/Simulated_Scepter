@@ -1159,7 +1159,7 @@ class AnyFateUniverse(SimulatedUniverse):
             CUS_LOGGER.error(f"作弊效果「{entry['raw_text']}」位置 ({x:.0f}, {y:.0f}) 不在作弊界面选项列表区域内，放弃点击")
             return None
         CUS_LOGGER.debug(f"点击作弊效果：「{entry['raw_text']}」")
-        key_mouse_manager.click_point(x, y)
+        key_mouse_manager.click_point(x, y, box=entry["box"])
         key_mouse_manager.wait()
         return entry["raw_text"]
 
@@ -1252,7 +1252,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 return False
             x = (entry["box"][0] + entry["box"][1]) / 2
             y = (entry["box"][2] + entry["box"][3]) / 2
-            key_mouse_manager.click_point(x, y)
+            key_mouse_manager.click_point(x, y, box=entry["box"])
             key_mouse_manager.wait()
         # 刚点完的「确认」也要等淡出，否则标题还认得出来，会被误判成没关窗
         time.sleep(0.05)
@@ -1431,11 +1431,11 @@ class AnyFateUniverse(SimulatedUniverse):
     def select_secret(self):
         # 点击优先级：对话条金色 ▼ →「选择」栏白色箭头 → 命途选项卡 → 都不在时点「秘闻」
         if self.check("arrow_dialog", mask=MASK["dialog"], fresh=True):
-            key_mouse_manager.click_point(self.tx, self.ty)
+            key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
             return
         # 图标（白色右箭头、命途选项卡）都在左侧图标列，与 select_event 用同一套区域
         if self.check("arrow", mask=MASK["event_icon"], fresh=True):
-            key_mouse_manager.click_point(self.tx, self.ty)
+            key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
             return
         success = False
         CUS_LOGGER.info("没错，我们会尽己所能将其诠释：比世界的命运更为沉重之物……")
@@ -1450,7 +1450,7 @@ class AnyFateUniverse(SimulatedUniverse):
             return
         # 命途选项卡已经出现：先用「选项卡 → 确定」的固定偏移快速点一下，再由 confirm_event 用文字识别复核
         CUS_LOGGER.info("原来那浑身着火的恶魔，满脑子幻想的都是要成为「救世主」哪！")
-        key_mouse_manager.click_point(self.tx, self.ty)
+        key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
         # 固定偏移：x 固定 1696 是按钮中心，y = 选项卡 y + 123
         self.confirm_event(point=(1696, self.ty + 123), timeout=0.5)
 

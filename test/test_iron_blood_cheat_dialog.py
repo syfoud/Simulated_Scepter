@@ -458,7 +458,7 @@ class CheatFlowTest(unittest.TestCase):
         self.manager = Mock()
         # 生产代码只走 1920x1080 像素入参的 pointer 接口；旧的比例接口 click/scroll/drag
         # 现在只作为 click_point 等的内部实现，测试替身跟着迁移，断言仍然对得上传参。
-        self.manager.click_point = Mock(side_effect=lambda x, y: self.engine._click(x, y))
+        self.manager.click_point = Mock(side_effect=lambda x, y, **kwargs: self.engine._click(x, y))
         self.manager.scroll_point = Mock(
             side_effect=lambda x, y, direct=1: self.engine._scroll(x, y, direct))
         self.manager.press = Mock(side_effect=lambda key, *a, **k: self.engine._press(key))

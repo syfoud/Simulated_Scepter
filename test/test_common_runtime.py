@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import numpy as np
 
@@ -77,6 +77,21 @@ class CommonRuntimeTests(unittest.TestCase):
             self.assertTrue(engine.check("button", 960, 540, threshold=0.99))
         self.assertAlmostEqual(engine.tx, 960)
         self.assertAlmostEqual(engine.ty, 540)
+        # check() 顺手记下匹配框，点击时随日志给出，便于核对落点；
+        # 框由中心加减半个模板尺寸反推，模板被截图边缘裁掉时中心仍是实际点击位置。
+        self.assertEqual(engine.tb, [955, 965, 535, 545])
+
+    def test_click_helpers_pass_source_box_into_click_point(self):
+        """点框中心、带框点位置要把源框交给 key_mouse_manager 写日志；纯坐标点击不传。"""
+        engine = self.kernel()
+        engine.click_box([10, 20, 10, 20])
+        engine.click_position([960, 540])
+        engine.click_position([960, 540], box=[900, 1000, 500, 600])
+        self.manager.click_point.assert_has_calls([
+            call(15.0, 15.0, box=[10, 20, 10, 20]),
+            call(960, 540),
+            call(960, 540, box=[900, 1000, 500, 600]),
+        ])
 
     def test_wrong_resolution_rejects_input_and_capture(self):
         self.window.return_value = GameWindow(1, "local", "game", "UnityWndClass", 1280, 720)

@@ -29,7 +29,7 @@ from tool.GLOBAL import (
     set_global_stop_flag,
 )
 from tool.log import CUS_LOGGER, log_emitter
-from tool.mask import MASK, crop_region, region_center_point
+from tool.mask import MASK, crop_region, quad_box, region_center_point
 from tool.screenshot import Screen
 from core.simulated.config import config
 from core.simulated.ocr import get_global_my_ts
@@ -360,7 +360,8 @@ class UniverseUtils(StateKernel):
                 if click:
                     key_mouse_manager.click_point(
                         (box[0]+box[1])//2,
-                        (box[2]+box[3])//2
+                        (box[2]+box[3])//2,
+                        box=box
                     )
                 if after_delay:
                     time.sleep(after_delay)
@@ -372,7 +373,8 @@ class UniverseUtils(StateKernel):
             if click:
                 key_mouse_manager.click_point(
                         (pt[0][0] + pt[1][0]) / 2,
-                        (pt[0][1] + pt[2][1]) / 2
+                        (pt[0][1] + pt[2][1]) / 2,
+                        box=quad_box(pt)
                 )
             if after_delay:
                 time.sleep(after_delay)

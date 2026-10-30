@@ -28,7 +28,7 @@ from core.common.engine import StateKernel
 from core.divergent.config import config
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER, print_exc
-from tool.mask import MASK, crop_region, region_center_point
+from tool.mask import MASK, crop_region, quad_box, region_center_point
 from tool.public_ocr import merge_text
 from tool.screenshot import Screen
 from tool.utils.game_window import (
@@ -276,7 +276,7 @@ class UniverseUtils(StateKernel):
             point = region_center_point(point)
         return point[0] + offset[0], point[1] + offset[1]
 
-    def click_point(self, x, y):
+    def click_point(self, x, y, box=None):
         """按 1920x1080 像素坐标点击，并等点击真正生效后才返回。
 
         差分宇宙的流程普遍是「点完立刻截屏判断结果」，而键鼠管理器是队列异步执行的，
@@ -284,17 +284,17 @@ class UniverseUtils(StateKernel):
         """
         if self._stop != 0:
             raise ValueError("正在退出")
-        key_mouse_manager.click_point(x, y)
+        key_mouse_manager.click_point(x, y, box=box)
         key_mouse_manager.wait()
         time.sleep(0.3)
 
     def click_box(self, box):
         """点击坐标框 [x1, x2, y1, y2] 的中心。"""
-        self.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2)
+        self.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2, box=box)
 
-    def click_position(self, position):
+    def click_position(self, position, box=None):
         """按 1920x1080 像素坐标 [x, y] 点击。"""
-        self.click_point(position[0], position[1])
+        self.click_point(position[0], position[1], box=box)
 
     def click_text(self, text, delay=0, box=None, after_delay=0, click=True, find_all=False, warning=True,
                    ocr_line=True, need_fresh=True):
@@ -317,7 +317,8 @@ class UniverseUtils(StateKernel):
             if len(match) and click:
                 self.click_point(
                     (box[0] + box[1]) // 2,
-                    (box[2] + box[3]) // 2
+                    (box[2] + box[3]) // 2,
+                    box=box
                 )
                 if after_delay:
                     time.sleep(after_delay)
@@ -327,7 +328,8 @@ class UniverseUtils(StateKernel):
             if click:
                 self.click_point(
                     (pt[0][0] + pt[1][0]) / 2,
-                    (pt[0][1] + pt[2][1]) / 2
+                    (pt[0][1] + pt[2][1]) / 2,
+                    box=quad_box(pt)
                 )
             if after_delay:
                 time.sleep(after_delay)
@@ -408,7 +410,11 @@ class UniverseUtils(StateKernel):
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
         if max_val > threshold:
             x, y = max_loc
-            self.click_position((x + target.shape[1]//2, y + target.shape[0]//2))
+            # 全屏匹配的坐标就是绝对坐标，匹配框由匹配位置和模板尺寸组成
+            self.click_position(
+                (x + target.shape[1]//2, y + target.shape[0]//2),
+                box=[int(x), int(x + target.shape[1]), int(y), int(y + target.shape[0])]
+            )
             return 1
         return 0
 

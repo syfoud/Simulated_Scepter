@@ -47,9 +47,12 @@ class CurrencyInteractionTests(unittest.TestCase):
 
                 # 第二帧：刷新过仍未命中必选 → 按优先级组兜底选卡。
                 # 先点选中的环境（ENVIR_BOXES[0] 中心 438,394），再点确认按钮（1080,982），
-                # 两次都走 click_point，这里只校验选卡那一次，故在调用列表里找它。
+                # 两次都走 click_point；选卡那一次会带上来源框，方便日志核对落点。
                 self.assertEqual(currency.select_envir(), 1)
-                self.assertIn(call(438, 394), manager.click_point.call_args_list)
+                self.assertIn(
+                    call(438, 394, box=currency.ENVIR_BOXES[0]),
+                    manager.click_point.call_args_list,
+                )
                 currency.update_state.assert_called_once_with("1-1")
 
     @patch("core.currency.automation.time.sleep")
@@ -64,10 +67,15 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertTrue(currency._select_blue_ocean_extra_environment())
 
         # 只点唯一那张卡（ENVIR_BOXES[1] 中心 957,394），再点确认按钮（1080,982）；
-        # 坐标都是 1920x1080 像素，内核用 click_point 原样传出。
+        # 坐标都是 1920x1080 像素，内核用 click_point 原样传出，并带上来源框。
         self.assertEqual(
             manager.mock_calls,
-            [call.click_point(957, 394), call.wait(), call.click_point(1080, 982), call.wait()],
+            [
+                call.click_point(957, 394, box=currency.ENVIR_BOXES[1]),
+                call.wait(),
+                call.click_point(1080, 982, box=currency.ENVIRONMENT_CONFIRM_BOX),
+                call.wait(),
+            ],
         )
         currency.click_text.assert_called_once_with(
             text="投资环境",

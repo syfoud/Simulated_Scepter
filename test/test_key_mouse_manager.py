@@ -160,6 +160,27 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.cursor.assert_called_once_with((980, 571))
         self.assertEqual(self.drag_to.call_args.args[:2], (789, 463))
 
+    def test_click_from_box_logs_box_and_click_point(self):
+        """点框中心时日志要同时给出源框和实际点击位置。
+
+        框边界来自识别结果，常是带小数的 numpy 值；日志里的框同样收成整像素，
+        才能和点击坐标并排核对落点是不是在框该在的位置。
+        """
+        self.manager.click_point(
+            np.float64(150.0), np.float64(350.6),
+            box=[np.float64(100), np.float64(200), np.float64(300), np.float64(400)])
+        self.manager.wait()
+        self.cursor.assert_called_once_with((170, 381))
+        logged = str(self.logger.debug.call_args)
+        self.assertIn("'x': 150", logged)
+        self.assertIn("'y': 351", logged)
+        self.assertIn("'box': [100, 200, 300, 400]", logged)
+
+    def test_click_without_box_keeps_old_log_shape(self):
+        """没有来源框的纯坐标点击不带 box 字段，日志与改版前一致。"""
+        self.click_at(215, 896)
+        self.assertNotIn("'box'", str(self.logger.debug.call_args))
+
 
 if __name__ == "__main__":
     unittest.main()
