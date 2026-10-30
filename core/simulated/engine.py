@@ -246,6 +246,9 @@ class SimulatedUniverse(UniverseUtils):
 
     def setting_exit(self):
         if self.state != "exit":
+            self.update_state("ui")
+            self.init_map()
+            self.floor_init = 0
             key_mouse_manager.click(1359, 811)
             key_mouse_manager.wait()
     def map_data_load(self):
@@ -358,9 +361,6 @@ class SimulatedUniverse(UniverseUtils):
                 key_mouse_manager.wait()
                 key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.press("esc")
-                self.update_state("ui")
-                self.init_map()
-                self.floor_init = 0
                 if self.floor == 13:
                     self.update_state("exit")
                     CUS_LOGGER.info(f"通关！当前层数:{self.floor}")
