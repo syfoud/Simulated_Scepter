@@ -544,5 +544,14 @@ class CleanupSectionWidgetTests(CleanupServiceTestBase):
         self.assertIn("UI.ui", str(raised.exception))
 
 
+class CleanupDirectoryTests(CleanupServiceTestBase):
+    """「文件位置」按钮使用的目录：每个清理对象对应一个用户可见目录。"""
+
+    def test_directory_is_the_root_users_browse(self):
+        self.assertEqual(service.category_directory("video"), self.paths["video"])
+        self.assertEqual(service.category_directory("log"), self.paths["logs"])
+        self.assertEqual(service.category_directory("temp"), self.paths["temp"])
+
+
 if __name__ == "__main__":
     unittest.main()
