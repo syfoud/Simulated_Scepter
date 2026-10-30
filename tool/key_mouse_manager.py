@@ -9,6 +9,14 @@ import win32con
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
+# 程序目前仅支持 1920x1080 这一种游戏分辨率；
+# 云游戏窗口因浏览器边框允许 8px 误差，内部分辨率同样是 1920x1080；
+# 代码里写死的坐标、日志里打印的坐标统一用像素坐标：
+# 原点在客户区左上角，x 向右、y 向下。
+# 客户区左上角的屏幕坐标由右、下边界减客户区尺寸反推：各机器标题栏高度不同，
+# 客户区上边界会漂，而右下角始终紧贴窗口右下角，从右下角反推才不会偏。
+
+
 # 游戏内键位配置的来源：user/gui_settings.json 的 game_keys 字段，
 # 默认值在 resource/gui_settings_default.json，形如 {"interact": "f", "move_w": "w", ...}。
 # 调用点一律传"逻辑键名"（如 "interact"、"move_w"），由 resolve_key 换成用户设置的物理键，
@@ -168,7 +176,6 @@ class KeyMouseManager:
         self.y0 = 0
         self.xx = 1
         self.yy = 1
-        self.full = False
         self.multi = 1.0
         self.scale = 1.0
         # 用于支持强制操作中断睡眠
@@ -191,16 +198,18 @@ class KeyMouseManager:
         if hasattr(config, 'scale'):
             self.scale = config.scale
 
-    def set_screen_params(self, x1, y1, xx, yy, full=False):
+    def set_screen_params(self, x1, y1, xx, yy):
         """
         设置屏幕参数，用于坐标转换
+
+        客户区左上角的屏幕坐标由右、下边界减客户区尺寸反推：
+        各机器标题栏高度不同，客户区上边界会漂，而右下角始终紧贴窗口右下角。
 
         Args:
             x1: 屏幕右边界坐标
             y1: 屏幕下边界坐标
             xx: 屏幕宽度
             yy: 屏幕高度
-            full: 是否全屏模式
         """
         self.x1 = x1
         self.y1 = y1
@@ -208,7 +217,6 @@ class KeyMouseManager:
         self.yy = yy
         self.x0 = x1-xx
         self.y0 = y1-yy
-        self.full = False
 
     def start(self):
         """
@@ -269,54 +277,31 @@ class KeyMouseManager:
                 time.sleep(0.01)
         CUS_LOGGER.info("键鼠管理器线程已停止")
 
-    def _convert_coordinates(self, x, y):
-        """
-        转换坐标格式
-
-        Args:
-            x: x坐标（可能是浮点数比例，也可能是游戏实际坐标）
-            y: y坐标（可能是浮点数比例，也可能是有游戏实际坐标）
-
-        Returns:
-            (actual_x, actual_y): 实际的屏幕坐标
-        """
-        # 如果是浮点数表示，则计算实际坐标
-        if isinstance(x, float):
-            actual_x, actual_y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
-        else:
-            actual_x, actual_y = self.x1-self.xx+x, self.y1-self.yy+y
-        # 全屏模式会有一个偏移
-        if self.full:
-            actual_x += 9
-            actual_y += 9
-
-        return actual_x, actual_y
-
     def _game_point(self, op_type, x, y):
         """
-        换算坐标并确认落点在游戏窗口内
+        把 1920x1080 像素坐标换算成屏幕坐标，并确认落点在游戏窗口内
 
-        落点在游戏窗口之外时（例如归一化 y 变成负数会换算到窗口下边界以下），
+        落点在游戏窗口之外时（例如像素坐标超出 1920x1080 会换算到窗口外），
         照常移动光标会把点击送给别的窗口、抢走游戏前台，因此放弃这次操作，
         并按同一偏离只警告一次记录原因。
 
         Args:
             op_type: 操作名称，用于日志
-            x: 请求的x坐标（浮点比例或实际坐标）
-            y: 请求的y坐标（浮点比例或实际坐标）
+            x: 请求的 x 像素坐标
+            y: 请求的 y 像素坐标
 
         Returns:
             (actual_x, actual_y): 游戏窗口内的屏幕坐标；越界时返回None
         """
-        actual_x, actual_y = self._convert_coordinates(x, y)
+        actual_x, actual_y = self.x0 + x, self.y0 + y
         if self.x0 <= actual_x <= self.x1 and self.y0 <= actual_y <= self.y1:
             return actual_x, actual_y
         if self.skipped_pointer != (op_type, x, y):
             self.skipped_pointer = (op_type, x, y)
             CUS_LOGGER.warning(
-                "%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，"
-                "请求坐标(%s, %s)换算为屏幕坐标(%s, %s)已越界，跳过本次操作。",
-                op_type, self.x0, self.y0, self.x1, self.y1, x, y, actual_x, actual_y
+                "%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，请求坐标(%s, %s)换算为屏幕坐标(%s, %s)已越界，跳过本次操作",
+                op_type, self.x0, self.y0, self.x1, self.y1,
+                x, y, actual_x, actual_y
             )
         return None
 
@@ -362,11 +347,10 @@ class KeyMouseManager:
             win32api.SetCursorPos(point)
             pyautogui.click()
 
-        elif op_type == 'mouse_move':
-            dx = operation['dx']
+        elif op_type == 'turn':
+            degrees = operation['degrees']
             fine = operation.get('fine', 1)
-            # 仿照UniverseUtils.mouse_move实现
-            self._direct_mouse_move(dx, fine)
+            self._direct_turn(degrees, fine)
 
         elif op_type == 'scroll':
             x, y = operation['x'], operation['y']
@@ -401,26 +385,29 @@ class KeyMouseManager:
             duration = operation.get('duration', 0)
             self._sleep(duration)
 
-    def _direct_mouse_move(self, x, fine=1):
+    def _direct_turn(self, degrees, fine=1):
         """
-        直接执行鼠标移动，不通过队列
+        直接执行视角转动，不通过队列
+
+        以逐段移动鼠标的方式转动视角：一次最多转 30/fine 度，每度对应的鼠标
+        横向移动量约为 16.5 像素，再乘以玩家的灵敏度倍率（multi）与 DPI 缩放比（scale）。
 
         Args:
-            dx: x轴移动距离
-            fine: 精细度控制参数
+            degrees: 转动角度，单位为度；正数向右转（俯视顺时针），负数向左转
+            fine: 精细度控制参数，越大单段转动的角度上限越小、越慢
         """
-        if x > 30 // fine:
-            y = 30 // fine
-        elif x < -30 // fine:
-            y = -30 // fine
+        if degrees > 30 // fine:
+            step = 30 // fine
+        elif degrees < -30 // fine:
+            step = -30 // fine
         else:
-            y = x
-        dx = int(16.5 * y * self.multi * self.scale)
-        CUS_LOGGER.debug(f"旋转{x}°，精度{fine},移动距离{dx}，倍率{self.multi}，缩放比{self.scale}")
+            step = degrees
+        dx = int(16.5 * step * self.multi * self.scale)
+        CUS_LOGGER.debug(f"旋转{degrees}°，精度{fine},移动距离{dx}，倍率{self.multi}，缩放比{self.scale}")
         win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, 0)  # 进行视角移动
         self._sleep(0.05 * fine)
-        if x != y:
-            self._direct_mouse_move(x - y, fine)
+        if degrees != step:
+            self._direct_turn(degrees - step, fine)
 
     def _sleep(self, duration):
         """
@@ -478,6 +465,21 @@ class KeyMouseManager:
             with self.queue_lock:
                 self.operation_queue.appendleft(operation)
 
+    def _enqueue(self, operation):
+        """
+        把操作放进队列
+
+        强制操作插到队首，并抢在可中断的 sleep 之前执行。
+
+        Args:
+            operation: 操作字典，需自带 force 字段
+        """
+        if operation['force']:
+            self._handle_force_operation(operation)
+        else:
+            with self.queue_lock:
+                self.operation_queue.append(operation)
+
     def wait(self):
         """
         等待操作队列及正在执行的动作全部完成，停止时提前返回。
@@ -508,11 +510,7 @@ class KeyMouseManager:
             'key': key,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)
 
     def keyUp(self, key, force=False):
         """
@@ -527,11 +525,7 @@ class KeyMouseManager:
             'key': key,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)
 
     def press(self, key, duration=0, allow_e=1, force=False):
         """
@@ -550,90 +544,88 @@ class KeyMouseManager:
             'allow_e': allow_e,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)
 
-    def click(self, x, y, force=False):
+    def turn(self, degrees, fine=1, force=False):
         """
-        点击指定位置
+        水平转动视角
 
         Args:
-            x: 屏幕x坐标（支持浮点数比例坐标和实际坐标）
-            y: 屏幕y坐标（支持浮点数比例坐标和实际坐标）
+            degrees: 转动角度，单位为度；正数向右转（俯视顺时针），负数向左转
+            fine: 精细度控制参数，越大单次转动越细碎、越慢
             force: 是否为强制操作
         """
+        operation = {
+            'type': 'turn',
+            'degrees': degrees,
+            'fine': fine,
+            'force': force
+        }
+        self._enqueue(operation)
+
+    def click_point(self, x, y, force=False, box=None):
+        """
+        按 1920x1080 像素坐标点击，原点在游戏客户区左上角。
+
+        入队的就是像素坐标本身，换算成屏幕坐标在 _game_point 里统一做，
+        所以日志里打印的坐标和这里传的完全一致。
+        视觉识别算出的中心常带小数（如 (1263 + 1317) / 2 = 1290.0、796.5），
+        而 win32api 只接受整数坐标，入队前四舍五入到整像素。
+
+        Args:
+            x: 1920x1080 坐标系下的 x 坐标，向右为正
+            y: 1920x1080 坐标系下的 y 坐标，向下为正
+            force: 是否为强制操作
+            box: 这次点击来源的框 [x1, x2, y1, y2]（同一坐标系），只写进日志，
+                用来核对落点是不是点在了框该在的位置
+        """
+        x, y = int(round(x)), int(round(y))
         operation = {
             'type': 'click',
             'x': x,
             'y': y,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        if box is not None:
+            operation['box'] = [int(round(value)) for value in box]
+        self._enqueue(operation)
 
-    def mouse_move(self, dx, fine=1, force=False):
+    def scroll_point(self, x, y, direct=1, force=False):
         """
-        移动鼠标
+        在 1920x1080 像素坐标处滚动滚轮。
 
         Args:
-            dx: x轴移动距离
-            fine: 精细度控制参数
-            force: 是否为强制操作
-        """
-        operation = {
-            'type': 'mouse_move',
-            'dx': dx,
-            'fine': fine,
-            'force': force
-        }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
-
-    def scroll(self, direct=1, x=0.5, y=0.5, force=False):
-        """
-        滚动鼠标滚轮
-
-        Args:
-            x: 滚动位置x坐标（支持浮点数比例坐标和实际坐标）
-            y: 滚动位置y坐标（支持浮点数比例坐标和实际坐标）
+            x: 1920x1080 坐标系下的 x 坐标
+            y: 1920x1080 坐标系下的 y 坐标
             direct: 滚动方向和次数，正数向上滚动，负数向下滚动
             force: 是否为强制操作
         """
-        operation = {
+        # 与点击一致：识别算出的中心可能带小数，入队前四舍五入到整像素。
+        x, y = int(round(x)), int(round(y))
+        self._enqueue({
             'type': 'scroll',
             'x': x,
             'y': y,
             'direct': direct,
             'force': force
-        }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        })
 
-    def drag(self, start_x, start_y, end_x, end_y, duration=0.4, force=False):
+    def drag_point(self, start_x, start_y, end_x, end_y, duration=0.4, force=False):
         """
-        拖拽操作
+        按 1920x1080 像素坐标拖拽。
 
         Args:
-            start_x: 起始点x坐标（支持浮点数比例坐标和实际坐标）
-            start_y: 起始点y坐标（支持浮点数比例坐标和实际坐标）
-            end_x: 结束点x坐标（支持浮点数比例坐标和实际坐标）
-            end_y: 结束点y坐标（支持浮点数比例坐标和实际坐标）
+            start_x: 起始点 x 像素坐标
+            start_y: 起始点 y 像素坐标
+            end_x: 结束点 x 像素坐标
+            end_y: 结束点 y 像素坐标
             duration: 拖拽持续时间（秒）
             force: 是否为强制操作
         """
-        operation = {
+        # 与点击一致：识别算出的中心可能带小数，入队前四舍五入到整像素。
+        start_x, start_y = int(round(start_x)), int(round(start_y))
+        end_x, end_y = int(round(end_x)), int(round(end_y))
+        self._enqueue({
             'type': 'drag',
             'start_x': start_x,
             'start_y': start_y,
@@ -641,12 +633,7 @@ class KeyMouseManager:
             'end_y': end_y,
             'duration': duration,
             'force': force
-        }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        })
 
     def sleep(self, duration, force=False):
         """
@@ -661,8 +648,4 @@ class KeyMouseManager:
             'duration': duration,
             'force': force
         }
-        if force:
-            self._handle_force_operation(operation)
-        else:
-            with self.queue_lock:
-                self.operation_queue.append(operation)
+        self._enqueue(operation)

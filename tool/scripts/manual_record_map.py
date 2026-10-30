@@ -64,8 +64,9 @@ from tool.utils.mminimap import PositionPredict  # noqa: E402
 # 交互提示检测参数（识别区域与 UniverseUtils.check("interact", mask=MASK["interact_icon"]) 一致）
 INTERACT_THRESHOLD = 0.96
 # big_world 图标：屏幕右侧中部偏下的鼠标右键提示图标，仅在"可自由行动"时可见，用于暂停录制
-WORLD_X = 0.0620
-WORLD_Y = 0.1287
+# 坐标按 1920x1080 截图记录，原点在左上角
+WORLD_X = 1801
+WORLD_Y = 941
 WORLD_THRESHOLD = 0.98
 CROP_PAD = 60
 SCREEN_W = 1920
@@ -93,8 +94,8 @@ def check_icon(screen, name, threshold, x=None, y=None, region=None):
     else:
         height, width = target.shape[0], target.shape[1]
         sx, sy = height + CROP_PAD, width + CROP_PAD
-        bx = SCREEN_W - int(x * SCREEN_W)
-        by = SCREEN_H - int(y * SCREEN_H)
+        bx = int(x)
+        by = int(y)
         local = screen[
             max(0, by - sx // 2): min(SCREEN_H, by + sx // 2),
             max(0, bx - sy // 2): min(SCREEN_W, bx + sy // 2),

@@ -61,7 +61,7 @@ class SimulatedUniverse(UniverseUtils):
         CUS_LOGGER.debug("当前命途：" + self.fate)
         key_mouse_manager.set_config(config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
 
         #停止运行标志
         self._stop = True
@@ -249,7 +249,7 @@ class SimulatedUniverse(UniverseUtils):
             self.update_state("ui")
             self.init_map()
             self.floor_init = 0
-            key_mouse_manager.click(1359, 811)
+            key_mouse_manager.click_point(1359, 811)
             key_mouse_manager.wait()
     def map_data_load(self):
         self.big_map_init = True
@@ -336,9 +336,9 @@ class SimulatedUniverse(UniverseUtils):
         if self.state=="run":
             CUS_LOGGER.info("开始匹配地图")
             #检查黄泉
-            if not self.quan and self.check("huangquan", 0.0578,0.7083):
+            if not self.quan and self.check("huangquan",1809,315):
                 self.quan = 1
-            if not self.bai_e and self.check("bai_e", 0.0625,0.7092):
+            if not self.bai_e and self.check("bai_e",1800,314):
                 self.bai_e = 1
             #长时间离开或者未初始化层数？则重新初始化
             if self.floor_init == 0:
@@ -367,13 +367,13 @@ class SimulatedUniverse(UniverseUtils):
                     return 1
                 elif self.fail_count <= 1:
                     CUS_LOGGER.error(f"地图{self.now_map}未发现目标，当前层数:{self.floor},相似度{self.now_map_sim}，尝试暂离")
-                    key_mouse_manager.click(0.2708, 0.2324)
+                    key_mouse_manager.click_point(1400, 829)
                     key_mouse_manager.keyUp("move_w")
                     self.fail_count += 1
                 else:
                     if self.debug == 0:
                         self.update_floor(1)
-                        key_mouse_manager.click(0.2708, 0.1324)
+                        key_mouse_manager.click_point(1400, 937)
                         CUS_LOGGER.error(
                             f"地图{self.now_map}多次未发现目标,相似度{self.now_map_sim}，当前层数:{self.floor},尝试退出重进"
                         )
@@ -382,7 +382,7 @@ class SimulatedUniverse(UniverseUtils):
                         CUS_LOGGER.error(
                             f"地图{self.now_map}多次未发现目标,相似度{self.now_map_sim}，尝试暂离 DEBUG"
                         )
-                        key_mouse_manager.click(0.2708, 0.2324)
+                        key_mouse_manager.click_point(1400, 829)
                 self.last_interact_time = time.time()
                 return 1
             # 寻路
@@ -432,15 +432,15 @@ class SimulatedUniverse(UniverseUtils):
             img_down = self.get_small_interaction_img(MASK["bless_path"])
             res_down = self.ts.split_and_find([self.fate], img_down, mode="bless")
             if res_up[1] == 2:
-                key_mouse_manager.click(*self.calc_point(MASK["bless_name"], res_up[0]))
+                key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
                 key_mouse_manager.wait()
                 chose = 1
             elif res_down[1] == 2:
-                key_mouse_manager.click(*self.calc_point(MASK["bless_path"], res_down[0]))
+                key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
                 key_mouse_manager.wait()
                 chose = 1
             if not chose:
-                key_mouse_manager.click(0.2990, 0.1046)
+                key_mouse_manager.click_point(1346, 967)
                 key_mouse_manager.wait()
         # 未匹配到优先祝福，刷新祝福并再次匹配
         if not chose:
@@ -457,15 +457,15 @@ class SimulatedUniverse(UniverseUtils):
             res_down = self.ts.split_and_find(self.tk.secondary, img_down, mode="bless")
             if res_up[1] == 2:
                 CUS_LOGGER.debug("识别到具体祝福")
-                key_mouse_manager.click(*self.calc_point(MASK["bless_name"], res_up[0]))
+                key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
                 key_mouse_manager.wait()
             elif res_down[1] >= 2:
                 CUS_LOGGER.debug("识别到匹配命途")
-                key_mouse_manager.click(*self.calc_point(MASK["bless_path"], res_down[0]))
+                key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
                 key_mouse_manager.wait()
             elif self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False,allow_fail=True):
                 CUS_LOGGER.debug("未识别到具体祝福,随便选一个")
-                key_mouse_manager.click(*self.calc_point(MASK["bless_name"], res_up[0]))
+                key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
                 key_mouse_manager.wait()
         self.click_text(text="确认",box=[1663, 1719, 949, 979],need_fresh=False,ocr_line=True,warning=True)
         key_mouse_manager.wait()
@@ -515,15 +515,15 @@ class SimulatedUniverse(UniverseUtils):
             self.stop()
             CUS_LOGGER.info('燃烧，聚变，然后湮灭。若想迎接新生，就必先投身终结。')
             return 1
-        key_mouse_manager.click(0.3448, 0.4926)
+        key_mouse_manager.click_point(1258, 548)
         self.init_map()
     def begin_universe(self):
         con = self.click_text(text="继续进度",box=[1610, 1762, 937, 1023],click=False,ocr_line=False,warning=False)
         if not con:
             if self.diffi == 5:
-                key_mouse_manager.click(0.9375, 0.5565)
-            key_mouse_manager.click(0.9375, 0.8565 - 0.1 * (self.diffi - 1))
-        key_mouse_manager.click(0.1083, 0.1009)
+                key_mouse_manager.click_point(120, 479)
+            key_mouse_manager.click_point(120, 155 + 108 * (self.diffi - 1))
+        key_mouse_manager.click_point(1712, 971)
         if con:
             CUS_LOGGER.debug(f"继续游戏附带初始化层数,更新前{self.floor}")
             self.get_level()
@@ -532,19 +532,20 @@ class SimulatedUniverse(UniverseUtils):
             self.update_floor(1)
     def pre_start(self):
         self.fail_count = 0
-        if self.check("team4", 0.5797, 0.2389):
-            dx = 0.9266 - 0.8552
-            dy = 0.8194 - 0.6741
+        if self.check("team4",807,822):
+            # 队伍面板是 3 列网格：起点 (140.9, 195.0)，列间距 137.1px、行间距 156.9px
+            dx = 137.1
+            dy = 156.9
             time.sleep(1)
             for i in self.order:
-                key_mouse_manager.click(
-                    0.9266 - dx * ((i - 1) % 3), 0.8194 - dy * ((i - 1) // 3)
+                key_mouse_manager.click_point(
+                    round(140.9 + dx * ((i - 1) % 3)), round(195.0 + dy * ((i - 1) // 3))
                 )
                 key_mouse_manager.sleep(0.5)
-        key_mouse_manager.click(0.1635, 0.1056)
+        key_mouse_manager.click_point(1606, 966)
         key_mouse_manager.wait()
     def select_fate(self):
-        click_x = [0.02, 0.98]
+        click_x = [1882, 38]
         n = 4  # 重试次数
         res = None
         while n:
@@ -553,16 +554,16 @@ class SimulatedUniverse(UniverseUtils):
             if res[1] == 1 and n:
                 # 没有找到命途
                 CUS_LOGGER.warning(f"未找到 {self.fate} 命途，尝试翻页")
-                key_mouse_manager.click(click_x[n % len(click_x)], 0.5)
+                key_mouse_manager.click_point(click_x[n % len(click_x)], 540)
                 n -= 1
                 continue
             else:
                 break
-        key_mouse_manager.click(*self.calc_point(MASK["fate"], res[0]))
+        key_mouse_manager.click_point(*self.calc_point(MASK["fate"], res[0]))
     def select_bless(self):
         if not (self.click_text('神奇宇宙') or self.click_text('巨胃宇宙')):
-            key_mouse_manager.click(0.5, 0.5)
-        key_mouse_manager.click(0.5062, 0.1065)
+            key_mouse_manager.click_point(960, 540)
+        key_mouse_manager.click_point(948, 965)
 
     def click_event_option(self, event_name, row, from_prior=False):
         """
@@ -572,7 +573,7 @@ class SimulatedUniverse(UniverseUtils):
         False 表示优选项都没命中、挑了一个识别到的选项兜底。
         """
         # 选项面板在右侧 [左, 右, 上, 下]（1920x1080 基准）：点击点必须落在里面才算点到了选项。
-        left, right, top, bottom = self.scaled_box([1320, 1850, 110, 1010])
+        left, right, top, bottom = [1320, 1850, 110, 1010]
         x = (row["box"][0] + row["box"][1]) / 2
         y = (row["box"][2] + row["box"][3]) / 2
         text = row["raw_text"]
@@ -589,7 +590,7 @@ class SimulatedUniverse(UniverseUtils):
         else:
             name = event_name or self.event_name_for_log(self.screen)
             CUS_LOGGER.warning(f"「{name}」选项列表里没有优选项命中，点击「{text}」")
-        key_mouse_manager.click(1 - x / self.xx, 1 - y / self.yy)
+        key_mouse_manager.click_point(x, y, box=row["box"])
         return True
 
     def click_event_prior(self, event_name, rows):
@@ -621,52 +622,40 @@ class SimulatedUniverse(UniverseUtils):
     #      没点中时按钮文字还在，按文字位置补点；所以偏移偶有失准也不会再卡死。
     def confirm_point(self, row):
         """
-        按被点中那条选项的文字行，推算「确定」按钮中心的键鼠比例坐标。
+        按被点中那条选项的文字行，推算「确定」按钮中心的 1920x1080 像素坐标。
         以选项文字行的底边当基准—，按钮贴在选中选项框的右下角。
         """
         bottom = max(line["box"][3] for line in row.get("lines") or [row])
-        # 76 是按钮中心在选项文字行底边下方的距离。
-        return 0.1135, 1 - (bottom + 76) / self.yy
-
-    def scaled_box(self, box):
-        """把 1920x1080 基准的区域框 [左,右,上,下] 缩放到当前分辨率（寰宇蝗灾各模块的界面区域共用）。"""
-        left, right, top, bottom = box
-        if (self.xx, self.yy) == (1920, 1080):
-            return list(box)
-        return [
-            int(left * self.xx / 1920),
-            int(right * self.xx / 1920),
-            int(top * self.yy / 1080),
-            int(bottom * self.yy / 1080),
-        ]
+        # 76 是按钮中心在选项文字行底边下方的距离；x 取按钮中心固定的 1702。
+        return 1702, bottom + 76
 
     def confirm_text_box(self):
         """
         在框内寻找「确定」文字，返回它的屏幕文本框 [x0,x1,y0,y1]，没有返回 None。
         find_with_box(forward=1, re_screen=True) 会重新截一帧、只对这条竖条进行 OCR。
         """
-        box = self.scaled_box([1590, 1830, 240, 1070])
+        box = [1590, 1830, 240, 1070]
         for res in self.ts.find_with_box(box=box, forward=True, re_screen=True):
             if isinstance(res, dict) and "确定" in res.get("raw_text", ""):
                 return list(res["box"])
         return None
 
     def click_confirm_text(self, box):
-        """点按钮文字框的中心（「确定」「确认」共用，与 click_text 一致，用镜像比例坐标）。"""
+        """点按钮文字框的中心（「确定」「确认」共用，与 click_text 一致，用 1920x1080 像素坐标）。"""
         center_x = (box[0] + box[1]) / 2
         center_y = (box[2] + box[3]) / 2
-        key_mouse_manager.click(1 - center_x / self.xx, 1 - center_y / self.yy)
+        key_mouse_manager.click_point(center_x, center_y, box=box)
 
     def confirm_event(self, event_name=None, point=None, timeout=1.5):
         """
         点掉选项框右下角浮出的「确定」按钮，事件才会真的往下走；优选项命中和兜底共用。
-        point 是固定偏移算出来的按钮位置（confirm_point 的键鼠比例坐标）：选项点中后按钮必然
+        point 是固定偏移算出来的按钮位置（confirm_point 的 1920x1080 像素坐标）：选项点中后按钮必然
         出现，先直接点这一下（不用识别，省一次 OCR）；点完再 OCR 复核一次——按钮文字还在就说明
         固定偏移没点中，按文字位置补点。point=None（拿不到选项框）时退回纯文字轮询。
         """
         key_mouse_manager.wait()
         if point is not None:
-            key_mouse_manager.click(*point)
+            key_mouse_manager.click_point(*point)
             time.sleep(0.2)  # 等游戏把「确定」按钮收掉，再复核它是不是真被点掉了
             box = self.confirm_text_box()
             if box is None:
@@ -706,14 +695,8 @@ class SimulatedUniverse(UniverseUtils):
         if img is None:
             return ""
         name_box = [190, 800, 960, 1000]
-        h, w = img.shape[:2]
-        if (w, h) != (1920, 1080):
-            x1, x2, y1, y2 = name_box
-            box = [int(x1 * w / 1920), int(x2 * w / 1920), int(y1 * h / 1080), int(y2 * h / 1080)]
-        else:
-            box = list(name_box)
         try:
-            name = self.ts.ocr_one_row(img, box)
+            name = self.ts.ocr_one_row(img, name_box)
         except Exception as e:  # OCR 失败不该拖垮事件流程，退回空串
             CUS_LOGGER.warning(f"事件名识别失败：{e}")
             return ""
@@ -856,15 +839,14 @@ class SimulatedUniverse(UniverseUtils):
         置灰（不能点）的选项在这里就被丢掉，所以调用方拿到的都是能点出反应的选项。
         names：交给 event_option_icons 的图标模板名，默认 option_icon_names() 那一遍。
         """
-        kx, ky = self.xx / 1920, self.yy / 1080
-        panel_right = int(1850 * kx)
+        panel_right = 1850
         rows = []
         for icon in self.event_option_icons(names):
             band = [
-                int(icon["x"] - 30 * kx),
+                int(icon["x"] - 30),
                 panel_right,
-                int(icon["y"] - 30 * ky),
-                int(icon["y"] + 20 * ky),
+                int(icon["y"] - 30),
+                int(icon["y"] + 20),
             ]
             lines = [
                 res
@@ -895,11 +877,11 @@ class SimulatedUniverse(UniverseUtils):
     def select_event(self):
         screen = self.get_screen()
         if self.check("arrow_dialog", mask=MASK["dialog"]):
-            key_mouse_manager.click(self.tx, self.ty)
+            key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
             return
         for photo in ("arrow", "arrow_1", "shop_herta"):
             if self.check(photo, mask=MASK["event_icon"]):
-                key_mouse_manager.click(self.tx, self.ty)
+                key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
                 return
         # 若检测到切换到奇物商店或祝福强化界面：交给对应动作处理
         label = self.event_ui_label(screen)
@@ -962,19 +944,19 @@ class SimulatedUniverse(UniverseUtils):
             return
         if self.click_text(text="休息区", box=[187, 289, 903, 941], click=False, warning=False):
             CUS_LOGGER.info("事已至此，我只想知道，当他们以凡人的身躯在黑潮中消散时……你为何连一滴眼泪都没有流下？")
-            key_mouse_manager.click(0.1667, 0.2592)
+            key_mouse_manager.click_point(1600, 800)
 
     # 选取奇物
     def select_strange(self):
         img = self.get_small_interaction_img(MASK["strange_name"], fresh=True)
         res = self.ts.split_and_find(self.tk.strange, img, mode="strange")
-        key_mouse_manager.click(*self.calc_point(MASK["strange_name"], res[0]))
-        key_mouse_manager.click(0.1365, 0.1093)
+        key_mouse_manager.click_point(*self.calc_point(MASK["strange_name"], res[0]))
+        key_mouse_manager.click_point(1658, 962)
         self.wait_flag(lambda: self.click_text(text="选择奇物",box=[5, 219, 3, 111],click=False,ocr_line=False,warning=False), 1.4)
     # 丢弃奇物
     def drop_strange(self):
-        key_mouse_manager.click(0.4714, 0.5500)
-        key_mouse_manager.click(0.1339, 0.1028)
+        key_mouse_manager.click_point(1015, 486)
+        key_mouse_manager.click_point(1663, 969)
         self.wait_flag(lambda: self.click_text(text="丢弃奇物",box=[10, 220, 0, 112],click=False,ocr_line=False,warning=False), 1.4)
     def drop_bless(self):
         st = set(self.tk.fates) - set(self.tk.secondary)
@@ -986,26 +968,26 @@ class SimulatedUniverse(UniverseUtils):
                     CUS_LOGGER.debug(f"St: {list(st)}, Secondary: {self.tk.secondary}")
                 res_down = self.ts.split_and_find(list(st), img_down, mode="bless")
                 if res_down[1] == 2:
-                    key_mouse_manager.click(*self.calc_point(MASK["bless_path"], res_down[0]))
+                    key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
                     clicked = 1
                     break
                 st.add(ft)
         if not clicked:
-            key_mouse_manager.click(0.4714, 0.5500)
-        key_mouse_manager.click(0.1203, 0.1093)
+            key_mouse_manager.click_point(1015, 486)
+        key_mouse_manager.click_point(1689, 962)
     def setting(self):
-        key_mouse_manager.click(0.2708, 0.2324)
+        key_mouse_manager.click_point(1400, 829)
     def enhance(self):
         self.quit = time.time()
-        for i in [None, (0.7984, 0.6824), (0.6859, 0.6824)]:
-            if self.check("enhance_fail", 0.1068, 0.0907, fresh=True):
+        for i in [None, (387, 343), (603, 343)]:
+            if self.check("enhance_fail",1715,982, fresh=True):
                 break
             if i is not None:
-                key_mouse_manager.click(i[0], i[1])
-            key_mouse_manager.click(0.1089, 0.0926)
+                key_mouse_manager.click_point(i[0], i[1])
+            key_mouse_manager.click_point(1711, 980)
             tm = time.time()
             while not self.click_text(text="祝福强化",box=[70, 236, 9, 125],click=False,ocr_line=False,warning=False) and time.time() - tm < 7:
-                key_mouse_manager.click(0.2062, 0.2054)
+                key_mouse_manager.click_point(1524, 858)
         key_mouse_manager.press("esc")
         if self.floor >= 13:
             self.update_floor(12)
@@ -1250,7 +1232,7 @@ class SimulatedUniverse(UniverseUtils):
         CUS_LOGGER.info("打开地图")
         key_mouse_manager.press("map")
     def goto_survival_room(self):
-        key_mouse_manager.mouse_move(15)
+        key_mouse_manager.turn(15)
         key_mouse_manager.keyDown("move_w")
         sprint()
         key_mouse_manager.sleep(4)

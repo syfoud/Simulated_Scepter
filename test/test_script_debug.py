@@ -71,15 +71,16 @@ class ScriptDebugTests(unittest.TestCase):
                     release.wait(2)
                     worker()
 
-                def enqueue(*args):
-                    click(*args)
+                # 生产代码经 click_point 入队，入队时会带 force 关键字参数。
+                def enqueue(*args, **kwargs):
+                    click_point(*args, **kwargs)
                     queued.set()
 
-                click = self.manager.click
+                click_point = self.manager.click_point
                 events = [{"name": "开始挑战", "trigger": {"state_only": True},
                            "actions": [{"position": [1510, 529]}]}]
                 with patch.object(self.manager, "_worker", side_effect=delayed_worker), \
-                        patch.object(self.manager, "click", side_effect=enqueue):
+                        patch.object(self.manager, "click_point", side_effect=enqueue):
                     thread = self.launch_debug(events, direct)
                     try:
                         self.assertTrue(entered.wait(2))
@@ -92,8 +93,8 @@ class ScriptDebugTests(unittest.TestCase):
                 self.assertFalse(thread.is_alive())
                 self.assertIn("完成", self.results[0])
                 self.click.assert_called_once_with()
-                # 保留原有比例坐标换算：浮点数经整数截断后横坐标为 1511。
-                self.cursor.assert_called_once_with((1511, 529))
+                # 客户区左上角就是屏幕原点（x0 = y0 = 0），像素坐标 (1510, 529) 即屏幕坐标。
+                self.cursor.assert_called_once_with((1510, 529))
                 self.assertFalse(self.manager.running)
 
     def test_stop_during_press_releases_key_and_discards_following_click(self):
@@ -161,7 +162,7 @@ class KeyMouseWaitTests(unittest.TestCase):
                 patch("tool.thread.get_logger", return_value=(Mock(), Mock())), \
                 patch("tool.thread.get_globals", return_value=Mock()):
             self.manager.start()
-            self.manager.click(10, 20)
+            self.manager.click_point(10, 20)
             self.manager.worker_thread.join(2)
             self.assertFalse(self.manager.worker_thread.is_alive())
             results, finished = [], Event()
@@ -202,7 +203,7 @@ class KeyMouseWaitTests(unittest.TestCase):
         self.manager.operation_queue = PausedQueue()
         with patch.object(self.manager, "_execute_operation", side_effect=execute):
             self.manager.start()
-            self.manager.click(10, 20)
+            self.manager.click_point(10, 20)
             thread = Thread(target=lambda: (self.manager.wait(), finished.set()))
             try:
                 self.assertTrue(popped.wait(2))

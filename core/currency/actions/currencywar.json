@@ -677,10 +677,7 @@
         "name": "自动战斗检测",
         "trigger": {
             "photo": "auto_battle",
-            "pos": {
-                "x": 0.9891,
-                "y": 0.1491
-            },
+            "pos": {"x": 21,"y": 919},
             "threshold": 0.9,
             "condition": "startbattle"
         },
@@ -914,10 +911,7 @@
         "name": "大世界",
         "trigger": {
             "photo": "smartphone",
-            "pos": {
-                "x": 0.9833,
-                "y": 0.938
-            },
+            "pos": {"x": 32,"y": 67},
             "threshold": 0.96
         },
         "actions": [

@@ -26,7 +26,7 @@ from tool.GLOBAL import (
     set_global_stop_flag,
 )
 from tool.log import CUS_LOGGER, log_emitter
-from tool.mask import MASK, crop_region, region_center
+from tool.mask import MASK, crop_region, quad_box, region_center_point
 from tool.screenshot import Screen
 from tool.timer import timer
 from tool.utils.game_window import (
@@ -234,7 +234,7 @@ class CurrencyUtils(StateKernel):
         time.sleep(1)
         return 1
 
-    # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
+    # example: self.wait_fig(lambda:self.check("strange",112,56), 1.4)
     def wait_flag(self, f, timeout=3.0):
         tm=time.time()
         while time.time()-tm<timeout:
@@ -249,27 +249,30 @@ class CurrencyUtils(StateKernel):
         return self.run_static()[1]
     def use_it(self, x, y):
         if x != 1 or y != 1:
-            key_mouse_manager.click(0.903 - 0.06 * (x - 1), 0.827 - 0.14 * (y - 1))
+            # 消耗品网格：横向步长 115.2px、纵向步长 151.2px，起点为 (186.24, 186.84)
+            key_mouse_manager.click_point(
+                round(186.24 + 115.2 * (x - 1)), round(186.84 + 151.2 * (y - 1))
+            )
         # 点击使用
-        key_mouse_manager.click(0.154,0.088)
+        key_mouse_manager.click_point(1624, 985)
         self.wait_flag(lambda:not self.click_text(text="确认",box=[1126, 1252, 716, 812],click=False,ocr_line=False,warning=False), 1.2)
         # 点击确认
-        key_mouse_manager.click(0.386,0.294)
+        key_mouse_manager.click_point(1179, 762)
         r = self.wait_flag(lambda:not self.click_text(text="替换同类",box=[816, 1006, 284, 380],click=False,warning=False), 0.8)
         if r:
             # 覆盖效果
-            key_mouse_manager.click(0.386,0.294)
+            key_mouse_manager.click_point(1179, 762)
 
     def calc_point(self, point, offset):
         """
         把识别结果相对匹配中心的偏移换算成点击坐标
 
-        point：归一化坐标，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
-        offset：识别结果相对匹配中心的像素偏移
+        point：1920x1080 像素坐标点，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
+        offset：识别结果相对匹配中心的像素偏移，与像素坐标同向（右下为正），因此直接相加
         """
         if len(point) == 4:
-            point = region_center(point, self.xx, self.yy)
-        return point[0] - offset[0] / self.xx, point[1] - offset[1] / self.yy
+            point = region_center_point(point)
+        return point[0] + offset[0], point[1] + offset[1]
 
     def click_text(self, text,delay=0,box=None,after_delay=0,click=True,find_all=False,warning=True,ocr_line=True,need_fresh=True,allow_fail=False):
         if delay:
@@ -292,9 +295,10 @@ class CurrencyUtils(StateKernel):
             # 检查匹配结果是否包含目标文本
             if len(match) and text in match:
                 if click:
-                    key_mouse_manager.click(
+                    key_mouse_manager.click_point(
                         (box[0]+box[1])//2,
-                        (box[2]+box[3])//2
+                        (box[2]+box[3])//2,
+                        box=box
                     )
                 if after_delay:
                     time.sleep(after_delay)
@@ -304,9 +308,10 @@ class CurrencyUtils(StateKernel):
         pt = self.ts.find_text(img, text,find_all)
         if pt is not None:
             if click:
-                key_mouse_manager.click(
-                        1 - (pt[0][0] + pt[1][0]) / 2 / self.xx,
-                        1 - (pt[0][1] + pt[2][1]) / 2 / self.yy
+                key_mouse_manager.click_point(
+                        (pt[0][0] + pt[1][0]) / 2,
+                        (pt[0][1] + pt[2][1]) / 2,
+                        box=quad_box(pt)
                 )
             if after_delay:
                 time.sleep(after_delay)
@@ -501,7 +506,7 @@ class CurrencyUtils(StateKernel):
         sub = (sub + 180) % 360 - 180
         if  mode==2 and sub==0:
             sub=1e-9
-        key_mouse_manager.mouse_move(sub)
+        key_mouse_manager.turn(sub)
         CUS_LOGGER.debug(f"当前人物角度为：{str(self.ang)}变换后角度{ang},视角移动{sub}")
         # 此处变换为了目标角度
         self.ang = ang
@@ -552,7 +557,7 @@ class CurrencyUtils(StateKernel):
     #0.2~0.25s
     def is_run(self,check=True):
         if check:
-            if not self.check("big_world", 0.0620, 0.1287, threshold=0.98, fresh=True):
+            if not self.check("big_world",1801,941, threshold=0.98, fresh=True):
                 self.update_state("no_run")
                 return False
         # loc_scr = get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True)

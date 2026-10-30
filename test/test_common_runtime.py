@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import numpy as np
 
@@ -49,7 +49,7 @@ class CommonRuntimeTests(unittest.TestCase):
             self.assertIsInstance(engine, registry.load_class("Common"))
             self.assertIs(engine.get_screen(), self.frame)
             self.manager.set_config.assert_called_once_with(None)
-            self.manager.set_screen_params.assert_called_once_with(1940, 1110, 1920, 1080, False)
+            self.manager.set_screen_params.assert_called_once_with(1940, 1110, 1920, 1080)
 
     def test_real_action_loop_recognizes_text_and_executes_coordinates_then_stops(self):
         engine = self.kernel()
@@ -59,7 +59,8 @@ class CommonRuntimeTests(unittest.TestCase):
             path.write_text(json.dumps([{"name": "确认", "trigger": {"text": "确认", "box": [0, 100, 0, 100]},
                                         "actions": [{"position": [960, 540]}, {"press": "f"}, "stop"]}]), encoding="utf-8")
             engine.start(path)
-        self.manager.click.assert_called_once_with(0.5, 0.5)
+        # 脚本 actions 里的 position 就是 1920x1080 像素坐标；内核直接交给 click_point，不再换算镜像比例。
+        self.manager.click_point.assert_called_once_with(960, 540)
         self.manager.press.assert_called_once_with("f", 0)
         self.assertEqual(engine.action_history, ["确认"])
         self.assertTrue(engine._stop)
@@ -68,12 +69,29 @@ class CommonRuntimeTests(unittest.TestCase):
     def test_shared_template_match_and_position_crop_use_game_coordinates(self):
         engine = self.kernel()
         engine.get_screen()
+        # 模板切成画面 (960,540) 附近的 10x10 切片：匹配中心应原样解析回该像素坐标，
+        # 说明 check() 的 x,y 与 self.tx,self.ty 用的都是 1920x1080 像素坐标。
         template = self.frame[535:545, 955:965].copy()
         self.assertTrue(engine.click_target(template, 0.99, flag=False))
         with patch("core.common.engine.find_image_by_name", return_value=template):
-            self.assertTrue(engine.check("button", 0.5, 0.5, threshold=0.99))
-        self.assertAlmostEqual(engine.tx, 0.5)
-        self.assertAlmostEqual(engine.ty, 0.5)
+            self.assertTrue(engine.check("button", 960, 540, threshold=0.99))
+        self.assertAlmostEqual(engine.tx, 960)
+        self.assertAlmostEqual(engine.ty, 540)
+        # check() 顺手记下匹配框，点击时随日志给出，便于核对落点；
+        # 框由中心加减半个模板尺寸反推，模板被截图边缘裁掉时中心仍是实际点击位置。
+        self.assertEqual(engine.tb, [955, 965, 535, 545])
+
+    def test_click_helpers_pass_source_box_into_click_point(self):
+        """点框中心、带框点位置要把源框交给 key_mouse_manager 写日志；纯坐标点击不传。"""
+        engine = self.kernel()
+        engine.click_box([10, 20, 10, 20])
+        engine.click_position([960, 540])
+        engine.click_position([960, 540], box=[900, 1000, 500, 600])
+        self.manager.click_point.assert_has_calls([
+            call(15.0, 15.0, box=[10, 20, 10, 20]),
+            call(960, 540),
+            call(960, 540, box=[900, 1000, 500, 600]),
+        ])
 
     def test_wrong_resolution_rejects_input_and_capture(self):
         self.window.return_value = GameWindow(1, "local", "game", "UnityWndClass", 1280, 720)

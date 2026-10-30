@@ -53,7 +53,8 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         self.assertTrue(currency.complete_difficulty_selection())
 
         manager.clean.assert_called_once_with()
-        manager.click.assert_called_once_with(1692, 965, force=True)
+        # 「开始对局」按钮的 1920x1080 像素坐标，内核用 click_point 原样传出。
+        manager.click_point.assert_called_once_with(1692, 965, force=True)
         manager.wait.assert_called_once_with()
         self.assertEqual(currency.exit_plane, 2)
         self.assertFalse(currency.prior_environment_found)
@@ -70,7 +71,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         self.assertTrue(currency.complete_difficulty_selection())
 
         manager.clean.assert_not_called()
-        manager.click.assert_not_called()
+        manager.click_point.assert_not_called()
         currency.update_state.assert_not_called()
         currency.run_history.start_run.assert_not_called()
 
@@ -84,7 +85,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
 
         currency.get_screen.assert_not_called()
         currency.is_one.assert_not_called()
-        manager.click.assert_not_called()
+        manager.click_point.assert_not_called()
 
     @patch("core.currency.automation.key_mouse_manager")
     def test_detected_selection_uses_shared_completion_path(self, manager):
@@ -97,7 +98,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
 
         manager.clean.assert_called_once_with()
         currency.complete_difficulty_selection.assert_called_once_with()
-        manager.click.assert_not_called()
+        manager.click_point.assert_not_called()
 
     @patch("core.currency.automation.time.sleep")
     @patch("core.currency.automation.key_mouse_manager")
@@ -111,7 +112,8 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
 
         manager.clean.assert_called_once_with()
         self.assertEqual(currency.get_screen.call_count, 2)  # 每次向下选择前都重新截图
-        manager.click.assert_called_once_with(*currency.DIFFICULTY_DOWN_POSITION)
+        # 向下选择按钮的坐标来自 DIFFICULTY_DOWN_POSITION 常量（1920x1080 像素），原样传给 click_point。
+        manager.click_point.assert_called_once_with(*currency.DIFFICULTY_DOWN_POSITION)
         manager.wait.assert_called_once_with()
         sleep.assert_not_called()  # 固定等待已删，改为等主循环下一帧重新识别
 
@@ -126,8 +128,8 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         self.assertFalse(currency.select_difficulty_start())
 
         manager.clean.assert_called_once_with()
-        self.assertEqual(manager.click.call_count, 2)
-        manager.click.assert_called_with(*currency.DIFFICULTY_DOWN_POSITION)
+        self.assertEqual(manager.click_point.call_count, 2)
+        manager.click_point.assert_called_with(*currency.DIFFICULTY_DOWN_POSITION)
         self.assertEqual(manager.wait.call_count, 2)
 
 

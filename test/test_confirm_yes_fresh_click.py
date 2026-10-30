@@ -35,11 +35,6 @@ load_img()
 from core.simulated.engine import SimulatedUniverse
 
 
-def mirror(point, xx=1920, yy=1080):
-    """真实像素坐标 → click() 用的镜像比例坐标（与 click_confirm_text 同一套换算）。"""
-    return 1 - point[0] / xx, 1 - point[1] / yy
-
-
 def center(box):
     return (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
 
@@ -57,8 +52,8 @@ CONFIRM_CACHED = line("确认", [300, 354, 611, 641])
 CONFIRM_AREA_BOX = [232, 1690, 154, 928]
 CHEAT_TITLE_BOX = [923, 996, 230, 270]
 
-# 老实现点的残留坐标（来自 23:32:34,537 那次 click）
-STALE_X, STALE_Y = 0.60546875, 0.2375
+# 老实现点的残留坐标（23:32:34,537 那次 click 的镜像比例 0.60546875,0.2375，换算成像素约为 758,824）
+STALE_X, STALE_Y = 758, 824
 
 
 class _StubConfirmEngine(SimulatedUniverse):
@@ -114,11 +109,11 @@ class ConfirmYesTest(unittest.TestCase):
             text="作弊", box=CHEAT_TITLE_BOX, click=False, allow_fail=True)
 
     def assertClicked(self, *boxes):
-        """断言点击落在文字框中心（click 收到的是镜像比例坐标），且不是残留坐标。"""
-        self.assertEqual(self.manager.click.call_count, len(boxes))
-        for clicked, box in zip(self.manager.click.call_args_list, boxes):
+        """断言点击落在文字框中心（click_point 收到的是 1920x1080 像素坐标），且不是残留坐标。"""
+        self.assertEqual(self.manager.click_point.call_count, len(boxes))
+        for clicked, box in zip(self.manager.click_point.call_args_list, boxes):
             actual = clicked.args
-            expected = mirror(center(box))
+            expected = center(box)
             self.assertAlmostEqual(actual[0], expected[0], places=6)
             self.assertAlmostEqual(actual[1], expected[1], places=6)
             self.assertNotEqual((actual[0], actual[1]), (STALE_X, STALE_Y))
@@ -159,7 +154,7 @@ class ConfirmYesTest(unittest.TestCase):
         self.assertCheatGuardChecked()
         engine.ts.find_with_box.assert_not_called()
         self.assertEqual(engine.confirm_boxes, [])
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.manager.wait.assert_not_called()
         self.assertIn("当前处于作弊选项窗", str(self.logger.debug.call_args_list))
 
@@ -173,7 +168,7 @@ class ConfirmYesTest(unittest.TestCase):
         self.assertCheatGuardChecked()
         engine.ts.find_with_box.assert_called_once()
         self.assertEqual(engine.confirm_boxes, [])
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.manager.wait.assert_not_called()
         self.assertIn("没识别到弹窗的「确认」文字", str(self.logger.warning.call_args))
 
@@ -185,7 +180,7 @@ class ConfirmYesTest(unittest.TestCase):
 
         self.assertEqual(result, 0)
         engine.ts.find_with_box.assert_called_once()
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         self.assertIn("没识别到弹窗的「确认」文字", str(self.logger.warning.call_args))
 
     def test_does_not_recheck_or_click_again_when_the_button_survives(self):

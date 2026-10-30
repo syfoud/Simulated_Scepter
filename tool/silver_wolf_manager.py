@@ -10,21 +10,19 @@ class SilverWolfManager:
     秘技点与秘技图标的识别优先复用主循环截圈。
     """
 
-    # 四个角色位的比例坐标（check 镜像坐标，对应屏幕原始坐标）
-    # (0.9385, 0.2963)、(0.9385, 0.3833)、(0.9385, 0.4694)、(0.9385, 0.5565)
+    # 四个角色位上银狼头像的位置
     _SILVER_WOLF_POS = {
-        1: (0.0615, 0.7037),
-        2: (0.0615, 0.6167),
-        3: (0.0615, 0.5306),
-        4: (0.0615, 0.4435),
+        1: (1802, 320),
+        2: (1802, 414),
+        3: (1802, 507),
+        4: (1802, 601),
     }
-    # 秘技图标在四个角色位上的比例坐标（check 镜像坐标）
-    # (0.8464, 0.2944)、(0.8464, 0.3787)、(0.8464, 0.4657)、(0.8464, 0.5519)
+    # 秘技图标在四个角色位上的位置
     _BEAN_POS = {
-        1: (0.1536, 0.7056),
-        2: (0.1536, 0.6213),
-        3: (0.1536, 0.5343),
-        4: (0.1536, 0.4481),
+        1: (1625, 318),
+        2: (1625, 409),
+        3: (1625, 503),
+        4: (1625, 596),
     }
     # 角色位与秘技图标识别阈值
     _CHECK_THRESHOLD = 0.98
@@ -39,9 +37,9 @@ class SilverWolfManager:
         Returns:
             银狼所在角色位序号（1~4）；未找到返回 None。
         """
-        for slot, (x_ratio,y_ratio) in self._SILVER_WOLF_POS.items():
+        for slot, (x, y) in self._SILVER_WOLF_POS.items():
             if self.parent.check(
-                "silverwolf", x_ratio, y_ratio, threshold=self._CHECK_THRESHOLD
+                "silverwolf", x, y, threshold=self._CHECK_THRESHOLD
             ):
                 return slot
         return None
@@ -55,9 +53,9 @@ class SilverWolfManager:
         Returns:
             该位置是否显示秘技图标。
         """
-        x_ratio, y_ratio = self._BEAN_POS[slot]
+        x, y = self._BEAN_POS[slot]
         return self.parent.check(
-            "bean", x_ratio, y_ratio, threshold=self._CHECK_THRESHOLD
+            "bean", x, y, threshold=self._CHECK_THRESHOLD
         )
 
     def should_skip_skill(self):

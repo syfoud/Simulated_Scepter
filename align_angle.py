@@ -41,7 +41,7 @@ def main(ang=[1,1,3], su=None):
             continue
         ang_list = []
         for j in range(i):
-            key_mouse_manager.mouse_move(60, fine=3 // i)
+            key_mouse_manager.turn(60, fine=3 // i)
             key_mouse_manager.wait()
             time.sleep(0.2)
             now_ang = get_angle(su)

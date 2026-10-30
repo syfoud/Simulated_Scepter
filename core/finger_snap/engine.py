@@ -199,11 +199,11 @@ class FingerSnap(AnyFateUniverse):
             self._pending_target = None
             self._target_decided = False
             return
-        key_mouse_manager.click(int(node["cx"]), int(node["cy"]))
+        key_mouse_manager.click_point(int(node["cx"]), int(node["cy"]))
         key_mouse_manager.wait()
         # 确认按钮在未选中节点时依然显示，且 OCR 容易误识别为“女弃”。
         # 直接点固定按钮：未选中时按钮禁用不生效，下次仍会重试选点。
-        key_mouse_manager.click(1685, 982)
+        key_mouse_manager.click_point(1685, 982)
         key_mouse_manager.wait()
         # 不把“已发出点击”当成“界面已成功关闭”。若选点界面
         # 仍然存在，select_doing 下次被调用时必须重新截图、建图和决策。
@@ -247,7 +247,7 @@ class FingerSnap(AnyFateUniverse):
                 selected_idx = int(self.next_node["idx"])
                 self.start_nodes=self.next_node
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
-                key_mouse_manager.click(x,y)
+                key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
                 self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
                 self.countdown = self.countdown_agent.apply_path(selected_idx).countdown
@@ -460,7 +460,7 @@ class FingerSnap(AnyFateUniverse):
         self.countdown_agent.sync_facts(
             countdown=self.countdown, cheat=self._cheat_count,
             reroll=self._reroll_count)
-        if not self.check("fast_roll", 0.1281,0.9074, threshold=0.9):
+        if not self.check("fast_roll",1674,100, threshold=0.9):
             self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
         found = self.ts.find_with_box(
             box=[1339, 1576, 429, 464], forward=True, re_screen=False)

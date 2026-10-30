@@ -13,6 +13,7 @@ from core.common.engine import StateKernel
 from core.common.ocr import get_global_my_ts
 from route import PATHS
 from tool.GLOBAL import get_global_stop_flag, key_mouse_manager
+from tool.mask import quad_box
 from tool.screenshot import Screen
 from tool.utils.game_window import (
     BASE_HEIGHT,
@@ -55,7 +56,7 @@ class ScriptKernel(StateKernel):
                 self.sct = Screen(self.xx, self.yy)
                 key_mouse_manager.set_config(None)
                 key_mouse_manager.multi = key_mouse_manager.scale = 1.0
-                key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy, self.full)
+                key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
                 return
             if time.monotonic() >= deadline:
                 raise TimeoutError("等待游戏窗口超过 300 秒，请启动游戏并将游戏窗口置于前台。")
@@ -109,7 +110,8 @@ class ScriptKernel(StateKernel):
         if click:
             self.prepare_script()
             self.click_position(((box[0][0] + box[1][0]) / 2,
-                                 (box[0][1] + box[2][1]) / 2))
+                                 (box[0][1] + box[2][1]) / 2),
+                                box=quad_box(box))
             key_mouse_manager.wait()
         return True
 

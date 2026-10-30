@@ -137,7 +137,8 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         self.assertEqual(self._pressed_keys(), ["esc"])
         self.manager.keyUp.assert_called_once_with("move_w")
-        self.manager.click.assert_not_called()  # 空打一拳是 click(0.5, 0.5)
+        # 空打一拳（旧实现是 click(0.5, 0.5)，现为 click_point(960, 540)）不能发生。
+        self.manager.click_point.assert_not_called()
         engine.navigate_battle.assert_not_called()
         engine.switch_current_role.assert_not_called()
         engine.ts.find_with_box.assert_not_called()  # 区域名 OCR 属于走图逻辑
@@ -145,16 +146,20 @@ class AwayBeforeMovementTest(unittest.TestCase):
             text="暂离", box=AWAY_BOX, click=False, allow_fail=True
         )
 
-    def test_away_clears_area_and_hands_over_to_ui_state(self):
-        """识别到「暂离」后进入 ui 状态，并清空区域名（暂离回到「黑塔的办公室」，不再处于原区域）。"""
+    def test_away_clears_area_without_switching_state(self):
+        """识别到「暂离」后只清空区域名、累计失败次数，不切状态也不重建地图。
+
+        暂离会回到「黑塔的办公室」，区域名必须清空，否则下一轮仍按旧区域名寻路；
+        状态与地图的复位交给后续流程按需处理，暂离流程本身不再越权改动。
+        """
         engine = make_engine(last_interact_time=0.0)
 
         self.assertEqual(engine.normal(), 1)
 
-        engine.update_state.assert_called_once_with("ui")
-        engine.init_map.assert_called_once_with()
-        self.assertEqual(engine.floor_init, 0)
         self.assertEqual(engine.area, "")
+        self.assertEqual(engine.fail_count, 1)
+        engine.update_state.assert_not_called()
+        engine.init_map.assert_not_called()
 
     def test_esc_miss_returns_to_the_main_loop_without_walking(self):
         """3 秒没唤出暂离界面：直接回主循环，不补按 esc、不走动、不施放秘技。"""
@@ -166,7 +171,7 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         # 只按一次 esc：再按一次可能把已经弹出的暂停菜单关掉
         self.assertEqual(self._pressed_keys(), ["esc"])
-        self.manager.click.assert_not_called()
+        self.manager.click_point.assert_not_called()
         engine.navigate_battle.assert_not_called()
         # 没离开跑图状态：状态与区域名都不动，界面也没换
         engine.update_state.assert_not_called()
@@ -182,7 +187,8 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         self.assertEqual(engine.normal(), 1)
 
-        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("ui",), ("exit",)])
+        # need_end 直接进结算：只有 exit 一次状态切换，不再先挂 ui 再 exit
+        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("exit",)])
         self.assertEqual(self._pressed_keys(), ["esc"])
         engine.navigate_battle.assert_not_called()
         self.assertEqual(engine.area, "")

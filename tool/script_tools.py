@@ -83,7 +83,7 @@ def marker_path(event_name):
 
 
 def save_marker(screen, box, path):
-    """保存独立图片标志，并按内核坐标约定生成局部匹配中心。"""
+    """保存独立图片标志，并按 1920x1080 像素坐标记录匹配中心。"""
     left, right, top, bottom = box
     height, width = screen.shape[:2]
     if not (0 <= left < right <= width and 0 <= top < bottom <= height):
@@ -112,8 +112,10 @@ def save_marker(screen, box, path):
             photo = "./" + photo
     except ValueError:
         photo = path.as_posix()
-    return {"photo": photo, "pos": {"x": 1 - (left + right) / (2 * width),
-                                       "y": 1 - (top + bottom) / (2 * height)},
+    # pos 与 check(path, x, y) 使用同一坐标约定：1920x1080 像素坐标，原点在客户区左上角。
+    # 截图固定为 1920x1080，所以框选中心在截图内的像素位置即为该坐标。
+    return {"photo": photo, "pos": {"x": round((left + right) / 2),
+                                    "y": round((top + bottom) / 2)},
             "threshold": 0.9}, path
 
 

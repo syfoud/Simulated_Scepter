@@ -45,7 +45,18 @@ def crop_region(screen, region):
     return screen[y1:y2, x1:x2, :]
 
 
-def region_center(region, width, height):
-    """区域中心的归一化坐标，与 check 的 x、y 使用同一套镜像坐标。"""
+def region_center_point(region):
+    """区域中心的 1920x1080 像素坐标（原点在客户区左上角）。"""
     x1, x2, y1, y2 = region
-    return 1 - (x1 + x2) / 2 / width, 1 - (y1 + y2) / 2 / height
+    return (x1 + x2) / 2, (y1 + y2) / 2
+
+
+def quad_box(points):
+    """把四点文本多边形压成 [x1, x2, y1, y2] 框。
+
+    OCR 的 find_text 返回的是四个角点，日志里要能和区域框一样直接读，所以统一压成
+    [左, 右, 上, 下]；坐标取整，避免日志里出现 np.int64(...) 这种表示。
+    """
+    xs = [int(point[0]) for point in points]
+    ys = [int(point[1]) for point in points]
+    return [min(xs), max(xs), min(ys), max(ys)]

@@ -142,7 +142,7 @@ class SimulatedCurrency(CurrencyUtils):
         super ().__init__ (speed)
         key_mouse_manager.set_config (config)
         # 设置屏幕参数以支持坐标转换
-        key_mouse_manager.set_screen_params (self.x1, self.y1, self.xx, self.yy, self.full)
+        key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
         # 普通位面选择、立即奖励和延迟奖励的状态
         self.investment_tracker = InvestmentSelectionTracker()
         self.run_history = CurrencyRunHistory()
@@ -336,7 +336,7 @@ class SimulatedCurrency(CurrencyUtils):
                 f"尚未识别到难度1，执行第{attempt + 1}/"
                 f"{self.DIFFICULTY_MAX_STEPS}次向下选择"
             )
-            key_mouse_manager.click(*self.DIFFICULTY_DOWN_POSITION)
+            key_mouse_manager.click_point(*self.DIFFICULTY_DOWN_POSITION)
             key_mouse_manager.wait()
 
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
@@ -362,7 +362,7 @@ class SimulatedCurrency(CurrencyUtils):
             return True
 
         key_mouse_manager.clean()
-        key_mouse_manager.click(1692, 965, force=True) # “开始对局”按钮坐标
+        key_mouse_manager.click_point(1692, 965, force=True) # “开始对局”按钮坐标
         key_mouse_manager.wait()
         self.exit_plane = self.set_exit_plane
         self.prior_environment_found = False
@@ -397,7 +397,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         if not matched and not self.has_fresh:
             CUS_LOGGER.info ("未匹配到必选环境，点击刷新按钮")
-            key_mouse_manager.click (672, 984)  # 刷新按钮坐标
+            key_mouse_manager.click_point(672, 984)  # 刷新按钮坐标
             key_mouse_manager.wait()
             self.has_fresh=True
             return
@@ -436,7 +436,7 @@ class SimulatedCurrency(CurrencyUtils):
             centers.append((cx, cy))
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
-        key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
+        key_mouse_manager.click_point(*centers[selected_idx], box=boxes[selected_idx])
         key_mouse_manager.wait()
 
         self._confirm_environment_selection()
@@ -482,7 +482,7 @@ class SimulatedCurrency(CurrencyUtils):
     def _confirm_environment_selection(self):
         # 普通环境与蓝海额外环境的确认按钮位置相同。
         box = self.ENVIRONMENT_CONFIRM_BOX
-        key_mouse_manager.click((box[0] + box[1]) // 2, (box[2] + box[3]) // 2)
+        key_mouse_manager.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2, box=box)
         key_mouse_manager.wait()
 
     def _select_blue_ocean_extra_environment(self, max_attempts=6):
@@ -516,7 +516,7 @@ class SimulatedCurrency(CurrencyUtils):
 
             self._apply_environment_effects([selected_text])
 
-            key_mouse_manager.click(*centers[selected_idx])
+            key_mouse_manager.click_point(*centers[selected_idx], box=self.ENVIR_BOXES[selected_idx])
             key_mouse_manager.wait()
             self._confirm_environment_selection()
 
@@ -545,7 +545,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         for attempt in range(max_attempts):
             for idx in pending:
-                key_mouse_manager.click(*self.BLESS_REFRESH_POSITIONS[idx])
+                key_mouse_manager.click_point(*self.BLESS_REFRESH_POSITIONS[idx])
                 key_mouse_manager.wait()
 
             self.ts.forward(self.get_screen())
@@ -650,7 +650,7 @@ class SimulatedCurrency(CurrencyUtils):
                 f"检测到{special_investment}：登记1次立即奖励和下一边界1次延迟奖励"
             )
 
-        key_mouse_manager.click (centers[selected_idx][0], centers[selected_idx][1])
+        key_mouse_manager.click_point(*centers[selected_idx], box=boxes[selected_idx])
 
         self.click_text (text = "确认", box = [948, 1005, 968, 999], click = True)
         CUS_LOGGER.info ("投资策略选择完成")
@@ -799,7 +799,7 @@ class SimulatedCurrency(CurrencyUtils):
             "前台" if move.area == "front" else "后台", move.target + 1,
             "补位" if move.outgoing is None else "替换",
         )
-        key_mouse_manager.drag(
+        key_mouse_manager.drag_point(
             (source[0] + source[1]) // 2, (source[2] + source[3]) // 2,
             (target[0] + target[1]) // 2, (target[2] + target[3]) // 2,
         )
@@ -827,7 +827,7 @@ class SimulatedCurrency(CurrencyUtils):
 
     def start_battle(self):
         """仅在可出战状态点击出战，等待输入完成后进入战斗状态。"""
-        key_mouse_manager.click(1818, 750)
+        key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
         self.update_state("startbattle")
         return 1
@@ -885,7 +885,7 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("当前处于战斗中，按 ESC 并点击撤退")
             key_mouse_manager.press("esc")
             key_mouse_manager.wait()
-            key_mouse_manager.click(1223, 985) # 点击撤退
+            key_mouse_manager.click_point(1223, 985) # 点击撤退
             key_mouse_manager.wait()
             self.ts.forward(self.get_screen())
 

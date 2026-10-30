@@ -133,10 +133,10 @@ def main(show):
             print(pos)
             if pos:
                 print(960 - pos[0][0])
-                key_mouse_manager.mouse_move((pos[0][0]-960)/16.5)
+                key_mouse_manager.turn((pos[0][0]-960)/16.5)
                 key_mouse_manager.wait()
                 break
-            key_mouse_manager.mouse_move(-k)
+            key_mouse_manager.turn(-k)
             key_mouse_manager.wait()
         key_mouse_manager.stop()
         input("请按任意键继续...")

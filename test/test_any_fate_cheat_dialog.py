@@ -35,12 +35,8 @@ load_all_images_from_directory(str(ROOT / "resource" / "imgs"))
 from core.any_fate.engine import AnyFateUniverse
 
 
-def mirror(point, xx=1920, yy=1080):
-    """真实像素坐标 → 点击用的镜像比例坐标（和 click_event_option 的换算一致）。"""
-    return 1 - point[0] / xx, 1 - point[1] / yy
-
-
 def center(box):
+    """OCR 文本框 [左,右,上,下] 的中心，即引擎点击的 1920x1080 像素坐标。"""
     return (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
 
 
@@ -98,12 +94,12 @@ class _StubCheatEngine(AnyFateUniverse):
     def get_screen(self):
         screen = np.zeros((self.yy, self.xx, 3), dtype=np.uint8)
         if self.selected_box is not None:
-            # 行卡片左右边界，和引擎里判定高亮时用的数值一致
-            left, right = [int(value * self.xx / 1920) for value in (470, 1450)]
+            # 行卡片左右边界，和引擎里判定高亮时用的数值一致（1920x1080 像素）
+            left, right = 470, 1450
             right = left + max(int((right - left) * self.highlight_fraction), 1)
             title_top = self.selected_box[2]
-            top = max(int(title_top - 8 * self.yy / 1080), 0)
-            bottom = max(int(title_top + 88 * self.yy / 1080), 0)
+            top = max(title_top - 8, 0)
+            bottom = title_top + 88
             # BGR；换算成 HSV 落在引擎判定的紫色区间里
             screen[top:bottom, left:right] = (200, 80, 120)
         self.screen = screen
@@ -120,11 +116,11 @@ class _StubCheatEngine(AnyFateUniverse):
 
     def _ocr(self, box=None, **kwargs):
         box = box or [0, self.xx, 0, self.yy]
-        if box == self.scaled_box([420, 1500, 240, 960]):
+        if box == [420, 1500, 240, 960]:
             # 先取当前帧再推进：否则第 0 帧永远用不到
             items = self._frame_lines()
             self.frame_index += 1
-        elif box == self.scaled_box([900, 1520, 700, 1030]):
+        elif box == [900, 1520, 700, 1030]:
             items = self._confirm_lines()
         else:
             items = []
@@ -154,23 +150,24 @@ class _StubCheatEngine(AnyFateUniverse):
         return rows
 
     def _click(self, x, y):
+        # click_point 收到的已经是 1920x1080 像素坐标，直接拿来和 OCR 框比对
         self.clicks.append((round(x, 6), round(y, 6)))
-        px, py = (1 - x) * self.xx, (1 - y) * self.yy
         for item in self._confirm_lines():
-            if self._near_point(px, py, item["box"]):
+            if self._near_point(x, y, item["box"]):
                 self.confirm_clicks += 1
                 if self.confirm_closes_after and self.confirm_clicks >= self.confirm_closes_after:
                     self.dialog_open = False
                 return
         for item in self._all_rows():
-            if self._near_point(px, py, item["box"]):
+            if self._near_point(x, y, item["box"]):
                 self.select_attempts += 1
                 if self.select_works and self.select_attempts > self.select_works_after:
                     self.selected_box = item["box"]
                 return
 
-    def _scroll(self, direct, x=0.5, y=0.5):
-        self.scrolls.append((direct, round((1 - x) * self.xx), round((1 - y) * self.yy)))
+    def _scroll(self, direct, x, y):
+        # scroll_point 的落点同样是 1920x1080 像素坐标
+        self.scrolls.append((direct, x, y))
 
     def _press(self, key, *args, **kwargs):
         self.presses.append(key)
@@ -179,8 +176,9 @@ class _StubCheatEngine(AnyFateUniverse):
 class CheatDialogTest(unittest.TestCase):
     def setUp(self):
         self.manager = Mock()
-        self.manager.click.side_effect = lambda x, y: self.engine._click(x, y)
-        self.manager.scroll.side_effect = lambda direct, x=0.5, y=0.5: self.engine._scroll(direct, x, y)
+        # 内核已统一改用 *_point 接口（1920x1080 像素坐标），替身与断言都跟着迁过来
+        self.manager.click_point.side_effect = lambda x, y, **kwargs: self.engine._click(x, y)
+        self.manager.scroll_point.side_effect = lambda x, y, direct=1: self.engine._scroll(direct, x, y)
         self.manager.press.side_effect = lambda key, *a, **k: self.engine._press(key)
         self.manager.wait = Mock()
         self.manager.sleep = Mock()
@@ -197,7 +195,8 @@ class CheatDialogTest(unittest.TestCase):
     def assertClicked(self, *boxes):
         self.assertEqual(len(self.engine.clicks), len(boxes))
         for clicked, box in zip(self.engine.clicks, boxes):
-            expected = mirror(center(box))
+            # 引擎点的就是 OCR 文本框中心的像素坐标，不再经过镜像比例换算
+            expected = center(box)
             self.assertAlmostEqual(clicked[0], expected[0], places=6)
             self.assertAlmostEqual(clicked[1], expected[1], places=6)
 
@@ -291,13 +290,12 @@ class SelectCheatOptionTest(CheatDialogTest):
             [[GUIXIN_TITLE], [GUIXIN_TITLE]] + [[CIHUAI_TITLE, CIHUAI_DESC]] * 7, dialog_open=True)
         self.assertEqual(engine.select_cheat_option(("慈怀",)), CIHUAI_TITLE["raw_text"])
         self.assertEqual(len(engine.scrolls), 2)
-        left, right, top, bottom = engine.scaled_box([420, 1500, 240, 960])
+        left, right, top, bottom = [420, 1500, 240, 960]
         for direct, x, y in engine.scrolls:
             # 一次滚 15 格约三行，方向只能往下
             self.assertEqual(direct, -15)
-            # 滚轮落在列表区域中间，不是屏幕中心
-            self.assertAlmostEqual(x, (left + right) / 2)
-            self.assertAlmostEqual(y, (top + bottom) / 2)
+            # 滚轮落在列表区域中间（引擎里用 //2 取整成像素），不是屏幕中心
+            self.assertEqual((x, y), ((left + right) // 2, (top + bottom) // 2))
         self.assertClicked(CIHUAI_TITLE["box"])
 
     def test_skip_first_ocr_scrolls_before_the_first_recognition(self):
@@ -333,7 +331,7 @@ class SelectCheatOptionTest(CheatDialogTest):
         self.assertIsNone(engine.select_cheat_option(("慈怀",)))
         self.assertEqual(len(engine.clicks), 5)
         for clicked in engine.clicks:
-            expected = mirror(center(CIHUAI_TITLE["box"]))
+            expected = center(CIHUAI_TITLE["box"])
             self.assertAlmostEqual(clicked[0], expected[0], places=6)
             self.assertAlmostEqual(clicked[1], expected[1], places=6)
         # 目标行一屏就认到了，所以一次都不滚
@@ -395,7 +393,7 @@ class ConfirmCheatDialogTest(CheatDialogTest):
         self.assertTrue(engine.confirm_cheat_dialog())
         self.assertEqual(len(engine.clicks), 1)
         clicked = engine.clicks[0]
-        expected = mirror(center(CONFIRM["box"]))
+        expected = center(CONFIRM["box"])
         self.assertAlmostEqual(clicked[0], expected[0], places=6)
         self.assertAlmostEqual(clicked[1], expected[1], places=6)
 

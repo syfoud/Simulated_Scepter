@@ -38,15 +38,21 @@ class CurrencyInteractionTests(unittest.TestCase):
                 currency.update_state = Mock()
                 manager.reset_mock()
 
-                # 第一帧：没刷出必选 → 点一次刷新就返回，不改状态、不选卡
+                # 第一帧：没刷出必选 → 点一次刷新就返回，不改状态、不选卡。
+                # 刷新按钮是 1920x1080 像素坐标，内核用 click_point 原样传出。
                 self.assertIsNone(currency.select_envir())
                 self.assertTrue(currency.has_fresh)
-                self.assertEqual(manager.click.call_args, call(672, 984))
+                self.assertEqual(manager.click_point.call_args, call(672, 984))
                 currency.update_state.assert_not_called()
 
-                # 第二帧：刷新过仍未命中必选 → 按优先级组兜底选卡
+                # 第二帧：刷新过仍未命中必选 → 按优先级组兜底选卡。
+                # 先点选中的环境（ENVIR_BOXES[0] 中心 438,394），再点确认按钮（1080,982），
+                # 两次都走 click_point；选卡那一次会带上来源框，方便日志核对落点。
                 self.assertEqual(currency.select_envir(), 1)
-                self.assertEqual(manager.click.call_args, call(438, 394))
+                self.assertIn(
+                    call(438, 394, box=currency.ENVIR_BOXES[0]),
+                    manager.click_point.call_args_list,
+                )
                 currency.update_state.assert_called_once_with("1-1")
 
     @patch("core.currency.automation.time.sleep")
@@ -60,9 +66,16 @@ class CurrencyInteractionTests(unittest.TestCase):
 
         self.assertTrue(currency._select_blue_ocean_extra_environment())
 
+        # 只点唯一那张卡（ENVIR_BOXES[1] 中心 957,394），再点确认按钮（1080,982）；
+        # 坐标都是 1920x1080 像素，内核用 click_point 原样传出，并带上来源框。
         self.assertEqual(
             manager.mock_calls,
-            [call.click(957, 394), call.wait(), call.click(1080, 982), call.wait()],
+            [
+                call.click_point(957, 394, box=currency.ENVIR_BOXES[1]),
+                call.wait(),
+                call.click_point(1080, 982, box=currency.ENVIRONMENT_CONFIRM_BOX),
+                call.wait(),
+            ],
         )
         currency.click_text.assert_called_once_with(
             text="投资环境",
@@ -82,7 +95,7 @@ class CurrencyInteractionTests(unittest.TestCase):
 
         self.assertFalse(currency._select_blue_ocean_extra_environment(max_attempts=2))
 
-        manager.click.assert_not_called()
+        manager.click_point.assert_not_called()
 
     @patch("core.currency.automation.time.sleep")
     @patch("core.currency.automation.key_mouse_manager")
@@ -147,8 +160,10 @@ class CurrencyInteractionTests(unittest.TestCase):
         result = currency._refresh_investment_options(["旧左", "旧中", "旧右"])
 
         self.assertEqual(result, ["新左", "新中", "新右"])
+        # 三个刷新按钮的坐标来自 BLESS_REFRESH_POSITIONS（1920x1080 像素），
+        # 第一轮三个都点，第二轮只重试文字没变的中间那个，故共 4 次 click_point。
         self.assertEqual(
-            manager.click.call_args_list,
+            manager.click_point.call_args_list,
             [
                 call(384, 869),
                 call(868, 869),

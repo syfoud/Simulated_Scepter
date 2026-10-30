@@ -32,7 +32,7 @@
         "name": "自动战斗检测",
         "trigger":{
             "photo": "auto_battle",
-            "pos": {"x":0.988,"y":0.1028},
+            "pos": {"x":23,"y":969},
             "threshold":0.985
         },
         "actions":
@@ -44,7 +44,7 @@
         "name": "战斗状态检测",
         "trigger":{
             "photo": "battle",
-            "pos": {"x":0.9594,"y":0.9778},
+            "pos": {"x":78,"y":24},
             "threshold":0.97
         },
         "actions":
@@ -70,7 +70,7 @@
         "name": "自动战斗检测II",
         "trigger":{
             "photo": "auto_2",
-            "pos": {"x":0.988,"y":0.1028},
+            "pos": {"x":23,"y":969},
             "threshold":0.985
         },
         "actions":
@@ -522,7 +522,7 @@
                 "scroll": -10
             },
            {
-                "drag": [0.5,0.1520,0.5,0.8620]
+                "drag": [960, 916, 960, 149]
             }
         ]
     },
@@ -552,7 +552,7 @@
         "actions":
         [
            {
-                "drag": [0.8521,0.5620,0.1521,0.5620]
+                "drag": [284, 473, 1628, 473]
             }
         ]
     },
@@ -574,7 +574,7 @@
         "name": "大世界",
         "trigger":{
             "photo": "smartphone",
-            "pos": {"x":0.9833,"y":0.9380},
+            "pos": {"x":32,"y":67},
             "threshold":0.96
         },
         "actions":
@@ -585,7 +585,7 @@
         "name": "可能处于模拟宇宙中",
         "trigger":{
             "photo": "big_world",
-            "pos": {"x":0.0620,"y":0.1287},
+            "pos": {"x":1801,"y":941},
             "threshold":0.98
         },
         "actions":

@@ -28,8 +28,7 @@ from core.common.engine import StateKernel
 from core.divergent.config import config
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER, print_exc
-from tool.log import my_print as print
-from tool.mask import MASK, crop_region, region_center
+from tool.mask import MASK, crop_region, quad_box, region_center_point
 from tool.public_ocr import merge_text
 from tool.screenshot import Screen
 from tool.utils.game_window import (
@@ -43,7 +42,6 @@ from tool.utils.game_window import (
     set_game_foreground,
 )
 from tool.utils.get_win_rect import get_window_rect
-from tool.utils.image_tool import find_image_by_name
 
 
 def notif(title, msg, cnt=None):
@@ -214,7 +212,7 @@ class UniverseUtils(StateKernel):
         else:
             self.press('sprint')
 
-    # example: self.wait_fig(lambda:self.check("strange", 0.9417, 0.9481), 1.4)
+    # example: self.wait_fig(lambda:self.check("strange",112,56), 1.4)
     def wait_fig(self, f, timeout=3):
         tm=time.time()
         while time.time()-tm<timeout:
@@ -226,36 +224,37 @@ class UniverseUtils(StateKernel):
 
     def use_it(self, x, y):
         if x != 1 or y != 1:
-            self.click((0.903 - 0.06 * (x - 1), 0.827 - 0.14 * (y - 1)))
+            # 消耗品网格：起点 (186.2, 186.8)，列间距 115.2px、行间距 151.2px
+            self.click_point(round(186.24 + 115.2 * (x - 1)), round(186.84 + 151.2 * (y - 1)))
             time.sleep(0.5)
         # 点击使用
-        self.click((0.154,0.088))
+        self.click_point(1624, 985)
         self.wait_fig(lambda:not self.click_text(text="确认",box=[1126, 1252, 716, 812],click=False,ocr_line=False,warning=False), 1.2)
         # 点击确认
-        self.click((0.386,0.294))
+        self.click_point(1179, 762)
         r = self.wait_fig(lambda:not self.click_text(text="替换同类",box=[816, 1006, 284, 380],click=False,warning=False), 0.8)
         if r:
             # 覆盖效果
-            self.click((0.386,0.294))
+            self.click_point(1179, 762)
 
     # 使用x排，y列的消耗品
     def use_consumable(self, x=1, y=1):
         self.press("inventory")
-        if self.wait_fig(lambda:not self.check("use_package",0.5182,0.9407), 3):
+        if self.wait_fig(lambda:not self.check("use_package",925,64), 3):
             time.sleep(0.4)
-            self.click((0.3677,0.0861))
+            self.click_point(1214, 987)
             time.sleep(0.4)
             self.get_screen()
-            if self.wait_fig(lambda:not self.check("use_star",0.8828,0.8648,threshold=0.9), 0.8):
+            if self.wait_fig(lambda:not self.check("use_star",225,146,threshold=0.9), 0.8):
                 self.use_it(x, y)
-                if self.wait_fig(lambda:not self.check("use_def",0.3198,0.0880), 2.2):
+                if self.wait_fig(lambda:not self.check("use_def",1306,985), 2.2):
                     time.sleep(0.4)
-                    self.click((0.3198,0.0880))
+                    self.click_point(1306, 985)
                     time.sleep(0.4)
                     self.get_screen()
-                    if self.wait_fig(lambda:not self.check("use_star",0.8828,0.8648,threshold=0.9), 0.6):
+                    if self.wait_fig(lambda:not self.check("use_star",225,146,threshold=0.9), 0.6):
                         self.use_it(x, y)
-                        self.wait_fig(lambda:not self.check("use_package",0.5182,0.9407), 2)
+                        self.wait_fig(lambda:not self.check("use_package",925,64), 2)
                         time.sleep(0.3)
                     self.press("esc")
             else:
@@ -266,30 +265,36 @@ class UniverseUtils(StateKernel):
                 if self.wait_fig(lambda:not self.isrun(), 3):
                     return
 
-    def get_point(self, x, y):
-        # 得到一个点的浮点表示
-        x = self.x1 - x
-        y = self.y1 - y
-        CUS_LOGGER.debug(f"获取到点：{x / self.xx:.4f},{y / self.yy:.4f}")
-
     def calc_point(self, point, offset):
         """
         把识别结果相对匹配中心的偏移换算成点击坐标
 
-        point：归一化坐标，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
+        point：1920x1080 像素坐标，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
         offset：识别结果相对匹配中心的像素偏移
         """
         if len(point) == 4:
-            point = region_center(point, self.xx, self.yy)
-        return point[0] - offset[0] / self.xx, point[1] - offset[1] / self.yy
+            point = region_center_point(point)
+        return point[0] + offset[0], point[1] + offset[1]
+
+    def click_point(self, x, y, box=None):
+        """按 1920x1080 像素坐标点击，并等点击真正生效后才返回。
+
+        差分宇宙的流程普遍是「点完立刻截屏判断结果」，而键鼠管理器是队列异步执行的，
+        所以这里必须等队列排空，否则会读到点击前的旧画面。
+        """
+        if self._stop != 0:
+            raise ValueError("正在退出")
+        key_mouse_manager.click_point(x, y, box=box)
+        key_mouse_manager.wait()
+        time.sleep(0.3)
 
     def click_box(self, box):
-        x = (box[0] + box[1]) / 2
-        y = (box[2] + box[3]) / 2
-        self.click((1 - x / self.xx, 1 - y / self.yy))
+        """点击坐标框 [x1, x2, y1, y2] 的中心。"""
+        self.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2, box=box)
 
-    def click_position(self, position):
-        self.click_box([position[0], position[0], position[1], position[1]])
+    def click_position(self, position, box=None):
+        """按 1920x1080 像素坐标 [x, y] 点击。"""
+        self.click_point(position[0], position[1], box=box)
 
     def click_text(self, text, delay=0, box=None, after_delay=0, click=True, find_all=False, warning=True,
                    ocr_line=True, need_fresh=True):
@@ -310,9 +315,10 @@ class UniverseUtils(StateKernel):
             match = self.ts.ocr_one_row(img, box)
             CUS_LOGGER.info(f"尝试匹配：{text}匹配结果：{match}")
             if len(match) and click:
-                key_mouse_manager.click(
+                self.click_point(
                     (box[0] + box[1]) // 2,
-                    (box[2] + box[3]) // 2
+                    (box[2] + box[3]) // 2,
+                    box=box
                 )
                 if after_delay:
                     time.sleep(after_delay)
@@ -320,9 +326,10 @@ class UniverseUtils(StateKernel):
         pt = self.ts.find_text(img, text, find_all)
         if pt is not None:
             if click:
-                key_mouse_manager.click(
-                    1 - (pt[0][0] + pt[1][0]) / 2 / self.xx,
-                    1 - (pt[0][1] + pt[2][1]) / 2 / self.yy
+                self.click_point(
+                    (pt[0][0] + pt[1][0]) / 2,
+                    (pt[0][1] + pt[2][1]) / 2,
+                    box=quad_box(pt)
                 )
             if after_delay:
                 time.sleep(after_delay)
@@ -393,158 +400,8 @@ class UniverseUtils(StateKernel):
             "max_loc": max_loc,
         }
 
-    # 计算匹配中心点坐标
-    def calculated(self, result, shape):
-        mat_top, mat_left = result["max_loc"]
-        prepared_height, prepared_width, prepared_channels = shape
-        x = int((mat_top + mat_top + prepared_width) / 2)
-        y = int((mat_left + mat_left + prepared_height) / 2)
-        return x, y
-
-    # 点击一个点
-    def click(self, points, click=1):
-        if self.debug == 2:
-            CUS_LOGGER.debug(f"Clicking point: {points}")
-        self.print_stack()
-        x, y = points
-        # 如果是浮点数表示，则计算实际坐标
-        if not isinstance(x, int):
-            x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
-        # 全屏模式会有一个偏移
-        if self.full:
-            x += 9
-            y += 9
-        if self._stop == 0:
-            win32api.SetCursorPos((x, y))
-            if click:
-                pyautogui.click()
-        else:
-            raise ValueError("正在退出")
-        time.sleep(0.3)
-
-    # 滚轮滚动
-    def scroll(self, points, clicks=1):
-        x, y = points
-        # 如果是浮点数表示，则计算实际坐标
-        if not isinstance(x, int):
-            x, y = self.x1 - int(x * self.xx), self.y1 - int(y * self.yy)
-        # 全屏模式会有一个偏移
-        if self.full:
-            x += 9
-            y += 9
-        if self._stop == 0:
-            win32api.SetCursorPos((x, y))
-            pyautogui.scroll(clicks)
-        else:
-            raise ValueError("正在退出")
-        time.sleep(0.3)
-
-    # 拖动
-    def drag(self, pt1, pt2):
-        x1, y1 = pt1
-        x1, y1 = self.x1 - int(x1 * self.xx), self.y1 - int(y1 * self.yy)
-        x2, y2 = pt2
-        x2, y2 = self.x1 - int(x2 * self.xx), self.y1 - int(y2 * self.yy)
-        # 全屏模式会有一个偏移
-        if self.full:
-            x1 += 9
-            y1 += 9
-            x2 += 9
-            y2 += 9
-        win32api.SetCursorPos((x1, y1))
-        time.sleep(0.2)
-        # pyautogui.mouseDown(button="primary", logScreenshot=False, _pause=False)
-        # time.sleep(0.3)
-        pyautogui.drag(x2 - x1, y2 - y1, 0.4)
-        time.sleep(0.3)
-
-    # 点击与模板匹配的点，flag=True表示必须匹配，不匹配就会一直寻找直到出现匹配
-    def click_target(self, target_path, threshold, flag=True,sub=True,click=False, mask_path=None, refine_mask_path=None, use_binary=False):
-        target = target_path
-        mask = None
-        refine_mask = None
-
-        if mask_path is not None:
-            mask = cv.imread(mask_path, cv.IMREAD_GRAYSCALE)
-
-        if refine_mask_path is not None:
-            refine_mask = cv.imread(refine_mask_path, cv.IMREAD_GRAYSCALE)
-
-        while True:
-            result = self.scan_screenshot(target, mask, refine_mask, use_binary)
-            if result["max_val"] > threshold:
-                CUS_LOGGER.info(f"匹配度{result['max_val']}")
-                points = self.calculated(result, target.shape)
-                self.get_point(*points)
-                CUS_LOGGER.info(f"target shape: {target.shape}")
-                if click:
-                    self.click(points)
-                return
-            if not flag:
-                return
-            elif sub:#降低阈值直到匹配到为止
-                threshold-=0.01
-
-    # 在截图中裁剪需要匹配的部分
-    def get_local(self, x, y, size, large=True):
-        sx, sy = size[0] + 60 * large, size[1] + 60 * large
-        bx, by = self.xx - int(x * self.xx), self.yy - int(y * self.yy)
-        return self.screen[
-            max(0, by - sx // 2) : min(self.yy, by + sx // 2),
-            max(0, bx - sy // 2) : min(self.xx, bx + sy // 2),
-            :,
-        ]
-
     def format_path(self, path):
         return f"resource/imgs/{path}.jpg"
-
-    def check(self, path, x=None, y=None, mask=None, threshold=None, fresh=False):
-        """判断截图中指定区域或匹配中心点附近是否存在匹配模板
-
-        path：匹配模板的路径，
-        x,y：匹配中心点，
-        mask：识别区域 [x1, x2, y1, y2]（见 tool/mask.py），给出时忽略 x,y，
-        threshold：匹配阈值
-        """
-        if fresh:
-            self.get_screen()
-        if threshold is None:
-            threshold = self.threshold
-        # 按名称查图像记忆切片，不拼接扩展名：模板中 jpg 与 png 混用
-        target = find_image_by_name(path)
-        if target is None:
-            # 模板名写错/文件缺失时直接判定为未匹配：否则 target.shape 会抛 AttributeError，
-            # 中断整个任务线程，且现场已无法判断是哪个模板名写错了
-            CUS_LOGGER.error(f"模板 {path} 不存在，本次匹配判定为未匹配")
-            return False
-        target = cv.resize(
-            target,
-            dsize=(int(self.scx * target.shape[1]), int(self.scx * target.shape[0])),
-        )
-        if mask is None:
-            center_x, center_y = x, y
-            local_screen = self.get_local(x, y, target.shape)
-        else:
-            center_x, center_y = region_center(mask, self.xx, self.yy)
-            local_screen = crop_region(self.screen, mask)
-        result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
-        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
-        self.tx = center_x - (max_loc[0] - 0.5 * local_screen.shape[1] + 0.5 * target.shape[1]) / self.xx
-        self.ty = center_y - (max_loc[1] - 0.5 * local_screen.shape[0] + 0.5 * target.shape[0]) / self.yy
-        if path == "./resource/imgs/run.jpg" and 0: # 此if被设置为无法触发，可能是调试代码
-            print(max_val)
-            cv.imwrite('target.jpg',target)
-            cv.imwrite('local.jpg',local_screen)
-            # print(self.tx,self.ty)
-            # print(x,y,max_loc,local_screen.shape)
-            # self.click((self.tx,self.ty),click=0)
-            # exit()
-        self.tm = max_val
-        if max_val > threshold:
-            if self.last_info != path:
-                CUS_LOGGER.info(f"匹配到图片 {path} 相似度 {max_val} 阈值 {threshold}")
-            self.last_info = path
-        return max_val > threshold
 
     def click_img(self, path, threshold=0.95):
         path = self.format_path(path)
@@ -553,7 +410,11 @@ class UniverseUtils(StateKernel):
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
         if max_val > threshold:
             x, y = max_loc
-            self.click_position((x + target.shape[1]//2, y + target.shape[0]//2))
+            # 全屏匹配的坐标就是绝对坐标，匹配框由匹配位置和模板尺寸组成
+            self.click_position(
+                (x + target.shape[1]//2, y + target.shape[0]//2),
+                box=[int(x), int(x + target.shape[1]), int(y), int(y + target.shape[0])]
+            )
             return 1
         return 0
 
@@ -573,7 +434,7 @@ class UniverseUtils(StateKernel):
 
     def get_end_point(self, mask=0):
         self.get_screen()
-        local_screen = self.get_local(0.4979, 0.6296, (715, 1399))
+        local_screen = self.get_local(964,400, (715, 1399))
         black = np.array([0, 0, 0])
         white = np.array([255, 255, 255])
         bw_map = np.zeros(local_screen.shape[:2], dtype=np.uint8)
@@ -616,30 +477,30 @@ class UniverseUtils(StateKernel):
             if dx is None:
                 for k in [60,120,60,60,30,-60,-60,-60,-60]:
                     if self.ang_neg:
-                        self.mouse_move(k)
+                        self.turn(k)
                         off -= k
                     else:
-                        self.mouse_move(-k)
+                        self.turn(-k)
                         off += k
                     time.sleep(0.3)
                     dx = self.get_end_point()
                     if dx is not None:
                         break
                 if dx is None:
-                    self.mouse_move(off*1.03)
+                    self.turn(off*1.03)
                     time.sleep(0.3)
                     return 0
         if i == 0:
-            self.mouse_move(dx / 3)
+            self.turn(dx / 3)
             time.sleep(0.3)
         else:
-            self.mouse_move(dx / 5)
+            self.turn(dx / 5)
             time.sleep(0.3)
         if i == 0 and abs(dx / 3) > 30:
             time.sleep(0.3)
             dx = self.get_end_point(1)
             if dx is not None:
-                self.mouse_move(dx / 4)
+                self.turn(dx / 4)
                 time.sleep(0.3)
         return 1
 
@@ -665,7 +526,7 @@ class UniverseUtils(StateKernel):
     def exist_minimap(self):
         self.get_screen()
         shape = (int(self.scx * 190), int(self.scx * 190))
-        local_screen = self.get_local(0.9333, 0.8657, shape)
+        local_screen = self.get_local(128,145, shape)
         blue = np.array([234, 191, 4])
         local_screen[np.sum(np.abs(local_screen - blue), axis=-1) <= 50] = blue
         self.loc_scr = local_screen
@@ -761,7 +622,7 @@ class UniverseUtils(StateKernel):
             if self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
                 return None
         if local_screen is None:
-            local_screen = self.get_local(0.9333, 0.8657, shape)
+            local_screen = self.get_local(128,145, shape)
         bw_map = np.zeros(local_screen.shape[:2], dtype=np.uint8)
         # 灰块、白线：小地图中的可移动区域、可移动区域的边缘
         # b_map：当前像素点是否是灰块。只允许灰块附近（2像素）的像素被识别为白线
@@ -837,7 +698,7 @@ class UniverseUtils(StateKernel):
         while time.time()-tm<5 and not self.floor_init:
             self.get_screen()
             for i in range(12, -1, -1):
-                if self.check("floor/ff" + str(i + 1), 0.0589, 0.8796):
+                if self.check("floor/ff" + str(i + 1),1807,130):
                     self.floor = i
                     CUS_LOGGER.info(f"当前层数：{i + 1}")
                     self.floor_init = 1
@@ -881,7 +742,7 @@ class UniverseUtils(StateKernel):
         threshold = 0.88
         shape = (int(self.scx * 190), int(self.scx * 190))
         curloc = (118 + 2, 125 + 2)
-        local_screen = self.get_local(0.9333, 0.8657, shape)
+        local_screen = self.get_local(128,145, shape)
         target = ((-1, -1), 0)
         nearest = (-1, -1)
         minicon = cv.imread(self.format_path("mini" + str(ii + 1)))
@@ -936,7 +797,7 @@ class UniverseUtils(StateKernel):
             if ii == 0:
                 sub = 0
             if not self.stop_move:
-                self.mouse_move(sub)
+                self.turn(sub)
                 return sub
             else:
                 return 0
@@ -1008,7 +869,7 @@ class UniverseUtils(StateKernel):
         if self.find == 1:
             self.press("move_w", 0.2)
         self.get_screen()
-        local_screen = self.get_local(0.9333, 0.8657, shape)
+        local_screen = self.get_local(128,145, shape)
         # 录图模式，将小地图覆盖到录制的大地图中
         if self.find == 0:
             self.write_map(bw_map)
@@ -1018,7 +879,7 @@ class UniverseUtils(StateKernel):
             if self.now_map == '19787':
                 self.press("move_w",0.3)
                 self.get_screen()
-                local_screen = self.get_local(0.9333, 0.8657, shape)
+                local_screen = self.get_local(128,145, shape)
                 self.now_map = '19788'
             self.ang = 360 - self.get_now_direc(local_screen) - 90
             self.get_real_loc()
@@ -1042,7 +903,7 @@ class UniverseUtils(StateKernel):
                         self.target.remove(j)
                         CUS_LOGGER.info("removed:" + str(j))
                 return
-            self.mouse_move(sub)
+            self.turn(sub)
             self.ang = ang
             ps = [13,9 + self.quan*7,11,7]
             if self._stop == 0:
@@ -1083,7 +944,7 @@ class UniverseUtils(StateKernel):
                     sub += 360
                 while sub > 180:
                     sub -= 360
-                self.mouse_move(sub)
+                self.turn(sub)
                 self.ang = ang
                 if self.debug:
                     self.big_map[
@@ -1229,23 +1090,16 @@ class UniverseUtils(StateKernel):
         if not self._stop:
             keyops.keyDown("move_w")
 
-    # 视角转动x度
-    def mouse_move(self, x, fine=1):
-        if x > 30 // fine:
-            y = 30 // fine
-        elif x < -30 // fine:
-            y = -30 // fine
-        else:
-            y = x
-        dx = int(16.5 * y * self.multi * self.scale)
-        if self._stop == 0 and self.stop_move == 0:
-            win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, 0)  # 进行视角移动
-        time.sleep(0.05 * fine)
-        if x != y:
-            if self._stop == 0:
-                self.mouse_move(x - y, fine)
-            else:
-                raise ValueError("正在退出")
+    # 视角转动 degrees 度（正数向右），同步等待转动生效
+    def turn(self, degrees, fine=1):
+        if self.stop_move:
+            # 地图寻路期间不允许动视角；仍保留一点等待，避免调用方变成忙循环
+            time.sleep(0.05 * fine)
+            return
+        if self._stop != 0:
+            raise ValueError("正在退出")
+        key_mouse_manager.turn(degrees, fine)
+        key_mouse_manager.wait()
 
     # 在大地图中覆盖小地图
     def write_map(self, bw_map):
@@ -1449,7 +1303,7 @@ class UniverseUtils(StateKernel):
     def isrun(self):
         scr = self.screen
         shape = (int(self.scx * 12), int(self.scx * 12))
-        loc_scr = self.get_local(0.9333, 0.8657, shape)
+        loc_scr = self.get_local(128,145, shape)
         hsv = cv.cvtColor(loc_scr, cv.COLOR_BGR2HSV)  # 转HSV
         lower = np.array([93, 120, 60])  # 90 改成120只剩箭头，但是角色移动过的印记会消失
         upper = np.array([97, 255, 255])
@@ -1458,7 +1312,7 @@ class UniverseUtils(StateKernel):
         scr_bak = deepcopy(scr)
         scr[np.min(scr,axis=-1)<=220]=[0,0,0]
         scr[np.min(scr,axis=-1)>220]=[255,255,255]
-        res = self.check('run',0.876,0.7815,threshold=0.91) and sum > 40000 and sum < 65000
+        res = self.check('run',238,236,threshold=0.91) and sum > 40000 and sum < 65000
         if self.tm>0.96:
             res = 1
         self.screen = deepcopy(scr_bak)
@@ -1472,7 +1326,7 @@ class UniverseUtils(StateKernel):
         self.ang_neg=self.ang_off<0
         if self.ang_off:
             time.sleep(0.6)
-            self.mouse_move(-self.ang_off*1.2)
+            self.turn(-self.ang_off*1.2)
             time.sleep(0.3)
             self.press("move_w",0.3)
         if self.mini_state==1 and self.floor in [4,8,11]:
@@ -1502,18 +1356,18 @@ class UniverseUtils(StateKernel):
                 if not self.check_bonus:
                     break
                 self.get_screen()
-                if self.check('bonus_c',0.2385,0.6685):
-                    self.click((0.4453,0.3250))
+                if self.check('bonus_c',1462,358):
+                    self.click_point(1065, 729)
                     time.sleep(1.5)
                     self.get_screen()
                     if self.click_text(text="储存沉浸器",box=[838, 1070, 298, 400],click=False,ocr_line=False,warning=False):
                         self.check_bonus = 0
-                    self.click((0.5062, 0.1454))
+                    self.click_point(948, 923)
                     time.sleep(1.4)
             keyops.keyUp("move_w")
             self.get_screen()
-            if self.check('bonus_c',0.2385,0.6685):
-                self.click((0.2385,0.6685))
+            if self.check('bonus_c',1462,358):
+                self.click_point(1462, 358)
             self.mini_state+=2
             if self.floor==12:
                 return
@@ -1576,7 +1430,7 @@ class UniverseUtils(StateKernel):
                         self.stop_move=1
                         self.mini_state+=2
                         return
-                if self.check("auto_2", 0.0583, 0.0769):
+                if self.check("auto_2",1808,997):
                     keyops.keyUp("move_w")
                     self.stop_move=1
                     self.mini_state+=2
@@ -1697,13 +1551,13 @@ class UniverseUtils(StateKernel):
                 img_down = crop_region(self.screen, MASK["bless_path"])
                 res_down = self.ts.split_and_find([self.fate], img_down, mode="bless")
                 if res_up[1] == 2:
-                    self.click(self.calc_point(MASK["bless_name"], res_up[0]))
+                    self.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
                     chose = 1
                 elif res_down[1] == 2:
-                    self.click(self.calc_point(MASK["bless_path"], res_down[0]))
+                    self.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
                     chose = 1
                 if not chose:
-                    self.click((0.2990, 0.1046))
+                    self.click_point(1346, 967)
                     time.sleep(1.2)
             # 未匹配到优先祝福，刷新祝福并再次匹配
             if not chose:
@@ -1724,13 +1578,13 @@ class UniverseUtils(StateKernel):
                     self.tk.secondary, img_down, mode="bless"
                 )
                 if res_up[1] == 2:
-                    self.click(self.calc_point(MASK["bless_name"], res_up[0]))
+                    self.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
                 elif res_down[1] >= 2:
-                    self.click(self.calc_point(MASK["bless_path"], res_down[0]))
+                    self.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
                 else:
-                    self.click(self.calc_point(MASK["bless_name"], res_up[0]))
+                    self.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
                 time.sleep(0.5)
-            self.click((0.1203, 0.1093))
+            self.click_point(1689, 962)
             time.sleep(1.7)
             self.get_screen()
             if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
