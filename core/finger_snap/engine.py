@@ -93,7 +93,7 @@ class FingerSnap(AnyFateUniverse):
         CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}，本轮是否遇到阮梅其二{self.ruanmei2}")
         self.recorder.stop_recording(need_del)
     def select_fate(self):
-        self.click_text(text="丰饶", box=[824, 877, 784, 814])
+        self.click_text(text="丰饶", box=[824, 784, 877, 814])
     def update_count(self, read=True):
         """
         更新或读取弹指模块的计数器值（使用 count.txt 的第二行）
@@ -155,10 +155,10 @@ class FingerSnap(AnyFateUniverse):
             CUS_LOGGER.info("恭喜，您获得了弹指一挥！")
 
     def select_doing(self):
-        text = self.ts.find_with_box(box=[557, 747, 447, 474], forward=True, re_screen=False)
+        text = self.ts.find_with_box(box=[557, 447, 747, 474], forward=True, re_screen=False)
         text = merge_text(text) if len(text) else ""
         CUS_LOGGER.debug(f"当前效果{text}")
-        if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996], click=False, allow_fail=True):
+        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996], click=False, allow_fail=True):
             CUS_LOGGER.info("要,用爱。。铭记我。。。")
             return
         upstream_target_ready = (
@@ -233,8 +233,8 @@ class FingerSnap(AnyFateUniverse):
         key_mouse_manager.clean()
         key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
-        if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996],click=False,allow_fail=True):
-            if self.click_text(text="点击空白处关闭", box=[876, 1047, 1008, 1035],click=False,allow_fail=True):
+        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996],click=False,allow_fail=True):
+            if self.click_text(text="点击空白处关闭", box=[876, 1008, 1047, 1035],click=False,allow_fail=True):
                 key_mouse_manager.wait()
                 return
             if not self.try_analysis_map(mode=2):
@@ -249,7 +249,7 @@ class FingerSnap(AnyFateUniverse):
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
                 key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
-                self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+                self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
                 self.countdown = self.countdown_agent.apply_path(selected_idx).countdown
                 if self.area and self.now_map != -1:
                     visit_count = self.record_map_visit(self.now_map)
@@ -257,7 +257,7 @@ class FingerSnap(AnyFateUniverse):
             else:
                 CUS_LOGGER.error("未找到下一步路径点")
         else:
-            self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+            self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
         # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
         # 而它通常已被上一节点消费掉，这里必须自己清
         self.area = ""
@@ -267,11 +267,11 @@ class FingerSnap(AnyFateUniverse):
             CUS_LOGGER.error("本功能为实验性功能，当前仅供开发人员测试，现已终止程序")
             return self.stop()
         key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[10, 220, 0, 112],click=False,warning=False):
+        if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[10, 220, 0, 112],click=False,warning=False):
+        elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=2
-        elif self.click_text(text="消褪",box=[10, 220, 0, 112],click=False,warning=False):
+        elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=3
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
@@ -279,7 +279,7 @@ class FingerSnap(AnyFateUniverse):
         self.try_analysis_map(1)
         self.save_screen(save_path=os.path.join(PATHS["temp"], "map"))
         for _ in range(5):
-            self.click_text(text="进入位面", box=[907, 1009, 857, 891])
+            self.click_text(text="进入位面", box=[907, 857, 1009, 891])
             self.node_count = 0
             self.new_node = True
             # 切换位面时没有重投界面出现，需清空区域名缓存
@@ -314,7 +314,7 @@ class FingerSnap(AnyFateUniverse):
             matches = match_multiple_targets(image, mode)
             CUS_LOGGER.debug(f"当前模式{mode},找到 {len(matches)} 个匹配")
             if not matches:
-                self.click_text(text="点击空白处关闭", box=[875, 1047, 776, 807])
+                self.click_text(text="点击空白处关闭", box=[875, 776, 1047, 807])
                 CUS_LOGGER.warning("未匹配到任何地图图标却错误进入寻路阶段，可能是误识别")
                 CUS_LOGGER.warning("刷新截图缓冲区后最后一次尝试匹配地图图标")
                 image = self.get_screen()
@@ -461,9 +461,9 @@ class FingerSnap(AnyFateUniverse):
             countdown=self.countdown, cheat=self._cheat_count,
             reroll=self._reroll_count)
         if not self.check("fast_roll",1674,100, threshold=0.9):
-            self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
+            self.click_text(text="快速投掷", box=[1700, 80, 1823, 117])
         found = self.ts.find_with_box(
-            box=[1339, 1576, 429, 464], forward=True, re_screen=False)
+            box=[1339, 429, 1576, 464], forward=True, re_screen=False)
         text = merge_text(found) if found else ""
         observed = parse_effect_text(text)
         parsed = EFFECT_NAMES.get(observed, "未识别")
@@ -477,7 +477,7 @@ class FingerSnap(AnyFateUniverse):
             if observed == pending_effect:
                 self._pending_cheat_effect = None
                 CUS_LOGGER.debug(f"作弊效果“{EFFECT_NAMES[pending_effect]}”已回显，直接确认，不重复决策")
-                self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
+                self.click_text(text="确认效果", box=[1584, 961, 1687, 994])
                 self.init_map()
                 self.mini_state = 1
                 return
@@ -490,7 +490,7 @@ class FingerSnap(AnyFateUniverse):
                 CUS_LOGGER.warning(f"作弊效果回显不一致：预期“{expected}”，实际“{actual}”，作弊次数还剩{self._cheat_count}次，重新选择")
                 self.countdown_agent.locked_effect = pending_effect
                 self._cheat_confirmed_effect = None
-                if self.click_text(text="作弊", box=[1261, 1321, 761, 792], allow_fail=True):
+                if self.click_text(text="作弊", box=[1261, 761, 1321, 792], allow_fail=True):
                     self._cheat_requested_effect = pending_effect
                     self._cheat_requested_at = time.time()
                 return
@@ -499,7 +499,7 @@ class FingerSnap(AnyFateUniverse):
             self.countdown_agent.locked_effect = None
         if observed is None:
             CUS_LOGGER.warning("无法确认骰子效果，本次不消耗资源并按无效果继续")
-            self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
+            self.click_text(text="确认效果", box=[1584, 961, 1687, 994])
             self.countdown_agent.apply_effect_action(EFFECT_NOTHING, "keep")
             self.init_map()
             self.mini_state = 1
@@ -528,13 +528,13 @@ class FingerSnap(AnyFateUniverse):
                     action = "keep"
         if action == "reroll":
             self._pending_cheat_effect = None
-            self.click_text(text="重投", box=[1599, 1657, 760, 795])
+            self.click_text(text="重投", box=[1599, 760, 1657, 795])
             self.countdown_agent.apply_effect_action(observed, action)
             self._reroll_count = self.countdown_agent.state.reroll_rem
             return
         if isinstance(action, tuple) and action[0] == "cheat":
             target_name = EFFECT_NAMES.get(action[1], action[1])
-            if not self.click_text(text="作弊", box=[1261, 1321, 761, 792], allow_fail=True):
+            if not self.click_text(text="作弊", box=[1261, 761, 1321, 792], allow_fail=True):
                 CUS_LOGGER.warning(f"没点到「作弊」按钮（当前骰面效果：{parsed}，目标效果：{target_name}），等下一轮重新决策")
                 return
             # 「作弊」按钮点下去后窗口约 0.3 s 弹出，这里记完账就回主循环：
@@ -549,7 +549,7 @@ class FingerSnap(AnyFateUniverse):
             self._cheat_count = self.countdown_agent.state.cheat_rem
             return
 
-        self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
+        self.click_text(text="确认效果", box=[1584, 961, 1687, 994])
         self.countdown_agent.apply_effect_action(observed, action)
         self.init_map()
         self.mini_state = 1
@@ -612,7 +612,7 @@ class FingerSnap(AnyFateUniverse):
             # 效果与目标界面按原流程收尾；路径界面继续完成选路。
             # 只有回到 normal 主界面后，才由既有结束流程按 Esc 并暂离。
             if advice.context.phase == PHASE_EFFECT:
-                self.click_text(text="确认效果", box=[1584, 1687, 961, 994], allow_fail=True)
+                self.click_text(text="确认效果", box=[1584, 961, 1687, 994], allow_fail=True)
             elif advice.context.phase == PHASE_TARGET:
                 self.abandon_confirm(confirm=True, allow_fail=True)
             else:

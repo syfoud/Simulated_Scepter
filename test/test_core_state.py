@@ -12,7 +12,7 @@ class StateKernelTests(unittest.TestCase):
         self.kernel = StateKernel()
         self.kernel.get_screen = Mock(return_value=255)
         self.kernel.ts = Mock()
-        self.kernel.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [0, 1, 0, 1]}]
+        self.kernel.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [0, 0, 1, 1]}]
         self.kernel.check = Mock(return_value=True)
         self.kernel.click_target = Mock(return_value=True)
         self.kernel.click_box = Mock()
@@ -31,7 +31,7 @@ class StateKernelTests(unittest.TestCase):
         self.assertEqual(self.kernel.last_update_time, 20)
 
     def test_text_and_image_triggers_update_state_and_keep_result_contract(self):
-        for trigger in ({"text": "确认", "box": [0, 1, 0, 1]},
+        for trigger in ({"text": "确认", "box": [0, 0, 1, 1]},
                         {"photo": "button", "pos": {"x": 1, "y": 2}},
                         {"state_only": True, "condition": "done"}):
             with self.subTest(trigger=trigger):
@@ -39,19 +39,19 @@ class StateKernelTests(unittest.TestCase):
                 self.assertEqual(self.kernel.state, "done")
 
     def test_wrong_state_and_unmatched_screen_do_not_execute_actions(self):
-        actions = self.actions(text="确认", box=[0, 1, 0, 1], condition="battle")
+        actions = self.actions(text="确认", box=[0, 0, 1, 1], condition="battle")
         self.assertEqual(self.kernel.run_static(json_file=actions), ("", 0))
         self.assertIsNone(self.kernel.state)
         self.kernel.ts.find_with_box.return_value = []
-        self.assertEqual(self.kernel.run_static(json_file=self.actions(text="确认", box=[0, 1, 0, 1])), ("", 0))
+        self.assertEqual(self.kernel.run_static(json_file=self.actions(text="确认", box=[0, 0, 1, 1])), ("", 0))
 
     def test_once_event_rearms_only_after_trigger_disappears(self):
-        actions = self.actions(text="确认", box=[0, 1, 0, 1], once=True)
+        actions = self.actions(text="确认", box=[0, 0, 1, 1], once=True)
         self.assertEqual(self.kernel.run_static(json_file=actions), ("确认窗口", 1))
         self.assertEqual(self.kernel.run_static(json_file=actions), ("", 0))
         self.kernel.ts.find_with_box.return_value = []
         self.assertEqual(self.kernel.run_static(json_file=actions), ("", 0))
-        self.kernel.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [0, 1, 0, 1]}]
+        self.kernel.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [0, 0, 1, 1]}]
         self.assertEqual(self.kernel.run_static(json_file=actions), ("确认窗口", 1))
 
     def test_interval_blocks_duplicate_actions_and_history_is_limited(self):

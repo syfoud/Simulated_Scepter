@@ -73,7 +73,7 @@ class BaseModeSettlementWiringTest(unittest.TestCase):
         self.assertEqual(event["name"], "结算界面")
         self.assertEqual(event["actions"], ["settle_university"])
         self.assertEqual(event["trigger"]["text"], "来自黑塔的分析报告")
-        self.assertEqual(event["trigger"]["box"], [716, 1013, 217, 252])
+        self.assertEqual(event["trigger"]["box"], [716, 217, 1013, 252])
 
     def test_report_screen_is_matched_before_the_blank_click_events(self):
         """run_static 每轮只执行第一个命中事件：结算界面必须排在点击空白类事件之前。"""

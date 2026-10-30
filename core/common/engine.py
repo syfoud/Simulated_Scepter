@@ -115,7 +115,7 @@ class StateKernel:
         if isinstance(action, str):
             return getattr(self, action)()
         if "text" in action:
-            text = self.ts.find_with_box(action.get("box", [0, 1920, 0, 1080]),
+            text = self.ts.find_with_box(action.get("box", [0, 0, 1920, 1080]),
                                          redundancy=action.get("redundancy", 30))
             for item in text:
                 if action["text"] in item["raw_text"]:
@@ -201,7 +201,7 @@ class StateKernel:
         判断截图中指定区域或匹配中心点附近是否存在匹配模板
         path：匹配模板的路径，
         x,y：匹配中心点，1920x1080 像素坐标（原点在客户区左上角），
-        mask：识别区域 [x1, x2, y1, y2]（见 tool/mask.py），给出时忽略 x,y，
+        mask：识别区域 [x1, y1, x2, y2]，即 [左, 上, 右, 下]（见 tool/mask.py），给出时忽略 x,y，
         threshold：匹配阈值
         """
         if fresh:
@@ -281,11 +281,11 @@ class StateKernel:
         点击给定坐标框的中心位置
 
         Args:
-            box: 坐标框，格式为[x1, x2, y1, y2]，其中x1,x2为横向坐标，y1,y2为纵向坐标，
+            box: 坐标框，格式为[x1, y1, x2, y2]，即 [左, 上, 右, 下]，
                 单位是 1920x1080 像素坐标（原点在客户区左上角）
         """
-        x = (box[0] + box[1]) / 2
-        y = (box[2] + box[3]) / 2
+        x = (box[0] + box[2]) / 2
+        y = (box[1] + box[3]) / 2
         key_mouse_manager.click_point(x, y)
 
     def click_position(self, position):

@@ -53,10 +53,10 @@ class CommonRuntimeTests(unittest.TestCase):
 
     def test_real_action_loop_recognizes_text_and_executes_coordinates_then_stops(self):
         engine = self.kernel()
-        engine.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [10, 20, 10, 20]}]
+        engine.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [10, 10, 20, 20]}]
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "script.json"
-            path.write_text(json.dumps([{"name": "确认", "trigger": {"text": "确认", "box": [0, 100, 0, 100]},
+            path.write_text(json.dumps([{"name": "确认", "trigger": {"text": "确认", "box": [0, 0, 100, 100]},
                                         "actions": [{"position": [960, 540]}, {"press": "f"}, "stop"]}]), encoding="utf-8")
             engine.start(path)
         # 脚本 actions 里的 position 就是 1920x1080 像素坐标；内核直接交给 click_point，不再换算镜像比例。

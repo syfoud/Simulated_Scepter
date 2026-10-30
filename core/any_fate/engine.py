@@ -241,7 +241,7 @@ class AnyFateUniverse(SimulatedUniverse):
             # 刚进图，初始化一些数据
             if not need_away:
                 if not self.area:
-                    ocr_text = self.ts.find_with_box(box=[55, 164, 12, 40],forward=True,re_screen=False)
+                    ocr_text = self.ts.find_with_box(box=[55, 12, 164, 40],forward=True,re_screen=False)
                     self.area=merge_text(ocr_text) if len(ocr_text) else ""
                     CUS_LOGGER.debug(f"当前区域{self.area}")
                 # 当前节点为祝福扑满且非精英区域时，根据开关决定切人策略
@@ -346,7 +346,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 found=False
                 # esc 有时不一定生效（动画、加载过程中），因此轮询到超时
                 while time.time()-tm<3:
-                    if self.click_text(text="暂离", box=[1321, 1383, 787, 821],click=False,allow_fail=True):
+                    if self.click_text(text="暂离", box=[1321, 787, 1383, 821],click=False,allow_fail=True):
                         found=True
                         self.area=""
                         break
@@ -605,7 +605,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 if self.now_map_sim > 0.7:
                     break
             self.now_map,self.now_map_sim=max_map,max_sim
-            if self.click_text(text="确认",box=[1361, 1417, 713, 744],click=False,allow_fail=True):
+            if self.click_text(text="确认",box=[1361, 713, 1417, 744],click=False,allow_fail=True):
                 self.big_map_init = False
                 key_mouse_manager.wait()
                 time.sleep(3)
@@ -671,7 +671,7 @@ class AnyFateUniverse(SimulatedUniverse):
                 key_mouse_manager.wait()
                 key_mouse_manager.keyDown("move_w")
         else:
-            if self.click_text(text="确认",box=[1361, 1417, 713, 744],click=False,allow_fail=True):
+            if self.click_text(text="确认",box=[1361, 713, 1417, 744],click=False,allow_fail=True):
                 self.big_map_init = False
                 key_mouse_manager.wait()
                 time.sleep(3)
@@ -692,7 +692,7 @@ class AnyFateUniverse(SimulatedUniverse):
 
     def begin_universe(self):
         self.area = ""
-        con = self.click_text(text="继续进度",box=[1610, 1762, 937, 1023],click=False,ocr_line=False,warning=False)
+        con = self.click_text(text="继续进度",box=[1610, 937, 1762, 1023],click=False,ocr_line=False,warning=False)
         if not con:
             #点击最低难度
             key_mouse_manager.click_point(120, 155)
@@ -707,8 +707,8 @@ class AnyFateUniverse(SimulatedUniverse):
         self.click_text(text=self.fate)
 
     def select_head(self):
-        self.click_text(text="击败该首领",box=[1108, 1385, 267, 290])
-        self.click_text(text="确认选择",box=[1633, 1733, 961, 990])
+        self.click_text(text="击败该首领",box=[1108, 267, 1385, 290])
+        self.click_text(text="确认选择",box=[1633, 961, 1733, 990])
 
     # 节点图是逐节点渲染出来的：识别开始得太早会漏掉尚未出现的节点，得到一张「缺节点」的图，
     # 期望值随之偏低（实测可为 0 或正常值的一半），使开局期望被误判为过低而提前退出，
@@ -862,7 +862,7 @@ class AnyFateUniverse(SimulatedUniverse):
         if matches is None:
             matches = match_multiple_targets(image, mode)
             if len(matches)==0:
-                self.click_text(text="点击空白处关闭", box=[875, 1047, 776, 807])
+                self.click_text(text="点击空白处关闭", box=[875, 776, 1047, 807])
                 CUS_LOGGER.warning("未匹配到任何地图图标却错误进入寻路阶段，可能是误识别")
                 CUS_LOGGER.warning("刷新截图缓冲区后最后一次尝试匹配地图图标")
                 image = self.get_screen()
@@ -1026,18 +1026,18 @@ class AnyFateUniverse(SimulatedUniverse):
 
     def initing_map(self):
         key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[10, 220, 0, 112],click=False,warning=False):
+        if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[10, 220, 0, 112],click=False,warning=False):
+        elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=2
-        elif self.click_text(text="消褪",box=[10, 220, 0, 112],click=False,warning=False):
+        elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=3
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return
         self.try_analysis_map(1)
         for _ in range(5):
-            self.click_text(text="进入位面", box=[907, 1009, 857, 891])
+            self.click_text(text="进入位面", box=[907, 857, 1009, 891])
             self.node_count=0
             self.new_node = True
             self.area = ""
@@ -1046,11 +1046,11 @@ class AnyFateUniverse(SimulatedUniverse):
 
     def initing_map2(self):
         key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[385, 449, 548, 583],click=False,warning=False):
+        if self.click_text(text="振翅",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[385, 449, 548, 583],click=False,warning=False):
+        elif self.click_text(text="浪潮",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=2
-        elif self.click_text(text="消褪",box=[385, 449, 548, 583],click=False,warning=False):
+        elif self.click_text(text="消褪",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=3
         else:
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
@@ -1111,20 +1111,20 @@ class AnyFateUniverse(SimulatedUniverse):
 
     # 作弊选项窗：点击「作弊」按钮后弹出的窗口。寰宇蝗灾中各命途骰面效果不一样，但窗口布局一致；
     # 要选哪个效果由各模式在点「作弊」按钮前写进 self.cheat_target。
-    # 「窗口还在不在」一律现查一次：click_text(text="作弊", box=[923, 996, 230, 270],
+    # 「窗口还在不在」一律现查一次：click_text(text="作弊", box=[923, 230, 996, 270],
     # click=False, allow_fail=True) 只 OCR 窗口顶部标题那一小块、不会点击；
     # 窗口开着的整个期间状态机会反复触发，所以这个判断不能缓存。
 
     def cheat_option_entries(self):
         """
         识别作弊列表里每个骰面效果的标题（以「【」开头，如【丰饶·慈怀】）；
-        返回 [{"raw_text": ..., "box": [左,右,上,下]}]（按阅读顺序）。
+        返回 [{"raw_text": ..., "box": [左,上,右,下]}]（按阅读顺序）。
         只对窗口内的列表区域做一次区域 OCR，返回的 box 是窗口内的实际像素。
         """
         entries = []
         # 列表区域：窗口内的效果列表（可滚动），连同底部按钮都在框内，不用再细分
         for res in self.ts.find_with_box(
-                box=[420, 1500, 240, 960], forward=True, re_screen=True):
+                box=[420, 240, 1500, 960], forward=True, re_screen=True):
             if not isinstance(res, dict):
                 continue
             text = (res.get("raw_text") or "").strip()
@@ -1151,10 +1151,10 @@ class AnyFateUniverse(SimulatedUniverse):
         点作弊效果那一行的文字中心，返回被点中的文字。
         位置落在作弊界面选项列表区域外就放弃。
         """
-        x = (entry["box"][0] + entry["box"][1]) / 2
-        y = (entry["box"][2] + entry["box"][3]) / 2
+        x = (entry["box"][0] + entry["box"][2]) / 2
+        y = (entry["box"][1] + entry["box"][3]) / 2
         # 列表区域，和 cheat_option_entries 里识别时用的同一个框
-        left, right, top, bottom = [420, 1500, 240, 960]
+        left, top, right, bottom = [420, 240, 1500, 960]
         if not (left <= x <= right and top <= y <= bottom):
             CUS_LOGGER.error(f"作弊效果「{entry['raw_text']}」位置 ({x:.0f}, {y:.0f}) 不在作弊界面选项列表区域内，放弃点击")
             return None
@@ -1169,7 +1169,7 @@ class AnyFateUniverse(SimulatedUniverse):
         # 行卡片左右 [470, 1450]、上下 = 标题 y-8 ~ 标题 y+88，卡片自身高约 100 px。
         x0 = 470
         x1 = min(1450, int(screen.shape[1]))
-        title_top = int(entry["box"][2])
+        title_top = int(entry["box"][1])
         y0 = max(title_top - 8, 0)
         y1 = min(title_top + 88, int(screen.shape[0]))
         if x1 - x0 < 10 or y1 - y0 < 10:
@@ -1199,7 +1199,7 @@ class AnyFateUniverse(SimulatedUniverse):
             # 没认出目标行就把列表往下滚三行再看。用滚轮不用拖拽：拖拽松手后有惯性，
             # 列表在截图之后还在滑，按截图坐标点击就会点偏；滚轮没有惯性，滚完等一会儿
             # 画面就停了。落点用识别列表时那个框的中心，往列表上滚，别滚到底部按钮上。
-            left, right, top, bottom = [420, 1500, 240, 960]
+            left, top, right, bottom = [420, 240, 1500, 960]
             key_mouse_manager.scroll_point((left + right) // 2,(top + bottom) // 2,direct=-15,)
             key_mouse_manager.wait()
             key_mouse_manager.sleep(0.3)
@@ -1237,12 +1237,12 @@ class AnyFateUniverse(SimulatedUniverse):
         for _ in range(tries):
             # 作弊窗收起有淡出动画，实测必须等 0.05 秒
             time.sleep(0.05)
-            if not self.click_text(text="作弊", box=[923, 996, 230, 270], click=False, allow_fail=True):
+            if not self.click_text(text="作弊", box=[923, 230, 996, 270], click=False, allow_fail=True):
                 CUS_LOGGER.debug("作弊选项窗已关闭")
                 return True
             entry = None
             # 底部「确认」的区域；左侧「取消」不在框内
-            for res in self.ts.find_with_box(box=[900, 1520, 700, 1030], forward=True, re_screen=True):
+            for res in self.ts.find_with_box(box=[900, 700, 1520, 1030], forward=True, re_screen=True):
                 if not isinstance(res, dict) or "确认" not in (res.get("raw_text") or ""):
                     continue
                 if entry is None or res["box"][3] > entry["box"][3]:
@@ -1250,13 +1250,13 @@ class AnyFateUniverse(SimulatedUniverse):
             if entry is None:
                 CUS_LOGGER.warning("作弊选项窗里没识别到「确认」按钮，窗口可能已关闭")
                 return False
-            x = (entry["box"][0] + entry["box"][1]) / 2
-            y = (entry["box"][2] + entry["box"][3]) / 2
+            x = (entry["box"][0] + entry["box"][2]) / 2
+            y = (entry["box"][1] + entry["box"][3]) / 2
             key_mouse_manager.click_point(x, y)
             key_mouse_manager.wait()
         # 刚点完的「确认」也要等淡出，否则标题还认得出来，会被误判成没关窗
         time.sleep(0.05)
-        if self.click_text(text="作弊", box=[923, 996, 230, 270], click=False, allow_fail=True):
+        if self.click_text(text="作弊", box=[923, 230, 996, 270], click=False, allow_fail=True):
             CUS_LOGGER.warning("作弊选项窗未正常关闭，可能仍在淡出，下一轮重新处理")
             return False
         return True
@@ -1286,12 +1286,12 @@ class AnyFateUniverse(SimulatedUniverse):
             CUS_LOGGER.warning(f"作弊效果「{selected}」已点中，但没确认成功")
 
     def select_doing(self):
-        text = self.ts.find_with_box(box=[557, 747, 447, 474], forward=True, re_screen=False)
+        text = self.ts.find_with_box(box=[557, 447, 747, 474], forward=True, re_screen=False)
         text = merge_text(text) if len(text) else ""
         CUS_LOGGER.debug(f"当前效果{text}")
         # 无命途专属效果可处理，放弃
         self.abandon_confirm(confirm=True)
-        if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996], click=False, allow_fail=True):
+        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996], click=False, allow_fail=True):
             CUS_LOGGER.info("是带着无法被改变的过往，背负它走向未来的决心。")
             return
 
@@ -1301,7 +1301,7 @@ class AnyFateUniverse(SimulatedUniverse):
             if self.ts.split_and_find(self.tk.fates, img_down)[1] or self._stop:
                 break
             CUS_LOGGER.debug("未识别到命途")
-            if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+            if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                 return 1
         img_up = self.get_small_interaction_img(MASK["bless_name"], fresh=True)
         res_up = self.ts.split_and_find(self.tk.prior_bless, img_up, bless_skip=self.tk.skip)
@@ -1315,11 +1315,11 @@ class AnyFateUniverse(SimulatedUniverse):
             CUS_LOGGER.debug("识别到匹配命途")
             key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
             key_mouse_manager.wait()
-        elif self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False,allow_fail=True):
+        elif self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False,allow_fail=True):
             CUS_LOGGER.debug("未识别到具体祝福,随便选一个")
             key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
             key_mouse_manager.wait()
-        self.click_text(text="确认",box=[1663, 1719, 949, 979],need_fresh=False,ocr_line=True,warning=True)
+        self.click_text(text="确认",box=[1663, 949, 1719, 979],need_fresh=False,ocr_line=True,warning=True)
         key_mouse_manager.wait()
         return 1
 
@@ -1327,8 +1327,8 @@ class AnyFateUniverse(SimulatedUniverse):
         key_mouse_manager.clean()
         key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
-        if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996],click=False,allow_fail=True):
-            if self.click_text(text="点击空白处关闭", box=[876, 1047, 1008, 1035],click=False,allow_fail=True):
+        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996],click=False,allow_fail=True):
+            if self.click_text(text="点击空白处关闭", box=[876, 1008, 1047, 1035],click=False,allow_fail=True):
                 CUS_LOGGER.info("「下一世，真理定会解明，死生……将有序流转。」")
                 key_mouse_manager.wait()
                 return
@@ -1338,14 +1338,14 @@ class AnyFateUniverse(SimulatedUniverse):
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
                 key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
-                self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+                self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
                 if self.area != "" and self.now_map!=-1:
                     visit_count = self.record_map_visit(self.now_map)
                     CUS_LOGGER.debug(f"上次地图编号{self.now_map}, 累计访问次数: {visit_count}")
             else:
                 CUS_LOGGER.error("未找到下一步路径点")
         else:
-            self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+            self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
         # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
         # 而它通常已被上一节点消费掉，这里必须自己清
         self.area=""
@@ -1385,8 +1385,8 @@ class AnyFateUniverse(SimulatedUniverse):
             return
         self.read_action_counts()
         if not self.check("fast_roll",1674,100, threshold=0.9):
-            self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
-        self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
+            self.click_text(text="快速投掷", box=[1700, 80, 1823, 117])
+        self.click_text(text="确认效果", box=[1584, 961, 1687, 994])
         self.init_map()
         self.mini_state = 1
 
@@ -1423,7 +1423,7 @@ class AnyFateUniverse(SimulatedUniverse):
             key_mouse_manager.click_point(1658, 962)
             key_mouse_manager.wait()
             for _ in range(5):
-                self.click_text(text="点击空白", box=[872, 1048, 729, 1015],warning=False)
+                self.click_text(text="点击空白", box=[872, 729, 1048, 1015],warning=False)
         key_mouse_manager.press("esc")
 
     # 命途选项卡 →「确定」按钮的手量固定偏移：选项卡是固定尺寸的单行卡片（不折行），所以这个偏移一直准；
@@ -1446,7 +1446,7 @@ class AnyFateUniverse(SimulatedUniverse):
         if not success:
             # 两个图标都没匹配上：在「秘闻」文字所在位置点一下
             CUS_LOGGER.info("「救世主」…在命运三相神谕的语境下，这张牌意味着谐调和完美无缺。")
-            self.click_text(text="秘闻", box=[197, 233, 887, 906])
+            self.click_text(text="秘闻", box=[197, 887, 233, 906])
             return
         # 命途选项卡已经出现：先用「选项卡 → 确定」的固定偏移快速点一下，再由 confirm_event 用文字识别复核
         CUS_LOGGER.info("原来那浑身着火的恶魔，满脑子幻想的都是要成为「救世主」哪！")
@@ -1465,7 +1465,7 @@ class AnyFateUniverse(SimulatedUniverse):
     def select_event(self):
         super().select_event()
         if self.new_node:
-            event_name = self.ts.find_with_box(box=[185, 750, 953, 1008], forward=True, re_screen=False)
+            event_name = self.ts.find_with_box(box=[185, 953, 750, 1008], forward=True, re_screen=False)
             if any(isinstance(ev, dict) and "阮·梅" in ev.get("raw_text", "") and "其二" in ev.get("raw_text", "") for ev in event_name):
                 self.ruanmei2 = True#本轮遭遇「阮·梅（其二）」，本轮视频将保留
             if any(isinstance(ev, dict) and "超验" in ev.get("raw_text", "") for ev in event_name):
@@ -1495,7 +1495,7 @@ class AnyFateUniverse(SimulatedUniverse):
 
     def emergency(self):
         self.nodes = None # 清除地图缓存
-        event_name = self.ts.find_with_box(box=[897, 1023, 500, 540], forward=True, re_screen=False)
+        event_name = self.ts.find_with_box(box=[897, 500, 1023, 540], forward=True, re_screen=False)
         if len(event_name)==0:
             self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "event"))
             # self.stop()
@@ -1574,7 +1574,7 @@ class AnyFateUniverse(SimulatedUniverse):
             return False
         if not self.click_text(
             text="放弃",
-            box=[1221, 1276, 967, 998],
+            box=[1221, 967, 1276, 998],
             allow_fail=allow_fail,
         ):
             return False
@@ -1587,7 +1587,7 @@ class AnyFateUniverse(SimulatedUniverse):
         appeared = self.wait_flag(
             lambda: not self.click_text(
                 text="确认",
-                box=[1158, 1220, 650, 690],
+                box=[1158, 650, 1220, 690],
                 click=False,
                 warning=False,
                 allow_fail=True,

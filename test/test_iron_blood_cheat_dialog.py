@@ -8,18 +8,18 @@
 窗口被误点关掉之后，后面的操作全落在空白页面上，作弊白白失败。
 
 当前生产契约（``core/iron_blood/engine.py`` 的 ``calculated_roll``）：
-- 先探窗口顶部的「作弊」标题（``click_text(text="作弊", box=[923,996,230,270], click=False,
+- 先探窗口顶部的「作弊」标题（``click_text(text="作弊", box=[923,230,996,270], click=False,
   allow_fail=True)``）：命中就说明作弊选项窗还开着，debug「作弊选项窗还开着，先不处理重投界面」
   并直接返回，不读效果文本、不做决策；单独「打开作弊窗」的助手已经没有了；
-- 重投界面先读当前效果文本（``ts.find_with_box(box=[1339,1576,429,464], forward=True, re_screen=False)``），
+- 重投界面先读当前效果文本（``ts.find_with_box(box=[1339,429,1576,464], forward=True, re_screen=False)``），
   文本里已经带「肉体」就完全不做决策动作，直接点「确认效果」；
 - 否则用 ``check("zero")`` 分别判断「作弊」与「重投」两个按钮是否可用；
 - 要做决策就调 ``evaluate_best_single_replacement``（第三位面 t=0.3、其它 t=0.2），再看替换节点；
 - 决定作弊时**先**把 ``self.cheat_target`` 写成 ``"肉体帝侯"``，**再**点一次「作弊」按钮
-  ``box=[1261,1321,761,792]``，点完立即 ``return``（不点「确认效果」、不 ``init_map``、``mini_state`` 不变）；
+  ``box=[1261,761,1321,792]``，点完立即 ``return``（不点「确认效果」、不 ``init_map``、``mini_state`` 不变）；
   点按钮失败只 warning「没点到「作弊」按钮」，仍然 ``return``；
-- 决定重投时点一次「重投」``box=[1599,1657,760,795]`` 后 ``return``；
-- 什么决策都不做才点「确认效果」``box=[1584,1687,961,994]``，再 ``init_map()``、``mini_state = 1``。
+- 决定重投时点一次「重投」``box=[1599,760,1657,795]`` 后 ``return``；
+- 什么决策都不做才点「确认效果」``box=[1584,961,1687,994]``，再 ``init_map()``、``mini_state = 1``。
 
 作弊选项窗的选行/确认由公共 ``AnyFateUniverse.cheat()`` 负责（点「作弊」按钮、开窗都在各模式
 ``calculated_roll`` 里完成）；这里用替身锁定它「先滚到目标行、看到高亮、再确认，找不到就 esc 退出，
@@ -45,7 +45,7 @@ from core.iron_blood.engine import IronBloodUniverse
 
 
 def center(box):
-    return (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
+    return (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
 
 
 def line(text, box):
@@ -53,18 +53,18 @@ def line(text, box):
 
 
 # 重投界面上的固定区域：当前效果文本、快速投掷、作弊、重投、确认效果（均为 1920x1080 基准）
-EFFECT_BOX = [1339, 1576, 429, 464]
-FAST_ROLL_BOX = [1700, 1823, 80, 117]
-CHEAT_BUTTON_BOX = [1261, 1321, 761, 792]
-REDO_BOX = [1599, 1657, 760, 795]
-CONFIRM_EFFECT_BOX = [1584, 1687, 961, 994]
+EFFECT_BOX = [1339, 429, 1576, 464]
+FAST_ROLL_BOX = [1700, 80, 1823, 117]
+CHEAT_BUTTON_BOX = [1261, 761, 1321, 792]
+REDO_BOX = [1599, 760, 1657, 795]
+CONFIRM_EFFECT_BOX = [1584, 961, 1687, 994]
 
 # 作弊选项窗里的固定文字：标题、底部「确认」，以及列表里的两行（目标是带「肉体」的肉体帝侯）
-TITLE = line("作弊", [940, 985, 240, 268])
-CONFIRM = line("确认", [1168, 1223, 811, 841])
-FLESH_TITLE = line("【毁灭·肉体帝侯】", [470, 700, 828, 854])
-FLESH_DESC = line("选择1个区域，为其附加【肉体帝侯】效果", [560, 1440, 860, 887])
-SELF_DESTRUCT_TITLE = line("【毁灭·精神自毁】", [470, 700, 690, 716])
+TITLE = line("作弊", [940, 240, 985, 268])
+CONFIRM = line("确认", [1168, 811, 1223, 841])
+FLESH_TITLE = line("【毁灭·肉体帝侯】", [470, 828, 700, 854])
+FLESH_DESC = line("选择1个区域，为其附加【肉体帝侯】效果", [560, 860, 1440, 887])
+SELF_DESTRUCT_TITLE = line("【毁灭·精神自毁】", [470, 690, 700, 716])
 
 
 class CalculatedRollTest(unittest.TestCase):
@@ -396,7 +396,7 @@ class _StubIronBloodCheatEngine(IronBloodUniverse):
         """
         screen = np.zeros((self.yy, self.xx, 3), dtype=np.uint8)
         if self.selected_box is not None:
-            title_top = int(self.selected_box[2])
+            title_top = int(self.selected_box[1])
             screen[max(title_top - 8, 0):max(title_top + 88, 0), 470:1450] = (200, 80, 120)
         self.screen = screen
         return screen
@@ -409,15 +409,15 @@ class _StubIronBloodCheatEngine(IronBloodUniverse):
 
     def _ocr(self, box=None, **kwargs):
         if box is None:
-            box = [0, self.xx, 0, self.yy]
+            box = [0, 0, self.xx, self.yy]
         lines = self._window_lines()
-        if box == [420, 1500, 240, 960]:
+        if box == [420, 240, 1500, 960]:
             # 先取当前帧再推进，否则 frame 0 永远用不到，「还在滑动的坐标不能用」就断言不出来
             lines = list(self._window_lines())
             self.frame_index += 1
         return [item for item in lines
-                if box[0] <= item["box"][0] and item["box"][1] <= box[1]
-                and box[2] <= item["box"][2] and item["box"][3] <= box[3]]
+                if box[0] <= item["box"][0] and item["box"][2] <= box[2]
+                and box[1] <= item["box"][1] and item["box"][3] <= box[3]]
 
     def _near(self, point, box, tolerance=1.0):
         """点击坐标是否落在 box 中心；两边都是 1920x1080 像素坐标，直接比。"""
