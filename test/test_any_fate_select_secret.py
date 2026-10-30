@@ -1058,9 +1058,11 @@ class DisabledOptionTest(unittest.TestCase):
         engine.event_prior = ["1个1星祝福"]
         SimulatedUniverse.select_event(engine)
 
+        # 点击接口收 1920x1080 像素坐标：选项文本框 [1357, 1435, 746, 777] 的中心即 (1396, 761.5)；
+        # box 一并传入，日志里能看出这一下点的是哪个框。
         self.assertEqual(
-            [call.args for call in self.manager.click.call_args_list],
-            [(1 - 1396 / 1920, 1 - 761.5 / 1080)],
+            [(call.args, call.kwargs["box"]) for call in self.manager.click_point.call_args_list],
+            [((1396, 761.5), [1357, 1435, 746, 777])],
         )
         self.assertTrue(any("置灰" in msg for msg in self._debug_messages()), self._debug_messages())
 
