@@ -496,6 +496,21 @@
         ]
     },
     {
+        "name": "奇物修复",
+        "trigger":{
+            "text": "已修复以下奇物",
+            "box": [839, 1078, 30, 78],
+            "interval": 0.8,
+            "redundancy": 30
+        },
+        "actions":
+        [
+            {
+                "position": [1456, 875]
+            }
+        ]
+    },
+    {
         "name": "模拟宇宙外",
         "trigger":{
             "text": "模拟宇宙",

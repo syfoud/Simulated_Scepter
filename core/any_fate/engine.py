@@ -353,9 +353,6 @@ class AnyFateUniverse(SimulatedUniverse):
                 if not found:
                     CUS_LOGGER.debug("未识别到暂离文本")
                     return 1
-                self.update_state("ui")
-                self.init_map()
-                self.floor_init = 0
                 if self.need_end:
                     self.update_state("exit")
                     CUS_LOGGER.info(f"{factor}将跨越旧世界的余烬，不断燃烧……")

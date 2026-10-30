@@ -19,6 +19,8 @@
   整块底边算（`confirm_point`）。
 - select_event：优选项没匹配上时只识别一次（没有战斗的事件本来就不存在优选项，重试只是白等），
   先记一条 warning 再在识别到的选项里选一条点击，避免卡在事件界面；确实一个都点不到时什么都不点。
+- select_event：选项识别里顺手丢掉置灰（当前不可用）的选项——游戏用置灰表示碎片不够之类的不可选状态，
+  点它不会选中、界面也不推进；不滤掉的话优选项正好命中灰选项时会每帧重复点它，永久卡在事件界面。
 """
 
 import types
@@ -169,6 +171,9 @@ class _StubEngine:
         self.event_option_icons = Mock(side_effect=_option_icons)
         self.get_local = SimulatedUniverse.get_local.__get__(self)
         self.event_option_rows = SimulatedUniverse.event_option_rows.__get__(self)
+        # 置灰（不可用）选项的过滤用真实现：亮度从 self.screen 上量
+        self.option_brightness = SimulatedUniverse.option_brightness.__get__(self)
+        self.drop_disabled_options = SimulatedUniverse.drop_disabled_options.__get__(self)
         self.pick_fallback_option = SimulatedUniverse.pick_fallback_option.__get__(self)
         # 优选项匹配用真实现（在识别到的选项行里匹配 event_prior），OCR 由 ts 打桩
         self.click_event_prior = SimulatedUniverse.click_event_prior.__get__(self)
@@ -980,6 +985,84 @@ class ConfirmEventClickTest(unittest.TestCase):
             self.assertAlmostEqual(found["y"], top + template.shape[0] / 2, delta=2)
         # 认到的结果留在 self._option_icons 里，select_event 靠它判断「连选项图标都没有」
         self.assertEqual(engine._option_icons, icons)
+
+
+class DisabledOptionTest(unittest.TestCase):
+    """置灰（当前不可用）的选项不能当候选：以前优选项命中灰选项时每帧重复点它，事件永远不推进。"""
+
+    # 「休息区」实测帧（寰宇蝗灾，宇宙碎片 73）：前三条买不起被置灰，只有「离开。」可点。
+    # 标题框最亮通道实测：置灰 60 / 95 / 64，可用 181，所以按同帧最亮的 60% 就能把置灰的挑出来。
+    DIM = 57
+    ENABLED = 181
+    REST_AREA_OPTIONS = [
+        ("米购买1个1星祝福", [1357, 1595, 211, 242], DIM, 228),
+        ("米购买1个奇物。", [1357, 1520, 390, 421], DIM, 407),
+        ("米强化2个随机祝福", [1357, 1620, 568, 599], DIM, 585),
+        ("米离开。", [1357, 1435, 746, 777], ENABLED, 763),
+    ]
+
+    def setUp(self):
+        self.manager = Mock()
+        self.enterContext(patch("core.simulated.engine.key_mouse_manager", self.manager))
+        self.logger = Mock()
+        self.enterContext(patch("core.simulated.engine.CUS_LOGGER", self.logger))
+        self.clock = _FakeClock()
+        self.enterContext(
+            patch(
+                "core.simulated.engine.time",
+                types.SimpleNamespace(time=self.clock.time, sleep=Mock()),
+            )
+        )
+
+    def _engine(self):
+        """造出「休息区」那一帧：星号与选项文字由替身喂，画面按实测亮度画出置灰/可用的标题。"""
+        engine = _StubEngine({}, {"休息区": False}, event_name="休息区")
+        frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        stars = []
+        bands = {}
+        for text, box, brightness, star_y in self.REST_AREA_OPTIONS:
+            frame[box[2]:box[3], box[0]:box[1]] = brightness
+            star = {"x": STAR_X, "y": star_y, "score": 0.99, "icon": "star"}
+            stars.append(star)
+            bands[tuple(engine._star_band(star))] = [{"raw_text": text, "box": list(box)}]
+        engine.stub_ocr(stars=stars, bands=bands)
+        engine.screen = frame
+        engine.get_screen = Mock(return_value=frame)
+        return engine
+
+    def _debug_messages(self):
+        return [call.args[0] for call in self.logger.debug.call_args_list]
+
+    def test_option_rows_keep_only_the_clickable_option(self):
+        """event_option_rows 只返回可点的选项行：置灰的三条全部丢掉，可用的那条原样留下。"""
+        rows = SimulatedUniverse.event_option_rows(self._engine())
+
+        self.assertEqual([row["raw_text"] for row in rows], ["米离开。"])
+
+    def test_options_of_equal_brightness_are_all_kept(self):
+        """面板淡入时所有选项一起变暗、亮度相同：没有可判断的置灰关系，不能误丢任何一条。"""
+        engine = self._engine()
+        engine.screen = np.full((1080, 1920, 3), 40, dtype=np.uint8)
+        engine.get_screen = Mock(return_value=engine.screen)
+
+        rows = SimulatedUniverse.event_option_rows(engine)
+
+        self.assertEqual([row["raw_text"] for row in rows], [text for text, *_ in self.REST_AREA_OPTIONS])
+
+    def test_preferred_option_hitting_a_disabled_row_falls_back_to_the_clickable_one(self):
+        """
+        优选项「1个1星祝福」只出现在置灰的「购买1个1星祝福」里：旧实现每帧点这条灰选项，
+        游戏不响应、界面不推进，于是永久卡死；现在改点唯一可用的「离开。」。
+        """
+        engine = self._engine()
+        engine.event_prior = ["1个1星祝福"]
+        SimulatedUniverse.select_event(engine)
+
+        self.assertEqual(
+            [call.args for call in self.manager.click.call_args_list],
+            [(1 - 1396 / 1920, 1 - 761.5 / 1080)],
+        )
+        self.assertTrue(any("置灰" in msg for msg in self._debug_messages()), self._debug_messages())
 
 
 if __name__ == "__main__":

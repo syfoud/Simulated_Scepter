@@ -246,6 +246,9 @@ class SimulatedUniverse(UniverseUtils):
 
     def setting_exit(self):
         if self.state != "exit":
+            self.update_state("ui")
+            self.init_map()
+            self.floor_init = 0
             key_mouse_manager.click_point(1359, 811)
             key_mouse_manager.wait()
     def map_data_load(self):
@@ -358,9 +361,6 @@ class SimulatedUniverse(UniverseUtils):
                 key_mouse_manager.wait()
                 key_mouse_manager.keyUp("move_w")
                 key_mouse_manager.press("esc")
-                self.update_state("ui")
-                self.init_map()
-                self.floor_init = 0
                 if self.floor == 13:
                     self.update_state("exit")
                     CUS_LOGGER.info(f"通关！当前层数:{self.floor}")
@@ -781,14 +781,62 @@ class SimulatedUniverse(UniverseUtils):
         self._option_icons = icons
         return icons
 
+    def option_brightness(self, box):
+        """
+        选项标题文字框里最亮的像素值（V = max(R,G,B)），用来区分可点与置灰的选项。
+
+        取最大值而不是均值：标题笔画很细，均值会被大片深色背景稀释，置灰与否的差别看不出来。
+        按 max(R,G,B) 而不是灰度：金色等彩色标题也按通道峰值算亮，不会被误判成置灰。
+
+        Args:
+            box: 选项标题文字的屏幕框 [x1, x2, y1, y2]。
+
+        Returns:
+            框内最亮的通道值（0~255）；框完全落在画面外时返回 0。
+        """
+        h, w = self.screen.shape[:2]
+        x1, x2 = max(int(box[0]), 0), min(int(box[1]), w)
+        y1, y2 = max(int(box[2]), 0), min(int(box[3]), h)
+        patch = self.screen[y1:y2, x1:x2]
+        return int(patch.max()) if patch.size else 0
+
+    def drop_disabled_options(self, rows):
+        """
+        丢掉置灰（当前不可用）的选项行，只留正常亮度的选项。
+
+        游戏用置灰表示选项此刻不可用，所以它不能进入优选项匹配和兜底候选，否则会永久卡在事件界面。
+        一帧里所有选项一样亮（面板淡入、或本来就只认到一条）时全部保留。
+
+        Args:
+            rows: event_option_rows 识别出的选项行，每行含 "box"（标题文字的屏幕框）与 "raw_text"。
+
+        Returns:
+            亮度达标的选项行，顺序不变；整帧没有亮度信息（全黑）时原样返回。
+        """
+        if not rows:
+            return rows
+        brightness = [self.option_brightness(row["box"]) for row in rows]
+        top = max(brightness)
+        if top == 0:
+            # 整帧全黑说明没有亮度信息可比较（例如测试里的空白画面），此时不做取舍。
+            return rows
+        kept = [row for row, value in zip(rows, brightness) if value * 5 >= top * 3]
+        dropped = [row for row, value in zip(rows, brightness) if value * 5 < top * 3]
+        if dropped:
+            CUS_LOGGER.debug(
+                "跳过不可用（置灰）的选项：" + "、".join(row["raw_text"] for row in dropped)
+            )
+        return kept
+
     def event_option_rows(self, fresh=False, names=None):
         """
-        按每条选项左侧的图标（模拟宇宙里就是星号 ※）只 OCR 它右侧的横条，返回识别到的选项行。
+        按每条选项左侧的图标（模拟宇宙里就是星号 ※）只 OCR 它右侧的横条，返回识别到且可点的选项行。
         每行 = {"raw_text": 选项文字, "box": 选项文字行的屏幕框,
         "lines": 这一条读到的全部文字行, "icon": 图标位置}。
         选项文字一定在图标右侧，所以只认与图标同一行的选项文字。
         左边包含 ※ 在内：正屏 OCR 会把 ※ 和选项文字并进同一个文本框，
         横条左缘必须容得下它，否则 box_contain 过滤不出来。
+        置灰（不能点）的选项在这里就被丢掉，所以调用方拿到的都是能点出反应的选项。
         names：交给 event_option_icons 的图标模板名，默认 option_icon_names() 那一遍。
         """
         panel_right = 1850
@@ -816,7 +864,7 @@ class SimulatedUniverse(UniverseUtils):
             row["icon"] = icon
             rows.append(row)
         rows.sort(key=lambda row: row["box"][2])
-        return rows
+        return self.drop_disabled_options(rows)
 
     # 事件界面：由左上角「事件」文字触发，一次调用把事件界面这一帧该做的事按优先级走完：
     #   金色 ▼（对话阶段）→ 推进图标（arrow → arrow_1 → shop_herta）→ 界面标题让路（奇物商店等）
@@ -824,7 +872,8 @@ class SimulatedUniverse(UniverseUtils):
     # 选项图标都在左侧图标列，用 MASK["event_icon"]。
     # 选项区什么都读不到时就什么都不点，并补一条 warning 说明这一帧整个函数什么都没识别到。
     # 选项图标（星号 ※）出现就代表选项出现了，它和选项文字绑定：
-    # event_option_rows 先把所有选项图标都认出来，再只 OCR 每个图标右侧的文字。
+    # event_option_rows 先把所有选项图标都认出来，再只 OCR 每个图标右侧的文字，
+    # 顺手滤掉置灰（不可用）的选项。
     def select_event(self):
         screen = self.get_screen()
         if self.check("arrow_dialog", mask=MASK["dialog"]):
