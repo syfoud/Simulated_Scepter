@@ -438,6 +438,25 @@ def category_roots(category: str) -> tuple[str, ...]:
     return tuple(os.path.join(PATHS["temp"], name) for name in TEMPDIRS)
 
 
+def category_directory(category: str) -> str:
+    """返回某个清理对象所在目录，供界面「文件位置」按钮打开。
+
+    临时文件分散在 temp 下的多个子目录，这里返回它们的上级 temp 目录，用户可以
+    继续进入子目录。目录是否存在不由此函数保证，由调用方决定如何提示。
+
+    Args:
+        category: 清理对象，取 CATEGORIES 之一。
+
+    Returns:
+        该清理对象所在目录的绝对路径。
+    """
+    if category == "video":
+        return PATHS["video"]
+    if category == "log":
+        return PATHS["logs"]
+    return PATHS["temp"]
+
+
 def directory_root(category: str) -> str | None:
     """返回某个清理对象中可能有目录型临时文件的根目录。
 
