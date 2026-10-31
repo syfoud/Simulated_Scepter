@@ -911,6 +911,13 @@
                      </widget>
                     </item>
                     <item>
+                     <widget class="AnimatedButton" name="pick_btn">
+                      <property name="text">
+                       <string>拾取坐标</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
                      <widget class="QLineEdit" name="PrintEdit">
                       <property name="placeholderText">
                        <string>输入识别目标</string>

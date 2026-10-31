@@ -704,12 +704,6 @@ class MainWindow(QMainWindowLog):
         self.calibrate_btn.clicked.connect(self.calibrate)
         self.test_btn.clicked.connect(self.test)
         self.print_btn.clicked.connect(self.test_2)
-        # 坐标拾取按钮动态插到「打印坐标」下面，避免改动 UI.ui 资源
-        self.pick_btn = AnimatedButton("拾取坐标", self)
-        # print_btn 位于嵌套布局 Lay_Tab1_Right 里，parentWidget().layout() 拿到的是外层布局
-        pick_layout = self.findChild(QVBoxLayout, "Lay_Tab1_Right") or self.print_btn.parentWidget().layout()
-        pick_index = pick_layout.indexOf(self.print_btn)
-        pick_layout.insertWidget(pick_index + 1 if pick_index >= 0 else pick_layout.count(), self.pick_btn)
         self.pick_btn.clicked.connect(self.toggle_coordinate_pick)
         self._pick_timer = QTimer(self)
         self._pick_timer.setInterval(300)
