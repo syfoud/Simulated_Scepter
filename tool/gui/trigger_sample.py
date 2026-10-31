@@ -36,7 +36,7 @@ class SampleView(QGraphicsView):
         scene.addPixmap(QPixmap.fromImage(image))
         scene.setSceneRect(0, 0, self.image_width, self.image_height)
         for item in texts:
-            left, right, top, bottom = item["box"]
+            left, top, right, bottom = item["box"]
             scene.addRect(QRectF(left, top, right - left, bottom - top), QPen(QColor("#34b87a"), 2))
         self.selection = scene.addRect(QRectF(), QPen(QColor("#ff7043"), 3))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -47,7 +47,7 @@ class SampleView(QGraphicsView):
         self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
 
     def show_box(self, box):
-        left, right, top, bottom = box
+        left, top, right, bottom = box
         self.selection.setRect(QRectF(left, top, right - left, bottom - top))
 
     def mousePressEvent(self, event):
@@ -56,11 +56,11 @@ class SampleView(QGraphicsView):
         point = self.mapToScene(event.pos())
         if self.recognize:
             candidates = [(index, item) for index, item in enumerate(self.texts)
-                          if item["box"][0] <= point.x() <= item["box"][1]
-                          and item["box"][2] <= point.y() <= item["box"][3]]
+                          if item["box"][0] <= point.x() <= item["box"][2]
+                          and item["box"][1] <= point.y() <= item["box"][3]]
             if candidates:
-                index, _ = min(candidates, key=lambda pair: (pair[1]["box"][1] - pair[1]["box"][0])
-                               * (pair[1]["box"][3] - pair[1]["box"][2]))
+                index, _ = min(candidates, key=lambda pair: (pair[1]["box"][2] - pair[1]["box"][0])
+                               * (pair[1]["box"][3] - pair[1]["box"][1]))
                 self.text_selected.emit(index)
         elif self.sceneRect().contains(point):
             self.origin = point
@@ -77,8 +77,8 @@ class SampleView(QGraphicsView):
             rect = QRectF(self.origin, self.mapToScene(event.pos())).normalized().intersected(self.sceneRect())
             self.origin = None
             if rect.width() >= 2 and rect.height() >= 2:
-                box = [max(0, math.floor(rect.left())), min(self.image_width, math.ceil(rect.right())),
-                       max(0, math.floor(rect.top())), min(self.image_height, math.ceil(rect.bottom()))]
+                box = [max(0, math.floor(rect.left())), max(0, math.floor(rect.top())),
+                       min(self.image_width, math.ceil(rect.right())), min(self.image_height, math.ceil(rect.bottom()))]
                 self.show_box(box)
                 self.region_selected.emit(box)
             else:

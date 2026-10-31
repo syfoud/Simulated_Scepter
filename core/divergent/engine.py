@@ -160,7 +160,7 @@ class DivergentUniverse(UniverseUtils):
         # self.click_target("imgs/c.jpg", threshold=0.9, flag=False)
         #没有检测到已有的存在的文字
         if res == '':
-            area_text = clean_text(self.ts.ocr_one_row(self.screen, [50, 350, 3, 35]), char=0)
+            area_text = clean_text(self.ts.ocr_one_row(self.screen, [50, 3, 350, 35]), char=0)
             if '位面' in area_text or '区域' in area_text or '第' in area_text:
                 CUS_LOGGER.info("尝试进入区域")
                 self.area()
@@ -171,7 +171,7 @@ class DivergentUniverse(UniverseUtils):
                 self.da_hei_ta_effecting = False
                 self.press("V")
             else:
-                text = merge_text(self.ts.find_with_box([400, 1920, 100, 600], redundancy=0))
+                text = merge_text(self.ts.find_with_box([400, 100, 1920, 600], redundancy=0))
                 #速通模式跳过转化
                 if self.speed and '转化' in text and '继续战斗' not in text and ('数据' in text or '过量' in text):
                     CUS_LOGGER.info('ready to stop')
@@ -246,7 +246,7 @@ class DivergentUniverse(UniverseUtils):
         # self.click_position([186, 237 + int((self.saved_num-1) * (622 - 237) / 3)])
         time.sleep(0.5)
         self.ts.forward(self.get_screen())
-        txt = merge_text(self.ts.find_with_box([0, 1920, 0, 1080], redundancy=0))
+        txt = merge_text(self.ts.find_with_box([0, 0, 1920, 1080], redundancy=0))
         empty_saves = len(txt.split('无存档')) - 1
         if self.total_empty_saves == 1:
             self.total_empty_saves = empty_saves
@@ -284,7 +284,7 @@ class DivergentUniverse(UniverseUtils):
 
 
     def find_team_member(self,team_member=None):
-        boxes = [[1620, 1790, 289, 335],[1620, 1790, 384, 427],[1620, 1790, 478, 521],[1620, 1790, 570, 618]]
+        boxes = [[1620, 289, 1790, 335],[1620, 384, 1790, 427],[1620, 478, 1790, 521],[1620, 570, 1790, 618]]
         if not team_member:
             team_member = {}
         for i,b in enumerate(boxes):
@@ -295,7 +295,7 @@ class DivergentUniverse(UniverseUtils):
 
     def get_now_area(self, deep=0):
         team_member = self.find_team_member(self.team_member)
-        self.area_text = clean_text(self.ts.ocr_one_row(self.screen, [50, 350, 3, 35]), char=0)
+        self.area_text = clean_text(self.ts.ocr_one_row(self.screen, [50, 3, 350, 35]), char=0)
         CUS_LOGGER.debug(f"area_text: {self.area_text}, deep: {deep}")
         if '位面' in self.area_text or '区域' in self.area_text or '第' in self.area_text:
             check_ok = 1
@@ -337,10 +337,10 @@ class DivergentUniverse(UniverseUtils):
             prefer_portal.update(config.portal_prior)
         prefer_portal.update({'首领':4, '休整':4})
         tm = time.time()
-        text = self.ts.find_with_box([0,1920,0,540], forward=1, mode=2)
+        text = self.ts.find_with_box([0,0,1920,540], forward=1, mode=2)
         portal = {'score':0,'nums':0,'type':''}
         for i in text:
-            if ('区' in i['raw_text'] or '域' in i['raw_text']) and (i['box'][0] > 400 or i['box'][2] > 60):
+            if ('区' in i['raw_text'] or '域' in i['raw_text']) and (i['box'][0] > 400 or i['box'][1] > 60):
                 portal_type = self.get_text_type(i['raw_text'], prefer_portal)
                 if '冒' in i['raw_text'] or '险' in i['raw_text']:
                     portal['nums'] += 1
@@ -360,7 +360,7 @@ class DivergentUniverse(UniverseUtils):
         self.ts.forward(self.get_screen())
 
     def portal_bias(self, portal):
-        return (portal['box'][0] + portal['box'][1]) // 2 - 950
+        return (portal['box'][0] + portal['box'][2]) // 2 - 950
 
     def aim_portal(self, portal):
         zero = bisect.bisect_left(config.angles, 0)
@@ -399,7 +399,7 @@ class DivergentUniverse(UniverseUtils):
                         tmm = time.time()
                         while time.time() - tmm < 8:
                             self.ts.forward(self.get_screen())
-                            area_text = clean_text(self.ts.ocr_one_row(self.screen, [50, 350, 3, 35]), char=0)
+                            area_text = clean_text(self.ts.ocr_one_row(self.screen, [50, 3, 350, 35]), char=0)
                             if '位面' in area_text or '区域' in area_text or '第' in area_text:
                                 break
                             self.run_static()
@@ -505,7 +505,7 @@ class DivergentUniverse(UniverseUtils):
 
     def confirm_text(self):
         """在右侧box里找「确定」按钮并点它，找到返回 True。"""
-        for res in self.ts.find_with_box([1590, 1830, 240, 1070], forward=1):
+        for res in self.ts.find_with_box([1590, 240, 1830, 1070], forward=1):
             if "确定" in res.get("raw_text", ""):
                 self.click_box(res["box"])
                 return True
@@ -516,7 +516,7 @@ class DivergentUniverse(UniverseUtils):
         self.event_solved = 1
         tm = time.time()
         while time.time() - tm < 20:
-            title_text = clean_text(self.ts.ocr_one_row(self.screen, [185, 820, 945, 1005]), char=0)
+            title_text = clean_text(self.ts.ocr_one_row(self.screen, [185, 945, 820, 1005]), char=0)
             CUS_LOGGER.debug(f"title_text: {title_text}")
             if event_id[0] == -1:
                 for i, e in enumerate(self.event_prior):
@@ -525,7 +525,7 @@ class DivergentUniverse(UniverseUtils):
                 start = self.now_event == event_id[1]
                 self.now_event = event_id[1]
                 CUS_LOGGER.info(f"event:{event_id},start:{start}")
-            if '事件' not in merge_text(self.ts.find_with_box([92, 195, 54, 88])):
+            if '事件' not in merge_text(self.ts.find_with_box([92, 54, 195, 88])):
                 return
 
             self.get_screen()
@@ -548,12 +548,12 @@ class DivergentUniverse(UniverseUtils):
                 self.ts.forward(self.screen)
                 clicked = 0
                 if event_id[0] != -1:
-                    text = self.ts.find_with_box([1300, 1920, 100, 1080], redundancy=30)
+                    text = self.ts.find_with_box([1300, 100, 1920, 1080], redundancy=30)
                     events = []
                     event_now = None
                     last_star = 0
                     for i in text:
-                        if self.check_box("star", [1250, 1460, i['box'][2]-30, i['box'][3]+30]) and last_star<self.ty-20:
+                        if self.check_box("star", [1250, i['box'][1]-30, 1460, i['box'][3]+30]) and last_star<self.ty-20:
                             last_star = self.ty
                             if event_now is not None:
                                 events.append(event_now)
@@ -587,7 +587,7 @@ class DivergentUniverse(UniverseUtils):
                 if not start:
                     time.sleep(0.6)
                     self.ts.forward(self.get_screen())
-                    if '事件' not in merge_text(self.ts.find_with_box([92, 195, 54, 88])):
+                    if '事件' not in merge_text(self.ts.find_with_box([92, 54, 195, 88])):
                         return
                 self.click_point(100, 47)
                 self.click_point(100, 47)
@@ -605,23 +605,23 @@ class DivergentUniverse(UniverseUtils):
         else:
             return 0
         time.sleep(0.3)
-        text = self.ts.find_with_box([300, 1920, 0, 350], forward=1, mode=2)
+        text = self.ts.find_with_box([300, 0, 1920, 350], forward=1, mode=2)
         res = 0
         event_text = ''
         debug_res = []
         CUS_LOGGER.debug(f"event_text: {text}")
         for i in text:
             box = i['box']
-            if 'ms' in i['raw_text'] or '状态效' in i['raw_text'] or len(i['raw_text']) < 2 or (box[0] > 1470 and box[2] < 75)\
-                  or (box[0] > 1800 and box[2] < 120) or (box[0] > 1600 and box[2] > 290) or (box[1] < 400 and box[3] < 160):
+            if 'ms' in i['raw_text'] or '状态效' in i['raw_text'] or len(i['raw_text']) < 2 or (box[0] > 1470 and box[1] < 75)\
+                  or (box[0] > 1800 and box[1] < 120) or (box[0] > 1600 and box[1] > 290) or (box[2] < 400 and box[3] < 160):
                 continue
             if '?' not in i['raw_text'] and '？' not in i['raw_text'] and len(clean_text(i['raw_text'], 1)) == 0:
                 continue
-            w, h = box[1] - box[0], box[3] - box[2]
+            w, h = box[2] - box[0], box[3] - box[1]
             if w < 40 or h > 45:
                 continue
-            if (box[0] + box[1]) // 2 > res or self.event_text in i['raw_text'] or i['raw_text'] in self.event_text:
-                res = (box[0] + box[1]) // 2
+            if (box[0] + box[2]) // 2 > res or self.event_text in i['raw_text'] or i['raw_text'] in self.event_text:
+                res = (box[0] + box[2]) // 2
                 event_text = i['raw_text']
             debug_res.append(i)
         if self.debug:
@@ -635,11 +635,11 @@ class DivergentUniverse(UniverseUtils):
             contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
             for contour in contours:
                 x, y, rect_w, rect_h = cv.boundingRect(contour)
-                box = [x, x + rect_w, y, y + rect_h]
-                if rect_w < 90 or rect_h > 70 or box[0] < 400 or box[1] > 1470:
+                box = [x, y, x + rect_w, y + rect_h]
+                if rect_w < 90 or rect_h > 70 or box[0] < 400 or box[2] > 1470:
                     continue
-                if abs(res - 950) > abs((box[0] + box[1]) // 2 - 950):
-                    res = (box[0] + box[1]) // 2
+                if abs(res - 950) > abs((box[0] + box[2]) // 2 - 950):
+                    res = (box[0] + box[2]) // 2
         if save:
             self.event_text = event_text
         return res
@@ -1060,20 +1060,20 @@ class DivergentUniverse(UniverseUtils):
     def bless(self, reverse=1, blood=0):
         self.bless_solved = 1
         # 屏幕下方
-        # text = self.ts.find_with_box([350, 1550, 795, 819])
+        # text = self.ts.find_with_box([350, 795, 1550, 819])
         # 金血祝福的位置会上下浮动, 故加大识别区域
-        text = self.ts.find_with_box([350, 1550, 750, 900])
+        text = self.ts.find_with_box([350, 750, 1550, 900])
         if len(text) == 0:
             # 屏幕中间 (祝福名称)
-            text = self.ts.find_with_box([350, 1550, 480, 530])
+            text = self.ts.find_with_box([350, 480, 1550, 530])
         if len(text) == 0:
             return
         self.update_bless_prior()
         blesses = []
         for i in text:
             box = i["box"]
-            x = (box[0] + box[1]) // 2
-            box = [x - 220, x + 220, 450, 850]
+            x = (box[0] + box[2]) // 2
+            box = [x - 220, 450, x + 220, 850]
             bless_text = self.ts.find_with_box(box)
             bless_raw_text = merge_text(bless_text, char=0)
             blesses.append({'raw_text': bless_raw_text, 'box': box, 'score': self.bless_score(bless_raw_text)})
@@ -1081,7 +1081,7 @@ class DivergentUniverse(UniverseUtils):
         CUS_LOGGER.debug(f"Blesses: {blesses}")
         box = blesses[0]['box']
         if not self.click_img("new"):
-            self.click_position([(box[0] + box[1]) // 2, 500], box=box)
+            self.click_position([(box[0] + box[2]) // 2, 500], box=box)
         if blood:
             self.click_position([960, 975])
         else:
@@ -1214,8 +1214,8 @@ class DivergentUniverse(UniverseUtils):
             self.click_target(find_image_by_name('universe.jpg'),threshold=0.9,click=True)
             # click_target 内部的点击走队列异步执行，必须等它生效，后面的 click_text 才会截到新画面
             key_mouse_manager.wait()
-            self.click_text(text="差分宇宙",after_delay=0.5,box=[301, 429, 433, 470])
-            self.click_text(text="前往参与",after_delay=5,box=[1443, 1539, 856, 884])
+            self.click_text(text="差分宇宙",after_delay=0.5,box=[301, 433, 429, 470])
+            self.click_text(text="前往参与",after_delay=5,box=[1443, 856, 1539, 884])
 
 
 def main():

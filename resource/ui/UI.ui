@@ -1789,10 +1789,17 @@
                           <string>上次清理：从未清理</string>
                          </property>
                          <property name="minimumWidth">
-                          <number>260</number>
+                          <number>280</number>
                          </property>
                          <property name="role" stdset="0">
                           <string>muted</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="0" column="4">
+                        <widget class="AnimatedButton" name="Cleanup_video_open_btn">
+                         <property name="text">
+                          <string>视频文件位置</string>
                          </property>
                         </widget>
                        </item>
@@ -1859,10 +1866,17 @@
                           <string>上次清理：从未清理</string>
                          </property>
                          <property name="minimumWidth">
-                          <number>260</number>
+                          <number>280</number>
                          </property>
                          <property name="role" stdset="0">
                           <string>muted</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="1" column="4">
+                        <widget class="AnimatedButton" name="Cleanup_log_open_btn">
+                         <property name="text">
+                          <string>日志文件位置</string>
                          </property>
                         </widget>
                        </item>
@@ -1929,10 +1943,17 @@
                           <string>上次清理：从未清理</string>
                          </property>
                          <property name="minimumWidth">
-                          <number>260</number>
+                          <number>280</number>
                          </property>
                          <property name="role" stdset="0">
                           <string>muted</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="2" column="4">
+                        <widget class="AnimatedButton" name="Cleanup_temp_open_btn">
+                         <property name="text">
+                          <string>临时文件位置</string>
                          </property>
                         </widget>
                        </item>

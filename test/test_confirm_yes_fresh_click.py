@@ -5,14 +5,14 @@
 ``self.tx / self.ty``。``click_text`` 只返回 True/False，从不写 self.tx/self.ty——那是上一次
 ``check()`` 留下的残留坐标。于是「识别到的是这一帧的确认按钮，点下去的却是上一次残留的东西」，
 日志 log_2026-10-20-18-54.txt 里 23:32:34,537 那一下点的就是 (0.60546875, 0.2375)
-（屏幕约 758,824），而这一帧 OCR 到的「确认」文字在 [1169, 1223, 811, 841]，按钮中心约 (1196, 826)。
+（屏幕约 758,824），而这一帧 OCR 到的「确认」文字在 [1169, 811, 1223, 841]，按钮中心约 (1196, 826)。
 这一下点在作弊选项窗的列表上，把作弊流程打断了。
 
 当前生产契约（``core/simulated/engine.py`` 的 ``confirm_yes``）：
-- 先做作弊窗守卫：``click_text(text="作弊", box=[923,996,230,270], click=False, allow_fail=True)``
+- 先做作弊窗守卫：``click_text(text="作弊", box=[923,230,996,270], click=False, allow_fail=True)``
   命中就 debug「当前处于作弊选项窗，跳过点击「确认」」并返回 0，**连 OCR 都不做**；
 - 点击位置只取**这一刻重新截图**后区域 OCR 到的「确认」文字块
-  （``find_with_box(box=[232,1690,154,928], forward=True, re_screen=True)``：只给 ``forward`` 用的是
+  （``find_with_box(box=[232,154,1690,928], forward=True, re_screen=True)``：只给 ``forward`` 用的是
   缓存帧，那就又变成「点上一帧的画面」）；
 - 弹窗标题里也可能带「确认」（如「确认丢弃祝福「X」？」），按钮永远在标题下面，所以取最靠下的
   那一块文字（OCR 顺序不保证，不用「第一个」）；
@@ -36,7 +36,7 @@ from core.simulated.engine import SimulatedUniverse
 
 
 def center(box):
-    return (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
+    return (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
 
 
 def line(text, box):
@@ -44,13 +44,13 @@ def line(text, box):
 
 
 # 日志里真实出现过的两行：弹窗标题、弹窗底部「确认」按钮（标题也含「确认」两个字）
-TITLE = line("确认丢弃祝福「无根据颂歌」？", [788, 1117, 512, 539])
-CONFIRM = line("确认", [1169, 1223, 811, 841])
+TITLE = line("确认丢弃祝福「无根据颂歌」？", [788, 512, 1117, 539])
+CONFIRM = line("确认", [1169, 811, 1223, 841])
 # 缓存帧（上一次截图）里的「确认」：位置明显不同，用来抓「用了旧画面」
-CONFIRM_CACHED = line("确认", [300, 354, 611, 641])
+CONFIRM_CACHED = line("确认", [300, 611, 354, 641])
 # 弹窗「确认」文字的识别区域（1920x1080 基准）与作弊窗标题区域
-CONFIRM_AREA_BOX = [232, 1690, 154, 928]
-CHEAT_TITLE_BOX = [923, 996, 230, 270]
+CONFIRM_AREA_BOX = [232, 154, 1690, 928]
+CHEAT_TITLE_BOX = [923, 230, 996, 270]
 
 # 老实现点的残留坐标（23:32:34,537 那次 click 的镜像比例 0.60546875,0.2375，换算成像素约为 758,824）
 STALE_X, STALE_Y = 758, 824
@@ -85,12 +85,12 @@ class _StubConfirmEngine(SimulatedUniverse):
         桩按 re_screen 取帧（被测调用点固定 forward=True）。
         """
         frame = self.get_screen() if re_screen else self.screen
-        box = list(box or [0, self.xx, 0, self.yy])
+        box = list(box or [0, 0, self.xx, self.yy])
         return [
             item for item in frame
             if isinstance(item, dict)
-            and box[0] <= item["box"][0] and item["box"][1] <= box[1]
-            and box[2] <= item["box"][2] and item["box"][3] <= box[3]
+            and box[0] <= item["box"][0] and item["box"][2] <= box[2]
+            and box[1] <= item["box"][1] and item["box"][3] <= box[3]
         ]
 
 
@@ -160,7 +160,7 @@ class ConfirmYesTest(unittest.TestCase):
 
     def test_does_not_click_when_the_confirm_text_is_missing(self):
         """这一帧没认到「确认」就什么都不点：点残留坐标只会乱点，等下一帧重试。"""
-        engine = self.make_engine([line("取消", [1000, 1080, 811, 841])])
+        engine = self.make_engine([line("取消", [1000, 811, 1080, 841])])
 
         result = engine.confirm_yes()
 
@@ -214,8 +214,8 @@ class ConfirmYesTest(unittest.TestCase):
     def test_rows_without_usable_text_are_ignored(self):
         """OCR 行可能缺 raw_text 或 raw_text 为 None：不能因此报错，也不能被当成「确认」。"""
         engine = self.make_engine([
-            {"box": [788, 1117, 512, 539]},
-            {"raw_text": None, "box": [800, 900, 600, 630]},
+            {"box": [788, 512, 1117, 539]},
+            {"raw_text": None, "box": [800, 600, 900, 630]},
             CONFIRM,
         ])
 

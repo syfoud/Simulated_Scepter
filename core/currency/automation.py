@@ -130,12 +130,12 @@ class SimulatedCurrency(CurrencyUtils):
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
     DIFFICULTY_MAX_STEPS = 120
-    DIFFICULTY_SELECTED_EFFECT_BOX = [700, 1200, 350, 465]
+    DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
     DIFFICULTY_DOWN_POSITION = (960, 844)
-    ENVIRONMENT_TITLE_BOX = [897, 1018, 80, 114]
-    ENVIRONMENT_CONFIRM_BOX = [1053, 1108, 967, 998]
+    ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
+    ENVIRONMENT_CONFIRM_BOX = [1053, 967, 1108, 998]
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
-    TEAM_COUNT_BOX = [884, 1150, 202, 280]
+    TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
 
     def __init__ (self, find, debug, speed, consumable, slow, nums = -1, bonus = False):
@@ -177,8 +177,8 @@ class SimulatedCurrency(CurrencyUtils):
         for index in range(1, 5):
             self.envir[index - 1] = priority[f"envir_{index}"][:]
 
-        self.ENVIR_BOXES = [[266, 610, 375, 413], [780, 1134, 375, 414], [1314, 1645, 373, 413]]
-        self.BLESS_BOXES = [[298, 608, 472, 513], [783, 1095, 472, 513], [1298, 1605, 472, 513]]
+        self.ENVIR_BOXES = [[266, 375, 610, 413], [780, 375, 1134, 414], [1314, 373, 1645, 413]]
+        self.BLESS_BOXES = [[298, 472, 608, 513], [783, 472, 1095, 513], [1298, 472, 1605, 513]]
 
         if debug != 2:
             # 似乎是避免鼠标越界的一个标志
@@ -270,7 +270,7 @@ class SimulatedCurrency(CurrencyUtils):
                 screen_text = " ".join(
                     res["raw_text"]
                     for res in self.ts.find_with_box(
-                        [0, 1920, 0, 1080],
+                        [0, 0, 1920, 1080],
                         redundancy=0
                     )
                 )
@@ -426,8 +426,8 @@ class SimulatedCurrency(CurrencyUtils):
         # 计算每个选项的中心像素坐标
         centers = []
         for box in boxes:
-            cx = (box[0] + box[1]) // 2
-            cy = (box[2] + box[3]) // 2
+            cx = (box[0] + box[2]) // 2
+            cy = (box[1] + box[3]) // 2
             centers.append((cx, cy))
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
@@ -477,13 +477,13 @@ class SimulatedCurrency(CurrencyUtils):
     def _confirm_environment_selection(self):
         # 普通环境与蓝海额外环境的确认按钮位置相同。
         box = self.ENVIRONMENT_CONFIRM_BOX
-        key_mouse_manager.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2, box=box)
+        key_mouse_manager.click_point((box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
         key_mouse_manager.wait()
 
     def _select_blue_ocean_extra_environment(self, max_attempts=6):
         CUS_LOGGER.info("蓝海生效，等待选择唯一的额外投资环境")
         centers = [
-            ((box[0] + box[1]) // 2, (box[2] + box[3]) // 2)
+            ((box[0] + box[2]) // 2, (box[1] + box[3]) // 2)
             for box in self.ENVIR_BOXES
         ]
 
@@ -582,16 +582,16 @@ class SimulatedCurrency(CurrencyUtils):
 
         centers = []
         for box in boxes:
-            cx = (box[0] + box[1]) // 2
-            cy = (box[2] + box[3]) // 2
+            cx = (box[0] + box[2]) // 2
+            cy = (box[1] + box[3]) // 2
             centers.append((cx, cy))
 
         selected_idx = -1
         texts = ["", "", ""]
         roi_boxes = [
-            [617, 641, 219, 241],
-            [1116, 1141, 219, 241],
-            [1616, 1639, 219, 241],
+            [617, 219, 641, 241],
+            [1116, 219, 1141, 241],
+            [1616, 219, 1639, 241],
         ]
 
         for attempt in range (self.max_refresh + 1):
@@ -601,7 +601,7 @@ class SimulatedCurrency(CurrencyUtils):
 
             icon_presence = [False] * len(roi_boxes)
             for idx, box in enumerate(roi_boxes):
-                x1, x2, y1, y2 = box
+                x1, y1, x2, y2 = box
                 roi = self.screen[y1:y2, x1:x2]
                 has_icon, std = self.detect_has_icon(roi)
                 icon_presence[idx] = bool(has_icon)
@@ -647,7 +647,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         key_mouse_manager.click_point(*centers[selected_idx], box=boxes[selected_idx])
 
-        self.click_text (text = "确认", box = [948, 1005, 968, 999], click = True)
+        self.click_text (text = "确认", box = [948, 968, 1005, 999], click = True)
         CUS_LOGGER.info ("投资策略选择完成")
         self.ts.forward (self.get_screen())
 
@@ -684,7 +684,7 @@ class SimulatedCurrency(CurrencyUtils):
         人物图标右侧开始，右侧留出两位数上限的宽度。
         """
         box = self.TEAM_COUNT_BOX
-        patch = self.screen[box[2]:box[3], box[0]:box[1]]
+        patch = self.screen[box[1]:box[3], box[0]:box[2]]
         counts = None
         halves = split_count_line(patch)
         if halves is not None:
@@ -795,8 +795,8 @@ class SimulatedCurrency(CurrencyUtils):
             "补位" if move.outgoing is None else "替换",
         )
         key_mouse_manager.drag_point(
-            (source[0] + source[1]) // 2, (source[2] + source[3]) // 2,
-            (target[0] + target[1]) // 2, (target[2] + target[3]) // 2,
+            (source[0] + source[2]) // 2, (source[1] + source[3]) // 2,
+            (target[0] + target[2]) // 2, (target[1] + target[3]) // 2,
         )
         key_mouse_manager.sleep(0.5)  # 等待交换或落位动画及人数刷新。
         key_mouse_manager.wait()
@@ -845,7 +845,7 @@ class SimulatedCurrency(CurrencyUtils):
         '''用于检测是否处于战斗状态，返回bool值'''
         if self.click_text(
             text="伤害",
-            box=[1793, 1833, 209, 231],
+            box=[1793, 209, 1833, 231],
             click=False,
             allow_fail=True,
         ):
@@ -867,7 +867,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.ts.forward(self.get_screen())
         if self.click_text(
             text="放弃并结算",
-            box=[707, 831, 728, 756],
+            box=[707, 728, 831, 756],
             click=False,
             allow_fail=True,
         ):
@@ -886,7 +886,7 @@ class SimulatedCurrency(CurrencyUtils):
 
             if self.click_text(
                 text="放弃并结算",
-                box=[707, 831, 728, 756],
+                box=[707, 728, 831, 756],
                 click=False,
                 allow_fail=True,
             ):
@@ -913,7 +913,7 @@ class SimulatedCurrency(CurrencyUtils):
 
             if self.click_text(
                 text="放弃并结算",
-                box=[707, 831, 728, 756],
+                box=[707, 728, 831, 756],
                 click=False,
                 allow_fail=True,
             ):

@@ -6,7 +6,7 @@ from core.currency.automation import SimulatedCurrency
 
 class CurrencyActionDispatchTests(unittest.TestCase):
     triggers = (
-        {"text": "\u51c6\u5907", "box": [0, 10, 0, 10], "redundancy": 20},
+        {"text": "\u51c6\u5907", "box": [0, 0, 10, 10], "redundancy": 20},
         {"photo": "icon", "pos": {"x": 10, "y": 20}, "threshold": 0.8},
         {"photo": "icon", "threshold": 0.8},
     )
@@ -18,7 +18,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         currency.get_screen = Mock(return_value=255)
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
-            {"raw_text": "\u51c6\u5907", "box": [0, 10, 0, 10]}
+            {"raw_text": "\u51c6\u5907", "box": [0, 0, 10, 10]}
         ]
         currency.check = Mock(return_value=True)
         currency.click_target = Mock(return_value=True)
@@ -140,7 +140,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         self.assertEqual(currency.run_static(), ("", 0))
 
         currency.ts.find_with_box.return_value = [
-            {"raw_text": "准备", "box": [0, 10, 0, 10]}
+            {"raw_text": "准备", "box": [0, 0, 10, 10]}
         ]
         self.assertEqual(currency.run_static(), ("choice", 1))
 
@@ -157,7 +157,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         currency.screen = "frame"
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
-            {"raw_text": "获得", "box": [0, 10, 0, 10]}
+            {"raw_text": "获得", "box": [0, 0, 10, 10]}
         ]
         runs = []
 
@@ -172,7 +172,7 @@ class CurrencyActionDispatchTests(unittest.TestCase):
         currency.loop()
 
         currency.ts.find_with_box.assert_called_once_with(
-            [0, 1920, 0, 1080], redundancy=0
+            [0, 0, 1920, 1080], redundancy=0
         )
         self.assertEqual(
             logger.warning.call_args_list[0],

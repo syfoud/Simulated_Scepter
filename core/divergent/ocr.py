@@ -24,7 +24,7 @@ class My_TS:
         if box is None:
             return self.ts.text_recognizer([img])[0][0]
         else:
-            return self.ts.text_recognizer([img[box[2]:box[3],box[0]:box[1]]])[0][0]
+            return self.ts.text_recognizer([img[box[1]:box[3],box[0]:box[2]]])[0][0]
 
     def forward(self, img):
         """
@@ -40,7 +40,7 @@ class My_TS:
         CUS_LOGGER.debug(f"识别结果：{ocr_res}")
         for res in ocr_res:
             res = {'raw_text': res[1][0], 'box': np.array(res[0]), 'score': res[1][1]}
-            res['box'] = [int(np.min(res['box'][:, 0])), int(np.max(res['box'][:, 0])), int(np.min(res['box'][:, 1])),
+            res['box'] = [int(np.min(res['box'][:, 0])), int(np.min(res['box'][:, 1])), int(np.max(res['box'][:, 0])),
                           int(np.max(res['box'][:, 1]))]
             self.res.append(res)
         CUS_LOGGER.debug(f"获取文本结果：{self.res}")
@@ -89,7 +89,7 @@ class My_TS:
         """
         在指定文本框内
         Args:
-            :param box: 一个指定的范围框[左上x,右下x,左上y,右下y]
+            :param box: 一个指定的范围框[左上x, 左上y, 右下x, 右下y]
             :param redundancy: 误差范围
             :param forward:
             :param mode: 图像处理保留的模式
@@ -98,9 +98,9 @@ class My_TS:
             指定区域提取的排序文字
         """
         if re_screen and forward and box is not None:
-            self.forward(filter_non_white(self.father.get_screen()[box[2]:box[3], box[0]:box[1]], mode=mode))
+            self.forward(filter_non_white(self.father.get_screen()[box[1]:box[3], box[0]:box[2]], mode=mode))
         elif forward and box is not None:
-            self.forward(filter_non_white(self.father.screen.copy()[box[2]:box[3], box[0]:box[1]], mode=mode))
+            self.forward(filter_non_white(self.father.screen.copy()[box[1]:box[3], box[0]:box[2]], mode=mode))
         ans = []
         for res in self.res:
             if box is None:
@@ -110,7 +110,7 @@ class My_TS:
                     ans.append(res)
             else:
                 #叠加指定偏移
-                res['box'] = [box[0]+res['box'][0], box[0]+res['box'][1], box[2]+res['box'][2], box[2]+res['box'][3]]
+                res['box'] = [box[0]+res['box'][0], box[1]+res['box'][1], box[0]+res['box'][2], box[1]+res['box'][3]]
                 ans.append(res)
         return sort_text(ans)
 

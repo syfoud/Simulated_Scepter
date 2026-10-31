@@ -28,7 +28,7 @@ INSECT_JSON = ROOT / "core" / "any_fate" / "actions" / "insect.json"
 
 REPORT_TITLE = "来自黑塔的分析报告"
 # 结算界面标题的识别框（与 insect.json「结算界面」同值：改实现时这里要跟着改）
-TITLE_BOX = [716, 1013, 217, 252]
+TITLE_BOX = [716, 217, 1013, 252]
 # 「结束并结算」后连点的两处：结算按钮、随后弹出的确认框
 CONFIRM_CLICKS = [{"position": [1393, 948]}, {"position": [1147, 676]}]
 

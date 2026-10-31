@@ -22,6 +22,7 @@ from tool.cleanup import (
     UNITS,
     CleanupConfig,
     CleanupItem,
+    category_directory,
     cleanup_manual,
     finish_manual_cleanup,
     last_cleanup_text,
@@ -272,10 +273,12 @@ class CleanupSettingsSection(QWidget):
     """自动清理设置区，负责显示三个清理对象的配置并收集用户改动。
 
     界面控件由 UI.ui 的进阶设置页承载，本类只负责读写这些控件的值：清理
-    按钮发出清理请求，实际清理与参数校验由主窗口完成。
+    按钮发出清理请求，位置按钮发出打开目录请求，实际清理、打开目录与参数
+    校验由主窗口完成。
     """
 
     cleanup_requested = pyqtSignal(str)  # 清理对象
+    open_location_requested = pyqtSignal(str)  # 需要打开文件位置的清理对象
 
     WIDGET_TYPES = {
         "mode_combo": QComboBox,
@@ -283,6 +286,7 @@ class CleanupSettingsSection(QWidget):
         "value_input": QLineEdit,
         "unit_combo": QComboBox,
         "cleanup_btn": QPushButton,
+        "open_btn": QPushButton,
         "last_label": QLabel,
     }
 
@@ -310,6 +314,9 @@ class CleanupSettingsSection(QWidget):
             )
             self.cleanup_btn[category].clicked.connect(
                 lambda _checked=False, name=category: self.cleanup_requested.emit(name)
+            )
+            self.open_btn[category].clicked.connect(
+                lambda _checked=False, name=category: self.open_location_requested.emit(name)
             )
 
         self._fix_column_layout()
@@ -727,6 +734,7 @@ class MainWindow(QMainWindowLog):
 
         self.cleanup_section = CleanupSettingsSection(self.advanced_settings_main_page)
         self.cleanup_section.cleanup_requested.connect(self.cleanup_category)
+        self.cleanup_section.open_location_requested.connect(self.open_cleanup_directory)
         self.Cleanup_save_btn.clicked.connect(self.save_cleanup_config)
         self._install_hotkey_captures()
         for action, capture in self._hotkey_captures.items():
@@ -1519,6 +1527,24 @@ class MainWindow(QMainWindowLog):
         self.cleanup_section.set_last_cleanup(category, cleaned_at)
 
         QMessageBox.information(self, "清理结果", result.summary)
+
+    def open_cleanup_directory(self, category):
+        """在资源管理器中打开某个清理对象所在的目录。
+
+        Args:
+            category: 清理对象，取 CATEGORIES 之一。
+        """
+        directory = category_directory(category)
+        if not os.path.isdir(directory):
+            QMessageBox.information(
+                self, "文件位置", f"该目录尚未生成：\n{directory}")
+            return
+        try:
+            os.startfile(directory)
+        except OSError as error:
+            CUS_LOGGER.warning("打开目录失败：%s（%s）", directory, error)
+            QMessageBox.warning(
+                self, "打开失败", f"无法打开该目录：\n{directory}\n{error}")
 
     def cleanup_at(self, trigger):
         """在某个触发时机执行周期清理与自动清理。

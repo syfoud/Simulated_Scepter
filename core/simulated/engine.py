@@ -257,7 +257,7 @@ class SimulatedUniverse(UniverseUtils):
         need_write=True
         if self.find:
             # 只有第一，第六层才寻找匹配的地图
-            if self.click_text(text="战斗", click=False, box=[55, 164, 12, 40], ocr_line=False):
+            if self.click_text(text="战斗", click=False, box=[55, 12, 164, 40], ocr_line=False):
                 if not self.floor_init:
                     self.get_level()
                 CUS_LOGGER.debug(f"检查当前层数：{self.floor}")
@@ -420,12 +420,12 @@ class SimulatedUniverse(UniverseUtils):
     # 祝福界面/回响界面 （放在一起处理了）
     def choose_bless(self):
         chose = 0
-        if self.click_text(text="重置祝福",box=[1268, 1444, 929, 1025],click=False,warning=False):
+        if self.click_text(text="重置祝福",box=[1268, 929, 1444, 1025],click=False,warning=False):
             for _ in range(4):
                 img_down = self.get_small_interaction_img(MASK["bless_path"], fresh=True)
                 if self.ts.split_and_find(self.tk.fates, img_down, mode="bless")[1] or self._stop:
                     break
-                if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                     return 1
             img_up = self.get_small_interaction_img(MASK["bless_name"], fresh=True)
             res_up = self.ts.split_and_find(self.tk.prior_bless, img_up, mode="bless_skip=self.tk.skip")
@@ -449,7 +449,7 @@ class SimulatedUniverse(UniverseUtils):
                 if self.ts.split_and_find(self.tk.fates, img_down)[1] or self._stop:
                     break
                 CUS_LOGGER.debug("未识别到命途")
-                if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                     return 1
             img_up = self.get_small_interaction_img(MASK["bless_name"], fresh=True)
             res_up = self.ts.split_and_find(self.tk.prior_bless, img_up, bless_skip=self.tk.skip)
@@ -463,11 +463,11 @@ class SimulatedUniverse(UniverseUtils):
                 CUS_LOGGER.debug("识别到匹配命途")
                 key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
                 key_mouse_manager.wait()
-            elif self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False,allow_fail=True):
+            elif self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False,allow_fail=True):
                 CUS_LOGGER.debug("未识别到具体祝福,随便选一个")
                 key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
                 key_mouse_manager.wait()
-        self.click_text(text="确认",box=[1663, 1719, 949, 979],need_fresh=False,ocr_line=True,warning=True)
+        self.click_text(text="确认",box=[1663, 949, 1719, 979],need_fresh=False,ocr_line=True,warning=True)
         key_mouse_manager.wait()
         return 1
     # F交互界面
@@ -518,7 +518,7 @@ class SimulatedUniverse(UniverseUtils):
         key_mouse_manager.click_point(1258, 548)
         self.init_map()
     def begin_universe(self):
-        con = self.click_text(text="继续进度",box=[1610, 1762, 937, 1023],click=False,ocr_line=False,warning=False)
+        con = self.click_text(text="继续进度",box=[1610, 937, 1762, 1023],click=False,ocr_line=False,warning=False)
         if not con:
             if self.diffi == 5:
                 key_mouse_manager.click_point(120, 479)
@@ -572,10 +572,10 @@ class SimulatedUniverse(UniverseUtils):
         from_prior=True 表示优选项命中（正常路径）；
         False 表示优选项都没命中、挑了一个识别到的选项兜底。
         """
-        # 选项面板在右侧 [左, 右, 上, 下]（1920x1080 基准）：点击点必须落在里面才算点到了选项。
-        left, right, top, bottom = [1320, 1850, 110, 1010]
-        x = (row["box"][0] + row["box"][1]) / 2
-        y = (row["box"][2] + row["box"][3]) / 2
+        # 选项面板在右侧 [左, 上, 右, 下]（1920x1080 基准）：点击点必须落在里面才算点到了选项。
+        left, top, right, bottom = [1320, 110, 1850, 1010]
+        x = (row["box"][0] + row["box"][2]) / 2
+        y = (row["box"][1] + row["box"][3]) / 2
         text = row["raw_text"]
         # OCR 结果有时会把选项左侧星号识别成「米」字
         if text.startswith("米"):
@@ -631,10 +631,10 @@ class SimulatedUniverse(UniverseUtils):
 
     def confirm_text_box(self):
         """
-        在框内寻找「确定」文字，返回它的屏幕文本框 [x0,x1,y0,y1]，没有返回 None。
+        在框内寻找「确定」文字，返回它的屏幕文本框 [x0,y0,x1,y1]，没有返回 None。
         find_with_box(forward=1, re_screen=True) 会重新截一帧、只对这条竖条进行 OCR。
         """
-        box = [1590, 1830, 240, 1070]
+        box = [1590, 240, 1830, 1070]
         for res in self.ts.find_with_box(box=box, forward=True, re_screen=True):
             if isinstance(res, dict) and "确定" in res.get("raw_text", ""):
                 return list(res["box"])
@@ -642,8 +642,8 @@ class SimulatedUniverse(UniverseUtils):
 
     def click_confirm_text(self, box):
         """点按钮文字框的中心（「确定」「确认」共用，与 click_text 一致，用 1920x1080 像素坐标）。"""
-        center_x = (box[0] + box[1]) / 2
-        center_y = (box[2] + box[3]) / 2
+        center_x = (box[0] + box[2]) / 2
+        center_y = (box[1] + box[3]) / 2
         key_mouse_manager.click_point(center_x, center_y, box=box)
 
     def confirm_event(self, event_name=None, point=None, timeout=1.5):
@@ -683,7 +683,7 @@ class SimulatedUniverse(UniverseUtils):
         if img is None:
             return ""
         try:
-            return self.ts.ocr_one_row(img, [93, 230, 50, 100]) or ""
+            return self.ts.ocr_one_row(img, [93, 50, 230, 100]) or ""
         except Exception as e:
             CUS_LOGGER.warning(f"界面标题识别失败：{e}")
             return ""
@@ -694,7 +694,7 @@ class SimulatedUniverse(UniverseUtils):
             img = self.get_screen()
         if img is None:
             return ""
-        name_box = [190, 800, 960, 1000]
+        name_box = [190, 960, 800, 1000]
         try:
             name = self.ts.ocr_one_row(img, name_box)
         except Exception as e:  # OCR 失败不该拖垮事件流程，退回空串
@@ -745,7 +745,7 @@ class SimulatedUniverse(UniverseUtils):
         names = self.option_icon_names() if names is None else tuple(names)
         region = MASK["event_icon"]
         local = crop_region(self.screen, region)
-        left, top = region[0], region[2]
+        left, top = region[0], region[1]
         icons = []
         for name in names:
             if name != "star" and "star" in names and not icons:
@@ -789,14 +789,14 @@ class SimulatedUniverse(UniverseUtils):
         按 max(R,G,B) 而不是灰度：金色等彩色标题也按通道峰值算亮，不会被误判成置灰。
 
         Args:
-            box: 选项标题文字的屏幕框 [x1, x2, y1, y2]。
+            box: 选项标题文字的屏幕框 [x1, y1, x2, y2]。
 
         Returns:
             框内最亮的通道值（0~255）；框完全落在画面外时返回 0。
         """
         h, w = self.screen.shape[:2]
-        x1, x2 = max(int(box[0]), 0), min(int(box[1]), w)
-        y1, y2 = max(int(box[2]), 0), min(int(box[3]), h)
+        x1, x2 = max(int(box[0]), 0), min(int(box[2]), w)
+        y1, y2 = max(int(box[1]), 0), min(int(box[3]), h)
         patch = self.screen[y1:y2, x1:x2]
         return int(patch.max()) if patch.size else 0
 
@@ -844,8 +844,8 @@ class SimulatedUniverse(UniverseUtils):
         for icon in self.event_option_icons(names):
             band = [
                 int(icon["x"] - 30),
-                panel_right,
                 int(icon["y"] - 30),
+                panel_right,
                 int(icon["y"] + 20),
             ]
             lines = [
@@ -858,12 +858,12 @@ class SimulatedUniverse(UniverseUtils):
             ]
             if not lines:
                 continue
-            lines.sort(key=lambda res: res["box"][2])
+            lines.sort(key=lambda res: res["box"][1])
             row = dict(lines[0])  # 第一行才是选项文字，下面是说明文字
             row["lines"] = lines
             row["icon"] = icon
             rows.append(row)
-        rows.sort(key=lambda row: row["box"][2])
+        rows.sort(key=lambda row: row["box"][1])
         return self.drop_disabled_options(rows)
 
     # 事件界面：由左上角「事件」文字触发，一次调用把事件界面这一帧该做的事按优先级走完：
@@ -942,7 +942,7 @@ class SimulatedUniverse(UniverseUtils):
 
         if self.confirm_event(point=self.confirm_point(prior)):
             return
-        if self.click_text(text="休息区", box=[187, 289, 903, 941], click=False, warning=False):
+        if self.click_text(text="休息区", box=[187, 903, 289, 941], click=False, warning=False):
             CUS_LOGGER.info("事已至此，我只想知道，当他们以凡人的身躯在黑潮中消散时……你为何连一滴眼泪都没有流下？")
             key_mouse_manager.click_point(1600, 800)
 
@@ -952,12 +952,12 @@ class SimulatedUniverse(UniverseUtils):
         res = self.ts.split_and_find(self.tk.strange, img, mode="strange")
         key_mouse_manager.click_point(*self.calc_point(MASK["strange_name"], res[0]))
         key_mouse_manager.click_point(1658, 962)
-        self.wait_flag(lambda: self.click_text(text="选择奇物",box=[5, 219, 3, 111],click=False,ocr_line=False,warning=False), 1.4)
+        self.wait_flag(lambda: self.click_text(text="选择奇物",box=[5, 3, 219, 111],click=False,ocr_line=False,warning=False), 1.4)
     # 丢弃奇物
     def drop_strange(self):
         key_mouse_manager.click_point(1015, 486)
         key_mouse_manager.click_point(1663, 969)
-        self.wait_flag(lambda: self.click_text(text="丢弃奇物",box=[10, 220, 0, 112],click=False,ocr_line=False,warning=False), 1.4)
+        self.wait_flag(lambda: self.click_text(text="丢弃奇物",box=[10, 0, 220, 112],click=False,ocr_line=False,warning=False), 1.4)
     def drop_bless(self):
         st = set(self.tk.fates) - set(self.tk.secondary)
         clicked = 0
@@ -986,7 +986,7 @@ class SimulatedUniverse(UniverseUtils):
                 key_mouse_manager.click_point(i[0], i[1])
             key_mouse_manager.click_point(1711, 980)
             tm = time.time()
-            while not self.click_text(text="祝福强化",box=[70, 236, 9, 125],click=False,ocr_line=False,warning=False) and time.time() - tm < 7:
+            while not self.click_text(text="祝福强化",box=[70, 9, 236, 125],click=False,ocr_line=False,warning=False) and time.time() - tm < 7:
                 key_mouse_manager.click_point(1524, 858)
         key_mouse_manager.press("esc")
         if self.floor >= 13:
@@ -998,12 +998,12 @@ class SimulatedUniverse(UniverseUtils):
         这一帧没认到就不点，等下一帧重新识别。
         """
         # 若处于作弊界面，则不点「确认」
-        if self.click_text(text="作弊", box=[923, 996, 230, 270], click=False, allow_fail=True):
+        if self.click_text(text="作弊", box=[923, 230, 996, 270], click=False, allow_fail=True):
             CUS_LOGGER.debug("当前处于作弊选项窗，跳过点击「确认」")
             return 0
-        # 在弹窗中找「确认」按钮的文字框 [左,右,上,下]; re_screen=True 让这里每次独立截一帧。
+        # 在弹窗中找「确认」按钮的文字框 [左,上,右,下]; re_screen=True 让这里每次独立截一帧。
         rows = [
-            row for row in self.ts.find_with_box(box=[232, 1690, 154, 928], forward=True, re_screen=True)
+            row for row in self.ts.find_with_box(box=[232, 154, 1690, 928], forward=True, re_screen=True)
             if isinstance(row, dict) and "确认" in (row.get("raw_text") or "")
         ]
         # 弹窗标题里也可能带「确认」（如「确认丢弃祝福「X」？」），按钮永远在标题下方，所以取最靠下的那一块文字。
@@ -1224,7 +1224,7 @@ class SimulatedUniverse(UniverseUtils):
         if self.state=="init2":
             return
         self.update_state("init")
-        if self.click_text(text="模拟宇宙",box=[1231, 1360, 595, 631],click=False,allow_fail= True):
+        if self.click_text(text="模拟宇宙",box=[1231, 595, 1360, 631],click=False,allow_fail= True):
             CUS_LOGGER.info("已在办公室，打开模拟宇宙")
             key_mouse_manager.press("interact")
             return

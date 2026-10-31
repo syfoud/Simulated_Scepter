@@ -150,15 +150,15 @@ class IronBloodUniverse(AnyFateUniverse):
                 CUS_LOGGER.error(f"写入铁血计数失败 {e}")
 
     def select_fate(self):
-        self.click_text(text="毁灭",box=[1263, 1317, 791, 821])
+        self.click_text(text="毁灭",box=[1263, 791, 1317, 821])
 
     def initing_map(self):
         key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[10, 220, 0, 112],click=False,warning=False):
+        if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[10, 220, 0, 112],click=False,warning=False):
+        elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=2
-        elif self.click_text(text="消褪",box=[10, 220, 0, 112],click=False,warning=False):
+        elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=3
             # 达到第三面暂停需求数时停止程序
             if self.third_plane_pause_count > 0 and self.third_plane_pause_count <= (self.kill_count+1):
@@ -175,7 +175,7 @@ class IronBloodUniverse(AnyFateUniverse):
         # 让游戏开始播入场动画，最后才用稳定帧做一次完整识别，不占开局时间。
         # 若一次点击未能生效，按钮还留在屏幕上，主循环会再点一次，至多间隔三秒，不会卡死。
         analysis_status, stable_frame = self.wait_map_rendered(1)
-        self.click_text(text="进入位面", box=[907, 1009, 857, 891])
+        self.click_text(text="进入位面", box=[907, 857, 1009, 891])
         self.node_count = 0
         self.new_node = True
         # 切换位面时没有重投界面出现，需清空区域名缓存
@@ -202,11 +202,11 @@ class IronBloodUniverse(AnyFateUniverse):
         return
     def initing_map2(self):
         key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[385, 449, 548, 583],click=False,warning=False):
+        if self.click_text(text="振翅",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[385, 449, 548, 583],click=False,warning=False):
+        elif self.click_text(text="浪潮",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=2
-        elif self.click_text(text="消褪",box=[385, 449, 548, 583],click=False,warning=False):
+        elif self.click_text(text="消褪",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=3
         else:
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
@@ -217,10 +217,10 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.wait()
         return
     def select_doing(self):
-        text = self.ts.find_with_box(box=[557, 747, 447, 474], forward=True, re_screen=False)
+        text = self.ts.find_with_box(box=[557, 447, 747, 474], forward=True, re_screen=False)
         text = merge_text(text) if len(text) else ""
         CUS_LOGGER.debug(f"当前效果{text}")
-        if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996], click=False, allow_fail=True):
+        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996], click=False, allow_fail=True):
             CUS_LOGGER.info("是带着无法被改变的过往，背负它走向未来的决心。")
             return
         if "肉体" in text:
@@ -234,7 +234,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 x,y=int(self.nodes[self.replace_idx]["cx"]),int(self.nodes[self.replace_idx]["cy"])
                 key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
-                self.click_text(text="确认目标", box=[1635, 1735, 968, 996])
+                self.click_text(text="确认目标", box=[1635, 968, 1735, 996])
             else:
                 CUS_LOGGER.info("所以你才变成了这副模样：残缺的神像…悲哀的薪柴。")
                 self.abandon_confirm(confirm=True)
@@ -263,7 +263,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 x, y = int(target_node["cx"]), int(target_node["cy"])
                 key_mouse_manager.click_point(x, y)
                 key_mouse_manager.wait()
-                self.click_text(text="确认目标", box=[1635, 1735, 968, 996])
+                self.click_text(text="确认目标", box=[1635, 968, 1735, 996])
             else:
                 #战争崇拜无猪可改，放弃
                 CUS_LOGGER.info("「放心，我会替你照顾。」")
@@ -298,8 +298,8 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.clean()
         key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
-        if self.click_text(text="选择移动目标", box=[1609, 1759, 965, 996],click=False,allow_fail=True):
-            if self.click_text(text="点击空白处关闭", box=[876, 1047, 1008, 1035],click=False,allow_fail=True):
+        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996],click=False,allow_fail=True):
+            if self.click_text(text="点击空白处关闭", box=[876, 1008, 1047, 1035],click=False,allow_fail=True):
                 CUS_LOGGER.info("「下一世，真理定会解明，死生……将有序流转。」")
                 key_mouse_manager.wait()
                 return
@@ -316,7 +316,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
                 key_mouse_manager.click_point(x,y)
                 key_mouse_manager.wait()
-                self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+                self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
                 if self.area != "" and self.now_map!=-1:
                     visit_count = self.record_map_visit(self.now_map)
                     CUS_LOGGER.debug(f"上次地图编号{self.now_map}, 累计访问次数: {visit_count}")
@@ -330,7 +330,7 @@ class IronBloodUniverse(AnyFateUniverse):
                     self.need_end=True
                     CUS_LOGGER.debug(f"当前极限值{self.kill_count + self.max_limited}无法达到第二位面推荐值{self.second_plane_count},终止本次演算")
         else:
-            self.click_text(text="确认移动", box=[1611, 1759, 964, 998])
+            self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
         # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
         # 而它通常已被上一节点消费掉，这里必须自己清
         self.area = ""
@@ -340,7 +340,7 @@ class IronBloodUniverse(AnyFateUniverse):
         # 点过「作弊」按钮后窗口约 0.3 s 才弹出来，这期间「重投界面」还会反复触发，
         # 那时背景的「确认效果」照样认得到。不在这里挡住，就会再点一次「作弊」，
         # 而那一下会落到已经打开的列表上，可能选中别的骰面。
-        if self.click_text(text="作弊", box=[923, 996, 230, 270], click=False, allow_fail=True):
+        if self.click_text(text="作弊", box=[923, 230, 996, 270], click=False, allow_fail=True):
             CUS_LOGGER.debug("作弊选项窗还开着，先不处理重投界面")
             return
         if self.nodes is None or self.plane_floor==-1:
@@ -349,9 +349,9 @@ class IronBloodUniverse(AnyFateUniverse):
             return
         _, cheat_count = self.read_action_counts()
         if not self.check("fast_roll",1674,100, threshold=0.9):
-            self.click_text(text="快速投掷", box=[1700, 1823, 80, 117])
+            self.click_text(text="快速投掷", box=[1700, 80, 1823, 117])
         if self.plane_floor in [2,3]:
-            text = self.ts.find_with_box(box=[1339, 1576, 429, 464], forward=True, re_screen=False)
+            text = self.ts.find_with_box(box=[1339, 429, 1576, 464], forward=True, re_screen=False)
             text = merge_text(text) if len(text) else ""
             CUS_LOGGER.info(f"拿去吧…我背负的一切。(当前效果{text})")
             if "肉体" not in text:
@@ -370,13 +370,13 @@ class IronBloodUniverse(AnyFateUniverse):
                             CUS_LOGGER.debug(f"期权最佳代替节点{self.replace_idx},替换后最佳路径{best_path}")
                             if cheating:
                                 self.cheat_target = "肉体帝侯"
-                                if not self.click_text(text="作弊", box=[1261, 1321, 761, 792], allow_fail=True):
+                                if not self.click_text(text="作弊", box=[1261, 761, 1321, 792], allow_fail=True):
                                     CUS_LOGGER.warning("没点到「作弊」按钮，等下一轮重新决策")
                                 return
                             elif redo:
-                                self.click_text(text="重投", box=[1599, 1657, 760, 795])
+                                self.click_text(text="重投", box=[1599, 760, 1657, 795])
                                 return
-        self.click_text(text="确认效果", box=[1584, 1687, 961, 994])
+        self.click_text(text="确认效果", box=[1584, 961, 1687, 994])
         self.init_map()
         self.mini_state = 1
 
