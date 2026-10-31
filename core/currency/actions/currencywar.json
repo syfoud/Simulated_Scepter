@@ -686,6 +686,30 @@
         ]
     },
     {
+        "name": "点击前往参与货币战争",
+        "trigger": {
+            "text": "旷宇纷争",
+            "box": [
+                99,
+                62,
+                203,
+                98
+            ],
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    1491,
+                    878
+                ]
+            },
+            {
+                "set_state": "start_currencywar"
+            }
+        ]
+    },
+    {
         "name": "打开矿宇纷争界面",
         "trigger": {
             "text": "星际和平指南",
@@ -704,34 +728,6 @@
                     593,
                     212
                 ]
-            },
-            {
-                "set_state": "goto_currency"
-            }
-        ]
-    },
-    {
-        "name": "点击前往参与货币战争",
-        "trigger": {
-            "text": "旷宇纷争",
-            "box": [
-                99,
-                62,
-                203,
-                98
-            ],
-            "redundancy": 30,
-            "condition": "init2"
-        },
-        "actions": [
-            {
-                "position": [
-                    1491,
-                    878
-                ]
-            },
-            {
-                "set_state": "start_currencywar"
             }
         ]
     },
