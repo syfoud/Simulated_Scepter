@@ -4,6 +4,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import threading
 import time
 
 import keyboard
@@ -477,6 +478,9 @@ class MainWindow(QMainWindowLog):
         self._task_monitor_timer.timeout.connect(self._check_task_thread)
         self._last_key_time = {}
         self._task_running_warning = None
+        # 坐标拾取：后台线程采集，右键或再点一次按钮停止
+        self._pick_thread = None
+        self._pick_stop = threading.Event()
         # 键位窗口打开期间暂停程序热键，否则用户录键时按下的停止/截图/打印热键会被全局钩子当场触发
         self._capturing_keys = False
         # 键位窗口返回的待保存键位，等用户点击「保存快捷键设置」才写配置
@@ -700,6 +704,17 @@ class MainWindow(QMainWindowLog):
         self.calibrate_btn.clicked.connect(self.calibrate)
         self.test_btn.clicked.connect(self.test)
         self.print_btn.clicked.connect(self.test_2)
+        # 坐标拾取按钮动态插到「打印坐标」下面，避免改动 UI.ui 资源
+        self.pick_btn = AnimatedButton("拾取坐标", self)
+        # print_btn 位于嵌套布局 Lay_Tab1_Right 里，parentWidget().layout() 拿到的是外层布局
+        pick_layout = self.findChild(QVBoxLayout, "Lay_Tab1_Right") or self.print_btn.parentWidget().layout()
+        pick_index = pick_layout.indexOf(self.print_btn)
+        pick_layout.insertWidget(pick_index + 1 if pick_index >= 0 else pick_layout.count(), self.pick_btn)
+        self.pick_btn.clicked.connect(self.toggle_coordinate_pick)
+        self._pick_timer = QTimer(self)
+        self._pick_timer.setInterval(300)
+        self._pick_timer.timeout.connect(self._sync_pick_button)
+        self._pick_timer.start()
         self.stop_btn.clicked.connect(self.stop_task)
         self.general_settings_save_btn.clicked.connect(self.save_general_config)
         self.ocr_settings_btn.clicked.connect(self.open_ocr_settings)
@@ -972,7 +987,7 @@ class MainWindow(QMainWindowLog):
         for widget in (
             self.engine_label, self.engine_combo, self.engine_settings_btn,
             self.script_label, self.script_combo, self.run_script_btn,
-            self.test_btn, self.print_btn, self.PrintEdit, self.PrintPhoto, self.PrintText,
+            self.test_btn, self.print_btn, self.pick_btn, self.PrintEdit, self.PrintPhoto, self.PrintText,
             self.label_test_hotkey, self.test_hotkey_input, self.label_print_hotkey, self.print_hotkey_input,
         ):
             widget.setVisible(debug_enabled)
@@ -1046,6 +1061,40 @@ class MainWindow(QMainWindowLog):
             self.start_task(task)
         except RuntimeError as error:
             QMessageBox.warning(self, "警告", str(error))
+
+    def toggle_coordinate_pick(self):
+        """鼠标坐标拾取：点哪打印哪，右键或再点一次按钮停止。"""
+        if self._pick_thread is not None and self._pick_thread.is_alive():
+            self._pick_stop.set()
+            return
+        if self.is_task_running():
+            self.show_task_running_warning()
+            return
+        self._pick_stop.clear()
+        self.pick_btn.setText("停止拾取")
+        CUS_LOGGER.debug("坐标拾取：左键点目标位置，右键或再点一次按钮停止")
+
+        def task():
+            try:
+                from tool.coordinate_picker import pick_coordinates
+
+                points = pick_coordinates(
+                    on_point=lambda _base, _screen, text: CUS_LOGGER.debug(text),
+                    should_stop=self._pick_stop.is_set,
+                )
+                CUS_LOGGER.debug(f"坐标拾取结束，共 {len(points)} 个点")
+            except Exception as error:  # 采集失败不能拖垮 GUI
+                CUS_LOGGER.error(f"坐标拾取失败：{error}")
+
+        self._pick_thread = threading.Thread(target=task, daemon=True)
+        self._pick_thread.start()
+
+    def _sync_pick_button(self):
+        """线程结束时恢复按钮文字（Qt 控件只能主线程改）。"""
+        running = self._pick_thread is not None and self._pick_thread.is_alive()
+        text = "停止拾取" if running else "拾取坐标"
+        if self.pick_btn.text() != text:
+            self.pick_btn.setText(text)
 
     def init_kernel_buttons(self):
         """普通运行按钮及齿轮由模块声明，主 UI 仅提供容器。"""
