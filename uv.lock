@@ -31,7 +31,7 @@ wheels = [
 
 [[package]]
 name = "auto-difficult-achievement"
-version = "1.5.25"
+version = "1.5.26"
 source = { virtual = "." }
 dependencies = [
     { name = "av" },
