@@ -13,7 +13,7 @@ class FlowDone(Exception):
 
 
 def run_flow(capture, identify, handlers, *, on_frame=None, idle=0.3, stable=2,
-             cooldown=2.0, unknown_timeout=20.0, should_stop=None):
+             cooldown=2.0, unknown_timeout=20.0, retry_limit=3, should_stop=None):
     """循环识别并分发。
 
     Args:
@@ -25,16 +25,19 @@ def run_flow(capture, identify, handlers, *, on_frame=None, idle=0.3, stable=2,
         stable: 连续多少帧同一个状态才允许动作，防识别抖动导致连点。
         cooldown: 动作后多少秒内只识别不动作，等界面切换。
         unknown_timeout: 连续多少秒认不出已知状态就超时，避免无限等待。
+        retry_limit: 同一界面连续处理几次仍无变化就报错，防「点了没反应」时无限重试。
         should_stop: () -> bool，外部停止条件（如 F8）。
 
     Raises:
         FlowDone: handlers 内主动结束（不再向上传播）。
         TimeoutError: 长时间停在未知界面。
+        RuntimeError: 同一界面反复动作但界面没有变化。
         InterruptedError: should_stop 返回 True。
     """
     last_state, count = None, 0
     ready_at = 0.0
     unknown_since = None
+    acted_state, same_state_actions = None, 0
 
     while True:
         if should_stop is not None and should_stop():
@@ -64,8 +67,17 @@ def run_flow(capture, identify, handlers, *, on_frame=None, idle=0.3, stable=2,
             continue
 
         unknown_since = None
+        # 上一个动作后界面没变化：累计次数，超过上限说明点了没生效
+        if state == acted_state:
+            same_state_actions += 1
+            if same_state_actions > retry_limit:
+                raise RuntimeError(f"界面 {state} 连续处理 {same_state_actions} 次仍未变化，停止以免空转")
+        else:
+            acted_state, same_state_actions = state, 1
+
         try:
             handler(snapshot)
         except FlowDone:
             return
         ready_at = time.monotonic() + cooldown
+

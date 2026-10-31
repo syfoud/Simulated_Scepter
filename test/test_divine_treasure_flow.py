@@ -48,7 +48,7 @@ class TestRunFlow(unittest.TestCase):
 
     def test_stable_frames_trigger_handler(self):
         calls = []
-        self.drive(["home"] * 4, {"home": lambda snapshot: calls.append(1)})
+        self.drive(["home"] * 3, {"home": lambda snapshot: calls.append(1)}, retry_limit=99)
         self.assertTrue(calls)
 
     def test_cooldown_blocks_repeat_click(self):
@@ -65,6 +65,12 @@ class TestRunFlow(unittest.TestCase):
         handlers = {"home": lambda snapshot: calls.append("home"), "masks": finish}
         self.drive(["home", "home", "masks", "masks", "home"], handlers)
         self.assertEqual(calls, ["home"])
+
+    def test_repeat_without_change_raises(self):
+        calls = []
+        with self.assertRaises(RuntimeError):
+            self.drive(["home"] * 50, {"home": lambda snapshot: calls.append(1)}, retry_limit=2)
+        self.assertEqual(len(calls), 2, "超过重试上限应停止而不是无限点击")
 
 
 if __name__ == "__main__":
