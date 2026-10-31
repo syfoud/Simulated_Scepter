@@ -113,45 +113,55 @@ def capture_game():
 
 
 def enter_universe(ocr, output):
+    """首页 → 面具页。
+
+    状态驱动：每帧只认屏幕当前是什么界面，不记录「第几步」，也不预期下一步是谁。
+    界面乱序、重复出现或卡住都不会误点；加新界面只需往 handlers 加一行。
+    """
     import win32api
     import win32con
 
-    last_clicked = -1
-    stable_state, stable_count = None, 0
-    deadline = time.monotonic() + 20
-    sequence = 0
+    from tool.divine_treasure.flow import FlowDone, run_flow
+
+    ctx = {"hwnd": None, "rect": None, "image": None, "sequence": 0, "last_state": None}
+
+    def capture():
+        image, hwnd, rect = capture_game()
+        ctx["hwnd"], ctx["rect"], ctx["image"] = hwnd, rect, image
+        return image
+
+    def on_frame(snapshot, image):
+        ctx["image"] = image
+        if snapshot["state"] != ctx["last_state"]:
+            ctx["last_state"] = snapshot["state"]
+            CUS_LOGGER.debug(f"Observed: {snapshot['state']}", extra={"flush": True})
+            save_evidence(output, f"{ctx['sequence']:02d}-{snapshot['state']}", image, snapshot)
+            ctx["sequence"] += 1
+
+    def click(snapshot):
+        if snapshot["target"] is not None:
+            CUS_LOGGER.debug(f"Click: {snapshot['state']} at {snapshot['target']}", extra={"flush": True})
+            click_game(ctx["hwnd"], ctx["rect"], snapshot["target"])
+
+    def click_practice(snapshot):
+        if snapshot["protocol"] != 5:
+            raise RuntimeError(f"Protocol must be 5, observed {snapshot['protocol']}; no adjustment made")
+        click(snapshot)
+
+    def on_masks(snapshot):
+        CUS_LOGGER.debug("SUCCESS: mask selection detected; no mask selected", extra={"flush": True})
+        raise FlowDone()
+
+    handlers = {"home": click, "mode": click, "regular": click,
+                "ranked": click, "practice": click_practice, "masks": on_masks}
+
     try:
-        while time.monotonic() < deadline:
-            image, hwnd, rect = capture_game()
-            result = inspect_screen(image, ocr)
-            state = result["state"]
-            stable_count = stable_count + 1 if state == stable_state else 1
-            if state != stable_state:
-                CUS_LOGGER.debug(f"Observed: {state}", extra={"flush": True})
-                save_evidence(output, f"{sequence:02d}-{state}", image, result)
-                sequence += 1
-            stable_state = state
-            if state != "unknown" and stable_count >= 2:
-                index = STATES.index(state)
-                if state == "masks":
-                    if last_clicked != 4:
-                        raise RuntimeError("Mask page appeared before this probe launched a run")
-                    save_evidence(output, "success-masks", image, result)
-                    CUS_LOGGER.debug("SUCCESS: mask selection detected; no mask selected", extra={"flush": True})
-                    return
-                if index > last_clicked:
-                    if index != last_clicked + 1:
-                        raise RuntimeError(f"Unexpected page {state}; start from sample 1")
-                    if state == "practice" and result["protocol"] != 5:
-                        raise RuntimeError(f"Protocol must be 5, observed {result['protocol']}; no adjustment made")
-                    CUS_LOGGER.debug(f"Click once: {state} at {result['target']}", extra={"flush": True})
-                    click_game(hwnd, rect, result["target"])
-                    last_clicked = index
-                    deadline = time.monotonic() + (45 if state == "practice" else 15)
-                    stable_count = 0
-            time.sleep(0.4)
-        save_evidence(output, "timeout-last-frame", image, result)
-        raise TimeoutError(f"No confirmed next page after {STATES[last_clicked] if last_clicked >= 0 else 'start'}")
+        run_flow(capture, lambda image: inspect_screen(image, ocr), handlers,
+                 on_frame=on_frame, cooldown=2.0, unknown_timeout=20.0)
+    except TimeoutError:
+        if ctx["image"] is not None:
+            save_evidence(output, "timeout-last-frame", ctx["image"], {"state": ctx["last_state"]})
+        raise
     finally:
         # 仅使用短点击；即使异常也释放本脚本可能按下的左键。
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
