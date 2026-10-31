@@ -287,14 +287,9 @@ class SimulatedCurrency(CurrencyUtils):
 
     def goto_currency (self):
         """
-        前往货币战争
-        该函数负责自动导航到货币战争，主要流程包括：
-        1. 检查是否已经在货币战争内
-        2. 如果不在，通过星际和平指南传送
+        不在货币战争中，通过星际和平指南传送至货币战争
         """
-        self.update_state("init")
         CUS_LOGGER.info("前往货币战争")
-        CUS_LOGGER.info("打开")
         key_mouse_manager.press("interastral_peace_guide")
 
     def is_one (self):
