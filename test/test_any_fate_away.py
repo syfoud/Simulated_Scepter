@@ -39,13 +39,13 @@ INSECT_JSON = ROOT / "core" / "any_fate" / "actions" / "insect.json"
 from core.any_fate.engine import AnyFateUniverse
 
 # normal() 里按 esc 后轮询「暂离」文字的识别框（与实现同值：改实现时这里要跟着改）
-AWAY_BOX = [1321, 1383, 787, 821]
+AWAY_BOX = [1321, 787, 1383, 821]
 # 超时暂离的判定阈值（秒）
 MAX_INTERACT_TIME = 40
 # 暂离时长按期间所在的区域名（区域名只用于寻路，暂离成功后被清空）
 AREA = "战斗"
 # 战斗中按 esc 弹出的暂停菜单「继续战斗」按钮（与 insect.json「战斗暂停」同值）
-BATTLE_PAUSE_BOX = [1580, 1679, 970, 998]
+BATTLE_PAUSE_BOX = [1580, 970, 1679, 998]
 BATTLE_PAUSE_CLICK = [1631, 983]
 # normal() 需要的画面：只做占位，OCR 与模板匹配都被打桩
 SCREEN = np.zeros((1080, 1920, 3), dtype=np.uint8)

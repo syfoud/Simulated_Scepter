@@ -20,7 +20,7 @@ class StateKernel:
         self.action_history = []
         self.action_time = time.time()
         self.latched_events = set()
-        # 最近一次图片匹配的落框 [x1, x2, y1, y2]，点击时写进日志便于核对落点
+        # 最近一次图片匹配的落框 [x1, y1, x2, y2]，点击时写进日志便于核对落点
         self.tb = None
 
     def update_state(self, state):
@@ -117,7 +117,7 @@ class StateKernel:
         if isinstance(action, str):
             return getattr(self, action)()
         if "text" in action:
-            text = self.ts.find_with_box(action.get("box", [0, 1920, 0, 1080]),
+            text = self.ts.find_with_box(action.get("box", [0, 0, 1920, 1080]),
                                          redundancy=action.get("redundancy", 30))
             for item in text:
                 if action["text"] in item["raw_text"]:
@@ -183,8 +183,8 @@ class StateKernel:
                 if click:
                     # 全屏匹配的 max_loc 已是绝对坐标，配上模板尺寸就是匹配框
                     box = [int(result["max_loc"][0]),
-                           int(result["max_loc"][0] + target.shape[1]),
                            int(result["max_loc"][1]),
+                           int(result["max_loc"][0] + target.shape[1]),
                            int(result["max_loc"][1] + target.shape[0])]
                     key_mouse_manager.click_point(*points, box=box)
                 return True
@@ -208,7 +208,7 @@ class StateKernel:
         判断截图中指定区域或匹配中心点附近是否存在匹配模板
         path：匹配模板的路径，
         x,y：匹配中心点，1920x1080 像素坐标（原点在客户区左上角），
-        mask：识别区域 [x1, x2, y1, y2]（见 tool/mask.py），给出时忽略 x,y，
+        mask：识别区域 [x1, y1, x2, y2]，即 [左, 上, 右, 下]（见 tool/mask.py），给出时忽略 x,y，
         threshold：匹配阈值
         """
         if fresh:
@@ -265,8 +265,8 @@ class StateKernel:
         # 匹配框由中心反推：日志里的框中心就和真正点击的点完全一致，
         # 模板在截图边缘被裁掉时也不会因为局部截图原点被夹紧而偏移
         half_width, half_height = target.shape[1] / 2, target.shape[0] / 2
-        self.tb = [int(self.tx - half_width), int(self.tx + half_width),
-                   int(self.ty - half_height), int(self.ty + half_height)]
+        self.tb = [int(self.tx - half_width), int(self.ty - half_height),
+                   int(self.tx + half_width), int(self.ty + half_height)]
         if max_val > threshold:
             if self.last_info != path:
                 CUS_LOGGER.debug(f"匹配到图片记忆切片 {path} 相似度 {max_val} 阈值 {threshold}")
@@ -293,11 +293,11 @@ class StateKernel:
         点击给定坐标框的中心位置
 
         Args:
-            box: 坐标框，格式为[x1, x2, y1, y2]，其中x1,x2为横向坐标，y1,y2为纵向坐标，
+            box: 坐标框，格式为[x1, y1, x2, y2]，即 [左, 上, 右, 下]，
                 单位是 1920x1080 像素坐标（原点在客户区左上角）
         """
-        x = (box[0] + box[1]) / 2
-        y = (box[2] + box[3]) / 2
+        x = (box[0] + box[2]) / 2
+        y = (box[1] + box[3]) / 2
         key_mouse_manager.click_point(x, y, box=box)
 
     def click_position(self, position, box=None):
@@ -306,7 +306,7 @@ class StateKernel:
 
         Args:
             position: 位置坐标，格式为[x, y]，单位为 1920x1080 像素坐标（原点在客户区左上角）
-            box: 这次点击来源的框 [x1, x2, y1, y2]，交不出来就不传，只用于写日志
+            box: 这次点击来源的框 [x1, y1, x2, y2]，交不出来就不传，只用于写日志
         """
         if box is None:
             # 没有来源框（纯坐标点击）时按原样传参，日志与旧版完全一致

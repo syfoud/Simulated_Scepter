@@ -569,7 +569,7 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
         editor.sample_requested.connect(self.window.capture_script_sample)
         self.window.script_tool_result.connect(editor.receive_result)
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
-        texts = [{"raw_text": "确认1", "box": [100, 220, 100, 145]}]
+        texts = [{"raw_text": "确认1", "box": [100, 100, 220, 145]}]
         focus = SimpleNamespace(hwnd=17)
         selections = []
 
@@ -577,7 +577,7 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
             if dialog.recognize:
                 dialog.text_list.setCurrentRow(0)
             else:
-                dialog.select_region([100, 220, 100, 145])
+                dialog.select_region([100, 100, 220, 145])
             dialog.use_btn.click()
             selections.append(dialog.trigger)
             return dialog.result()

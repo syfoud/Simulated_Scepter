@@ -37,7 +37,7 @@ from tool.script_files import (
 
 STEP_DEFAULTS = {
     "点击坐标": {"position": [960, 540]},
-    "点击文字": {"text": "目标文字", "box": [0, 1920, 0, 1080]},
+    "点击文字": {"text": "目标文字", "box": [0, 0, 1920, 1080]},
     "点击图片": {"photo": "图片名称", "threshold": 0.9},
     "按键": {"press": "esc", "time": 0},
     "等待": {"sleep": 1},
@@ -148,13 +148,13 @@ class ScriptEditor(QDialog):
         self.debug_scope_combo.addItem("整个脚本", "script")
         self.debug_stop_btn.setEnabled(False)
         self.trigger_fields = ParameterFields({
-            "text": "目标文字", "box": [0, 1920, 0, 1080], "photo": "图片名称",
+            "text": "目标文字", "box": [0, 0, 1920, 1080], "photo": "图片名称",
             "pos": {"x": 960, "y": 540}, "mask": "interact_icon", "state_only": True,
             "condition": "状态名称", "once": False, "interval": 1, "threshold": 0.9, "redundancy": 30,
         }, self.trigger_host)
         self.trigger_layout.addWidget(self.trigger_fields)
         self.step_fields = ParameterFields({
-            "position": [960, 540], "text": "目标文字", "box": [0, 1920, 0, 1080],
+            "position": [960, 540], "text": "目标文字", "box": [0, 0, 1920, 1080],
             "photo": "图片名称", "press": "esc", "time": 0, "sleep": 1, "real_sleep": 1,
             "drag": [960, 540, 960, 640], "scroll": -1, "set_state": "状态名称", "threshold": 0.9,
         }, self.step_host)

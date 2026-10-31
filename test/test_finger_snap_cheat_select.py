@@ -36,39 +36,39 @@ from tool.countdown_evaluator import EFFECT_NAMES, EFFECT_NOTHING, EFFECT_SELECT
 XX, YY = 1920, 1080
 
 # 引擎里写死的各个区域框（1920x1080 基准）
-LIST_BOX = [420, 1500, 240, 960]       # 作弊列表区域
-TITLE_BOX = [923, 996, 230, 270]       # 只用来判断窗口还开着的标题条
-BUTTON_BOX = [1261, 1321, 761, 792]    # 掷骰界面上的「作弊」按钮
-CONFIRM_BOX = [900, 1520, 700, 1030]   # 作弊窗底部按钮区域
-CONFIRM_EFFECT_BOX = [1584, 1687, 961, 994]  # 「确认效果」按钮
-EFFECT_BOX = [1339, 1576, 429, 464]    # 当前骰面效果文本
+LIST_BOX = [420, 240, 1500, 960]       # 作弊列表区域
+TITLE_BOX = [923, 230, 996, 270]       # 只用来判断窗口还开着的标题条
+BUTTON_BOX = [1261, 761, 1321, 792]    # 掷骰界面上的「作弊」按钮
+CONFIRM_BOX = [900, 700, 1520, 1030]   # 作弊窗底部按钮区域
+CONFIRM_EFFECT_BOX = [1584, 961, 1687, 994]  # 「确认效果」按钮
+EFFECT_BOX = [1339, 429, 1576, 464]    # 当前骰面效果文本
 
 
 def line(text, box):
-    """一行 OCR 结果：raw_text + 屏幕像素框 [左,右,上,下]。"""
+    """一行 OCR 结果：raw_text + 屏幕像素框 [左, 上, 右, 下]。"""
     return {"raw_text": text, "box": list(box)}
 
 
 def center(box):
-    return (box[0] + box[1]) / 2, (box[2] + box[3]) / 2
+    return (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
 
 
 # 作弊窗里的固定文字
-DIALOG_TITLE = line("作弊", [940, 985, 240, 268])
+DIALOG_TITLE = line("作弊", [940, 240, 985, 268])
 DICE_BUTTON = line("作弊", BUTTON_BOX)
-CONFIRM = line("确认", [1168, 1223, 811, 841])
+CONFIRM = line("确认", [1168, 811, 1223, 841])
 # 提示文字里也带「确认」二字，必须在框内挑最下面那个真按钮
-CONFIRM_HINT = line("点击「确认」按钮", [950, 1400, 720, 750])
-CIHUAI_TITLE = line("【丰饶·慈怀】", [470, 700, 900, 926])
+CONFIRM_HINT = line("点击「确认」按钮", [950, 720, 1400, 750])
+CIHUAI_TITLE = line("【丰饶·慈怀】", [470, 900, 700, 926])
 # 说明文字里也带着「慈怀」，但引擎只认「【」开头的行标题
-CIHUAI_DESC = line("选择1个区域，为其附加【慈怀】效果", [560, 1440, 910, 937])
-GUIXIN_TITLE = line("【丰饶·归心】", [470, 700, 690, 716])
-OTHER_TITLE = line("【丰饶·对症】", [470, 700, 780, 806])
+CIHUAI_DESC = line("选择1个区域，为其附加【慈怀】效果", [560, 910, 1440, 937])
+GUIXIN_TITLE = line("【丰饶·归心】", [470, 690, 700, 716])
+OTHER_TITLE = line("【丰饶·对症】", [470, 780, 700, 806])
 
 
 def observed_line(text):
     """当前骰面效果的 OCR 行；text=None 表示认不出。"""
-    return line(text, [1400, 1500, 440, 460]) if text else None
+    return line(text, [1400, 440, 1500, 460]) if text else None
 
 
 class FakeAgent:
@@ -155,7 +155,7 @@ class StubFingerSnap(FingerSnap):
         return [DIALOG_TITLE, CONFIRM] + list(self.list_lines)
 
     def _ocr(self, box=None, **kwargs):
-        box = box or [0, self.xx, 0, self.yy]
+        box = box or [0, 0, self.xx, self.yy]
         if box == LIST_BOX:
             items = self._window_lines()
         elif box == CONFIRM_BOX:
@@ -168,8 +168,8 @@ class StubFingerSnap(FingerSnap):
         else:
             items = []
         return [dict(item) for item in items
-                if box[0] <= item["box"][0] and item["box"][1] <= box[1]
-                and box[2] <= item["box"][2] and item["box"][3] <= box[3]]
+                if box[0] <= item["box"][0] and item["box"][2] <= box[2]
+                and box[1] <= item["box"][1] and item["box"][3] <= box[3]]
 
     # ---- 截图打桩 ----
 
@@ -181,7 +181,7 @@ class StubFingerSnap(FingerSnap):
         """
         screen = np.zeros((self.yy, self.xx, 3), dtype=np.uint8)
         if self.selected_box is not None:
-            title_top = int(self.selected_box[2])
+            title_top = int(self.selected_box[1])
             screen[max(title_top - 8, 0):max(title_top + 88, 0), 470:1450] = (200, 80, 120)
         self.screen = screen
         return screen
@@ -471,7 +471,7 @@ class FingerSnapCheatSelectTest(unittest.TestCase):
 
     def test_click_option_outside_the_list_is_refused(self):
         engine = self.make_engine(dialog_open=True)
-        outside = line("【丰饶·慈怀】", [470, 700, 40, 66])
+        outside = line("【丰饶·慈怀】", [470, 40, 700, 66])
         self.assertIsNone(engine.click_cheat_option(outside))
         self.assertClicks(engine)
         self.assertIn("不在作弊界面选项列表区域内", self.errors())

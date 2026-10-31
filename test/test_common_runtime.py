@@ -53,10 +53,10 @@ class CommonRuntimeTests(unittest.TestCase):
 
     def test_real_action_loop_recognizes_text_and_executes_coordinates_then_stops(self):
         engine = self.kernel()
-        engine.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [10, 20, 10, 20]}]
+        engine.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [10, 10, 20, 20]}]
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "script.json"
-            path.write_text(json.dumps([{"name": "确认", "trigger": {"text": "确认", "box": [0, 100, 0, 100]},
+            path.write_text(json.dumps([{"name": "确认", "trigger": {"text": "确认", "box": [0, 0, 100, 100]},
                                         "actions": [{"position": [960, 540]}, {"press": "f"}, "stop"]}]), encoding="utf-8")
             engine.start(path)
         # 脚本 actions 里的 position 就是 1920x1080 像素坐标；内核直接交给 click_point，不再换算镜像比例。
@@ -79,18 +79,18 @@ class CommonRuntimeTests(unittest.TestCase):
         self.assertAlmostEqual(engine.ty, 540)
         # check() 顺手记下匹配框，点击时随日志给出，便于核对落点；
         # 框由中心加减半个模板尺寸反推，模板被截图边缘裁掉时中心仍是实际点击位置。
-        self.assertEqual(engine.tb, [955, 965, 535, 545])
+        self.assertEqual(engine.tb, [955, 535, 965, 545])
 
     def test_click_helpers_pass_source_box_into_click_point(self):
         """点框中心、带框点位置要把源框交给 key_mouse_manager 写日志；纯坐标点击不传。"""
         engine = self.kernel()
-        engine.click_box([10, 20, 10, 20])
+        engine.click_box([10, 10, 20, 20])
         engine.click_position([960, 540])
-        engine.click_position([960, 540], box=[900, 1000, 500, 600])
+        engine.click_position([960, 540], box=[900, 500, 1000, 600])
         self.manager.click_point.assert_has_calls([
-            call(15.0, 15.0, box=[10, 20, 10, 20]),
+            call(15.0, 15.0, box=[10, 10, 20, 20]),
             call(960, 540),
-            call(960, 540, box=[900, 1000, 500, 600]),
+            call(960, 540, box=[900, 500, 1000, 600]),
         ])
 
     def test_wrong_resolution_rejects_input_and_capture(self):

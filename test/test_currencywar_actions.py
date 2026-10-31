@@ -29,7 +29,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
                 "name": "命运圣杯祈愿试炼",
                 "trigger": {
                     "text": "请选择一个祈愿试炼",
-                    "box": [1400, 1595, 572, 599],
+                    "box": [1400, 572, 1595, 599],
                     "interval": 2,
                     "redundancy": 30,
                     "once": True,
@@ -70,7 +70,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
         self.assertEqual(confirm["trigger"]["text"], "确认选择")
         self.assertEqual(
             confirm["actions"],
-            [{"text": "确认选择", "box": [700, 1250, 880, 1050]}],
+            [{"text": "确认选择", "box": [700, 880, 1250, 1050]}],
         )
         self.assertEqual(detail["trigger"]["text"], "装备")
         self.assertEqual(detail["actions"], [{"press": "esc"}])
@@ -143,7 +143,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
         currency.ts.find_with_box.return_value = [
             {
                 "raw_text": "跳过(2/2)",
-                "box": [1784, 1852, 730, 770],
+                "box": [1784, 730, 1852, 770],
             }
         ]
         currency.do_action = Mock(return_value=1)
@@ -158,7 +158,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
 
         self.assertEqual(result, ("跳过战斗", 1))
         currency.ts.find_with_box.assert_called_once_with(
-            [1784, 1852, 730, 770],
+            [1784, 730, 1852, 770],
             redundancy=60,
         )
         currency.do_action.assert_called_once_with({"position": [1818, 750]})

@@ -15,16 +15,16 @@ from tool.log import CUS_LOGGER
 from tool.storage import resource_path
 from tool.utils.image_tool import find_image_by_name
 
-# 坐标均为 1920×1080 游戏截图中的 [左, 右, 上, 下]，备战栏从左到右编号。
-BENCH_BOXES = tuple((383 + 125 * i, 493 + 125 * i, 843, 977) for i in range(9))
+# 坐标均为 1920×1080 游戏截图中的 [左, 上, 右, 下]，备战栏从左到右编号。
+BENCH_BOXES = tuple((383 + 125 * i, 843, 493 + 125 * i, 977) for i in range(9))
 # 仅保存头像中心的 40×40 特征，不包含边框、角标和星级。
-PORTRAIT_BOX = (35, 75, 47, 87)
+PORTRAIT_BOX = (35, 47, 75, 87)
 AREA_BOXES = {
-    "front": ((676, 807, 328, 465), (821, 948, 328, 465),
-              (968, 1095, 328, 465), (1109, 1240, 328, 465)),
-    "back": ((533, 673, 598, 737), (678, 812, 598, 737),
-             (822, 950, 598, 737), (966, 1095, 598, 737),
-             (1105, 1238, 598, 737), (1244, 1384, 598, 737)),
+    "front": ((676, 328, 807, 465), (821, 328, 948, 465),
+              (968, 328, 1095, 465), (1109, 328, 1240, 465)),
+    "back": ((533, 598, 673, 737), (678, 598, 812, 737),
+             (822, 598, 950, 737), (966, 598, 1095, 737),
+             (1105, 598, 1238, 737), (1244, 598, 1384, 737)),
 }
 # 画面上的人数是前台与后台之和，上限随对局进度变化，因此不能按前台落点数校验。
 TEAM_CAPACITY = len(AREA_BOXES["front"]) + len(AREA_BOXES["back"])
@@ -37,7 +37,7 @@ MATCH_THRESHOLD = 0.9
 # 卡片右上角的角标：有两枚亮色笔画的黑色圆角框；漏识别角标不能作为道具证据。
 # templates/badges/ 下按角标图形保存模板（front=前台、back=后台、both=前后台都能放），
 # 目录里新增模板即可参与匹配；还没收录的新图形再用下面的形状规则兜底。
-BADGE_BOX = (0, 42, 77, 110)  # 卡片内的 [上, 下, 左, 右]
+BADGE_BOX = (77, 0, 110, 42)  # 卡片内的 [左, 上, 右, 下]
 BADGE_THRESHOLD = 0.9         # 角标模板的匹配分数；角色实测 0.98 以上，道具与空格不到 0.31
 BADGE_DARK = 45               # 兜底：角标底框的亮度上限（近黑色）
 BADGE_BRIGHT = 100            # 兜底：角标笔画的亮度下限（红色的格子灰度约 113）
@@ -141,7 +141,7 @@ def field_portrait(patch, corners):
         np.float32(corners), np.float32(((0, 0), (109, 0), (109, 133), (0, 133))),
     )
     tile = cv2.warpPerspective(patch, matrix, (110, 134))
-    left, right, top, bottom = PORTRAIT_BOX
+    left, top, right, bottom = PORTRAIT_BOX
     return tile[top:bottom, left:right]
 
 
@@ -165,7 +165,7 @@ def badge_detected(tile):
     Returns:
         True 表示有角标，也就是角色。
     """
-    top, bottom, left, right = BADGE_BOX
+    left, top, right, bottom = BADGE_BOX
     patch = tile[top:bottom, left:right]
     gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape
@@ -197,7 +197,7 @@ class BattlePreparation:
             if tile is None:
                 raise ValueError(f"无法读取备战模板：{path}")
             if tile.shape == (134, 110, 3):
-                left, right, top, bottom = PORTRAIT_BOX
+                left, top, right, bottom = PORTRAIT_BOX
                 tile = tile[top:bottom, left:right].copy()
                 if path.stem.startswith("character_"):
                     save_template(path, tile)  # 保留文件名，已有优先级继续匹配同一角色。
@@ -355,7 +355,7 @@ class BattlePreparation:
         Args:
             tile: 一张备战卡片的截图。
         """
-        top, bottom, left, right = BADGE_BOX
+        left, top, right, bottom = BADGE_BOX
         patch = tile[top:bottom, left:right]
         best_name, best_score = None, 0.0
         glyphs = (cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY) > BADGE_BRIGHT).astype(np.uint8)
@@ -384,11 +384,11 @@ class BattlePreparation:
         if frame.shape != (1080, 1920, 3):
             raise ValueError("货币战争备战识别需要 1920×1080 的 BGR 截图")
         slots = []
-        for index, (left, right, top, bottom) in enumerate(BENCH_BOXES):
+        for index, (left, top, right, bottom) in enumerate(BENCH_BOXES):
             tile = frame[top:bottom, left:right].copy()
             badge = self.badge_name(tile)
             areas = BADGE_AREAS.get(badge, ())
-            x1, x2, y1, y2 = PORTRAIT_BOX
+            x1, y1, x2, y2 = PORTRAIT_BOX
             margin = MATCH_MARGIN
             portrait = tile[y1:y2, x1:x2].copy()
             search = tile[y1 - margin:y2 + margin, x1 - margin:x2 + margin].copy()
@@ -438,7 +438,7 @@ class BattlePreparation:
         """
         names = set()
         for area, boxes in AREA_BOXES.items():
-            for index, (left, right, top, bottom) in enumerate(boxes):
+            for index, (left, top, right, bottom) in enumerate(boxes):
                 if index in vacancies[area]:
                     continue
                 portrait = field_portrait(
@@ -474,7 +474,7 @@ class BattlePreparation:
         height, width = frame.shape[:2]
         for area, boxes in AREA_BOXES.items():
             vacancies[area] = []
-            for index, (left, right, top, bottom) in enumerate(boxes):
+            for index, (left, top, right, bottom) in enumerate(boxes):
                 search = frame[max(0, top - MATCH_MARGIN):min(height, bottom + MATCH_MARGIN),
                                max(0, left - MATCH_MARGIN):min(width, right + MATCH_MARGIN)]
                 score = match_score(search, self.area_tiles[area][index])

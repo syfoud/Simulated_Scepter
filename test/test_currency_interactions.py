@@ -14,14 +14,14 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.ts = Mock()
         currency.get_screen = Mock(return_value=object())
         currency.ENVIR_BOXES = [
-            [266, 610, 375, 413],
-            [780, 1134, 375, 414],
-            [1314, 1645, 373, 413],
+            [266, 375, 610, 413],
+            [780, 375, 1134, 414],
+            [1314, 373, 1645, 413],
         ]
         currency.BLESS_BOXES = [
-            [298, 608, 472, 513],
-            [783, 1095, 472, 513],
-            [1298, 1605, 472, 513],
+            [298, 472, 608, 513],
+            [783, 472, 1095, 513],
+            [1298, 472, 1605, 513],
         ]
         return currency
 

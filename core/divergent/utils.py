@@ -229,10 +229,10 @@ class UniverseUtils(StateKernel):
             time.sleep(0.5)
         # 点击使用
         self.click_point(1624, 985)
-        self.wait_fig(lambda:not self.click_text(text="确认",box=[1126, 1252, 716, 812],click=False,ocr_line=False,warning=False), 1.2)
+        self.wait_fig(lambda:not self.click_text(text="确认",box=[1126, 716, 1252, 812],click=False,ocr_line=False,warning=False), 1.2)
         # 点击确认
         self.click_point(1179, 762)
-        r = self.wait_fig(lambda:not self.click_text(text="替换同类",box=[816, 1006, 284, 380],click=False,warning=False), 0.8)
+        r = self.wait_fig(lambda:not self.click_text(text="替换同类",box=[816, 284, 1006, 380],click=False,warning=False), 0.8)
         if r:
             # 覆盖效果
             self.click_point(1179, 762)
@@ -269,7 +269,7 @@ class UniverseUtils(StateKernel):
         """
         把识别结果相对匹配中心的偏移换算成点击坐标
 
-        point：1920x1080 像素坐标，或 MASK 中的识别区域 [x1, x2, y1, y2]（取区域中心）
+        point：1920x1080 像素坐标，或 MASK 中的识别区域 [x1, y1, x2, y2]（取区域中心）
         offset：识别结果相对匹配中心的像素偏移
         """
         if len(point) == 4:
@@ -289,8 +289,8 @@ class UniverseUtils(StateKernel):
         time.sleep(0.3)
 
     def click_box(self, box):
-        """点击坐标框 [x1, x2, y1, y2] 的中心。"""
-        self.click_point((box[0] + box[1]) // 2, (box[2] + box[3]) // 2, box=box)
+        """点击坐标框 [x1, y1, x2, y2] 的中心。"""
+        self.click_point((box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
 
     def click_position(self, position, box=None):
         """按 1920x1080 像素坐标 [x, y] 点击。"""
@@ -316,8 +316,8 @@ class UniverseUtils(StateKernel):
             CUS_LOGGER.info(f"尝试匹配：{text}匹配结果：{match}")
             if len(match) and click:
                 self.click_point(
-                    (box[0] + box[1]) // 2,
-                    (box[2] + box[3]) // 2,
+                    (box[0] + box[2]) // 2,
+                    (box[1] + box[3]) // 2,
                     box=box
                 )
                 if after_delay:
@@ -413,18 +413,18 @@ class UniverseUtils(StateKernel):
             # 全屏匹配的坐标就是绝对坐标，匹配框由匹配位置和模板尺寸组成
             self.click_position(
                 (x + target.shape[1]//2, y + target.shape[0]//2),
-                box=[int(x), int(x + target.shape[1]), int(y), int(y + target.shape[0])]
+                box=[int(x), int(y), int(x + target.shape[1]), int(y + target.shape[0])]
             )
             return 1
         return 0
 
-    def check_box(self, path, box=[0,1920,0,1080], threshold=0.96):
+    def check_box(self, path, box=[0, 0, 1920, 1080], threshold=0.96):
         path = self.format_path(path)
         target = cv.imread(path)
-        local_screen = self.screen[box[2]:box[3],box[0]:box[1]]
+        local_screen = self.screen[box[1]:box[3], box[0]:box[2]]
         result = cv.matchTemplate(local_screen, target, cv.TM_CCORR_NORMED)
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(result)
-        self.tx, self.ty = (max_loc[0]+box[0], max_loc[1]+box[2])
+        self.tx, self.ty = (max_loc[0]+box[0], max_loc[1]+box[1])
         self.tm = max_val
         if max_val > threshold:
             if self.last_info != path:
@@ -619,7 +619,7 @@ class UniverseUtils(StateKernel):
         shape = (int(self.scx * 190), int(self.scx * 190))
         if gs:
             self.get_screen()
-            if self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+            if self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                 return None
         if local_screen is None:
             local_screen = self.get_local(128,145, shape)
@@ -710,7 +710,7 @@ class UniverseUtils(StateKernel):
         if self.check("interact", mask=MASK["interact_icon"], threshold=0.95):
             if not check_text:
                 return 1
-            text = self.ts.ocr_one_row(self.screen, [1206, 1437, 587, 635])
+            text = self.ts.ocr_one_row(self.screen, [1206, 587, 1437, 635])
             CUS_LOGGER.debug(f"text: {text}")
             if len(text):
                 CUS_LOGGER.info('识别到交互信息：' + text)
@@ -1057,7 +1057,7 @@ class UniverseUtils(StateKernel):
             if type == 3:
                 for i in range(9):
                     self.get_screen()
-                    if self.quan and self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                    if self.quan and self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                         return
                     if self.check("interact", mask=MASK["interact_icon"], threshold=0.96):
                         CUS_LOGGER.info("大图识别到传送点")
@@ -1360,7 +1360,7 @@ class UniverseUtils(StateKernel):
                     self.click_point(1065, 729)
                     time.sleep(1.5)
                     self.get_screen()
-                    if self.click_text(text="储存沉浸器",box=[838, 1070, 298, 400],click=False,ocr_line=False,warning=False):
+                    if self.click_text(text="储存沉浸器",box=[838, 298, 1070, 400],click=False,ocr_line=False,warning=False):
                         self.check_bonus = 0
                     self.click_point(948, 923)
                     time.sleep(1.4)
@@ -1523,8 +1523,8 @@ class UniverseUtils(StateKernel):
 
     def bless(self):
         self.get_screen()
-        if self.wait_fig(lambda:not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False), 2.3):
-            self.wait_fig(lambda:not self.click_text(text="重置祝福",box=[1268, 1444, 929, 1025],click=False,warning=False), 0.7)
+        if self.wait_fig(lambda:not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False), 2.3):
+            self.wait_fig(lambda:not self.click_text(text="重置祝福",box=[1268, 929, 1444, 1025],click=False,warning=False), 0.7)
             time.sleep(1.2)
         else:
             return
@@ -1532,7 +1532,7 @@ class UniverseUtils(StateKernel):
             chose = 0
             self.battle = 0
             self.get_screen()
-            if self.click_text(text="重置祝福",box=[1268, 1444, 929, 1025],click=False,warning=False):
+            if self.click_text(text="重置祝福",box=[1268, 929, 1444, 1025],click=False,warning=False):
                 for _ in range(14):
                     self.get_screen()
                     img_down = crop_region(self.screen, MASK["bless_path"])
@@ -1542,7 +1542,7 @@ class UniverseUtils(StateKernel):
                     ):
                         time.sleep(0.2)
                         break
-                    if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                    if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                         return 1
                     time.sleep(0.2)
                 self.get_screen()
@@ -1567,7 +1567,7 @@ class UniverseUtils(StateKernel):
                     if self.ts.split_and_find(self.tk.fates, img_down)[1] or self._stop:
                         time.sleep(0.2)
                         break
-                    if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+                    if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                         return 1
                     time.sleep(0.2)
                 self.get_screen()
@@ -1587,7 +1587,7 @@ class UniverseUtils(StateKernel):
             self.click_point(1689, 962)
             time.sleep(1.7)
             self.get_screen()
-            if not self.click_text(text="选择祝福",box=[60, 222, 0, 113],click=False,ocr_line=False,warning=False):
+            if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
                 return
 
     def get_text_position(self, clean=0):

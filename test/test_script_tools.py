@@ -47,7 +47,7 @@ class ScriptToolsTests(unittest.TestCase):
         self.frame = np.random.default_rng(8).integers(0, 256, (108, 192, 3), dtype=np.uint8)
 
     def test_sample_owns_frame_and_text_snapshot_without_preparing_input(self):
-        texts = [{"raw_text": "开始 1", "box": [20, 80, 30, 50]}]
+        texts = [{"raw_text": "开始 1", "box": [20, 30, 80, 50]}]
         engine = Mock(_stop=False)
         engine.get_screen.return_value = self.frame
         engine.ts.res = texts
@@ -67,13 +67,13 @@ class ScriptToolsTests(unittest.TestCase):
         engine.ts.forward.assert_not_called()
 
     def test_text_selection_matches_runtime_normalization(self):
-        trigger = text_trigger({"raw_text": "开始！Test 123", "box": [20, 80, 30, 50]})
-        self.assertEqual(trigger, {"text": "开始", "box": [20, 80, 30, 50]})
+        trigger = text_trigger({"raw_text": "开始！Test 123", "box": [20, 30, 80, 50]})
+        self.assertEqual(trigger, {"text": "开始", "box": [20, 30, 80, 50]})
         with self.assertRaisesRegex(ValueError, "为空"):
-            text_trigger({"raw_text": "UID 123", "box": [20, 80, 30, 50]})
+            text_trigger({"raw_text": "UID 123", "box": [20, 30, 80, 50]})
 
     def test_marker_preserves_pixels_is_discoverable_and_matches_local_coordinates(self):
-        trigger, path = save_marker(self.frame, [20, 70, 30, 60], marker_path("确认事件"))
+        trigger, path = save_marker(self.frame, [20, 30, 70, 60], marker_path("确认事件"))
         np.testing.assert_array_equal(cv.imdecode(np.frombuffer(path.read_bytes(), np.uint8), cv.IMREAD_COLOR),
                                       self.frame[30:60, 20:70])
         self.assertEqual(path.parent, self.root / "imgs/script_markers")
@@ -93,7 +93,7 @@ class ScriptToolsTests(unittest.TestCase):
             np.testing.assert_array_equal(image_tool.find_image_by_name(trigger["photo"]), loaded)
 
     def test_invalid_crop_never_saves_a_file(self):
-        for box in ([20, 20, 30, 60], [-1, 20, 30, 60], [20, 200, 30, 60]):
+        for box in ([20, 30, 20, 60], [-1, 30, 20, 60], [20, 30, 200, 60]):
             with self.subTest(box=box), self.assertRaises(ValueError):
                 save_marker(self.frame, box, marker_path("无效范围"))
         self.assertFalse((self.root / "imgs").exists())
@@ -148,7 +148,7 @@ class ScriptToolsTests(unittest.TestCase):
     def test_default_marker_uses_safe_event_name_and_avoids_overwriting(self):
         path = marker_path("事件/确认:奖励")
         self.assertEqual(path.name, "事件_确认_奖励.png")
-        save_marker(self.frame, [20, 70, 30, 60], path)
+        save_marker(self.frame, [20, 30, 70, 60], path)
         self.assertEqual(marker_path("事件/确认:奖励").name, "事件_确认_奖励 (2).png")
         self.assertEqual(marker_path("...").name, "图片标志.png")
         self.assertEqual(marker_path("CON").name, "_CON.png")
@@ -156,9 +156,9 @@ class ScriptToolsTests(unittest.TestCase):
     def test_external_and_same_named_markers_resolve_exact_files_and_refresh_after_replace(self):
         with patch.object(image_tool, "_image_directory", str(self.root / "imgs")), \
                 patch.object(image_tool, "_image_cache", {}):
-            first, path = save_marker(self.frame, [20, 70, 30, 60], self.root / "outside/确认.png")
-            second, _ = save_marker(self.frame, [80, 100, 70, 90], self.root / "imgs/nested/确认.png")
-            third, _ = save_marker(self.frame, [120, 140, 40, 60], self.root / "imgs/确认.png")
+            first, path = save_marker(self.frame, [20, 30, 70, 60], self.root / "outside/确认.png")
+            second, _ = save_marker(self.frame, [80, 70, 100, 90], self.root / "imgs/nested/确认.png")
+            third, _ = save_marker(self.frame, [120, 40, 140, 60], self.root / "imgs/确认.png")
             self.assertTrue(Path(first["photo"]).is_absolute())
             self.assertEqual(second["photo"], "nested/确认.png")
             np.testing.assert_array_equal(image_tool.find_image_by_name(first["photo"]), self.frame[30:60, 20:70])
@@ -171,7 +171,7 @@ class ScriptToolsTests(unittest.TestCase):
             kernel.scx = kernel.scy = 1.0
             kernel.threshold, kernel.config, kernel.last_info = 0.97, None, ""
             self.assertTrue(kernel.check(first["photo"], **first["pos"], threshold=first["threshold"]))
-            save_marker(self.frame, [80, 100, 70, 90], path)
+            save_marker(self.frame, [80, 70, 100, 90], path)
             np.testing.assert_array_equal(image_tool.find_image_by_name(first["photo"]), self.frame[70:90, 80:100])
             path.unlink()
             self.assertIsNone(image_tool.find_image_by_name(first["photo"]))
@@ -183,7 +183,7 @@ class ScriptToolsTests(unittest.TestCase):
         path.write_bytes(b"original")
         with patch("tool.script_tools.os.replace", side_effect=OSError("写入失败")):
             with self.assertRaises(OSError):
-                save_marker(self.frame, [20, 70, 30, 60], path)
+                save_marker(self.frame, [20, 30, 70, 60], path)
         self.assertEqual(path.read_bytes(), b"original")
         self.assertEqual(list(self.root.iterdir()), [path])
 
@@ -206,11 +206,11 @@ class ScriptToolsTests(unittest.TestCase):
         kernel._stop = False
         kernel.get_screen = Mock(return_value=self.frame)
         kernel.ts = Mock()
-        kernel.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [0, 1, 0, 1]}]
+        kernel.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [0, 0, 1, 1]}]
         kernel.prepare_script = Mock()
         kernel.do_action = Mock(return_value=1)
         events = [dict(new_event(), name="条件错误", trigger={"state_only": True, "condition": "wrong"}),
-                  dict(new_event(), name="确认", trigger={"text": "确认", "box": [0, 1, 0, 1]}),
+                  dict(new_event(), name="确认", trigger={"text": "确认", "box": [0, 0, 1, 1]}),
                   dict(new_event(), name="后续", actions=[{"sleep": 2}])]
         self.assertIn("已命中“确认”", debug_events(kernel, events, False))
         kernel.do_action.assert_called_once_with({"sleep": 1})
@@ -270,7 +270,7 @@ class ScriptToolsGuiTests(unittest.TestCase):
         self.root = Path(self.folder.name).resolve()  # 生产代码返回的是解析后的长路径
         self.enterContext(patch.dict(PATHS, {"root": str(self.root), "image": str(self.root / "imgs")}))
         self.frame = np.random.default_rng(5).integers(0, 256, (540, 960, 3), dtype=np.uint8)
-        self.texts = [{"raw_text": "确认1", "box": [100, 220, 100, 145]}]
+        self.texts = [{"raw_text": "确认1", "box": [100, 100, 220, 145]}]
         self.sample = {"screen": self.frame, "texts": self.texts}
 
     def picker(self, recognize, event_name=""):
@@ -289,7 +289,7 @@ class ScriptToolsGuiTests(unittest.TestCase):
         dialog.match_text.setText("确认！123")
         dialog.use_btn.click()
         self.assertEqual(dialog.result(), QDialog.Accepted)
-        self.assertEqual(dialog.trigger, {"text": "确认", "box": [100, 220, 100, 145]})
+        self.assertEqual(dialog.trigger, {"text": "确认", "box": [100, 100, 220, 145]})
 
     def test_reverse_drag_maps_scaled_scene_coordinates_and_saves_crop(self):
         dialog = self.picker(False)
@@ -298,8 +298,8 @@ class ScriptToolsGuiTests(unittest.TestCase):
         QTest.mousePress(view.viewport(), Qt.LeftButton, pos=start)
         QTest.mouseMove(view.viewport(), end)
         QTest.mouseRelease(view.viewport(), Qt.LeftButton, pos=end)
-        left, right, top, bottom = dialog.box
-        for actual, expected in zip(dialog.box, [100, 300, 120, 240]):
+        left, top, right, bottom = dialog.box
+        for actual, expected in zip(dialog.box, [100, 120, 300, 240]):
             self.assertLessEqual(abs(actual - expected), 2)
         dialog.use_btn.click()
         self.assertEqual(dialog.result(), QDialog.Accepted)
@@ -324,7 +324,7 @@ class ScriptToolsGuiTests(unittest.TestCase):
                     dialog.browse_btn.click()
                 self.assertEqual(dialog.save_folder.text(), str(destination))
                 dialog.file_name.setText("另一个标志")
-                dialog.select_region([10, 40, 20, 50])
+                dialog.select_region([10, 20, 40, 50])
                 dialog.use_btn.click()
                 self.assertEqual(dialog.result(), QDialog.Accepted)
                 self.assertEqual(Path(dialog.trigger["photo"]), destination / "另一个标志.png")
@@ -335,7 +335,7 @@ class ScriptToolsGuiTests(unittest.TestCase):
         path = self.root / "imgs/script_markers/事件.png"
         path.parent.mkdir(parents=True)
         path.write_bytes(b"existing")
-        dialog.select_region([10, 40, 20, 50])
+        dialog.select_region([10, 20, 40, 50])
         with patch("tool.gui.trigger_sample.QMessageBox.question", return_value=QMessageBox.No):
             dialog.use_btn.click()
         self.assertEqual(path.read_bytes(), b"existing")
@@ -391,13 +391,13 @@ class ScriptToolsGuiTests(unittest.TestCase):
         editor = self.editor()
         editor.trigger_fields.set_value({"state_only": True, "condition": "battle", "once": True, "extension": 7})
         editor.request_sample(True)
-        picker = Mock(trigger={"text": "确认", "box": [100, 220, 100, 145]})
+        picker = Mock(trigger={"text": "确认", "box": [100, 100, 220, 145]})
         picker.exec_.return_value = QDialog.Accepted
         with patch("tool.gui.script_editor.TriggerSample", return_value=picker) as dialog:
             editor.receive_result(editor.session, {"sample": self.sample})
         self.assertEqual(dialog.call_args.kwargs["event_name"], editor.event_name.text())
         self.assertEqual(editor.trigger_fields.value(), {"condition": "battle", "once": True, "extension": 7,
-                                                        "text": "确认", "box": [100, 220, 100, 145]})
+                                                        "text": "确认", "box": [100, 100, 220, 145]})
         self.assertTrue(editor.isWindowModified())
 
     def test_cancelled_or_foreign_result_never_opens_picker(self):
