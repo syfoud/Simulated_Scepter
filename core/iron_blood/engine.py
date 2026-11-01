@@ -246,23 +246,23 @@ class IronBloodUniverse(AnyFateUniverse):
 
     def format_plane_detail(self, now):
         """拼接待写入 kill_record.txt 的位面明细后缀。
-
-        逻辑：进入下一位面时，游戏才会兜底结算上一位面的 boss（+1）。
-        如果本局没进下一位面，由于三面有 end_of_university 补 +1，而一二面没有，需在这里统一补正。
-
+        
+        逻辑：
+        1. 只有拥有前置位面并进入下一位面时，才结算前置位面的 boss（由 get_real_start_kills 处理 +1）。
+        2. 如果当前位面直接结算，说明没打当前面的 boss，不需要补 +1。
+        3. 只有三面结算，因为没第四面了，由 end_of_university 统一补 +1，这里直接使用 self.kill_count 即可。
+        
         Args:
             now: 结算时刻的秒级时间戳。
-
+            
         Returns:
             形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串。
         """
         planes = [(1, "一"), (2, "二"), (3, "三")]
         parts = []
-
-        # 获取包含所有已发生 boss 的最终总击杀
+        
+        # self.kill_count 已包含三面结算补上的 boss（如果有）
         final_kills = self.kill_count
-        if self.plane_floor < 3:
-            final_kills += 1 # 没有进入三面兜底，手动补上最后这一面的 boss
 
         def get_real_start_kills(p):
             """获取进入该位面时的真实击杀（包含前置位面的 boss 补正）"""
@@ -275,9 +275,9 @@ class IronBloodUniverse(AnyFateUniverse):
             if p not in self.plane_records:
                 parts.append(f"{name}面:用时0分0秒 击杀数0")
                 continue
-
+            
             start_time = self.plane_records[p]["start_time"]
-
+            
             # 寻找下一位面作为结束基准
             next_p = p + 1
             if next_p in self.plane_records:
@@ -286,12 +286,12 @@ class IronBloodUniverse(AnyFateUniverse):
             else:
                 end_time = now
                 end_kills = final_kills
-
+                
             duration = int(end_time - start_time)
             kills = end_kills - get_real_start_kills(p)
-
+            
             parts.append(f"{name}面:用时{duration // 60}分{duration % 60}秒 击杀数{kills}")
-
+            
         return "[" + "|".join(parts) + "]"
 
     def select_doing(self):
