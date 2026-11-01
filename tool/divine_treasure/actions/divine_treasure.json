@@ -1,0 +1,42 @@
+[
+  {
+    "name": "entry",
+    "trigger": { "text": "欢愉假面", "box": [0, 400, 0, 160] },
+    "actions": ["stop"]
+  },
+  {
+    "name": "entry",
+    "trigger": { "text": "进入星阶模式", "box": [650, 1900, 930, 1040], "interval": 3 },
+    "actions": ["fill_team", { "text": "进入星阶模式", "box": [650, 1900, 930, 1040] }]
+  },
+  {
+    "name": "entry",
+    "trigger": { "text": "常规演算", "box": [0, 750, 200, 480] },
+    "actions": [{ "text": "常规演算", "box": [0, 750, 200, 480] }]
+  },
+  {
+    "name": "entry",
+    "trigger": { "text": "练习模式", "box": [960, 1260, 100, 180] },
+    "actions": [{ "text": "练习模式", "box": [960, 1260, 100, 180] }]
+  },
+  {
+    "name": "entry",
+    "trigger": { "text": "启动", "box": [650, 1900, 930, 1040] },
+    "actions": ["check_protocol", { "text": "启动", "box": [650, 1900, 930, 1040] }]
+  },
+  {
+    "name": "entry",
+    "trigger": { "text": "开始游戏", "box": [650, 1900, 930, 1040] },
+    "actions": [{ "text": "开始游戏", "box": [650, 1900, 930, 1040] }]
+  },
+  {
+    "name": "team",
+    "trigger": { "text": "星阶模式", "box": [0, 400, 0, 160] },
+    "actions": ["stop"]
+  },
+  {
+    "name": "team",
+    "trigger": { "text": "进入星阶模式", "box": [650, 1900, 930, 1040], "interval": 3 },
+    "actions": ["fill_team", { "text": "进入星阶模式", "box": [650, 1900, 930, 1040] }]
+  }
+]

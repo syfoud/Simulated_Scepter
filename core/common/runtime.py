@@ -26,6 +26,9 @@ from tool.utils.game_window import (
 
 
 class ScriptKernel(StateKernel):
+    # 等待游戏窗口出现的上限（秒）。测试场景由子类下调，正式运行保持 300。
+    window_timeout = 300
+
     def __init__(self):
         super().__init__()
         self._stop = False
@@ -41,7 +44,7 @@ class ScriptKernel(StateKernel):
         self.last_get_screen_time = None
         self.ts = get_global_my_ts(father=self)
         set_game_foreground()
-        deadline = time.monotonic() + 300
+        deadline = time.monotonic() + self.window_timeout
         while not get_global_stop_flag():
             window = get_foreground_game_window()
             if window is not None:

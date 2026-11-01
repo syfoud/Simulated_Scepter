@@ -6,6 +6,38 @@
 
 `divine_treasure_entry.py --run`：开始游戏 → 常规演算 → 进入星阶模式 → 练习模式 → 确认协议5 → 启动 → 面具页停止。2026-09-10 用户确认实机测试通过；作为正式入场实现保留，不再迁回旧模拟宇宙主类。
 
+2026-10-31 起入场改为状态驱动（`tool/divine_treasure/flow.py`）：每帧只识别当前界面再分发，不再依赖「下一步应该是哪个页面」。
+
+## 使用前提：预置一支队伍
+
+「常规演算」页底部有 4 个队伍槽位，全空时无法开始对局。脚本会检测空槽位（模板 `tool/divine_treasure/assets/team_empty_slot.png`），命中就依次点击「空槽位 → 预设编队标签 → 预设列表第一个」。
+
+**因此首次使用前需要在游戏里做一次配置**：
+
+1. 组好一支 4 人队伍；
+2. 保存为「预设编队」；
+3. 给这支预设点收藏，让它排在预设列表第一位。
+
+配置完成后，每次入场都会自动套用这支队伍，不再需要手动选人。
+
+脚本必须以**管理员权限**运行（游戏是管理员进程时，普通权限的点击会被 Windows 静默拦截）。
+
+### 最小验证命令
+
+游戏停在「常规演算」页（底部队伍槽位为空），**不必从首页开始**：
+
+```bash
+python -m uv run python divine_treasure_entry.py --run --stage team
+```
+
+走的是「识别 regular → 空槽位 → 预设编队 → 第一个预设 → 进入星阶模式 → 到达星阶页」这一段：
+
+- 队伍为空：`Team is empty: slot -> preset tab -> first preset` → `Click: regular -> ranked`
+- 队伍已满：`Team already filled` → `Click: regular -> ranked`
+- 成功标志：`SUCCESS: team ready, ranked page reached`，证据图 `00-regular` / `01-team-filled` / `02-ranked`
+
+整条入场仍然用 `--stage entry`：`python -m uv run python divine_treasure_entry.py --run --stage entry`
+
 ## 本轮面具流程
 
 从 Mask-Selection 第1或第3张所示的未选面具界面运行：
