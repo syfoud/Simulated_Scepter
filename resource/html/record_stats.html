@@ -491,6 +491,64 @@
   .table-toggle:focus-visible, .table-resizer:focus-visible, .table-scrollbar:focus-visible {
     outline: 2px solid var(--accent); outline-offset: -2px;
   }
+  /* 位面详细记录 Tooltip 与眼睛按钮 */
+  .eye-btn {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--text-dim);
+    transition: all 0.15s;
+    vertical-align: middle;
+    user-select: none;
+  }
+  .eye-btn:hover, .eye-btn.active {
+    background: var(--panel-2);
+    color: var(--accent);
+  }
+  .eye-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+  .plane-tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
+    max-width: 320px;
+    max-height: 320px;
+    overflow-y: auto;
+    line-height: 1.6;
+  }
+  .plane-tooltip::-webkit-scrollbar {
+    width: 6px;
+  }
+  .plane-tooltip::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .plane-tooltip.show {
+    opacity: 1;
+    visibility: visible;
+  }
+  .plane-tooltip.pinned {
+    pointer-events: auto;
+    border-color: var(--accent);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3), 0 0 0 1px var(--accent);
+  }
   @media (prefers-reduced-motion: reduce) {
     .table-block, .table-toggle { transition: none; }
   }
@@ -597,6 +655,103 @@
   document.getElementById('themeToggle').addEventListener('click', toggleTheme);
   initTheme();
 
+  // 注入位面详情 Tooltip DOM
+  const eyeTooltip = document.createElement('div');
+  eyeTooltip.className = 'plane-tooltip';
+  document.body.appendChild(eyeTooltip);
+  let activeEyeBtn = null;
+
+  function showEyeTooltip(target, html, isPinned) {
+    eyeTooltip.innerHTML = html;
+    eyeTooltip.classList.add('show');
+    eyeTooltip.classList.toggle('pinned', isPinned);
+    activeEyeBtn = target;
+    if (target) target.classList.add('active');
+  }
+
+  function hideEyeTooltip() {
+    eyeTooltip.classList.remove('show', 'pinned');
+    if (activeEyeBtn) {
+      activeEyeBtn.classList.remove('active');
+      activeEyeBtn = null;
+    }
+  }
+
+  function positionTooltip(target) {
+    if (eyeTooltip.classList.contains('pinned')) return;
+    const rect = target.getBoundingClientRect();
+    
+    let left = rect.left + rect.width / 2 - eyeTooltip.offsetWidth / 2;
+    let top = rect.bottom + 8;
+    
+    if (left < 8) left = 8;
+    if (left + eyeTooltip.offsetWidth > window.innerWidth - 8) {
+      left = window.innerWidth - eyeTooltip.offsetWidth - 8;
+    }
+    if (top + eyeTooltip.offsetHeight > window.innerHeight - 8) {
+      top = rect.top - eyeTooltip.offsetHeight - 8;
+      if (top < 8) top = 8; 
+    }
+    
+    eyeTooltip.style.left = left + 'px';
+    eyeTooltip.style.top = top + 'px';
+  }
+
+  document.addEventListener('mouseover', (e) => {
+    const btn = e.target.closest('.eye-btn');
+    if (!btn) return;
+    if (eyeTooltip.classList.contains('pinned')) return;
+    
+    const html = decodeURIComponent(btn.dataset.tooltip || '');
+    if (!html) return;
+    
+    showEyeTooltip(btn, html, false);
+    positionTooltip(btn);
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    const btn = e.target.closest('.eye-btn');
+    if (!btn) return;
+    if (eyeTooltip.classList.contains('pinned')) return;
+    
+    if (e.relatedTarget && eyeTooltip.contains(e.relatedTarget)) return;
+    
+    hideEyeTooltip();
+  });
+
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.eye-btn');
+    if (btn) {
+      e.preventDefault();
+      
+      if (activeEyeBtn === btn && eyeTooltip.classList.contains('pinned')) {
+        hideEyeTooltip();
+      } else {
+        const html = decodeURIComponent(btn.dataset.tooltip || '');
+        if (!html) return;
+        
+        hideEyeTooltip();
+        showEyeTooltip(btn, html, true);
+        positionTooltip(btn);
+      }
+    } else {
+      if (!eyeTooltip.contains(e.target)) {
+        hideEyeTooltip();
+      }
+    }
+  });
+
+  window.addEventListener('scroll', () => {
+    if (!eyeTooltip.classList.contains('pinned')) {
+      hideEyeTooltip();
+    } else if (activeEyeBtn) {
+       const rect = activeEyeBtn.getBoundingClientRect();
+       if (rect.bottom < 0 || rect.top > window.innerHeight) {
+           hideEyeTooltip();
+       }
+    }
+  }, { passive: true, capture: true });
+
   const DB_NAME = 'round_stats_db';
   const DB_VERSION = 1;
   const STORE_NAME = 'handles';
@@ -689,7 +844,8 @@
         if (!map.has(round)) {
           map.set(round, {
             round, value: 0, duration: null,
-            planes: [0, 0, 0], missing: true, openingExpectation: null, raw: line
+            planes: [0, 0, 0], missing: true, openingExpectation: null, raw: line,
+            planeDetailHtml: '无位面详细记录'
           });
         }
         continue;
@@ -707,7 +863,8 @@
         if (!map.has(r)) {
           map.set(r, {
             round: r, value: 0, duration: null,
-            planes: [0, 0, 0], missing: true, openingExpectation: null, raw: "缺失数据(自动补全)"
+            planes: [0, 0, 0], missing: true, openingExpectation: null, raw: "缺失数据(自动补全)",
+            planeDetailHtml: '无位面详细记录'
           });
         }
       }
@@ -755,7 +912,21 @@
     const expectationMatch = line.match(/(?:第一面期望|开局期望)\s*[:：]\s*(-?\d+(?:\.\d+)?)/);
     if (expectationMatch) openingExpectation = parseFloat(expectationMatch[1]);
 
-    return { round, value, duration, planes, missing: false, openingExpectation, raw: line };
+    let planeDetailHtml = '';
+    const bracketMatch = line.match(/\[(.*?)\]/);
+    if (bracketMatch) {
+      const parts = bracketMatch[1].split('|');
+      planeDetailHtml = parts.map(p => {
+        const pm = p.match(/([一二三]面)[:：]用时([\d分秒]+)\s*击杀数(\d+)/);
+        if (pm) {
+          return `<div>${pm[1]}：用时 ${pm[2]}，击杀数 ${pm[3]}</div>`;
+        }
+        return `<div>${escapeHtml(p)}</div>`;
+      }).join('');
+    }
+    if (!planeDetailHtml) planeDetailHtml = '无位面详细记录';
+
+    return { round, value, duration, planes, missing: false, openingExpectation, raw: line, planeDetailHtml };
   }
 
   function formatDuration(sec) {
@@ -1778,6 +1949,7 @@
     // 3. 动态拼接每一行
     for (const fs of fileStats) {
       const s = fs.stat;
+      
       html += `<tr>
         <td class="file-name" title="${escapeHtml(fs.name)}">${escapeHtml(fs.name)}</td>
         <td class="num">${s.total}</td>`;
@@ -1888,6 +2060,7 @@
       <th class="num">用时</th>
       <th class="num">开局期望</th>
       <th class="num">与上一次的轮回差</th>
+      <th class="num" style="width: 50px; text-align: center;">详情</th>
     </tr></thead><tbody>`;
 
     for (const r of filtered) {
@@ -1895,6 +2068,11 @@
       const expectationVal = (r.openingExpectation !== null && r.openingExpectation !== undefined)
         ? r.openingExpectation.toFixed(2)
         : '—';
+      
+      const detailHtml = r.planeDetailHtml || '无位面详细记录';
+      const encodedDetail = encodeURIComponent(detailHtml);
+      const eyeIcon = `<svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
+
       html += `<tr>
         <td>${escapeHtml(r.sourceFile || '')}</td>
         <td class="num">${r.round}</td>
@@ -1902,6 +2080,7 @@
         <td class="num">${formatDuration(r.duration)}</td>
         <td class="num">${expectationVal}</td>
         <td class="num">${diff}</td>
+        <td class="num" style="text-align: center;"><span class="eye-btn" data-tooltip="${encodedDetail}">${eyeIcon}</span></td>
       </tr>`;
     }
 
@@ -2419,10 +2598,14 @@
         <th class="num">用时</th>
         <th class="num">异常开局期望</th>
         <th>原因</th>
+        <th class="num" style="width: 50px; text-align: center;">详情</th>
       </tr></thead><tbody>`;
 
       for (const r of abnormalRecords) {
         const reason = abnormalReasons[r.openingExpectation] || '—';
+        const detailHtml = r.planeDetailHtml || '无位面详细记录';
+        const encodedDetail = encodeURIComponent(detailHtml);
+        const eyeIcon = `<svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`;
 
         abnormalHtml += `<tr>
           <td>${escapeHtml(r.sourceFile || '')}</td>
@@ -2431,6 +2614,7 @@
           <td class="num">${formatDuration(r.duration)}</td>
           <td class="num">${r.openingExpectation.toFixed(0)}</td>
           <td>${escapeHtml(reason)}</td>
+          <td class="num" style="text-align: center;"><span class="eye-btn" data-tooltip="${encodedDetail}">${eyeIcon}</span></td>
         </tr>`;
       }
 

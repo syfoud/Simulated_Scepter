@@ -38,6 +38,8 @@ class IronBloodUniverse(AnyFateUniverse):
         self.my_fate = config.fates.index(self.fate)
         self.tk = text_keys(self.my_fate)
         self.expectation_weight = 0 # 地图路径期望
+        self.plane_start_times = {}   # {1/2/3: 识别到振翅/浪潮/消褪的时刻}
+        self.plane_start_kills = {}   # {1/2/3: 进入该位面时含已认定 boss 的累计击杀}
         # 保存开局期望。-5 表示本局还没走到开局节点图识别，直接开局的局会以这个值写入记录
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
         # 铁血战士使用毁灭专属事件优先级
@@ -50,6 +52,8 @@ class IronBloodUniverse(AnyFateUniverse):
         self.elapsed_time = 0  # 重置演算持续时间
         self.kill_count = 0
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
+        self.plane_start_times = {}
+        self.plane_start_kills = {}
 
     def stop_round_recording(self):
         """按击杀数决定本轮录像是否删除，并把本局数据写进保留视频的文件名"""
@@ -84,10 +88,13 @@ class IronBloodUniverse(AnyFateUniverse):
 
     def end_of_university(self):
         # 本局的开始时间与用时必须在父类之前取：父类会把 run_start_time 重置为下一局的开始时间
-        self.elapsed_time = int(time.time() - self.run_start_time)
+        now = time.time()
+        self.elapsed_time = int(now - self.run_start_time)
         start_time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.run_start_time))
         if self.plane_floor==3:
             self.kill_count+=1
+        # 使用上面补过三面 boss 的 kill_count 计算位面明细
+        plane_str = self.format_plane_detail(now)
         super().end_of_university()
         record_file = os.path.join(PATHS["backup"], "kill_record.txt")
         try:
@@ -96,9 +103,9 @@ class IronBloodUniverse(AnyFateUniverse):
             total_sec = self.elapsed_time % 60
             # 「开局期望」一律写入：确认识别到写真实值（0 也是真读数），识别失败或本局没做识别写负数原因码
             if self.first_plane_weight >= 0:
-                line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight:.2f}"
+                line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight:.2f}{plane_str}"
             else:
-                line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight}"
+                line = f"轮回次数:{self.count}, 开始时间:{start_time_str}, 用时:{total_min}分{total_sec}秒, 击杀数:{self.kill_count:02d}, 开局期望:{self.first_plane_weight}{plane_str}"
             with open(record_file, "a", encoding="utf-8") as file:
                 file.write(line + "\n")
         except Exception as e:
@@ -156,10 +163,13 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=1
+            self.record_plane_start(1)
         elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=2
+            self.record_plane_start(2)
         elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=3
+            self.record_plane_start(3)
             # 达到第三面暂停需求数时停止程序
             if self.third_plane_pause_count > 0 and self.third_plane_pause_count <= (self.kill_count+1):
                 CUS_LOGGER.info(f"当前击杀数：{self.kill_count+1}，已达到第三面暂停需求数：{self.third_plane_pause_count}，停止程序")
@@ -204,10 +214,13 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=1
+            self.record_plane_start(1)
         elif self.click_text(text="浪潮",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=2
+            self.record_plane_start(2)
         elif self.click_text(text="消褪",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=3
+            self.record_plane_start(3)
         else:
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
             return
@@ -216,6 +229,61 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
         return
+    def record_plane_start(self, plane):
+        """记录进入位面的时刻与累计击杀基准。
+
+        同一位面多次触发时只记第一次，避免位面内重复识别重置计时。
+        拥有前置位面（plane-1 已记录）时认定前置位面的 boss，本次只 +1；
+        无前置位面（接管或一面）时基准为 0，接管前的击杀都归入本面。
+
+        Args:
+            plane: 位面序号，取 1、2 或 3。
+        """
+        if plane in self.plane_start_times:
+            return
+        self.plane_start_times[plane] = time.time()
+        if (plane - 1) in self.plane_start_times:
+            # 拥有前置位面：认定前置位面的 boss，本次只 +1
+            self.plane_start_kills[plane] = self.kill_count + 1
+        else:
+            # 无前置位面（接管或一面）：基准为 0，前面的击杀都算入本面
+            self.plane_start_kills[plane] = 0
+
+    def format_plane_detail(self, now):
+        """拼接待写入 kill_record.txt 的位面明细后缀。
+
+        Args:
+            now: 结算时刻的秒级时间戳，与 plane_start_times 同一时基，用于计算位面耗时。
+
+        Returns:
+            形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串；
+            程序启动后未识别到任何位面时，三个位面均显示 -1。
+        """
+        times = self.plane_start_times
+        kills = self.plane_start_kills
+        if not times:
+            # 程序启动后没识别到任何位面就结算
+            return "[一面:用时-1 击杀数-1|二面:用时-1 击杀数-1|三面:用时-1 击杀数-1]"
+        has1 = 1 in times
+        has2 = 2 in times
+        has3 = 3 in times
+        kill_now = self.kill_count
+
+        t1 = int(times.get(2, now) - times[1]) if has1 else 0
+        t2 = int(times.get(3, now) - times[2]) if has2 else 0
+        t3 = int(now - times[3]) if has3 else 0
+
+        k1 = (kills.get(2, kill_now) - kills.get(1, 0)) if has1 else 0
+        k2 = (kills.get(3, kill_now) - kills.get(2, 0)) if has2 else 0
+        k3 = (kill_now - kills.get(3, 0)) if has3 else 0
+
+        def fmt(t):
+            return f"{t // 60}分{t % 60}秒"
+
+        return (f"[一面:用时{fmt(t1)} 击杀数{k1}"
+                f"|二面:用时{fmt(t2)} 击杀数{k2}"
+                f"|三面:用时{fmt(t3)} 击杀数{k3}]")
+
     def select_doing(self):
         text = self.ts.find_with_box(box=[557, 447, 747, 474], forward=True, re_screen=False)
         text = merge_text(text) if len(text) else ""
