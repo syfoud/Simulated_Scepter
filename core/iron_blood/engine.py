@@ -252,7 +252,7 @@ class IronBloodUniverse(AnyFateUniverse):
         
         Args:
             now: 结算时刻的秒级时间戳。
-
+            
         Returns:
             形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串。
         """
@@ -265,14 +265,13 @@ class IronBloodUniverse(AnyFateUniverse):
             final_kills += 1 # 没有进入三面兜底，手动补上最后这一面的 boss
 
         def get_real_start_kills(p):
-            """获取进入该位面时的真实击杀（包含前置位面的 boss）"""
+            """获取进入该位面时的真实击杀（包含前置位面的 boss 补正）"""
             if p not in self.plane_records:
                 return 0
-            # 如果前置位面存在，说明兜底过了，+1
             has_prev = (p - 1) in self.plane_records
             return self.plane_records[p]["base_kills"] + (1 if has_prev else 0)
 
-        for i, (p, name) in enumerate(planes):
+        for p, name in planes:
             if p not in self.plane_records:
                 parts.append(f"{name}面:用时0分0秒 击杀数0")
                 continue
