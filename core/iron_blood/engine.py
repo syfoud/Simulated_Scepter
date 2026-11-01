@@ -230,10 +230,10 @@ class IronBloodUniverse(AnyFateUniverse):
         return
     def record_plane_start(self, plane):
         """记录进入位面的时刻与当时的累计击杀快照。
-        
+
         同一位面多次触发时只记第一次，避免位面内重复识别重置计时。
         这里记录的是游戏给出的原始值，不含前置位面的 boss，保证数据来源纯粹。
-        
+
         Args:
             plane: 位面序号，取 1、2 或 3。
         """
@@ -252,7 +252,7 @@ class IronBloodUniverse(AnyFateUniverse):
         
         Args:
             now: 结算时刻的秒级时间戳。
-            
+
         Returns:
             形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串。
         """
