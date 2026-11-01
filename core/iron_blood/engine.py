@@ -38,10 +38,10 @@ class IronBloodUniverse(AnyFateUniverse):
         self.my_fate = config.fates.index(self.fate)
         self.tk = text_keys(self.my_fate)
         self.expectation_weight = 0 # 地图路径期望
-        self.plane_start_times = {}   # {1/2/3: 识别到振翅/浪潮/消褪的时刻}
-        self.plane_start_kills = {}   # {1/2/3: 进入该位面时含已认定 boss 的累计击杀}
         # 保存开局期望。-5 表示本局还没走到开局节点图识别，直接开局的局会以这个值写入记录
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
+        # 记录进入位面的时间和纯快照击杀数（不含前置 boss 补正，靠计算时统一推导）
+        self.plane_records = {}   # {1/2/3: {"start_time": 时刻, "base_kills": 快照击杀}}
         # 铁血战士使用毁灭专属事件优先级
         event_iron_blood = resource_path(__file__, "config/event_iron_blood.json")
         with open(event_iron_blood, encoding="utf-8", errors="ignore") as f:
@@ -52,8 +52,7 @@ class IronBloodUniverse(AnyFateUniverse):
         self.elapsed_time = 0  # 重置演算持续时间
         self.kill_count = 0
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
-        self.plane_start_times = {}
-        self.plane_start_kills = {}
+        self.plane_records = {}
 
     def stop_round_recording(self):
         """按击杀数决定本轮录像是否删除，并把本局数据写进保留视频的文件名"""
@@ -163,13 +162,13 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=1
-            self.record_plane_start(1)
+            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=2
-            self.record_plane_start(2)
+            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=3
-            self.record_plane_start(3)
+            self.record_plane_start(self.plane_floor)
             # 达到第三面暂停需求数时停止程序
             if self.third_plane_pause_count > 0 and self.third_plane_pause_count <= (self.kill_count+1):
                 CUS_LOGGER.info(f"当前击杀数：{self.kill_count+1}，已达到第三面暂停需求数：{self.third_plane_pause_count}，停止程序")
@@ -214,13 +213,13 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=1
-            self.record_plane_start(1)
+            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="浪潮",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=2
-            self.record_plane_start(2)
+            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="消褪",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=3
-            self.record_plane_start(3)
+            self.record_plane_start(self.plane_floor)
         else:
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
             return
@@ -230,55 +229,71 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.wait()
         return
     def record_plane_start(self, plane):
-        """记录进入位面的时刻与累计击杀基准。
-
+        """记录进入位面的时刻与当时的累计击杀快照。
+        
         同一位面多次触发时只记第一次，避免位面内重复识别重置计时。
-        拥有前置位面（plane-1 已记录）时认定前置位面的 boss，本次只 +1；
-        无前置位面（接管或一面）时基准为 0，接管前的击杀都归入本面。
-
+        这里记录的是游戏给出的原始值，不含前置位面的 boss，保证数据来源纯粹。
+        
         Args:
             plane: 位面序号，取 1、2 或 3。
         """
-        if plane in self.plane_start_times:
+        if plane in self.plane_records:
             return
-        self.plane_start_times[plane] = time.time()
-        if (plane - 1) in self.plane_start_times:
-            # 拥有前置位面：认定前置位面的 boss，本次只 +1
-            self.plane_start_kills[plane] = self.kill_count + 1
-        else:
-            # 无前置位面（接管或一面）：基准为 0，前面的击杀都算入本面
-            self.plane_start_kills[plane] = 0
+        self.plane_records[plane] = {
+            "start_time": time.time(),
+            "base_kills": self.kill_count
+        }
 
     def format_plane_detail(self, now):
         """拼接待写入 kill_record.txt 的位面明细后缀。
-
+        
+        逻辑：进入下一位面时，游戏才会兜底结算上一位面的 boss（+1）。
+        如果本局没进下一位面，由于三面有 end_of_university 补 +1，而一二面没有，需在这里统一补正。
+        
         Args:
-            now: 结算时刻的秒级时间戳，与 plane_start_times 同一时基，用于计算位面耗时。
-
+            now: 结算时刻的秒级时间戳。
+            
         Returns:
             形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串。
         """
-        times = self.plane_start_times
-        kills = self.plane_start_kills
-        has1 = 1 in times
-        has2 = 2 in times
-        has3 = 3 in times
-        kill_now = self.kill_count
+        planes = [(1, "一"), (2, "二"), (3, "三")]
+        parts = []
+        
+        # 获取包含所有已发生 boss 的最终总击杀
+        final_kills = self.kill_count
+        if self.plane_floor < 3:
+            final_kills += 1 # 没有进入三面兜底，手动补上最后这一面的 boss
 
-        t1 = int(times.get(2, now) - times[1]) if has1 else 0
-        t2 = int(times.get(3, now) - times[2]) if has2 else 0
-        t3 = int(now - times[3]) if has3 else 0
+        def get_real_start_kills(p):
+            """获取进入该位面时的真实击杀（包含前置位面的 boss）"""
+            if p not in self.plane_records:
+                return 0
+            # 如果前置位面存在，说明兜底过了，+1
+            has_prev = (p - 1) in self.plane_records
+            return self.plane_records[p]["base_kills"] + (1 if has_prev else 0)
 
-        k1 = (kills.get(2, kill_now) - kills.get(1, 0)) if has1 else 0
-        k2 = (kills.get(3, kill_now) - kills.get(2, 0)) if has2 else 0
-        k3 = (kill_now - kills.get(3, 0)) if has3 else 0
-
-        def format_duration(seconds):
-            return f"{seconds // 60}分{seconds % 60}秒"
-
-        return (f"[一面:用时{format_duration(t1)} 击杀数{k1}"
-                f"|二面:用时{format_duration(t2)} 击杀数{k2}"
-                f"|三面:用时{format_duration(t3)} 击杀数{k3}]")
+        for i, (p, name) in enumerate(planes):
+            if p not in self.plane_records:
+                parts.append(f"{name}面:用时0分0秒 击杀数0")
+                continue
+            
+            start_time = self.plane_records[p]["start_time"]
+            
+            # 寻找下一位面作为结束基准
+            next_p = p + 1
+            if next_p in self.plane_records:
+                end_time = self.plane_records[next_p]["start_time"]
+                end_kills = get_real_start_kills(next_p)
+            else:
+                end_time = now
+                end_kills = final_kills
+                
+            duration = int(end_time - start_time)
+            kills = end_kills - get_real_start_kills(p)
+            
+            parts.append(f"{name}面:用时{duration // 60}分{duration % 60}秒 击杀数{kills}")
+            
+        return "[" + "|".join(parts) + "]"
 
     def select_doing(self):
         text = self.ts.find_with_box(box=[557, 447, 747, 474], forward=True, re_screen=False)
