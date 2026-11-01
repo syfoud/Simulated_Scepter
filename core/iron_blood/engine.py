@@ -256,14 +256,10 @@ class IronBloodUniverse(AnyFateUniverse):
             now: 结算时刻的秒级时间戳，与 plane_start_times 同一时基，用于计算位面耗时。
 
         Returns:
-            形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串；
-            程序启动后未识别到任何位面时，三个位面均显示 -1。
+            形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串。
         """
         times = self.plane_start_times
         kills = self.plane_start_kills
-        if not times:
-            # 程序启动后没识别到任何位面就结算
-            return "[一面:用时-1 击杀数-1|二面:用时-1 击杀数-1|三面:用时-1 击杀数-1]"
         has1 = 1 in times
         has2 = 2 in times
         has3 = 3 in times
@@ -277,12 +273,12 @@ class IronBloodUniverse(AnyFateUniverse):
         k2 = (kills.get(3, kill_now) - kills.get(2, 0)) if has2 else 0
         k3 = (kill_now - kills.get(3, 0)) if has3 else 0
 
-        def fmt(t):
-            return f"{t // 60}分{t % 60}秒"
+        def format_duration(seconds):
+            return f"{seconds // 60}分{seconds % 60}秒"
 
-        return (f"[一面:用时{fmt(t1)} 击杀数{k1}"
-                f"|二面:用时{fmt(t2)} 击杀数{k2}"
-                f"|三面:用时{fmt(t3)} 击杀数{k3}]")
+        return (f"[一面:用时{format_duration(t1)} 击杀数{k1}"
+                f"|二面:用时{format_duration(t2)} 击杀数{k2}"
+                f"|三面:用时{format_duration(t3)} 击杀数{k3}]")
 
     def select_doing(self):
         text = self.ts.find_with_box(box=[557, 447, 747, 474], forward=True, re_screen=False)
