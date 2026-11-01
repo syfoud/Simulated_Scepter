@@ -246,19 +246,19 @@ class IronBloodUniverse(AnyFateUniverse):
 
     def format_plane_detail(self, now):
         """拼接待写入 kill_record.txt 的位面明细后缀。
-        
+
         逻辑：进入下一位面时，游戏才会兜底结算上一位面的 boss（+1）。
         如果本局没进下一位面，由于三面有 end_of_university 补 +1，而一二面没有，需在这里统一补正。
-        
+
         Args:
             now: 结算时刻的秒级时间戳。
-            
+
         Returns:
             形如 "[一面:用时X分X秒 击杀数K|二面:...|三面:...]" 的字符串。
         """
         planes = [(1, "一"), (2, "二"), (3, "三")]
         parts = []
-        
+
         # 获取包含所有已发生 boss 的最终总击杀
         final_kills = self.kill_count
         if self.plane_floor < 3:
@@ -275,9 +275,9 @@ class IronBloodUniverse(AnyFateUniverse):
             if p not in self.plane_records:
                 parts.append(f"{name}面:用时0分0秒 击杀数0")
                 continue
-            
+
             start_time = self.plane_records[p]["start_time"]
-            
+
             # 寻找下一位面作为结束基准
             next_p = p + 1
             if next_p in self.plane_records:
@@ -286,12 +286,12 @@ class IronBloodUniverse(AnyFateUniverse):
             else:
                 end_time = now
                 end_kills = final_kills
-                
+
             duration = int(end_time - start_time)
             kills = end_kills - get_real_start_kills(p)
-            
+
             parts.append(f"{name}面:用时{duration // 60}分{duration % 60}秒 击杀数{kills}")
-            
+
         return "[" + "|".join(parts) + "]"
 
     def select_doing(self):
