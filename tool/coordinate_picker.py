@@ -1,4 +1,4 @@
-"""鼠标坐标拾取：点哪打印哪，输出相对游戏窗口的 1920x1080 坐标。
+"""鼠标坐标拾取：鼠标移到哪、按 Ctrl 就记录哪，输出相对游戏窗口的 1920x1080 坐标。
 
 用途：不依赖 OCR 和模板图，直接肉眼把鼠标放到图标上点一下，就知道它在基准坐标里的位置。
 
@@ -6,6 +6,7 @@
     python -m tool.coordinate_picker          # 聚焦游戏窗口后采集，右键停止
     python -m tool.coordinate_picker --no-focus
 
+用 Ctrl 而不是点击采样：点击会把游戏里的卡片按钮真的点下去，界面一变后续坐标就不准。
 注意：游戏鼠标被锁定时（FPS 视角），按住 Alt 才能自由移动光标；这是游戏行为，本工具不做拦截。
 """
 
@@ -74,7 +75,8 @@ def pick_coordinates(
 
     rect = get_client_screen_rect(hwnd)
     points: list[tuple[int, int]] = []
-    left_was_down = False
+    # 采样用 Ctrl 而不是点击：点击会把游戏里的卡片/按钮真的点下去，界面一变后面的坐标就不准了
+    trigger_was_down = False
 
     try:
         while True:
@@ -83,20 +85,20 @@ def pick_coordinates(
             if win32api.GetAsyncKeyState(win32con.VK_RBUTTON) & 0x8000:
                 break
 
-            left_down = bool(win32api.GetAsyncKeyState(win32con.VK_LBUTTON) & 0x8000)
+            trigger_down = bool(win32api.GetAsyncKeyState(win32con.VK_CONTROL) & 0x8000)
             # 只在按下的那一帧采点，按住不放不会重复刷屏
-            if left_down and not left_was_down:
+            if trigger_down and not trigger_was_down:
                 screen = win32api.GetCursorPos()
                 base = to_base(screen[0], screen[1], rect)
                 if 0 <= base[0] <= BASE_WIDTH and 0 <= base[1] <= BASE_HEIGHT:
                     points.append(base)
                     if on_point is not None:
                         on_point(base, screen, format_point(base, screen, rect))
-            left_was_down = left_down
+            trigger_was_down = trigger_down
             time.sleep(POLL_INTERVAL)
     finally:
         # 不让残留按键状态影响后续自动化
-        left_was_down = False
+        trigger_was_down = False
 
     return points
 
@@ -108,7 +110,7 @@ def main() -> int:
     parser.add_argument("--no-focus", action="store_true", help="不强制把游戏窗口切到前台")
     args = parser.parse_args()
 
-    print("左键点目标位置采集坐标，右键停止；窗口外的点击会被忽略。", flush=True)
+    print("鼠标移到目标位置、按 Ctrl 记录（不会点击游戏），右键停止；窗口外会忽略。", flush=True)
     try:
         points = pick_coordinates(focus=not args.no_focus, on_point=lambda b, s, text: print(text, flush=True))
     except RuntimeError as error:
