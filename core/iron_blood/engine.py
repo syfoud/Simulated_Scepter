@@ -162,13 +162,10 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=1
-            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=2
-            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
             self.plane_floor=3
-            self.record_plane_start(self.plane_floor)
             # 达到第三面暂停需求数时停止程序
             if self.third_plane_pause_count > 0 and self.third_plane_pause_count <= (self.kill_count+1):
                 CUS_LOGGER.info(f"当前击杀数：{self.kill_count+1}，已达到第三面暂停需求数：{self.third_plane_pause_count}，停止程序")
@@ -177,6 +174,7 @@ class IronBloodUniverse(AnyFateUniverse):
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return
+        self.record_plane_start(self.plane_floor)
         # 「进入位面」按钮出现时，节点图可能还在逐个生成节点、甚至还在把随机节点替换成精英节点。
         # 此时识别会漏掉尚未出现的节点，得到一张不完整的图，期望值随之偏低，本应继续打的开局会被
         # 误判成期望过低而退出，于是 kill_record.txt 里留下一条用时明显偏短的记录，即「假账」。
@@ -213,16 +211,15 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.keyUp("move_w")
         if self.click_text(text="振翅",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=1
-            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="浪潮",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=2
-            self.record_plane_start(self.plane_floor)
         elif self.click_text(text="消褪",box=[385, 548, 449, 583],click=False,warning=False):
             self.plane_floor=3
-            self.record_plane_start(self.plane_floor)
         else:
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
             return
+        self.record_plane_start(self.plane_floor)
+
         CUS_LOGGER.debug(f"当前地图位面{self.plane_floor}")
         self.try_analysis_map(3,1)
         key_mouse_manager.press("esc")
