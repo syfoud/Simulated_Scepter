@@ -53,6 +53,9 @@ MASK_PRIORITY = (
     "贪吃面具", "斗士面具", "战车面具", "敷衍面具",
 )
 MASK_POINTS = ((331, 431), (332, 615), (338, 803))  # 三张面具卡片中心，按从上到下
+# 排名小于这个值才值得直接选：前 6 名本体分都 ≥ +1，后面的是中性或有负面。
+# 三张都达不到就用刷新额度重刷，刷完仍不达标才勉强选最好的那张。
+GOOD_MASK_RANK = 6
 MASK_REFRESH = (161, 949)   # 「刷新 N/1」
 MASK_CONFIRM = (1586, 959)  # 「确定」
 MASK_DETAIL_BOX = (1020, 180, 1350, 250)  # 右侧详情面板标题区 [x1, y1, x2, y2]，大字识别更稳
@@ -304,12 +307,8 @@ class DivineTreasureKernel(ScriptKernel):
                 names.append((text, index))
         return names
 
-    def select_mask(self):
-        """先批量识别三张面具名，缺失的再逐张点开补，最后按优先级选。
-
-        正常情况下批量识别就够了（2 次点击：选 + 确定）；只有被选中导致的框失效、
-        或识别不清时才降级点开读详情，避免每局都点 5 次。
-        """
+    def read_masks(self):
+        """批量识别三张面具名，缺失的再逐张点开补，返回 {卡片序号: 名字}。"""
         found = dict((index, text) for text, index in self.read_mask_names())
         CUS_LOGGER.debug(f"批量识别：{found}", extra={"flush": True})
         for index in range(len(MASK_POINTS)):
@@ -322,6 +321,42 @@ class DivineTreasureKernel(ScriptKernel):
             if "面具" in name:
                 found[index] = name
                 CUS_LOGGER.debug(f"第 {index + 1} 张补读：{name}", extra={"flush": True})
+        return found
+
+    def try_refresh(self, before):
+        """点一次刷新，返回新的 {序号: 名字}；没刷出变化（多半没额度）返回 None。
+
+        不读「刷新 N/1」的数字：那个小字 OCR 不稳（实测读成「价」），直接点完比对
+        三张面具名是否变了更可靠。
+        """
+        self.click_position(MASK_REFRESH)
+        key_mouse_manager.wait()
+        time.sleep(1.2)
+        fresh = dict((index, text) for text, index in self.read_mask_names())
+        if not fresh:
+            return None
+        if set(fresh.values()) == set(before.values()):
+            return None
+        CUS_LOGGER.debug(f"刷新后：{fresh}", extra={"flush": True})
+        return fresh
+
+    def select_mask(self):
+        """先按优先级挑；三张都不够好就刷一次再挑，实在不行才勉强选最好的。
+
+        批量识别在正常情况下不点击（2 次点击：选 + 确定）；只有被选中导致的框失效、
+        或识别不清时才降级点开读详情。
+        """
+        found = self.read_masks()
+        if found:
+            best = min(found.items(), key=lambda item: (self.mask_rank(item[1]), item[0]))
+            if self.mask_rank(best[1]) >= GOOD_MASK_RANK:
+                CUS_LOGGER.debug(f"三张都不理想（最好的是 {best[1]}，排名 {self.mask_rank(best[1]) + 1}），"
+                                 f"尝试刷新", extra={"flush": True})
+                fresh = self.try_refresh(found)
+                if fresh:
+                    found = fresh
+                else:
+                    CUS_LOGGER.debug("刷新没有变化（可能额度已用完），沿用当前三张", extra={"flush": True})
         if not found:
             CUS_LOGGER.warning("三张面具都没识别出来，直接点确定", extra={"flush": True})
             self.click_position(MASK_CONFIRM)
