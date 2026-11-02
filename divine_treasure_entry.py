@@ -34,7 +34,13 @@ TEAM_EMPTY_SLOT_BOX = (1112, 1186, 931, 1004)  # 空槽位图标的搜索区 [x1
 TEAM_EMPTY_TEMPLATE = str(ROOT / "tool" / "divine_treasure" / "assets" / "team_empty_slot.png")  # 必须是绝对路径：
 # find_image_by_name 对带 "/" 的相对路径会拼到 resource/imgs 下，导致永远读不到
 PROTOCOL_BOX = (672, 1246, 879, 953)  # 练习模式页底部「阈值协议 ▼ N」整条，只从中提取数字
-TARGET_PROTOCOL = 5                   # 期望的阈值协议；识别不到或不等时只告警，不阻塞入场
+PROTOCOL_MINUS = (731, 902)           # 阈值协议左侧「−」
+PROTOCOL_PLUS = (1142, 902)           # 阈值协议右侧「+」
+PROTOCOL_RANGE = (1, 9)               # 协议可选范围，越界时钳制
+DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol 覆盖
+# 默认取 4 而不是 5：协议效果逐级叠加，N5 相对 N4 只多「第一位面 1 次惊世奇迹」，代价是
+# 面具愿力需求与方程祝福需求提高；而刷图鉴时战斗时间占比很低，N5 更肉的敌人几乎无感，
+# 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 _TEAM_EMPTY_TEMPLATE = None
 
@@ -178,6 +184,7 @@ class DivineTreasureKernel(ScriptKernel):
     window_timeout = 5        # 测试用短等待；正式运行可调回 300
     require_foreground = True  # 游戏窗口切走就停
     action_groups = None       # None = 跑 JSON 里全部组
+    target_protocol = DEFAULT_PROTOCOL  # 目标阈值协议，由 --protocol 覆盖
 
     def run_static(self, json_path=None, json_file=None, action_list=None, skip_check=False):
         # 按 --stage 指定的组运行，便于只验证当次改动的那一段
@@ -208,22 +215,37 @@ class DivineTreasureKernel(ScriptKernel):
             time.sleep(wait)
         # 面板不会自动关闭，但也不遮挡「进入星阶模式」，后续动作照常点击
 
-    def check_protocol(self):
-        """校验阈值协议。
-
-        用的是主循环每帧已经做好的整屏 OCR 结果，只在协议框范围内取数字——单行 OCR
-        只会返回第一段文字（「阈值协议」），拿不到后面的数字。
-
-        识别不到数字、或数字与目标不一致时**只告警不中断**：协议框位置和识别都可能
-        随界面变化，卡在这里整条入场就走不下去。要换难度改 TARGET_PROTOCOL。
-        """
+    def read_protocol(self):
+        """读当前阈值协议，读不到返回 None。"""
+        # find_with_box 用的是最近一次 forward 的结果，这里先刷新一帧再取
+        self.ts.forward(self.get_screen())
         items = self.ts.find_with_box(list(PROTOCOL_BOX), redundancy=10)
         digits = "".join(ch for item in items for ch in item["raw_text"] if ch.isdigit())
-        if not digits:
-            CUS_LOGGER.warning("未识别到阈值协议数字，跳过校验继续启动", extra={"flush": True})
-        elif int(digits) != TARGET_PROTOCOL:
-            CUS_LOGGER.warning(f"阈值协议为 {digits}，目标 {TARGET_PROTOCOL}，按当前值继续启动",
-                               extra={"flush": True})
+        return int(digits) if digits else None
+
+    def check_protocol(self):
+        """把阈值协议调整到 self.target_protocol（1~9）。
+
+        每局都读一次当前值再按需点 +/− ：游戏会记住上次选择，通常第一次调整后就一直
+        相等，不会再点。识别不到数字时只告警并继续，避免把整条入场卡在练习页。
+        """
+        target = self.target_protocol
+        if target is None:
+            return
+        for _ in range(12):  # 1~9 最大跨度 8 次，留一点余量
+            current = self.read_protocol()
+            if current is None:
+                CUS_LOGGER.warning("未识别到阈值协议数字，跳过调整继续启动", extra={"flush": True})
+                return
+            if current == target:
+                return
+            point = PROTOCOL_PLUS if current < target else PROTOCOL_MINUS
+            CUS_LOGGER.debug(f"阈值协议 {current} → {target}，点击{'加号' if point == PROTOCOL_PLUS else '减号'}",
+                             extra={"flush": True})
+            self.click_position(point)
+            key_mouse_manager.wait()
+            time.sleep(0.35)
+        CUS_LOGGER.warning(f"阈值协议未能调整到 {target}，按当前值继续启动", extra={"flush": True})
 
 
 def main(default_stage="entry"):
@@ -234,6 +256,8 @@ def main(default_stage="entry"):
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--stage", choices=("entry", "team", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
+    parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
+                        help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.samples and args.stage not in ("entry", "masks"):
@@ -308,6 +332,7 @@ def main(default_stage="entry"):
     from tool.action_script import run_script
 
     kernel = DivineTreasureKernel()
+    kernel.target_protocol = max(PROTOCOL_RANGE[0], min(PROTOCOL_RANGE[1], args.protocol))
     if args.stage == "team":
         kernel.action_groups = ["team"]
     try:

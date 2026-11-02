@@ -21,8 +21,8 @@
   },
   {
     "name": "entry",
-    "trigger": { "text": "启动", "box": [650, 1900, 930, 1040] },
-    "actions": ["check_protocol", { "text": "启动", "box": [650, 1900, 930, 1040] }]
+    "trigger": { "text": "启动", "box": [650, 1900, 930, 1040], "interval": 2 },
+    "actions": ["check_protocol", { "sleep": 0.6 }, { "text": "启动", "box": [650, 1900, 930, 1040] }]
   },
   {
     "name": "entry",
