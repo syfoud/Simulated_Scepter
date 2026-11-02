@@ -33,7 +33,8 @@ TEAM_PRESET_FIRST = (299, 279)    # 预设列表第一个（即收藏置顶那�
 TEAM_EMPTY_SLOT_BOX = (1112, 1186, 931, 1004)  # 空槽位图标的搜索区 [x1, x2, y1, y2]
 TEAM_EMPTY_TEMPLATE = str(ROOT / "tool" / "divine_treasure" / "assets" / "team_empty_slot.png")  # 必须是绝对路径：
 # find_image_by_name 对带 "/" 的相对路径会拼到 resource/imgs 下，导致永远读不到
-PROTOCOL_BOX = (984, 1040, 873, 930)  # 练习模式页的阈值协议数字
+PROTOCOL_BOX = (672, 1246, 879, 953)  # 练习模式页底部「阈值协议 ▼ N」整条，只从中提取数字
+TARGET_PROTOCOL = 5                   # 期望的阈值协议；识别不到或不等时只告警，不阻塞入场
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 _TEAM_EMPTY_TEMPLATE = None
 
@@ -208,11 +209,21 @@ class DivineTreasureKernel(ScriptKernel):
         # 面板不会自动关闭，但也不遮挡「进入星阶模式」，后续动作照常点击
 
     def check_protocol(self):
-        """练习模式的阈值协议必须是 5，否则就地停下。"""
-        text = self.ts.ocr_one_row(self.get_screen(), list(PROTOCOL_BOX))
-        digits = "".join(ch for ch in (text or "") if ch.isdigit())
-        if digits and digits != "5":
-            raise RuntimeError(f"Protocol must be 5, observed {digits}; no adjustment made")
+        """校验阈值协议。
+
+        用的是主循环每帧已经做好的整屏 OCR 结果，只在协议框范围内取数字——单行 OCR
+        只会返回第一段文字（「阈值协议」），拿不到后面的数字。
+
+        识别不到数字、或数字与目标不一致时**只告警不中断**：协议框位置和识别都可能
+        随界面变化，卡在这里整条入场就走不下去。要换难度改 TARGET_PROTOCOL。
+        """
+        items = self.ts.find_with_box(list(PROTOCOL_BOX), redundancy=10)
+        digits = "".join(ch for item in items for ch in item["raw_text"] if ch.isdigit())
+        if not digits:
+            CUS_LOGGER.warning("未识别到阈值协议数字，跳过校验继续启动", extra={"flush": True})
+        elif int(digits) != TARGET_PROTOCOL:
+            CUS_LOGGER.warning(f"阈值协议为 {digits}，目标 {TARGET_PROTOCOL}，按当前值继续启动",
+                               extra={"flush": True})
 
 
 def main(default_stage="entry"):
