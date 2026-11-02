@@ -16,13 +16,9 @@
   },
   {
     "name": "entry",
-    "trigger": { "text": "练习模式", "box": [960, 1260, 100, 180] },
-    "actions": [{ "text": "练习模式", "box": [960, 1260, 100, 180] }]
-  },
-  {
-    "name": "entry",
     "trigger": { "text": "启动", "box": [650, 1900, 930, 1040], "interval": 2 },
-    "actions": ["check_protocol", { "sleep": 0.6 }, { "text": "启动", "box": [650, 1900, 930, 1040] }]
+    "actions": ["ensure_practice_mode", "check_protocol", { "sleep": 0.6 },
+                { "text": "启动", "box": [650, 1900, 930, 1040] }]
   },
   {
     "name": "entry",

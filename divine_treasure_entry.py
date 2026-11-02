@@ -239,6 +239,26 @@ class DivineTreasureKernel(ScriptKernel):
             time.sleep(wait)
         # 面板不会自动关闭，但也不遮挡「进入星阶模式」，后续动作照常点击
 
+    def ensure_practice_mode(self):
+        """确保当前在「练习模式」页。
+
+        ranked 与 practice 两页都有「启动」按钮和「阈值协议」，只靠文字区分不开；
+        但练习页中部显示「该模式不影响星阶」，拓星页显示「你已至星之尽头」。
+        在拓星页误点「启动」会真的影响星阶，所以这一步不能省。
+        """
+        if any("不影响星阶" in item["raw_text"] for item in self.ts.res):
+            return
+        items = self.ts.find_with_box([960, 1260, 100, 180], redundancy=10)
+        for item in items:
+            if "练习模式" in item["raw_text"]:
+                box = item["box"]
+                CUS_LOGGER.debug("当前不在练习模式，切换标签", extra={"flush": True})
+                self.click_position(((box[0] + box[1]) / 2, (box[2] + box[3]) / 2))
+                key_mouse_manager.wait()
+                time.sleep(0.8)
+                return
+        CUS_LOGGER.warning("未找到「练习模式」标签，按当前页面继续", extra={"flush": True})
+
     def read_protocol(self):
         """读当前阈值协议，读不到返回 None。"""
         # find_with_box 用的是最近一次 forward 的结果，这里先刷新一帧再取
