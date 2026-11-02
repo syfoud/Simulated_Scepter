@@ -183,25 +183,49 @@ class DivineTreasureKernel(ScriptKernel):
 
     window_timeout = 5        # 测试用短等待；正式运行可调回 300
     require_foreground = True  # 游戏窗口切走就停
+    foreground_grace = 30      # 失焦容忍帧数，约十几秒，给用户切回窗口的时间
     action_groups = None       # None = 跑 JSON 里全部组
     target_protocol = DEFAULT_PROTOCOL  # 目标阈值协议，由 --protocol 覆盖
+    _foreground_misses = 0
+    _miss_count = 0
 
     def run_static(self, json_path=None, json_file=None, action_list=None, skip_check=False):
         # 按 --stage 指定的组运行，便于只验证当次改动的那一段
-        return self.match_actions(json_path, json_file, action_list or self.action_groups, skip_check)
+        name, result = self.match_actions(json_path, json_file, action_list or self.action_groups, skip_check)
+        if not name:
+            # 连续认不出界面时把当前 OCR 到的文字打出来，方便判断卡在哪一页
+            self._miss_count += 1
+            if self._miss_count % 20 == 1:
+                texts = [item["raw_text"] for item in self.ts.res[:8]]
+                CUS_LOGGER.debug(f"未匹配到任何规则，当前界面文字：{texts}", extra={"flush": True})
+        else:
+            self._miss_count = 0
+        return name, result
 
     def get_screen(self):
         import win32api
         import win32con
 
-        from tool.utils.game_window import get_foreground_game_window
+        from tool.utils.game_window import (
+            get_foreground_game_window,
+            set_game_foreground,
+        )
 
         if win32api.GetAsyncKeyState(win32con.VK_F8) & 0x8000:
             CUS_LOGGER.error("F8 pressed, stopping")
             self.stop()
-        elif self.require_foreground and get_foreground_game_window() is None:
-            CUS_LOGGER.error("游戏窗口不在前台，停止")
-            self.stop()
+        elif self.require_foreground:
+            # 从终端启动时前台是终端，游戏被抢焦点；这里给十几帧宽限并主动拉回，
+            # 不要一失焦就停（用户敲完命令再切回游戏需要时间）
+            if get_foreground_game_window() is None:
+                self._foreground_misses += 1
+                if self._foreground_misses > self.foreground_grace:
+                    CUS_LOGGER.error("游戏窗口长时间不在前台，停止")
+                    self.stop()
+                elif self._foreground_misses % 10 == 1:
+                    set_game_foreground()
+            else:
+                self._foreground_misses = 0
         return super().get_screen()
 
     def fill_team(self):
