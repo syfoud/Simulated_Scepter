@@ -56,8 +56,11 @@ MASK_POINTS = ((331, 431), (332, 615), (338, 803))  # 三张面具卡片中心�
 MASK_REFRESH = (161, 949)   # 「刷新 N/1」
 MASK_CONFIRM = (1586, 959)  # 「确定」
 MASK_DETAIL_BOX = (1020, 180, 1350, 250)  # 右侧详情面板标题区 [x1, y1, x2, y2]，大字识别更稳
+# 三张卡片上名字条的文字框 [x1, y1, x2, y2]，实机采集（按五个字宽度取）
+MASK_NAME_BOXES = ((374, 400, 552, 432), (378, 586, 550, 617), (378, 771, 552, 805))
 # OCR 常见误读，统一成正名后再比对优先级
-MASK_ALIASES = {"雪鹄": "雪鸮", "雪鸡": "雪鸮", "雪号": "雪鸮", "机凯": "机铠", "财喵": "财猫"}
+MASK_ALIASES = {"雪鹄": "雪鸮", "雪鸡": "雪鸮", "雪号": "雪鸮", "机凯": "机铠",
+                "财喵": "财猫", "冏": "囧"}
 _TEAM_EMPTY_TEMPLATE = None
 
 
@@ -282,36 +285,59 @@ class DivineTreasureKernel(ScriptKernel):
                 return rank
         return len(MASK_PRIORITY)
 
-    def select_mask(self):
-        """逐张点开读名字，按优先级挑最优的一张再点确定。
+    def read_mask_names(self):
+        """一次裁三条名字条、放大 3 倍后识别，返回 [(归一化名字, 卡片序号)]。
 
-        每张卡片被点开时右侧详情会显示对应面具名，读完记住排名，最后回头点最优那张。
-        三张都不在优先级列表时保底选第一张，至少能开局。
+        比逐张点开快得多（点开会把卡片选中、白条位置跟着变）；但选中态那张卡的框会
+        失效，所以调用方要对缺失项降级处理。
         """
-        best = None
-        for index, point in enumerate(MASK_POINTS):
-            self.click_position(point)
+        screen = self.get_screen()
+        names = []
+        for index, (x1, y1, x2, y2) in enumerate(MASK_NAME_BOXES):
+            crop = screen[y1:y2, x1:x2]
+            if crop.size == 0:
+                continue
+            crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+            text = self.ts.ocr_one_row(crop) or ""
+            text = self.normalize_mask_name("".join(ch for ch in text if not ch.isspace()))
+            if "面具" in text and len(text) >= 3:
+                names.append((text, index))
+        return names
+
+    def select_mask(self):
+        """先批量识别三张面具名，缺失的再逐张点开补，最后按优先级选。
+
+        正常情况下批量识别就够了（2 次点击：选 + 确定）；只有被选中导致的框失效、
+        或识别不清时才降级点开读详情，避免每局都点 5 次。
+        """
+        found = dict((index, text) for text, index in self.read_mask_names())
+        CUS_LOGGER.debug(f"批量识别：{found}", extra={"flush": True})
+        for index in range(len(MASK_POINTS)):
+            if index in found:
+                continue
+            self.click_position(MASK_POINTS[index])
             key_mouse_manager.wait()
             time.sleep(0.45)
             name = self.read_mask_detail()
-            rank = self.mask_rank(name)
-            CUS_LOGGER.debug(f"第 {index + 1} 张：{name or '未识别'}（优先级 {rank}）", extra={"flush": True})
-            if "面具" not in name:
-                continue
-            if best is None or rank < best[0]:
-                best = (rank, name, index)
-        if best is None:
+            if "面具" in name:
+                found[index] = name
+                CUS_LOGGER.debug(f"第 {index + 1} 张补读：{name}", extra={"flush": True})
+        if not found:
             CUS_LOGGER.warning("三张面具都没识别出来，直接点确定", extra={"flush": True})
-        else:
-            if best[0] >= len(MASK_PRIORITY):
-                CUS_LOGGER.warning(f"三张都不在优先级列表，选第 {best[2] + 1} 张：{best[1]}",
-                                   extra={"flush": True})
-            else:
-                CUS_LOGGER.debug(f"按优先级选：{best[1]}（第 {best[2] + 1} 张，排名 {best[0] + 1}）",
-                                 extra={"flush": True})
-            self.click_position(MASK_POINTS[best[2]])
+            self.click_position(MASK_CONFIRM)
             key_mouse_manager.wait()
-            time.sleep(0.45)
+            return
+        best = min(found.items(), key=lambda item: (self.mask_rank(item[1]), item[0]))
+        rank = self.mask_rank(best[1])
+        if rank >= len(MASK_PRIORITY):
+            CUS_LOGGER.warning(f"识别到的面具都不在优先级列表，选第 {best[0] + 1} 张：{best[1]}",
+                               extra={"flush": True})
+        else:
+            CUS_LOGGER.debug(f"按优先级选：{best[1]}（第 {best[0] + 1} 张，排名 {rank + 1}）",
+                             extra={"flush": True})
+        self.click_position(MASK_POINTS[best[0]])
+        key_mouse_manager.wait()
+        time.sleep(0.45)
         self.click_position(MASK_CONFIRM)
         key_mouse_manager.wait()
         time.sleep(0.8)
