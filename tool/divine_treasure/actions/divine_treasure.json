@@ -38,11 +38,11 @@
   {
     "name": "dismiss",
     "trigger": { "text": "空白处关闭", "box": [880, 990, 1020, 1025], "redundancy": 30 },
-    "actions": [{ "position": [1800, 650] }, { "sleep": 1 }]
+    "actions": [{ "text": "点击空白" }, { "sleep": 1 }]
   },
   {
     "name": "masks",
-    "trigger": { "text": "选择惊世奇迹", "box": [650, 50, 1300, 200] },
+    "trigger": { "text": "选择惊世奇迹", "box": [650, 50, 1300, 200], "interval": 2 },
     "actions": ["stop"]
   },
   {
