@@ -33,7 +33,8 @@ TEAM_PRESET_FIRST = (299, 279)    # 预设列表第一个（即收藏置顶那�
 TEAM_EMPTY_SLOT_BOX = (1112, 1186, 931, 1004)  # 空槽位图标的搜索区 [x1, x2, y1, y2]
 TEAM_EMPTY_TEMPLATE = str(ROOT / "tool" / "divine_treasure" / "assets" / "team_empty_slot.png")  # 必须是绝对路径：
 # find_image_by_name 对带 "/" 的相对路径会拼到 resource/imgs 下，导致永远读不到
-PROTOCOL_BOX = (672, 1246, 879, 953)  # 练习模式页底部「阈值协议 ▼ N」整条，只从中提取数字
+PROTOCOL_BOX = (672, 1246, 879, 953)  # 练习模式页底部「阈值协议 ▼ N」整条（备用区域）
+PROTOCOL_DIGIT_BOX = (1002, 887, 1019, 913)  # 协议数字本身，[x1, y1, x2, y2]，实机采集
 PROTOCOL_MINUS = (731, 902)           # 阈值协议左侧「−」
 PROTOCOL_PLUS = (1142, 902)           # 阈值协议右侧「+」
 PROTOCOL_RANGE = (1, 9)               # 协议可选范围，越界时钳制
@@ -260,11 +261,19 @@ class DivineTreasureKernel(ScriptKernel):
         CUS_LOGGER.warning("未找到「练习模式」标签，按当前页面继续", extra={"flush": True})
 
     def read_protocol(self):
-        """读当前阈值协议，读不到返回 None。"""
-        # find_with_box 用的是最近一次 forward 的结果，这里先刷新一帧再取
-        self.ts.forward(self.get_screen())
-        items = self.ts.find_with_box(list(PROTOCOL_BOX), redundancy=10)
-        digits = "".join(ch for item in items for ch in item["raw_text"] if ch.isdigit())
+        """读当前阈值协议，读不到返回 None。
+
+        整屏 OCR 认不出那个单独的大号数字（det 阶段会漏），所以单独裁数字区域放大后再认；
+        用 ocr_one_row 而不是 forward，避免覆盖主循环缓存的整屏识别结果。
+        """
+        screen = self.get_screen()
+        x1, y1, x2, y2 = PROTOCOL_DIGIT_BOX
+        crop = screen[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
+        crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        text = self.ts.ocr_one_row(crop)
+        digits = "".join(ch for ch in (text or "") if ch.isdigit())
         return int(digits) if digits else None
 
     def check_protocol(self):
