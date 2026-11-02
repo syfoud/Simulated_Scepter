@@ -491,7 +491,8 @@ def main(default_stage="entry"):
     if args.stage == "team":
         kernel.action_groups = ["team"]
     elif args.stage == "mask":
-        kernel.action_groups = ["masks"]
+        # dismiss 放前面：选完面具会弹「点击空白处关闭」，先把它关掉才看得到下一界面
+        kernel.action_groups = ["dismiss", "masks"]
     try:
         if args.stage in ("entry", "team", "mask"):
             run_script(kernel, str(ACTION_SCRIPT))

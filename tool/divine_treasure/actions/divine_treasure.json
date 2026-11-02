@@ -36,8 +36,13 @@
     "actions": ["fill_team", { "text": "进入星阶模式", "box": [650, 930, 1900, 1040] }]
   },
   {
+    "name": "dismiss",
+    "trigger": { "text": "空白", "box": [870, 985, 1030, 1030], "redundancy": 60 },
+    "actions": [{ "text": "点击空白" }, { "sleep": 1 }]
+  },
+  {
     "name": "masks",
-    "trigger": { "text": "点击空白处关闭", "box": [650, 950, 1300, 1040] },
+    "trigger": { "text": "请选择方程", "box": [650, 50, 1300, 200] },
     "actions": ["stop"]
   },
   {
