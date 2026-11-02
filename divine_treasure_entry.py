@@ -193,11 +193,11 @@ class DivineTreasureKernel(ScriptKernel):
         # 按 --stage 指定的组运行，便于只验证当次改动的那一段
         name, result = self.match_actions(json_path, json_file, action_list or self.action_groups, skip_check)
         if not name:
-            # 连续认不出界面时把当前 OCR 到的文字打出来，方便判断卡在哪一页
+            # 连续认不出界面时把当前 OCR 到的文字和位置打出来，方便判断卡在哪一页
             self._miss_count += 1
-            if self._miss_count % 20 == 1:
-                texts = [item["raw_text"] for item in self.ts.res[:8]]
-                CUS_LOGGER.debug(f"未匹配到任何规则，当前界面文字：{texts}", extra={"flush": True})
+            if self._miss_count % 10 == 1:
+                items = [(item["raw_text"], [int(v) for v in item["box"]]) for item in self.ts.res]
+                CUS_LOGGER.debug(f"未匹配到任何规则，共 {len(items)} 条：{items}", extra={"flush": True})
         else:
             self._miss_count = 0
         return name, result
