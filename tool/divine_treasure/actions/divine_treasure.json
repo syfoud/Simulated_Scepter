@@ -2,7 +2,7 @@
   {
     "name": "entry",
     "trigger": { "text": "欢愉假面", "box": [0, 0, 400, 160] },
-    "actions": ["stop"]
+    "actions": ["select_mask"]
   },
   {
     "name": "entry",
@@ -34,5 +34,15 @@
     "name": "team",
     "trigger": { "text": "进入星阶模式", "box": [650, 930, 1900, 1040], "interval": 3 },
     "actions": ["fill_team", { "text": "进入星阶模式", "box": [650, 930, 1900, 1040] }]
+  },
+  {
+    "name": "masks",
+    "trigger": { "text": "点击空白处关闭", "box": [650, 950, 1300, 1040] },
+    "actions": ["stop"]
+  },
+  {
+    "name": "masks",
+    "trigger": { "text": "欢愉假面", "box": [0, 0, 400, 160], "interval": 3 },
+    "actions": ["select_mask"]
   }
 ]

@@ -43,6 +43,21 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 面具愿力需求与方程祝福需求提高；而刷图鉴时战斗时间占比很低，N5 更肉的敌人几乎无感，
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
+
+# ── 面具选择（「欢愉假面」页）──────────────────────────────────────────────
+# 优先级来自 214 题人工评分：本体分 + 专属奇迹均值×0.6 的综合排序，
+# 依据见 canon/divine-treasure/_10-面具选择判据.md
+MASK_PRIORITY = (
+    "机铠面具", "万随面具", "雪鸮面具", "点子王面具", "镜头面具",
+    "「两张」面具", "马之面具", "财猫面具", "操盘面具", "囧之面具",
+    "贪吃面具", "斗士面具", "战车面具", "敷衍面具",
+)
+MASK_POINTS = ((331, 431), (332, 615), (338, 803))  # 三张面具卡片中心，按从上到下
+MASK_REFRESH = (161, 949)   # 「刷新 N/1」
+MASK_CONFIRM = (1586, 959)  # 「确定」
+MASK_DETAIL_BOX = (1020, 180, 1350, 250)  # 右侧详情面板标题区 [x1, y1, x2, y2]，大字识别更稳
+# OCR 常见误读，统一成正名后再比对优先级
+MASK_ALIASES = {"雪鹄": "雪鸮", "雪鸡": "雪鸮", "雪号": "雪鸮", "机凯": "机铠", "财喵": "财猫"}
 _TEAM_EMPTY_TEMPLATE = None
 
 
@@ -240,6 +255,67 @@ class DivineTreasureKernel(ScriptKernel):
             time.sleep(wait)
         # 面板不会自动关闭，但也不遮挡「进入星阶模式」，后续动作照常点击
 
+    def normalize_mask_name(self, name):
+        """把 OCR 常见的形近字统一成正名，便于和优先级列表比对。"""
+        for alias, real in MASK_ALIASES.items():
+            if alias in name:
+                name = name.replace(alias, real)
+        return name
+
+    def read_mask_detail(self):
+        """读右侧详情面板的面具名。
+
+        卡片名字条上的小字 OCR 不稳（「囧」会被认成「周/同」），详情面板的标题是大字，
+        识别明显更可靠，所以按「点开卡片 → 读详情」来认面具。
+        """
+        x1, y1, x2, y2 = MASK_DETAIL_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return ""
+        text = self.ts.ocr_one_row(crop) or ""
+        return self.normalize_mask_name("".join(ch for ch in text if not ch.isspace()))
+
+    def mask_rank(self, name):
+        """返回面具在优先级里的排名，越小越好；不在列表返回 len(MASK_PRIORITY)。"""
+        for rank, want in enumerate(MASK_PRIORITY):
+            if want in name:
+                return rank
+        return len(MASK_PRIORITY)
+
+    def select_mask(self):
+        """逐张点开读名字，按优先级挑最优的一张再点确定。
+
+        每张卡片被点开时右侧详情会显示对应面具名，读完记住排名，最后回头点最优那张。
+        三张都不在优先级列表时保底选第一张，至少能开局。
+        """
+        best = None
+        for index, point in enumerate(MASK_POINTS):
+            self.click_position(point)
+            key_mouse_manager.wait()
+            time.sleep(0.45)
+            name = self.read_mask_detail()
+            rank = self.mask_rank(name)
+            CUS_LOGGER.debug(f"第 {index + 1} 张：{name or '未识别'}（优先级 {rank}）", extra={"flush": True})
+            if "面具" not in name:
+                continue
+            if best is None or rank < best[0]:
+                best = (rank, name, index)
+        if best is None:
+            CUS_LOGGER.warning("三张面具都没识别出来，直接点确定", extra={"flush": True})
+        else:
+            if best[0] >= len(MASK_PRIORITY):
+                CUS_LOGGER.warning(f"三张都不在优先级列表，选第 {best[2] + 1} 张：{best[1]}",
+                                   extra={"flush": True})
+            else:
+                CUS_LOGGER.debug(f"按优先级选：{best[1]}（第 {best[2] + 1} 张，排名 {best[0] + 1}）",
+                                 extra={"flush": True})
+            self.click_position(MASK_POINTS[best[2]])
+            key_mouse_manager.wait()
+            time.sleep(0.45)
+        self.click_position(MASK_CONFIRM)
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+
     def ensure_practice_mode(self):
         """确保当前在「练习模式」页。
 
@@ -307,7 +383,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -388,8 +464,10 @@ def main(default_stage="entry"):
     kernel.target_protocol = max(PROTOCOL_RANGE[0], min(PROTOCOL_RANGE[1], args.protocol))
     if args.stage == "team":
         kernel.action_groups = ["team"]
+    elif args.stage == "mask":
+        kernel.action_groups = ["masks"]
     try:
-        if args.stage in ("entry", "team"):
+        if args.stage in ("entry", "team", "mask"):
             run_script(kernel, str(ACTION_SCRIPT))
         if args.stage in ("masks", "opening"):
             from divine_treasure_masks import run
