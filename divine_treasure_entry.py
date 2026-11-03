@@ -593,8 +593,12 @@ class DivineTreasureKernel(ScriptKernel):
             return ""
         crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         text = (self.ts.ocr_one_row(crop) or "").strip()
+        # 必须含「位面」才算区域标签。战斗界面左上角是「1/3」这类波次 UI，
+        # 不加这层过滤会被当成「在 3D 场景」——战斗结束判断就会在开局几秒内误触发。
+        if "位面" not in text:
+            return ""
         match = re.search(r"[-—–]\s*([^\s\-(]+)", text)
-        return match.group(1) if match else text
+        return match.group(1) if match else ""
 
     def in_battle_area(self):
         """当前区域是不是「战斗」类型。"""
