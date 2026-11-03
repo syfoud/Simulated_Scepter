@@ -459,7 +459,8 @@ class DivineTreasureKernel(ScriptKernel):
         import win32api
         import win32con
 
-        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, int(pixels), 0, 0)
+        # dx 才是水平位移；早先误写成 dy，结果每"转一次"都在把视角往下拉
+        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(pixels), 0, 0, 0)
 
     def walk(self, seconds=None):
         """按住前进键走一小段。"""
@@ -489,57 +490,73 @@ class DivineTreasureKernel(ScriptKernel):
                 self.turn_view(TURN_PIXELS)
                 time.sleep(0.35)
                 continue
-            # 视野里有怪：朝当前朝向靠近
-            for _ in range(8):
+            # 视野里有怪：朝当前朝向靠近，边走边砍
+            # 不靠红圈判断「能否攻击」——红圈常与怪物身体重合，模板匹配实测只有 0.5，
+            # 而且不一定落在屏幕内。靠近途中反复普攻，打中就进战斗，打空继续走。
+            for _ in range(12):
                 if self.in_battle():
                     return True
-                if self.has_lock_on():
-                    self.attack()
-                    time.sleep(0.9)
-                    if self.in_battle():
-                        return True
                 self.walk()
-                time.sleep(0.25)
+                time.sleep(0.15)
+                self.attack()
+                time.sleep(0.5)
+                if self.in_battle():
+                    return True
         return False
 
     def engage_front(self):
-        """从出生点正面推进：差分宇宙的出生点怪物必定在正前方，直接前进即可。"""
-        for _ in range(12):
+        """从出生点正面推进：差分宇宙的出生点怪物必定在正前方，直接前进+普攻。"""
+        for _ in range(14):
             if self.in_battle():
                 return True
-            if self.has_lock_on():
-                self.attack()
-                time.sleep(0.9)
-                if self.in_battle():
-                    return True
             self.walk()
-            time.sleep(0.2)
+            time.sleep(0.15)
+            self.attack()
+            time.sleep(0.5)
+            if self.in_battle():
+                return True
+        return False
+
+    def wait_and_click(self, text, timeout=8.0):
+        """等某段文字出现再点它，超时返回 False。
+
+        比「固定 sleep + 点一次」可靠：界面加载快慢不定，点早了会落空。
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.click_text(text):
+                return True
+            time.sleep(0.5)
         return False
 
     def reset_to_spawn(self):
         """卡住时的兜底：ESC → 暂离 → F → 开始游戏 → 继续进度，把角色重置回出生点。
 
         链路来自实机截图 ex1~ex4。重置后怪物必定在正前方，直接前进就能撞上。
+        F 要重试：退回大世界后角色落点/加载时机不定，一次没进很常见。
         """
         CUS_LOGGER.debug("尝试重置回出生点", extra={"flush": True})
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
-        time.sleep(1.2)
-        if not self.click_text("暂离"):
+        if not self.wait_and_click("暂离", timeout=5):
             CUS_LOGGER.warning("暂停界面没找到「暂离」", extra={"flush": True})
             return False
-        time.sleep(3.0)                     # 退回大世界
-        key_mouse_manager.press("interact")  # F：进入差分宇宙
-        key_mouse_manager.wait()
-        time.sleep(2.5)
-        if not self.click_text("开始游戏"):
-            CUS_LOGGER.warning("主页没找到「开始游戏」", extra={"flush": True})
+        time.sleep(2.5)                      # 退回大世界
+        entered = False
+        for _ in range(3):                   # F 最多试三次
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            time.sleep(2.0)
+            if self.click_text("开始游戏"):
+                entered = True
+                break
+        if not entered:
+            CUS_LOGGER.warning("三次按 F 都没进到差分宇宙主页", extra={"flush": True})
             return False
-        time.sleep(1.5)
-        if not self.click_text("继续进度"):
+        if not self.wait_and_click("继续进度", timeout=6):
             CUS_LOGGER.warning("模式选择页没找到「继续进度」", extra={"flush": True})
             return False
-        time.sleep(3.5)                     # 等重新加载进 3D
+        time.sleep(3.5)                      # 等重新加载进 3D
         return True
 
     def find_and_engage(self):
