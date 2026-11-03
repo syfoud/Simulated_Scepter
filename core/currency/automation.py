@@ -564,7 +564,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         return latest_texts
 
-    def select_bless (self):
+    def select_strategy (self):
         """选择投资策略，并区分普通位面选择与黄金/白银投资奖励。"""
 
         selection = self.investment_tracker.begin_selection()

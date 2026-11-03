@@ -704,7 +704,7 @@ class AnyFateUniverse(SimulatedUniverse):
             self.update_floor(1)
 
     def select_fate(self):
-        self.click_text(text=self.fate)
+        self.click_text(text=self.fate, box=[159, 782, 1761, 816], allow_fail=True)
 
     def select_head(self):
         self.click_text(text="击败该首领",box=[1108, 267, 1385, 290])

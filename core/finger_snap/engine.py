@@ -93,7 +93,7 @@ class FingerSnap(AnyFateUniverse):
         CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}，本轮是否遇到阮梅其二{self.ruanmei2}")
         self.recorder.stop_recording(need_del)
     def select_fate(self):
-        self.click_text(text="丰饶", box=[824, 784, 877, 814])
+        key_mouse_manager.click_point(850, 798)
     def update_count(self, read=True):
         """
         更新或读取弹指模块的计数器值（使用 count.txt 的第二行）

@@ -30,13 +30,13 @@
         "name": "选择开局奖励",
         "trigger":{
             "text": "开拓",
-            "box": [589, 130, 1327, 163],
+            "box": [974, 785, 987, 822],
             "interval": 3,
             "redundancy": 30
         },
         "actions":
         [
-            "select_bless"
+            "select_start_bless"
         ]
     },
     {
@@ -499,8 +499,8 @@
         "name": "奇物修复",
         "trigger":{
             "text": "已修复以下奇物",
-            "box": [839, 30, 1078, 78],
-            "interval": 0.8,
+            "box": [839, 30, 1078, 120],
+            "interval": 1,
             "redundancy": 30
         },
         "actions":
@@ -532,6 +532,7 @@
         "trigger":{
             "text": "确认命途",
             "box": [1525, 968, 1628, 996],
+            "interval": 1,
             "redundancy": 30
         },
         "actions":
@@ -545,6 +546,7 @@
         "trigger":{
             "text": "踏上的命途",
             "box": [837, 155, 1083, 186],
+            "interval": 1,
             "redundancy": 30
         },
         "actions":
@@ -584,6 +586,7 @@
         "trigger":{
             "text": "下载初始角色",
             "box": [105, 65, 251, 96],
+            "interval": 1,
             "redundancy": 30
         },
         "actions":
