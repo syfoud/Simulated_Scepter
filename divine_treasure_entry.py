@@ -51,6 +51,9 @@ PANEL_TOGGLE = (417, 81)                  # 展开/收起箭头
 PANEL_LEVEL_BOX = (125, 148, 220, 188)    # 「Lv N/20」文字区 [x1, y1, x2, y2]
 PANEL_PROGRESS_BOX = (134, 182, 435, 194)  # 经验条 [x1, y1, x2, y2]
 PANEL_BAR_BRIGHT = 50                     # 经验条填充判定阈值（实测亮 86 / 暗 2）
+# 进度条满的判定：条上的 +N 是「通过本区域后结算」的值，条画满就表示结算后升级；
+# 留 5% 容差是因为填充边界有 1~2 像素误差，实测满条读到 0.99
+PANEL_BAR_FULL = 0.95
 
 # ── 选择方程（随时可能出现的通用决策界面）────────────────────────────────
 # 不排优先级：队伍配置因人而异，选中间那个最省事
@@ -418,6 +421,10 @@ class DivineTreasureKernel(ScriptKernel):
             filled = int((bar.mean(axis=(0, 2)) > PANEL_BAR_BRIGHT).sum())
             ratio = filled / bar.shape[1]
         return level, cap, ratio
+
+    def mask_level_full(self, progress):
+        """本级经验条是否已满（= 通过当前区域后会升级）。"""
+        return progress is not None and progress[2] >= PANEL_BAR_FULL
 
     def ensure_panel(self):
         """确保对局面板展开；返回 (等级, 上限, 进度) 或 None。
