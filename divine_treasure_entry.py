@@ -901,7 +901,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "combat", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -990,6 +990,21 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "combat":
+            # 完整战斗链路：找怪 → 进战斗 → 自动战斗 → 等结束 → 选祝福（可连续）
+            kernel.prepare_script()
+            if not kernel.find_and_engage():
+                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
+                return 2
+            CUS_LOGGER.debug("已进入战斗", extra={"flush": True})
+            kernel.ensure_auto_battle()
+            if not kernel.wait_battle_end():
+                CUS_LOGGER.error("没能确认战斗结束", extra={"flush": True})
+                return 2
+            # 祝福可能连续弹多次，交给 JSON 主循环处理（bless 组在标题消失时 stop）
+            kernel.action_groups = ["dismiss", "bless"]
+            run_script(kernel, str(ACTION_SCRIPT))
+            return 0
         if args.stage == "bless":
             # 走 JSON 主循环，验证「识别到选择祝福 → 选推荐 → 确认」整条链路
             kernel.action_groups = ["dismiss", "bless"]
