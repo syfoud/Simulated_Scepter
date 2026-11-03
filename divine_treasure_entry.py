@@ -414,6 +414,34 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.8)
 
     # ── 3D 区域：找怪与进入战斗 ──────────────────────────────────────────
+    def in_3d_scene(self):
+        """是否在 3D 场景里：左上角有「(N/20) 第X位面-类型」这行。
+
+        这是区分战斗界面与 3D 场景最干净的判据——战斗界面这行不存在。
+        """
+        return bool(self.current_area_type())
+
+    def wait_battle_end(self, timeout=180.0, stable=2):
+        """等战斗结束、回到 3D 场景。
+
+        不能用「小旗子消失」判断：终结技动画会短暂隐藏整个 UI，旗子会假消失。
+        改用区域标签，并要求连续 stable 次读到才算数，躲开动画和加载瞬间。
+        """
+        CUS_LOGGER.debug("等待战斗结束（回到 3D 场景）", extra={"flush": True})
+        deadline = time.time() + timeout
+        hits = 0
+        while time.time() < deadline:
+            if self.in_3d_scene():
+                hits += 1
+                if hits >= stable:
+                    CUS_LOGGER.debug("已回到 3D 场景", extra={"flush": True})
+                    return True
+            else:
+                hits = 0
+            time.sleep(1.0)
+        CUS_LOGGER.warning(f"{timeout:.0f} 秒内没等到战斗结束", extra={"flush": True})
+        return False
+
     def auto_battle_on(self):
         """自动战斗是否已开启：按钮呈黄色即开启，蓝灰即未开。"""
         x1, y1, x2, y2 = AUTO_BATTLE_BOX
@@ -749,7 +777,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -838,6 +866,13 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "waitend":
+            kernel.prepare_script()
+            if not kernel.wait_battle_end():
+                CUS_LOGGER.error("没能确认战斗结束", extra={"flush": True})
+                return 2
+            CUS_LOGGER.debug(f"战斗结束，当前区域类型：{kernel.current_area_type()}", extra={"flush": True})
+            return 0
         if args.stage == "auto":
             # 自动战斗是可选步骤：单独跑，验证「没开就点、已开不动」
             kernel.prepare_script()
