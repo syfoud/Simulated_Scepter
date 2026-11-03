@@ -536,10 +536,15 @@ class DivineTreasureKernel(ScriptKernel):
         F 要重试：退回大世界后角色落点/加载时机不定，一次没进很常见。
         """
         CUS_LOGGER.debug("尝试重置回出生点", extra={"flush": True})
-        key_mouse_manager.press("esc")
-        key_mouse_manager.wait()
-        if not self.wait_and_click("暂离", timeout=5):
-            CUS_LOGGER.warning("暂停界面没找到「暂离」", extra={"flush": True})
+        paused = False
+        for _ in range(3):                   # ESC 也可能被吞，重试三次
+            key_mouse_manager.press("esc")
+            key_mouse_manager.wait()
+            if self.wait_and_click("暂离", timeout=3):
+                paused = True
+                break
+        if not paused:
+            CUS_LOGGER.warning("三次 ESC 都没出现暂停界面", extra={"flush": True})
             return False
         time.sleep(2.5)                      # 退回大世界
         entered = False
@@ -560,10 +565,19 @@ class DivineTreasureKernel(ScriptKernel):
         return True
 
     def find_and_engage(self):
-        """找怪并进入战斗；一轮扫不到就重置回出生点再正面推进，仍失败才放弃。"""
+        """找怪并进入战斗。
+
+        顺序按「最可能命中」排：
+        1. 先正面推进——出生点/重置后的怪必定在正前方，这一步就够的情况最多
+        2. 走偏了再转一圈找
+        3. 还不行为重置回出生点，再正面推一次
+        """
+        if self.engage_front():
+            return True
+        CUS_LOGGER.debug("正面没撞上，转视角找一圈", extra={"flush": True})
         if self.scan_for_monster():
             return True
-        CUS_LOGGER.warning("一圈没找到能打的怪，重置回出生点", extra={"flush": True})
+        CUS_LOGGER.warning("一圈也没找到，重置回出生点", extra={"flush": True})
         if not self.reset_to_spawn():
             return False
         if self.engage_front():
