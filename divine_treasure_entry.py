@@ -422,24 +422,26 @@ class DivineTreasureKernel(ScriptKernel):
     def ensure_panel(self):
         """确保对局面板展开；返回 (等级, 上限, 进度) 或 None。
 
-        3D 场景里鼠标是被游戏锁定的（视角跟随），必须先按住 Alt 把光标呼出来，
-        才能点左上角的展开箭头——否则点击会变成视角转动/攻击。
+        3D 场景里鼠标被游戏锁定的（视角跟随），必须先按住 Alt 把光标呼出来，才能点
+        左上角的展开箭头——否则点击会变成转视角/攻击。
+
+        用 pyautogui 而不是 win32api.keybd_event：后者是旧的键事件 API，游戏收不到，
+        实测按住 Alt 再点击完全没反应。项目里其余按键也都走 pyautogui（底层 SendInput）。
         """
         progress = self.read_mask_progress()
         if progress is not None:
             return progress
-        import win32api
-        import win32con
+        import pyautogui
 
         CUS_LOGGER.debug("面板收起：按住 Alt 呼出光标后点展开箭头", extra={"flush": True})
-        win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)  # Alt 按下
+        pyautogui.keyDown("alt")
         try:
-            time.sleep(0.2)  # 等游戏切到「光标模式」
+            time.sleep(0.25)  # 等游戏切到「光标模式」
             self.click_position(PANEL_TOGGLE)
             key_mouse_manager.wait()
-            time.sleep(0.2)
+            time.sleep(0.25)
         finally:
-            win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)  # 松开 Alt
+            pyautogui.keyUp("alt")  # 放 finally：异常时也不能让 Alt 一直按着
         time.sleep(0.5)
         return self.read_mask_progress()
 
