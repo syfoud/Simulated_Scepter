@@ -17,6 +17,7 @@ from tool.utils.minimap_util import (
     POSITION_SEARCH_SCALE,
     ArrowRotateMap,
     ArrowRotateMapAll,
+    ImageNotSupported,
     PositionPredictState,
     RotationRemapData,
     area_limit,
@@ -115,8 +116,9 @@ def update_direction(or_image=None, minimap=None):
     try:
         area = area_pad(get_bbox(image, threshold=128), pad=-1)
         area = area_limit(area, (0, 0, *image_size(image)))
-    except IndexError:
-        CUS_LOGGER.debug('小地图上没有方向箭头')
+    except (IndexError, ImageNotSupported):
+        # 战斗界面、黑屏、加载动画会整块盖住小地图，蓝色箭头缺失属于可恢复的画面失效
+        CUS_LOGGER.warning('小地图上没有方向箭头')
         return None
 
     image = crop(image, area=area, copy=False)
