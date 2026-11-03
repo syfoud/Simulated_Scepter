@@ -44,6 +44,14 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 
+# ── 对局面板（左上角，可展开/收起）──────────────────────────────────────
+# 展开后才看得到面具等级与进度。识别方式是「读 Lv N/20」而不是给 14 张面具各写一套
+# 愿力算法——等级和进度条是游戏自己算好的，直接读出来就行。
+PANEL_TOGGLE = (417, 81)                  # 展开/收起箭头
+PANEL_LEVEL_BOX = (125, 148, 220, 188)    # 「Lv N/20」文字区 [x1, y1, x2, y2]
+PANEL_PROGRESS_BOX = (134, 182, 435, 194)  # 经验条 [x1, y1, x2, y2]
+PANEL_BAR_BRIGHT = 50                     # 经验条填充判定阈值（实测亮 86 / 暗 2）
+
 # ── 选择方程（随时可能出现的通用决策界面）────────────────────────────────
 # 不排优先级：队伍配置因人而异，选中间那个最省事
 EQUATION_MIDDLE = (960, 500)    # 中间方程的卡片中心
@@ -381,6 +389,46 @@ class DivineTreasureKernel(ScriptKernel):
         self.click_position(MASK_CONFIRM)
         key_mouse_manager.wait()
         time.sleep(0.8)
+
+    def read_mask_progress(self):
+        """读面板上的面具等级与经验进度；面板收起时返回 None。
+
+        Returns:
+            (等级, 上限, 进度 0~1) 或 None。
+
+        做法是直接读游戏显示的数字，而不是按面具内置愿力算法表——14 张面具各一套
+        需求曲线既难维护又容易过期，而 `Lv N/20` 是游戏自己算的。
+        经验条用列亮度找填充边界：填充段实测亮度 ~86，空槽 ~2。
+        """
+        screen = self.get_screen()
+        x1, y1, x2, y2 = PANEL_LEVEL_BOX
+        crop = screen[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
+        crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        text = (self.ts.ocr_one_row(crop) or "").replace(" ", "")
+        match = re.search(r"(\d+)/(\d+)", text)
+        if not match:          # 面板收起时这块是别的文字，读不出 N/M
+            return None
+        level, cap = int(match.group(1)), int(match.group(2))
+        bx1, by1, bx2, by2 = PANEL_PROGRESS_BOX
+        bar = screen[by1:by2, bx1:bx2]
+        ratio = 0.0
+        if bar.size:
+            filled = int((bar.mean(axis=(0, 2)) > PANEL_BAR_BRIGHT).sum())
+            ratio = filled / bar.shape[1]
+        return level, cap, ratio
+
+    def ensure_panel(self):
+        """确保对局面板展开；返回是否成功（读得到等级）。"""
+        progress = self.read_mask_progress()
+        if progress is not None:
+            return progress
+        CUS_LOGGER.debug("面板处于收起状态，点箭头展开", extra={"flush": True})
+        self.click_position(PANEL_TOGGLE)
+        key_mouse_manager.wait()
+        time.sleep(0.5)
+        return self.read_mask_progress()
 
     def select_equation(self):
         """点中间那个方程，再点右下角确认。
