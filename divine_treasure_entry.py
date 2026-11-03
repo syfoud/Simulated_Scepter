@@ -44,6 +44,19 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 
+# ── 3D 区域（战斗 / 寻路）────────────────────────────────────────────────
+# 不认怪物外观（千奇百怪），只认两个信号：
+#   1. 顶部出现「等级XX xxx团」信息条 = 视野内有怪（等级与名字都会变，只用结构判据）
+#   2. 红圈准星 = 已锁定怪物
+# 小旗子 = 已进入战斗界面，这是判断「打没打起来」最可靠的信号。
+ASSET_DIR = ROOT / "tool" / "divine_treasure" / "assets"
+BATTLE_FLAG = str(ASSET_DIR / "battle_flag.png")
+LOCK_RING = str(ASSET_DIR / "lock_ring.png")
+MONSTER_INFO_BOX = (500, 0, 1400, 100)   # 顶部怪物信息区 [x1, y1, x2, y2]
+TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
+WALK_SECONDS = 0.35      # 每次前进时长，短距离关卡不建议开加速（容易冲过头）
+
+
 # ── 对局面板（左上角，可展开/收起）──────────────────────────────────────
 # 展开后才看得到面具等级与进度。识别方式是「读 Lv N/20」而不是给 14 张面具各写一套
 # 愿力算法——等级和进度条是游戏自己算好的，直接读出来就行。
@@ -393,6 +406,79 @@ class DivineTreasureKernel(ScriptKernel):
         key_mouse_manager.wait()
         time.sleep(0.8)
 
+    # ── 3D 区域：找怪与进入战斗 ──────────────────────────────────────────
+    def has_monster_info(self):
+        """顶部出现「等级XX xxx团」信息条 → 视野内有怪。
+
+        等级数字和团名都会变（不同区域、不同怪物），所以只判「这块区域有没有文字 +
+        是否含『等级』二字」，不碰具体内容。001 无怪 / 005 打完怪时这块都是空的。
+        """
+        x1, y1, x2, y2 = MONSTER_INFO_BOX
+        for item in self.ts.res:
+            box = item["box"]
+            if box[0] >= x1 and box[3] <= y2 and "等级" in item["raw_text"]:
+                return True
+        return False
+
+    def in_battle(self):
+        """左上角小旗子出现 = 已在战斗界面（实测战斗 0.998 / 3D 场景 0.6x）。"""
+        return bool(self.check(BATTLE_FLAG, threshold=0.9))
+
+    def has_lock_on(self):
+        """红圈准星出现 = 已锁定怪物。红圈不一定在屏幕内（多只怪时可能锁到视野外）。"""
+        return bool(self.check(LOCK_RING, threshold=0.75))
+
+    def turn_view(self, pixels):
+        """鼠标相对移动转视角。用 mouse_event 的 MOVE 而不是 SetCursorPos：
+        游戏读的是相对位移，绝对定位会被当成「瞬移」而丢失视角。"""
+        import win32api
+        import win32con
+
+        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, 0, int(pixels), 0, 0)
+
+    def walk(self, seconds=None):
+        """按住前进键走一小段。"""
+        seconds = WALK_SECONDS if seconds is None else seconds
+        key_mouse_manager.keyDown("move_w")
+        time.sleep(seconds)
+        key_mouse_manager.keyUp("move_w")
+
+    def attack(self):
+        """原地左键普攻（不移动准星，避免打空）。"""
+        import win32api
+        import win32con
+
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        time.sleep(0.06)
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+    def find_and_engage(self):
+        """从当前位置找怪并进入战斗，成功返回 True。
+
+        扫描策略：没看到怪就转视角，看到怪就前进；靠近后红圈出现再普攻。
+        不保证一次普攻就进战斗（角色攻击范围较小时会打空），所以普攻后会复查小旗子。
+        """
+        for _ in range(24):          # 最多转一圈（24 × TURN_PIXELS）
+            if self.in_battle():
+                return True
+            if not self.has_monster_info():
+                self.turn_view(TURN_PIXELS)
+                time.sleep(0.35)
+                continue
+            # 视野里有怪：朝当前朝向靠近
+            for _ in range(8):
+                if self.in_battle():
+                    return True
+                if self.has_lock_on():
+                    self.attack()
+                    time.sleep(0.9)
+                    if self.in_battle():
+                        return True
+                self.walk()
+                time.sleep(0.25)
+        CUS_LOGGER.warning("一圈没找到能打的怪", extra={"flush": True})
+        return False
+
     def read_mask_progress(self):
         """读面板上的面具等级与经验进度；面板收起时返回 None。
 
@@ -532,7 +618,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -621,6 +707,13 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "battle":
+            kernel.prepare_script()
+            if not kernel.find_and_engage():
+                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
+                return 2
+            CUS_LOGGER.debug("已进入战斗界面（小旗子）", extra={"flush": True})
+            return 0
         if args.stage == "panel":
             # 不走 run_script 就没有 prepare_script，键鼠管理器线程不会启动，
             # 此时 click_position 只是入队、没人执行
