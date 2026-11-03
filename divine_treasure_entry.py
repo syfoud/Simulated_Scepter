@@ -55,6 +55,11 @@ LOCK_RING = str(ASSET_DIR / "lock_ring.png")
 MONSTER_INFO_BOX = (500, 0, 1400, 100)   # 顶部怪物信息区 [x1, y1, x2, y2]
 BATTLE_FLAG_POINT = (75, 25)             # 小旗子中心（战斗界面左上角）
 AREA_LABEL_BOX = (0, 10, 400, 60)        # 左上角「(N/20) 第X位面-类型」[x1, y1, x2, y2]
+# 自动战斗按钮（战斗界面右上角）。开/关图标形状相同、只差颜色：开启是黄色
+# （色相~18、饱和~138），未开启是蓝灰（色相~117、饱和~44）。模板匹配反而分不开，
+# 所以用 HSV 判色。
+AUTO_BATTLE_BOX = (1744, 38, 1780, 56)   # [x1, y1, x2, y2]
+AUTO_BATTLE_POINT = (1762, 47)
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
@@ -409,6 +414,25 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.8)
 
     # ── 3D 区域：找怪与进入战斗 ──────────────────────────────────────────
+    def auto_battle_on(self):
+        """自动战斗是否已开启：按钮呈黄色即开启，蓝灰即未开。"""
+        x1, y1, x2, y2 = AUTO_BATTLE_BOX
+        patch = self.get_screen()[y1:y2, x1:x2]
+        if patch.size == 0:
+            return False
+        hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+        return bool(hsv[:, :, 0].mean() < 40 and hsv[:, :, 1].mean() > 90)
+
+    def ensure_auto_battle(self):
+        """战斗里没开自动战斗就点一下（可选步骤，调用方自己决定要不要用）。"""
+        if self.auto_battle_on():
+            return True
+        CUS_LOGGER.debug("自动战斗未开启，点一下按钮", extra={"flush": True})
+        self.click_position(AUTO_BATTLE_POINT)
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+        return self.auto_battle_on()
+
     def current_area_type(self):
         """读左上角「(N/20) 第X位面-类型」，返回类型文字（战斗/事件/精英…）。
 
@@ -725,7 +749,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -814,6 +838,14 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "auto":
+            # 自动战斗是可选步骤：单独跑，验证「没开就点、已开不动」
+            kernel.prepare_script()
+            before = kernel.auto_battle_on()
+            CUS_LOGGER.debug(f"自动战斗当前：{'已开启' if before else '未开启'}", extra={"flush": True})
+            ok = kernel.ensure_auto_battle()
+            CUS_LOGGER.debug(f"处理后：{'已开启' if ok else '仍未开启'}", extra={"flush": True})
+            return 0 if ok else 2
         if args.stage == "battle":
             kernel.prepare_script()
             if not kernel.find_and_engage():
