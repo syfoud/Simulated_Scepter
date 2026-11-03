@@ -1065,7 +1065,7 @@ class MainWindow(QMainWindowLog):
             QMessageBox.warning(self, "警告", str(error))
 
     def toggle_coordinate_pick(self):
-        """鼠标坐标拾取：点哪打印哪，右键或再点一次按钮停止。"""
+        """鼠标坐标拾取：鼠标移到哪按 Ctrl 就记录哪，右键或再点一次按钮停止。"""
         if self._pick_thread is not None and self._pick_thread.is_alive():
             self._pick_stop.set()
             return
@@ -1074,7 +1074,7 @@ class MainWindow(QMainWindowLog):
             return
         self._pick_stop.clear()
         self.pick_btn.setText("停止拾取")
-        CUS_LOGGER.debug("坐标拾取：左键点目标位置，右键或再点一次按钮停止")
+        CUS_LOGGER.debug("坐标拾取：鼠标移到目标位置按 Ctrl 记录（不会点击游戏），右键或再点一次按钮停止")
 
         def task():
             try:

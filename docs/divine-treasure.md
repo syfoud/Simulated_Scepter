@@ -38,6 +38,18 @@ python -m uv run python divine_treasure_entry.py --run --stage team
 
 整条入场仍然用 `--stage entry`：`python -m uv run python divine_treasure_entry.py --run --stage entry`
 
+### 阈值协议（`--protocol`）
+
+```bash
+python -m uv run python divine_treasure_entry.py --run --stage entry --protocol 4
+```
+
+- 取值 1~9，默认 **4**；越界会钳制到范围内
+- 脚本每局读一次当前值，与目标相等就不点，通常第一次调整后不再变动（游戏会记住上次选择）
+- 识别不到数字时只告警、继续启动，不会卡在练习页
+
+**为什么默认 4 而不是 5**：协议效果逐级叠加，N4 起区域数量就已给足；N5 相对 N4 只多「进入第一位面时获得 1 次惊世奇迹」，代价是面具愿力需求与方程祝福需求提高。刷图鉴时战斗时间占比很低，N5 更肉的敌人几乎无感，真正影响事件机会的是区域数量。完整协议表与评估见 `canon/divine-treasure/_02-乐园漫记玩法.md`。
+
 ## 本轮面具流程
 
 从 Mask-Selection 第1或第3张所示的未选面具界面运行：
