@@ -195,21 +195,6 @@
   {
     "name": "bless",
     "trigger": {
-      "text": "位面",
-      "box": [
-        50,
-        10,
-        320,
-        50
-      ]
-    },
-    "actions": [
-      "stop"
-    ]
-  },
-  {
-    "name": "bless",
-    "trigger": {
       "text": "选择祝福",
       "box": [
         90,

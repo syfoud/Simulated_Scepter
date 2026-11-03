@@ -64,6 +64,7 @@ AUTO_BATTLE_POINT = (1762, 47)
 # 直接按颜色找图标（实测三卡时命中 x=649/1126/1603，与实机采集一致）。
 BLESS_ICON_ROI = (200, 380)      # 只扫这个纵向区间，避开顶部 UI 和底部按钮
 BLESS_CARD_Y = 450               # 点在图标正下方的卡片内
+BLESS_TITLE_BOX = (90, 55, 220, 105)  # 左上角「选择祝福」标题 [x1, y1, x2, y2]
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
@@ -418,6 +419,14 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.8)
 
     # ── 3D 区域：找怪与进入战斗 ──────────────────────────────────────────
+    def has_bless_screen(self):
+        """界面上是否还有「选择祝福」标题。"""
+        x1, y1, x2, y2 = BLESS_TITLE_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "选择祝福" in (self.ts.ocr_one_row(crop) or "")
+
     def find_recommend_icons(self):
         """找祝福界面上的推荐图标（绿色圆形），返回按 x 排序的中心点列表。
 
@@ -485,7 +494,12 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.5)
         self.click_text("确认")
         key_mouse_manager.wait()
-        time.sleep(0.8)
+        time.sleep(1.0)
+        # 只认「本状态是否消失」：下一步可能是任意界面（通用通知、选择奇物、回大世界…），
+        # 猜不得。界面上不再有「选择祝福」就说明这一批处理完了。
+        if not self.has_bless_screen():
+            CUS_LOGGER.debug("祝福界面已消失，本状态处理完毕", extra={"flush": True})
+            self.stop()
 
     def in_3d_scene(self):
         """是否在 3D 场景里：左上角有「(N/20) 第X位面-类型」这行。
