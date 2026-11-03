@@ -98,6 +98,8 @@ class UniverseUtils(StateKernel):
         self.config = config
         self.floor_change = False
         self.ang = 270
+        #无地图模式下进图时的初始角度
+        self.initial_angle = None
         #是否速通
         self.speed = speed
         #当前计算坐标
@@ -454,7 +456,8 @@ class UniverseUtils(StateKernel):
                 if dx is None:
                     key_mouse_manager.turn(off*1.03)
                     key_mouse_manager.wait()
-                    CUS_LOGGER.warning(f"即便理智随身形一起化作焦炭，{factor}也会记得自己的使命……(旋转未找到终点)")
+                    CUS_LOGGER.debug("旋转未找到终点")
+                    CUS_LOGGER.warning(f"即便理智随身形一起化作焦炭，{factor}也会记得自己的使命……")
                     return 0
         CUS_LOGGER.debug(f"移动面向终点 参数{i}移动距离{dx}")
         if i == 0:
@@ -837,7 +840,7 @@ class UniverseUtils(StateKernel):
             return True
         else:
             return False
-    def move_direct_thread(self,device=0):
+    def move_direct_thread(self,device=0,initial_angle=None):
         CUS_LOGGER.info("「去成为翁法罗斯的黎明吧......」")
         self.is_find_end = 0
         if self.mini_state > 2:
@@ -850,6 +853,8 @@ class UniverseUtils(StateKernel):
             self.has_target=self.move_direct_to_text()
             if self.has_target:
                 self.target_type=1
+        if not self.has_target:
+            self.restore_initial_angle(initial_angle)
         self.ready = 1
         now_time = time.time()
         if self.is_find_end == 0:
@@ -863,6 +868,20 @@ class UniverseUtils(StateKernel):
                     self.has_target=True
                     self.target_type=4
         CUS_LOGGER.info(f"无需再去追逐什么，如今，{factor}已是长夜尽头的烈火……")
+
+    def restore_initial_angle(self, initial_angle):
+        if initial_angle is None:
+            return
+        current_angle, direction = self.pos_predictor.update_minimap_data(self.get_screen())
+        if direction is None or current_angle is None:
+            return
+        turn_angle = (initial_angle - current_angle + 180) % 360 - 180
+        key_mouse_manager.turn(turn_angle)
+        key_mouse_manager.wait()
+        _, direction = self.pos_predictor.update_minimap_data(self.get_screen())
+        if direction is not None:
+            self.ang = (270 + direction) % 360
+        CUS_LOGGER.debug(f"未找到有效目标，恢复初始视角{initial_angle}度，旋转{turn_angle}度")
 
     def backup_map(self):
         """
@@ -903,6 +922,7 @@ class UniverseUtils(StateKernel):
         self.first_mini = 1
         self.find=1
         self.red_threshold = 4500
+        self.initial_angle = None
         self.mini_state=1
     def nof(self,must_be=None):
         """
@@ -2350,12 +2370,20 @@ class UniverseUtils(StateKernel):
         self.has_target=True
         CUS_LOGGER.info(f"PhiLia093已经拥抱了她的命运……而{factor}，也会投身自己的本源——「毁灭」。")
         self.target_type = -1
+        if self.initial_angle is None:
+            rotation, direction = self.pos_predictor.update_minimap_data(self.get_screen())
+            if direction is not None and rotation is not None:
+                self.initial_angle = rotation
+                CUS_LOGGER.debug(f"记录当前区域初始视角：{self.initial_angle}度")
         if not self.move_to_red_point():
             CUS_LOGGER.info("想反悔就反悔，孩子们总是幸福的……可属于大人的命运，从来没有回头的选择。")
             self.has_target=False
         if not self.check("z", mask=MASK["monster_info"],threshold=0.95,fresh=True) and not self.has_target:
-            ThreadWithException(target=self.move_direct_thread,
-    kwargs={"device":1}, name="移动").start()
+            ThreadWithException(
+                target=self.move_direct_thread,
+                kwargs={"device": 1, "initial_angle": self.initial_angle},
+                name="移动",
+            ).start()
             while not self.ready:
                 time.sleep(0.1)
         key_mouse_manager.keyDown("move_w")
@@ -2533,14 +2561,16 @@ class UniverseUtils(StateKernel):
                         key_mouse_manager.wait()
                 elif self.move_direct_to_text():
                     i="w"
-                elif self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
-                    key_mouse_manager.keyUp(f"move_{i}")
-                    key_mouse_manager.wait()
-                    key_mouse_manager.press("interact")
-                    self.get_screen()
-                    if self.nof():
-                        self.should_update_map = False
-                        return
+                else:
+                    self.restore_initial_angle(self.initial_angle)
+                    if self.check("interact", mask=MASK["interact_icon"], threshold=0.96,fresh=True):
+                        key_mouse_manager.keyUp(f"move_{i}")
+                        key_mouse_manager.wait()
+                        key_mouse_manager.press("interact")
+                        self.get_screen()
+                        if self.nof():
+                            self.should_update_map = False
+                            return
                 key_mouse_manager.press(f"move_{i}", 0.25)
                 CUS_LOGGER.debug(f"向{i}走0.25秒")
                 key_mouse_manager.wait()
