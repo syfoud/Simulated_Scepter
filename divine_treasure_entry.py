@@ -44,6 +44,17 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 
+# ── 对局面板（左上角，可展开/收起）──────────────────────────────────────
+# 展开后才看得到面具等级与进度。识别方式是「读 Lv N/20」而不是给 14 张面具各写一套
+# 愿力算法——等级和进度条是游戏自己算好的，直接读出来就行。
+PANEL_TOGGLE = (417, 81)                  # 展开/收起箭头
+PANEL_LEVEL_BOX = (125, 148, 220, 188)    # 「Lv N/20」文字区 [x1, y1, x2, y2]
+PANEL_PROGRESS_BOX = (134, 182, 435, 194)  # 经验条 [x1, y1, x2, y2]
+PANEL_BAR_BRIGHT = 50                     # 经验条填充判定阈值（实测亮 86 / 暗 2）
+# 进度条满的判定：条上的 +N 是「通过本区域后结算」的值，条画满就表示结算后升级；
+# 留 5% 容差是因为填充边界有 1~2 像素误差，实测满条读到 0.99
+PANEL_BAR_FULL = 0.95
+
 # ── 选择方程（随时可能出现的通用决策界面）────────────────────────────────
 # 不排优先级：队伍配置因人而异，选中间那个最省事
 EQUATION_MIDDLE = (960, 500)    # 中间方程的卡片中心
@@ -382,6 +393,65 @@ class DivineTreasureKernel(ScriptKernel):
         key_mouse_manager.wait()
         time.sleep(0.8)
 
+    def read_mask_progress(self):
+        """读面板上的面具等级与经验进度；面板收起时返回 None。
+
+        Returns:
+            (等级, 上限, 进度 0~1) 或 None。
+
+        做法是直接读游戏显示的数字，而不是按面具内置愿力算法表——14 张面具各一套
+        需求曲线既难维护又容易过期，而 `Lv N/20` 是游戏自己算的。
+        经验条用列亮度找填充边界：填充段实测亮度 ~86，空槽 ~2。
+        """
+        screen = self.get_screen()
+        x1, y1, x2, y2 = PANEL_LEVEL_BOX
+        crop = screen[y1:y2, x1:x2]
+        if crop.size == 0:
+            return None
+        crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        text = (self.ts.ocr_one_row(crop) or "").replace(" ", "")
+        match = re.search(r"(\d+)/(\d+)", text)
+        if not match:          # 面板收起时这块是别的文字，读不出 N/M
+            return None
+        level, cap = int(match.group(1)), int(match.group(2))
+        bx1, by1, bx2, by2 = PANEL_PROGRESS_BOX
+        bar = screen[by1:by2, bx1:bx2]
+        ratio = 0.0
+        if bar.size:
+            filled = int((bar.mean(axis=(0, 2)) > PANEL_BAR_BRIGHT).sum())
+            ratio = filled / bar.shape[1]
+        return level, cap, ratio
+
+    def mask_level_full(self, progress):
+        """本级经验条是否已满（= 通过当前区域后会升级）。"""
+        return progress is not None and progress[2] >= PANEL_BAR_FULL
+
+    def ensure_panel(self):
+        """确保对局面板展开；返回 (等级, 上限, 进度) 或 None。
+
+        3D 场景里鼠标被游戏锁定的（视角跟随），必须先按住 Alt 把光标呼出来，才能点
+        左上角的展开箭头——否则点击会变成转视角/攻击。
+
+        用 pyautogui 而不是 win32api.keybd_event：后者是旧的键事件 API，游戏收不到，
+        实测按住 Alt 再点击完全没反应。项目里其余按键也都走 pyautogui（底层 SendInput）。
+        """
+        progress = self.read_mask_progress()
+        if progress is not None:
+            return progress
+        import pyautogui
+
+        CUS_LOGGER.debug("面板收起：按住 Alt 呼出光标后点展开箭头", extra={"flush": True})
+        pyautogui.keyDown("alt")
+        try:
+            time.sleep(0.25)  # 等游戏切到「光标模式」
+            self.click_position(PANEL_TOGGLE)
+            key_mouse_manager.wait()
+            time.sleep(0.25)
+        finally:
+            pyautogui.keyUp("alt")  # 放 finally：异常时也不能让 Alt 一直按着
+        time.sleep(0.5)
+        return self.read_mask_progress()
+
     def select_equation(self):
         """点中间那个方程，再点右下角确认。
 
@@ -462,7 +532,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -551,6 +621,17 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "panel":
+            # 不走 run_script 就没有 prepare_script，键鼠管理器线程不会启动，
+            # 此时 click_position 只是入队、没人执行
+            kernel.prepare_script()
+            result = kernel.ensure_panel()
+            if result is None:
+                CUS_LOGGER.error("展不开面板或读不到等级", extra={"flush": True})
+                return 2
+            level, cap, ratio = result
+            CUS_LOGGER.debug(f"面具等级 Lv {level}/{cap}，本级进度 {ratio:.0%}", extra={"flush": True})
+            return 0
         if args.stage in ("masks", "opening"):
             from divine_treasure_masks import run
 
