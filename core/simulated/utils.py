@@ -1339,7 +1339,7 @@ class UniverseUtils(StateKernel):
         if direction is None:
             self.minimap_fail_count += 1
             # 小地图失效也可能只是刚进入/刚离开模拟宇宙大世界，重新确认一次当前是否仍在模拟宇宙中。
-            if not self.check("big_world", 1801, 941, threshold=0.98, fresh=True):
+            if not self.is_run():
                 CUS_LOGGER.warning("小地图识别失败，可能处于其他状态，本次不更新位置")
                 return False
             CUS_LOGGER.debug("小地图识别失败，但仍处于模拟宇宙的大世界中，本次不更新位置")
