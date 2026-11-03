@@ -526,7 +526,14 @@ class DivineTreasureKernel(ScriptKernel):
         · 区域标识（回到 3D 大世界）
         战斗界面三样都没有；终结技期间 UI 整个隐藏，三样也都没有——所以都不会误判。
         """
-        return self.has_choice_ui() or self.has_dismiss_screen() or self.in_3d_scene()
+        logo = self.has_choice_ui()
+        dismiss = self.has_dismiss_screen()
+        area = self.in_3d_scene()
+        if logo or dismiss or area:
+            CUS_LOGGER.debug(f"判定为非战斗界面：标志={logo} 通用通知={dismiss} 区域标识={area}",
+                             extra={"flush": True})
+            return True
+        return False
 
     def has_dismiss_screen(self):
         """界面上是否有「点击空白处关闭」（通用通知）。"""
