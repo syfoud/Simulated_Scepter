@@ -60,6 +60,10 @@ AREA_LABEL_BOX = (0, 10, 400, 60)        # 左上角「(N/20) 第X位面-类型�
 # 所以用 HSV 判色。
 AUTO_BATTLE_BOX = (1744, 38, 1780, 56)   # [x1, y1, x2, y2]
 AUTO_BATTLE_POINT = (1762, 47)
+# 选择祝福：推荐图标是绿色圆形，卡片数量 1/2/3 时排列都不同，所以不猜坐标，
+# 直接按颜色找图标（实测三卡时命中 x=649/1126/1603，与实机采集一致）。
+BLESS_ICON_ROI = (200, 380)      # 只扫这个纵向区间，避开顶部 UI 和底部按钮
+BLESS_CARD_Y = 450               # 点在图标正下方的卡片内
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
@@ -414,6 +418,43 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.8)
 
     # ── 3D 区域：找怪与进入战斗 ──────────────────────────────────────────
+    def find_recommend_icons(self):
+        """找祝福界面上的推荐图标（绿色圆形），返回按 x 排序的中心点列表。
+
+        不按「三张卡各占多少宽度」去算——1 / 2 / 3 张卡时排列完全不同，而图标的
+        颜色和形状始终不变，按颜色找最省事。
+        """
+        y1, y2 = BLESS_ICON_ROI
+        roi = self.get_screen()[y1:y2]
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, (40, 100, 100), (85, 255, 255))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        centers = []
+        for contour in contours:
+            if cv2.contourArea(contour) > 150:
+                moment = cv2.moments(contour)
+                if moment["m00"]:
+                    centers.append((int(moment["m10"] / moment["m00"]),
+                                    int(moment["m01"] / moment["m00"]) + y1))
+        return sorted(centers)
+
+    def choose_bless(self):
+        """选祝福：优先带推荐图标的（取最左一个），都没有就点屏幕中央，最后确认。"""
+        icons = self.find_recommend_icons()
+        if icons:
+            x = icons[0][0]
+            CUS_LOGGER.debug(f"推荐祝福 @ x={x}（共 {len(icons)} 个推荐）", extra={"flush": True})
+            self.click_position((x, BLESS_CARD_Y))
+        else:
+            CUS_LOGGER.debug("没有推荐图标，选中间那张", extra={"flush": True})
+            self.click_position((960, BLESS_CARD_Y))
+        key_mouse_manager.wait()
+        time.sleep(0.5)
+        self.click_text("确认")
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+
     def in_3d_scene(self):
         """是否在 3D 场景里：左上角有「(N/20) 第X位面-类型」这行。
 
@@ -777,7 +818,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -866,6 +907,14 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "bless":
+            kernel.prepare_script()
+            kernel.ts.forward(kernel.get_screen())
+            icons = kernel.find_recommend_icons()
+            CUS_LOGGER.debug(f"检测到 {len(icons)} 个推荐图标：{icons}", extra={"flush": True})
+            kernel.choose_bless()
+            CUS_LOGGER.debug("已选择祝福并确认", extra={"flush": True})
+            return 0
         if args.stage == "waitend":
             kernel.prepare_script()
             if not kernel.wait_battle_end():
