@@ -498,12 +498,17 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.5)
         self.click_text("确认")
         key_mouse_manager.wait()
-        time.sleep(1.0)
-        # 只认「本状态是否消失」：下一步可能是任意界面（通用通知、选择奇物、回大世界…），
-        # 猜不得。界面上不再有「选择祝福」就说明这一批处理完了。
-        if not self.has_bless_screen():
-            CUS_LOGGER.debug("祝福界面已消失，本状态处理完毕", extra={"flush": True})
-            self.stop()
+        # 点完确认后可能闪过「获得祝福」通知或加载画面，紧接着又弹下一个祝福。
+        # 所以不能看一眼就判结束：给 8 秒窗口，期间只要「选择祝福」再出现就继续，
+        # 整个窗口都没再出现才认为这一批处理完。
+        deadline = time.time() + 8.0
+        while time.time() < deadline:
+            if self.has_bless_screen():
+                CUS_LOGGER.debug("还有下一个祝福，继续", extra={"flush": True})
+                return
+            time.sleep(0.5)
+        CUS_LOGGER.debug("8 秒内没有新祝福，本状态处理完毕", extra={"flush": True})
+        self.stop()
 
     def in_3d_scene(self):
         """是否在 3D 场景里：左上角有「(N/20) 第X位面-类型」这行。
