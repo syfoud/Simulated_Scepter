@@ -878,6 +878,9 @@ class UniverseUtils(StateKernel):
         turn_angle = (initial_angle - current_angle + 180) % 360 - 180
         key_mouse_manager.turn(turn_angle)
         key_mouse_manager.wait()
+        _, direction = self.pos_predictor.update_minimap_data(self.get_screen())
+        if direction is not None:
+            self.ang = (270 + direction) % 360
         CUS_LOGGER.debug(f"未找到有效目标，恢复初始视角{initial_angle}度，旋转{turn_angle}度")
 
     def backup_map(self):
