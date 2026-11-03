@@ -420,13 +420,26 @@ class DivineTreasureKernel(ScriptKernel):
         return level, cap, ratio
 
     def ensure_panel(self):
-        """确保对局面板展开；返回是否成功（读得到等级）。"""
+        """确保对局面板展开；返回 (等级, 上限, 进度) 或 None。
+
+        3D 场景里鼠标是被游戏锁定的（视角跟随），必须先按住 Alt 把光标呼出来，
+        才能点左上角的展开箭头——否则点击会变成视角转动/攻击。
+        """
         progress = self.read_mask_progress()
         if progress is not None:
             return progress
-        CUS_LOGGER.debug("面板处于收起状态，点箭头展开", extra={"flush": True})
-        self.click_position(PANEL_TOGGLE)
-        key_mouse_manager.wait()
+        import win32api
+        import win32con
+
+        CUS_LOGGER.debug("面板收起：按住 Alt 呼出光标后点展开箭头", extra={"flush": True})
+        win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)  # Alt 按下
+        try:
+            time.sleep(0.2)  # 等游戏切到「光标模式」
+            self.click_position(PANEL_TOGGLE)
+            key_mouse_manager.wait()
+            time.sleep(0.2)
+        finally:
+            win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)  # 松开 Alt
         time.sleep(0.5)
         return self.read_mask_progress()
 
@@ -510,7 +523,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -599,6 +612,14 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "panel":
+            result = kernel.ensure_panel()
+            if result is None:
+                CUS_LOGGER.error("展不开面板或读不到等级", extra={"flush": True})
+                return 2
+            level, cap, ratio = result
+            CUS_LOGGER.debug(f"面具等级 Lv {level}/{cap}，本级进度 {ratio:.0%}", extra={"flush": True})
+            return 0
         if args.stage in ("masks", "opening"):
             from divine_treasure_masks import run
 
