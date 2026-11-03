@@ -103,9 +103,6 @@ class UniverseUtils(StateKernel):
         self.now_loc = [0,0]
         #小地图连续识别失败次数，达到阈值后缓存坐标不可信
         self.minimap_fail_count = 0
-        #整图重定位的候选坐标与连续不一致次数
-        self.minimap_relocate_pos = None
-        self.minimap_relocate_tries = 0
         #裁剪大地图范围
         self.cut_pos = None
         self.mini_state = 0
@@ -908,10 +905,8 @@ class UniverseUtils(StateKernel):
         self.find=1
         self.red_threshold = 4500
         self.mini_state=1
-        # 换图后旧地图上的失败计数与重定位候选都不再适用
+        # 换图后旧地图上的失败计数不再适用
         self.minimap_fail_count = 0
-        self.minimap_relocate_pos = None
-        self.minimap_relocate_tries = 0
     def nof(self,must_be=None):
         """
         检查当前没有f交互
@@ -1346,51 +1341,20 @@ class UniverseUtils(StateKernel):
             return True
         # 连续失效 3 次说明缓存坐标已不可信，小地图一恢复就做整图重定位
         if self.minimap_fail_count >= 3:
-            return self.relocate_position()
-        pos,sim=self.pos_predictor.update_position(self.screen)
-        self.now_loc= pos
-        self.minimap_relocate_pos = None
-        CUS_LOGGER.debug(f"获取到新坐标{self.now_loc}")
-        return True
-
-    def relocate_position(self):
-        """
-        小地图恢复可用后，用整图匹配重新确定角色位置，替代失效期间不可信的缓存坐标。
-
-        失败期间连朝向箭头都识别不到，说明画面本身不可用，单帧整图匹配同样可能落在结构相似的错误峰值上
-        （实测约 15%），因此第一帧结果只作为候选，下一帧再整图匹配一次，两次结果一致才提交。
-        """
-        search_position = self.pos_predictor.position
-        # 位置预测器只有在搜索中心为 (0,0) 时才对整张地图模板做匹配，否则只在旧坐标附近的窗口内搜索
-        self.pos_predictor.position = (0, 0)
-        try:
-            pos, _ = self.pos_predictor.update_position(self.screen, update=False)
-        finally:
-            self.pos_predictor.position = search_position
-        if self.minimap_relocate_pos is None:
-            self.minimap_relocate_pos = pos
-            CUS_LOGGER.debug(f"小地图连续识别失败{self.minimap_fail_count}次，整图重定位候选{pos}")
-            return True
-        # 相邻两帧的整图匹配要落在同一处，距离超过 30（大地图像素坐标）就认定失败
-        if get_dis(pos, self.minimap_relocate_pos) > 30:
-            self.minimap_relocate_pos = pos
-            self.minimap_relocate_tries += 1
-            # 连续 4 次都没法互相印证，说明画面仍不可靠
-            if self.minimap_relocate_tries >= 4:
+            # 整图重定位由预测器完成：清空搜索中心做整图匹配，相邻两帧结果互相印证后才写入位置
+            pos, gave_up = self.pos_predictor.relocate(self.screen)
+            if pos is not None:
+                self.now_loc = pos
+                self.minimap_fail_count = 0
+                CUS_LOGGER.info(f"小地图连续识别失败后整图重定位成功，当前坐标{self.now_loc}")
+            elif gave_up:
                 # 放弃本次重定位，继续用上次可信坐标，等下一轮连续失败再重来
                 self.minimap_fail_count = 0
-                self.minimap_relocate_tries = 0
-                self.minimap_relocate_pos = None
                 CUS_LOGGER.warning("整图重定位连续不一致，放弃本次重定位，继续使用上次可信坐标")
-                return True
-            CUS_LOGGER.debug(f"整图重定位两次结果不一致，等待下一帧确认，候选{pos}")
             return True
-        self.now_loc = pos
-        self.pos_predictor.position = pos
-        self.minimap_fail_count = 0
-        self.minimap_relocate_tries = 0
-        self.minimap_relocate_pos = None
-        CUS_LOGGER.info(f"小地图连续识别失败后整图重定位成功，当前坐标{self.now_loc}")
+        pos,sim=self.pos_predictor.update_position(self.screen)
+        self.now_loc= pos
+        CUS_LOGGER.debug(f"获取到新坐标{self.now_loc}")
         return True
 
     def get_offset(self,delta=1):
