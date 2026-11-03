@@ -446,12 +446,13 @@ class DivineTreasureKernel(ScriptKernel):
 
         check() 必须给 x/y 或 mask，否则会走到 get_local(None, None) 抛 int(None)。
         """
+        # fresh=True：battle 阶段不走主循环，self.screen 不会自动刷新，必须自己抓一帧
         return bool(self.check(BATTLE_FLAG, x=BATTLE_FLAG_POINT[0], y=BATTLE_FLAG_POINT[1],
-                               threshold=0.9))
+                               threshold=0.85, fresh=True))
 
     def has_lock_on(self):
         """红圈准星出现 = 已锁定怪物。红圈不一定在屏幕内（多只怪时可能锁到视野外）。"""
-        return bool(self.check(LOCK_RING, mask=(0, 0, 1920, 1080), threshold=0.75))
+        return bool(self.check(LOCK_RING, mask=(0, 0, 1920, 1080), threshold=0.75, fresh=True))
 
     def turn_view(self, pixels):
         """鼠标相对移动转视角。用 mouse_event 的 MOVE 而不是 SetCursorPos：
@@ -499,7 +500,7 @@ class DivineTreasureKernel(ScriptKernel):
                 self.walk()
                 time.sleep(0.15)
                 self.attack()
-                time.sleep(0.5)
+                time.sleep(1.0)   # 普攻频率按实测减半
                 if self.in_battle():
                     return True
         return False
@@ -512,7 +513,7 @@ class DivineTreasureKernel(ScriptKernel):
             self.walk()
             time.sleep(0.15)
             self.attack()
-            time.sleep(0.5)
+            time.sleep(1.0)   # 普攻频率按实测减半
             if self.in_battle():
                 return True
         return False
