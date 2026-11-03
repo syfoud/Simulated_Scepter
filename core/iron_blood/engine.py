@@ -150,7 +150,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 CUS_LOGGER.error(f"写入铁血计数失败 {e}")
 
     def select_fate(self):
-        self.click_text(text="毁灭",box=[1263, 791, 1317, 821])
+        key_mouse_manager.click_point(1292, 798)
 
     def initing_map(self):
         key_mouse_manager.keyUp("move_w")

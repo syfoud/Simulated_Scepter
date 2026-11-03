@@ -210,7 +210,6 @@ class My_TS:
     def find_text(self, img, text,find_all=False):
         self.nothing = 1
         results = self.ts.ocr(img)
-        # log.debug(f"识别到文本：{results}")
         find_all_return = None
         for res in results:
             res = {'raw_text': res[1][0], 'box': np.array(res[0]), 'score': res[1][1]}

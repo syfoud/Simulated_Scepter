@@ -560,8 +560,8 @@ class SimulatedUniverse(UniverseUtils):
             else:
                 break
         key_mouse_manager.click_point(*self.calc_point(MASK["fate"], res[0]))
-    def select_bless(self):
-        if not (self.click_text('神奇宇宙') or self.click_text('巨胃宇宙')):
+    def select_start_bless(self):
+        if not (self.click_text(text='神奇宇宙', box=[511, 477, 1409, 519]) or self.click_text(text='巨胃宇宙', box=[511, 477, 1409, 519])):
             key_mouse_manager.click_point(960, 540)
         key_mouse_manager.click_point(948, 965)
 

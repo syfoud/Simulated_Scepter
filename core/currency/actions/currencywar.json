@@ -356,7 +356,7 @@
             "redundancy": 30
         },
         "actions": [
-            "select_bless"
+            "select_strategy"
         ]
     },
     {

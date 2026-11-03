@@ -208,12 +208,12 @@
         "name": "选择开局奖励",
         "trigger":{
             "text": "开拓",
-            "box": [589, 130, 1327, 163],
+            "box": [974, 785, 987, 822],
             "redundancy": 30
         },
         "actions":
         [
-            "select_bless"
+            "select_start_bless"
         ]
     },
     {
