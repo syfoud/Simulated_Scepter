@@ -615,6 +615,9 @@ def main(default_stage="entry"):
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
         if args.stage == "panel":
+            # 不走 run_script 就没有 prepare_script，键鼠管理器线程不会启动，
+            # 此时 click_position 只是入队、没人执行
+            kernel.prepare_script()
             result = kernel.ensure_panel()
             if result is None:
                 CUS_LOGGER.error("展不开面板或读不到等级", extra={"flush": True})
