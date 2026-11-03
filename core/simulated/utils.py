@@ -61,7 +61,6 @@ from tool.utils.mminimap import PositionPredict
 from tool.utils.ocr_num import match_skill_numbers_in_region
 from tool.utils.predict import get_text_position, predict
 
-
 def set_forground():
     config.read()
     try:
@@ -104,6 +103,8 @@ class UniverseUtils(StateKernel):
         self.speed = speed
         #当前计算坐标
         self.now_loc = [0,0]
+        #小地图连续识别失败次数，达到阈值后缓存坐标不可信
+        self.minimap_fail_count = 0
         #裁剪大地图范围
         self.cut_pos = None
         self.mini_state = 0
@@ -924,6 +925,8 @@ class UniverseUtils(StateKernel):
         self.red_threshold = 4500
         self.initial_angle = None
         self.mini_state=1
+        # 换图后旧地图上的失败计数不再适用
+        self.minimap_fail_count = 0
     def nof(self,must_be=None):
         """
         检查当前没有f交互
@@ -1330,6 +1333,11 @@ class UniverseUtils(StateKernel):
     def get_loc(self, fresh=True):
         """
         精确匹配获得精确坐标，该坐标并非代表点位在大地图上的像素坐标，而是经过变换缩放而获得的
+
+        小地图失效（战斗中、黑屏、加载动画）时，位置模板匹配只能得到错误峰值；此时不写入 now_loc，
+        否则错误坐标会被后续的位置搜索窗口和转向计算当作真值，战斗结束后也回不到正确位置。
+
+        连续失效 3 次后缓存坐标已不可信，等小地图恢复可用再做整图重定位。
         """
 
         CUS_LOGGER.debug(f"获取新坐标,当前坐标{self.now_loc}是否刷新{fresh}")
@@ -1337,10 +1345,38 @@ class UniverseUtils(StateKernel):
             self.get_screen()
             if not self.is_run():
                 return False
+        # 角色朝向箭头是小地图可用的前提：小地图被战斗界面覆盖或整屏黑屏时箭头会消失。
+        _, direction = self.pos_predictor.update_minimap_data(self.screen)
+        if direction is None:
+            # 淡出、弹窗遮挡、震屏通常只持续一两帧，重新截一帧再判断，避免把瞬时遮挡当成小地图失效
+            self.get_screen()
+            _, direction = self.pos_predictor.update_minimap_data(self.screen)
+        if direction is None:
+            self.minimap_fail_count += 1
+            # 小地图失效也可能只是刚进入/刚离开模拟宇宙大世界，重新确认一次当前是否仍在模拟宇宙中。
+            if not self.is_run():
+                CUS_LOGGER.warning("小地图识别失败，可能处于其他状态，本次不更新位置")
+                return False
+            CUS_LOGGER.debug("小地图识别失败，但仍处于模拟宇宙的大世界中，本次不更新位置")
+            return True
+        # 连续失效 3 次说明缓存坐标已不可信，小地图一恢复就做整图重定位
+        if self.minimap_fail_count >= 3:
+            # 整图重定位由预测器完成：清空搜索中心做整图匹配，相邻两帧结果互相印证后才写入位置
+            pos, gave_up = self.pos_predictor.relocate(self.screen)
+            if pos is not None:
+                self.now_loc = pos
+                self.minimap_fail_count = 0
+                CUS_LOGGER.info(f"小地图连续识别失败后整图重定位成功，当前坐标{self.now_loc}")
+            elif gave_up:
+                # 放弃本次重定位，继续用上次可信坐标，等下一轮连续失败再重来
+                self.minimap_fail_count = 0
+                CUS_LOGGER.warning("整图重定位连续不一致，放弃本次重定位，继续使用上次可信坐标")
+            return True
         pos,sim=self.pos_predictor.update_position(self.screen)
         self.now_loc= pos
         CUS_LOGGER.debug(f"获取到新坐标{self.now_loc}")
         return True
+
     def get_offset(self,delta=1):
         if self.slow:
             delta /= 2

@@ -17,6 +17,7 @@ from tool.utils.minimap_util import (
     POSITION_SEARCH_SCALE,
     ArrowRotateMap,
     ArrowRotateMapAll,
+    ImageNotSupported,
     PositionPredictState,
     RotationRemapData,
     area_limit,
@@ -115,8 +116,9 @@ def update_direction(or_image=None, minimap=None):
     try:
         area = area_pad(get_bbox(image, threshold=128), pad=-1)
         area = area_limit(area, (0, 0, *image_size(image)))
-    except IndexError:
-        CUS_LOGGER.debug('小地图上没有方向箭头')
+    except (IndexError, ImageNotSupported):
+        # 战斗界面、黑屏、加载动画会整块盖住小地图，蓝色箭头缺失属于可恢复的画面失效
+        CUS_LOGGER.warning('小地图上没有方向箭头')
         return None
 
     image = crop(image, area=area, copy=False)
@@ -215,6 +217,9 @@ def _predict_precise_position(state):
 class PositionPredict:
     def __init__(self, position: tuple[float, float]= (0, 0)):
         self.position = position
+        # 整图重定位的候选坐标与连续不一致次数，见 relocate
+        self.relocate_candidate = None
+        self.relocate_mismatch = 0
         self.set_now_map(1)
         self.rotation=None
         self.direction=None
@@ -314,6 +319,52 @@ class PositionPredict:
             position = tuple(np.round(best_state.global_loca, 1))
         return position, position_similarity
 
+    def relocate(self,image):
+        """
+        丢弃缓存的搜索中心，用整图匹配重新确定角色位置。
+
+        小地图失效（战斗界面、黑屏、加载动画）期间的位置匹配只能得到错误峰值，继续以旧坐标为中心
+        搜索只会一直失败，所以把搜索中心清成 (0,0)：预测器只在中心为 (0,0) 时对整张地图模板做匹配。
+
+        单帧整图匹配仍可能落在结构相似的错误峰值上，因此第一帧结果只作候选，下一帧再匹配一次，
+        两次结果距离不超过 30（大地图像素坐标）才认为可信并写入 position。
+
+        Args:
+            image: 整屏图像
+
+        Returns:
+            (position, gave_up): position 为本次确认的坐标，未确认时为 None；
+            gave_up 为 True 表示连续 4 次结果无法互相印证，已放弃本次重定位。
+        """
+        search_position = self.position
+        # 预测器只有搜索中心为 (0,0) 时才整图匹配
+        self.position = (0, 0)
+        try:
+            position, _ = self.update_position(image, update=False)
+        finally:
+            self.position = search_position
+
+        if self.relocate_candidate is None:
+            self.relocate_candidate = position
+            CUS_LOGGER.debug(f"整图重定位候选{position}")
+            return None, False
+
+        # 两帧结果应落在同一处，差异过大说明至少有一帧落在错误峰值上
+        if float(np.linalg.norm(np.subtract(position, self.relocate_candidate))) > 30:
+            self.relocate_candidate = position
+            self.relocate_mismatch += 1
+            if self.relocate_mismatch >= 4:
+                self.relocate_candidate = None
+                self.relocate_mismatch = 0
+                return None, True
+            CUS_LOGGER.debug(f"整图重定位两帧结果不一致，等待下一帧确认，候选{position}")
+            return None, False
+
+        self.position = position
+        self.relocate_candidate = None
+        self.relocate_mismatch = 0
+        return position, False
+
     def draw_position_on_map(self, raidus=90.0,show=True):
         """
         在assets_floor_feat上绘制当前位置对应的点和小地图范围
@@ -361,6 +412,9 @@ class PositionPredict:
         mask_img_name = f'map_{map_num}a.png'
         self.assets_floor_feat = find_image_in_folder('gray_image/', feat_name, search_subfolders=True)
         self.assets_floor_outside_mask = find_image_in_folder('gray_image/', mask_img_name, search_subfolders=True)
+        # 换图后上一张地图上的重定位候选不再适用
+        self.relocate_candidate = None
+        self.relocate_mismatch = 0
     def match_multiple_maps(self,image,show_result= False):
         """
         在多个地图中匹配最佳位置
