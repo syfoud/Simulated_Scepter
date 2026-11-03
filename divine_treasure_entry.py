@@ -439,16 +439,48 @@ class DivineTreasureKernel(ScriptKernel):
                                     int(moment["m01"] / moment["m00"]) + y1))
         return sorted(centers)
 
+    def find_bless_cards(self):
+        """用轮廓找祝福卡片本体，返回按 x 排序的中心点。
+
+        卡片名 OCR 会漏检（读成「自由」而不是「自由蛹」，后面的卡干脆读不到），
+        所以没有推荐图标时改找卡片矩形。
+        """
+        gray = cv2.cvtColor(self.get_screen(), cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        raw = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            # 卡片尺寸；y>200 排除顶部 UI，y<520 只留卡片主体（内部元素会重复命中）
+            if w > 300 and h > 250 and 200 < y < 520:
+                raw.append((x + w // 2, y + h // 2))
+        # 同一张卡会被拆成多个矩形，按 x 间距聚类去重
+        cards = []
+        for cx, cy in sorted(raw):
+            if not cards or cx - cards[-1][0] > 100:
+                cards.append((cx, cy))
+        return cards
+
     def choose_bless(self):
-        """选祝福：优先带推荐图标的（取最左一个），都没有就点屏幕中央，最后确认。"""
+        """选祝福：优先带推荐图标的（取最左一个），否则选最左边的卡片。
+
+        不能「没有推荐就点屏幕正中」——两张卡时正中间是空隙，会点空。
+        """
         icons = self.find_recommend_icons()
         if icons:
             x = icons[0][0]
             CUS_LOGGER.debug(f"推荐祝福 @ x={x}（共 {len(icons)} 个推荐）", extra={"flush": True})
             self.click_position((x, BLESS_CARD_Y))
         else:
-            CUS_LOGGER.debug("没有推荐图标，选中间那张", extra={"flush": True})
-            self.click_position((960, BLESS_CARD_Y))
+            cards = self.find_bless_cards()
+            if cards:
+                CUS_LOGGER.debug(f"无推荐图标，选最左卡片 @ {cards[0]}（共 {len(cards)} 张）",
+                                 extra={"flush": True})
+                self.click_position(cards[0])
+            else:
+                CUS_LOGGER.warning("既没推荐图标也没找到卡片轮廓，点最左卡位置兜底",
+                                   extra={"flush": True})
+                self.click_position((480, BLESS_CARD_Y))
         key_mouse_manager.wait()
         time.sleep(0.5)
         self.click_text("确认")
