@@ -44,6 +44,11 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 
+# ── 选择方程（随时可能出现的通用决策界面）────────────────────────────────
+# 不排优先级：队伍配置因人而异，选中间那个最省事
+EQUATION_MIDDLE = (960, 500)    # 中间方程的卡片中心
+EQUATION_CONFIRM = (1710, 972)  # 右下角「确认」
+
 # ── 面具选择（「欢愉假面」页）──────────────────────────────────────────────
 # 优先级来自 214 题人工评分：本体分 + 专属奇迹均值×0.6 的综合排序，
 # 依据见 canon/divine-treasure/_10-面具选择判据.md
@@ -377,6 +382,19 @@ class DivineTreasureKernel(ScriptKernel):
         key_mouse_manager.wait()
         time.sleep(0.8)
 
+    def select_equation(self):
+        """点中间那个方程，再点右下角确认。
+
+        不排优先级——每个人队伍不同，选哪个方程收益差别很大；中间那张最省事，
+        也避开「最左边往往是给别人配的」这类争议。
+        """
+        self.click_position(EQUATION_MIDDLE)
+        key_mouse_manager.wait()
+        time.sleep(0.6)  # 等卡片选中动画，确认按钮才会亮
+        self.click_position(EQUATION_CONFIRM)
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+
     def ensure_practice_mode(self):
         """确保当前在「练习模式」页。
 
@@ -444,7 +462,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -528,8 +546,10 @@ def main(default_stage="entry"):
     elif args.stage == "mask":
         # dismiss 放前面：选完面具会弹「点击空白处关闭」，先把它关掉才看得到下一界面
         kernel.action_groups = ["dismiss", "masks"]
+    elif args.stage == "equation":
+        kernel.action_groups = ["dismiss", "equation"]
     try:
-        if args.stage in ("entry", "team", "mask"):
+        if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
         if args.stage in ("masks", "opening"):
             from divine_treasure_masks import run
