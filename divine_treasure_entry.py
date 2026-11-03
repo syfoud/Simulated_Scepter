@@ -508,23 +508,35 @@ class DivineTreasureKernel(ScriptKernel):
         """
         return bool(self.current_area_type())
 
-    def wait_battle_end(self, timeout=180.0, stable=2):
-        """等战斗结束、回到 3D 场景。
+    def has_dismiss_screen(self):
+        """界面上是否有「点击空白处关闭」（通用通知）。"""
+        x1, y1, x2, y2 = (880, 990, 1020, 1025)
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "空白" in (self.ts.ocr_one_row(crop) or "")
 
-        不能用「小旗子消失」判断：终结技动画会短暂隐藏整个 UI，旗子会假消失。
-        改用区域标签，并要求连续 stable 次读到才算数，躲开动画和加载瞬间。
+    def wait_battle_end(self, timeout=180.0):
+        """等战斗结束。
+
+        不用「旗子消失 N 秒」这种时间阈值——终结技动画期间整个 UI 都会隐藏，旗子同样
+        消失，靠时间去猜永远要给终结技留不确定的余量。
+
+        改成等一个「战斗里不可能出现」的新界面：3D 区域标签 / 选择祝福 / 通用通知。
+        这三样在战斗进行中都不会出现，所以终结技放多久都不会误判。超时兜底。
         """
-        CUS_LOGGER.debug("等待战斗结束（回到 3D 场景）", extra={"flush": True})
+        CUS_LOGGER.debug("等待战斗结束", extra={"flush": True})
         deadline = time.time() + timeout
-        hits = 0
         while time.time() < deadline:
             if self.in_3d_scene():
-                hits += 1
-                if hits >= stable:
-                    CUS_LOGGER.debug("已回到 3D 场景", extra={"flush": True})
-                    return True
-            else:
-                hits = 0
+                CUS_LOGGER.debug("战斗结束：已回到 3D 场景", extra={"flush": True})
+                return True
+            if self.has_bless_screen():
+                CUS_LOGGER.debug("战斗结束：出现选择祝福", extra={"flush": True})
+                return True
+            if self.has_dismiss_screen():
+                CUS_LOGGER.debug("战斗结束：出现通用通知", extra={"flush": True})
+                return True
             time.sleep(1.0)
         CUS_LOGGER.warning(f"{timeout:.0f} 秒内没等到战斗结束", extra={"flush": True})
         return False
