@@ -452,11 +452,10 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.06)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
-    def find_and_engage(self):
-        """从当前位置找怪并进入战斗，成功返回 True。
+    def scan_for_monster(self):
+        """原地转一圈找怪：没看到就转视角，看到就前进靠近，红圈出现再普攻。
 
-        扫描策略：没看到怪就转视角，看到怪就前进；靠近后红圈出现再普攻。
-        不保证一次普攻就进战斗（角色攻击范围较小时会打空），所以普攻后会复查小旗子。
+        不保证一次普攻就进战斗（角色攻击范围较小时会打空），所以普攻后复查小旗子。
         """
         for _ in range(24):          # 最多转一圈（24 × TURN_PIXELS）
             if self.in_battle():
@@ -476,7 +475,58 @@ class DivineTreasureKernel(ScriptKernel):
                         return True
                 self.walk()
                 time.sleep(0.25)
-        CUS_LOGGER.warning("一圈没找到能打的怪", extra={"flush": True})
+        return False
+
+    def engage_front(self):
+        """从出生点正面推进：差分宇宙的出生点怪物必定在正前方，直接前进即可。"""
+        for _ in range(12):
+            if self.in_battle():
+                return True
+            if self.has_lock_on():
+                self.attack()
+                time.sleep(0.9)
+                if self.in_battle():
+                    return True
+            self.walk()
+            time.sleep(0.2)
+        return False
+
+    def reset_to_spawn(self):
+        """卡住时的兜底：ESC → 暂离 → F → 开始游戏 → 继续进度，把角色重置回出生点。
+
+        链路来自实机截图 ex1~ex4。重置后怪物必定在正前方，直接前进就能撞上。
+        """
+        CUS_LOGGER.debug("尝试重置回出生点", extra={"flush": True})
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        time.sleep(1.2)
+        if not self.click_text("暂离"):
+            CUS_LOGGER.warning("暂停界面没找到「暂离」", extra={"flush": True})
+            return False
+        time.sleep(3.0)                     # 退回大世界
+        key_mouse_manager.press("interact")  # F：进入差分宇宙
+        key_mouse_manager.wait()
+        time.sleep(2.5)
+        if not self.click_text("开始游戏"):
+            CUS_LOGGER.warning("主页没找到「开始游戏」", extra={"flush": True})
+            return False
+        time.sleep(1.5)
+        if not self.click_text("继续进度"):
+            CUS_LOGGER.warning("模式选择页没找到「继续进度」", extra={"flush": True})
+            return False
+        time.sleep(3.5)                     # 等重新加载进 3D
+        return True
+
+    def find_and_engage(self):
+        """找怪并进入战斗；一轮扫不到就重置回出生点再正面推进，仍失败才放弃。"""
+        if self.scan_for_monster():
+            return True
+        CUS_LOGGER.warning("一圈没找到能打的怪，重置回出生点", extra={"flush": True})
+        if not self.reset_to_spawn():
+            return False
+        if self.engage_front():
+            return True
+        CUS_LOGGER.error("重置后正面推进仍没进战斗", extra={"flush": True})
         return False
 
     def read_mask_progress(self):
