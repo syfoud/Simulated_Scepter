@@ -245,6 +245,7 @@ class SimulatedUniverse(UniverseUtils):
         self.recorder.stop_recording()
 
     def setting_exit(self):
+        self.initial_angle = None
         if self.state != "exit":
             key_mouse_manager.click_point(1359, 811)
             key_mouse_manager.wait()
