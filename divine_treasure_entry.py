@@ -53,6 +53,8 @@ ASSET_DIR = ROOT / "tool" / "divine_treasure" / "assets"
 BATTLE_FLAG = str(ASSET_DIR / "battle_flag.png")
 LOCK_RING = str(ASSET_DIR / "lock_ring.png")
 MONSTER_INFO_BOX = (500, 0, 1400, 100)   # 顶部怪物信息区 [x1, y1, x2, y2]
+BATTLE_FLAG_POINT = (75, 25)             # 小旗子中心（战斗界面左上角）
+AREA_LABEL_BOX = (0, 10, 400, 60)        # 左上角「(N/20) 第X位面-类型」[x1, y1, x2, y2]
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
 WALK_SECONDS = 0.35      # 每次前进时长，短距离关卡不建议开加速（容易冲过头）
 
@@ -407,6 +409,25 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.8)
 
     # ── 3D 区域：找怪与进入战斗 ──────────────────────────────────────────
+    def current_area_type(self):
+        """读左上角「(N/20) 第X位面-类型」，返回类型文字（战斗/事件/精英…）。
+
+        这行是判断「当前区域要不要打怪」的唯一依据：战斗区才需要找怪进战，
+        事件区直接走过去交互即可。区域序号和位面号都会变，只取「-」后面的类型。
+        """
+        x1, y1, x2, y2 = AREA_LABEL_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return ""
+        crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        text = (self.ts.ocr_one_row(crop) or "").strip()
+        match = re.search(r"[-—–]\s*([^\s\-(]+)", text)
+        return match.group(1) if match else text
+
+    def in_battle_area(self):
+        """当前区域是不是「战斗」类型。"""
+        return "战斗" in self.current_area_type()
+
     def has_monster_info(self):
         """顶部出现「等级XX xxx团」信息条 → 视野内有怪。
 
@@ -421,12 +442,16 @@ class DivineTreasureKernel(ScriptKernel):
         return False
 
     def in_battle(self):
-        """左上角小旗子出现 = 已在战斗界面（实测战斗 0.998 / 3D 场景 0.6x）。"""
-        return bool(self.check(BATTLE_FLAG, threshold=0.9))
+        """左上角小旗子出现 = 已在战斗界面（实测战斗 0.998 / 3D 场景 0.6x）。
+
+        check() 必须给 x/y 或 mask，否则会走到 get_local(None, None) 抛 int(None)。
+        """
+        return bool(self.check(BATTLE_FLAG, x=BATTLE_FLAG_POINT[0], y=BATTLE_FLAG_POINT[1],
+                               threshold=0.9))
 
     def has_lock_on(self):
         """红圈准星出现 = 已锁定怪物。红圈不一定在屏幕内（多只怪时可能锁到视野外）。"""
-        return bool(self.check(LOCK_RING, threshold=0.75))
+        return bool(self.check(LOCK_RING, mask=(0, 0, 1920, 1080), threshold=0.75))
 
     def turn_view(self, pixels):
         """鼠标相对移动转视角。用 mouse_event 的 MOVE 而不是 SetCursorPos：
