@@ -65,6 +65,10 @@ AUTO_BATTLE_POINT = (1762, 47)
 BLESS_ICON_ROI = (200, 380)      # 只扫这个纵向区间，避开顶部 UI 和底部按钮
 BLESS_CARD_Y = 450               # 点在图标正下方的卡片内
 BLESS_TITLE_BOX = (90, 55, 220, 105)  # 左上角「选择祝福」标题 [x1, y1, x2, y2]
+# 左上角的差分宇宙标志：出现在所有「需要玩家选择」的界面（祝福/方程/奇遇…），
+# 战斗界面和 3D 场景都没有。实测选择界面 0.998、战斗 0.393、3D 0.38x。
+CHOICE_LOGO = str(ASSET_DIR / "choice_logo.png")
+CHOICE_LOGO_POINT = (67, 67)
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
@@ -508,6 +512,22 @@ class DivineTreasureKernel(ScriptKernel):
         """
         return bool(self.current_area_type())
 
+    def has_choice_ui(self):
+        """左上角有差分宇宙标志 = 「需要玩家选择」的界面。"""
+        return bool(self.check(CHOICE_LOGO, x=CHOICE_LOGO_POINT[0], y=CHOICE_LOGO_POINT[1],
+                               threshold=0.9, fresh=True))
+
+    def is_non_battle_ui(self):
+        """不是战斗界面。
+
+        用「肯定不是战斗」的三个特征取并集：
+        · 差分宇宙标志（需要选择的界面）
+        · 点击空白处关闭（通用通知）
+        · 区域标识（回到 3D 大世界）
+        战斗界面三样都没有；终结技期间 UI 整个隐藏，三样也都没有——所以都不会误判。
+        """
+        return self.has_choice_ui() or self.has_dismiss_screen() or self.in_3d_scene()
+
     def has_dismiss_screen(self):
         """界面上是否有「点击空白处关闭」（通用通知）。"""
         x1, y1, x2, y2 = (880, 990, 1020, 1025)
@@ -528,14 +548,8 @@ class DivineTreasureKernel(ScriptKernel):
         CUS_LOGGER.debug("等待战斗结束", extra={"flush": True})
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if self.in_3d_scene():
-                CUS_LOGGER.debug("战斗结束：已回到 3D 场景", extra={"flush": True})
-                return True
-            if self.has_bless_screen():
-                CUS_LOGGER.debug("战斗结束：出现选择祝福", extra={"flush": True})
-                return True
-            if self.has_dismiss_screen():
-                CUS_LOGGER.debug("战斗结束：出现通用通知", extra={"flush": True})
+            if self.is_non_battle_ui():
+                CUS_LOGGER.debug("战斗结束：已离开战斗界面", extra={"flush": True})
                 return True
             time.sleep(1.0)
         CUS_LOGGER.warning(f"{timeout:.0f} 秒内没等到战斗结束", extra={"flush": True})
