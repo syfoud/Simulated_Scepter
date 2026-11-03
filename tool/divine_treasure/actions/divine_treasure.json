@@ -1,63 +1,258 @@
 [
   {
     "name": "entry",
-    "trigger": { "text": "欢愉假面", "box": [0, 0, 400, 160] },
-    "actions": ["select_mask"]
+    "trigger": {
+      "text": "欢愉假面",
+      "box": [
+        0,
+        0,
+        400,
+        160
+      ]
+    },
+    "actions": [
+      "select_mask"
+    ]
   },
   {
     "name": "entry",
-    "trigger": { "text": "进入星阶模式", "box": [650, 930, 1900, 1040], "interval": 3 },
-    "actions": ["fill_team", { "text": "进入星阶模式", "box": [650, 930, 1900, 1040] }]
+    "trigger": {
+      "text": "进入星阶模式",
+      "box": [
+        650,
+        930,
+        1900,
+        1040
+      ],
+      "interval": 3
+    },
+    "actions": [
+      "fill_team",
+      {
+        "text": "进入星阶模式",
+        "box": [
+          650,
+          930,
+          1900,
+          1040
+        ]
+      }
+    ]
   },
   {
     "name": "entry",
-    "trigger": { "text": "常规演算", "box": [0, 200, 750, 480] },
-    "actions": [{ "text": "常规演算", "box": [0, 200, 750, 480] }]
+    "trigger": {
+      "text": "常规演算",
+      "box": [
+        0,
+        200,
+        750,
+        480
+      ]
+    },
+    "actions": [
+      {
+        "text": "常规演算",
+        "box": [
+          0,
+          200,
+          750,
+          480
+        ]
+      }
+    ]
   },
   {
     "name": "entry",
-    "trigger": { "text": "启动", "box": [650, 930, 1900, 1040], "interval": 2 },
-    "actions": ["ensure_practice_mode", "check_protocol", { "sleep": 0.6 },
-                { "text": "启动", "box": [650, 930, 1900, 1040] }]
+    "trigger": {
+      "text": "启动",
+      "box": [
+        650,
+        930,
+        1900,
+        1040
+      ],
+      "interval": 2
+    },
+    "actions": [
+      "ensure_practice_mode",
+      "check_protocol",
+      {
+        "sleep": 0.6
+      },
+      {
+        "text": "启动",
+        "box": [
+          650,
+          930,
+          1900,
+          1040
+        ]
+      }
+    ]
   },
   {
     "name": "entry",
-    "trigger": { "text": "开始游戏", "box": [650, 930, 1900, 1040] },
-    "actions": [{ "text": "开始游戏", "box": [650, 930, 1900, 1040] }]
+    "trigger": {
+      "text": "开始游戏",
+      "box": [
+        650,
+        930,
+        1900,
+        1040
+      ]
+    },
+    "actions": [
+      {
+        "text": "开始游戏",
+        "box": [
+          650,
+          930,
+          1900,
+          1040
+        ]
+      }
+    ]
   },
   {
     "name": "team",
-    "trigger": { "text": "星阶模式", "box": [0, 0, 400, 160] },
-    "actions": ["stop"]
+    "trigger": {
+      "text": "星阶模式",
+      "box": [
+        0,
+        0,
+        400,
+        160
+      ]
+    },
+    "actions": [
+      "stop"
+    ]
   },
   {
     "name": "team",
-    "trigger": { "text": "进入星阶模式", "box": [650, 930, 1900, 1040], "interval": 3 },
-    "actions": ["fill_team", { "text": "进入星阶模式", "box": [650, 930, 1900, 1040] }]
+    "trigger": {
+      "text": "进入星阶模式",
+      "box": [
+        650,
+        930,
+        1900,
+        1040
+      ],
+      "interval": 3
+    },
+    "actions": [
+      "fill_team",
+      {
+        "text": "进入星阶模式",
+        "box": [
+          650,
+          930,
+          1900,
+          1040
+        ]
+      }
+    ]
   },
   {
     "name": "equation",
-    "trigger": { "text": "请选择方程", "box": [650, 50, 1300, 200], "interval": 8 },
-    "actions": ["select_equation", "stop"]
+    "trigger": {
+      "text": "请选择方程",
+      "box": [
+        650,
+        50,
+        1300,
+        200
+      ],
+      "interval": 8
+    },
+    "actions": [
+      "select_equation",
+      "stop"
+    ]
   },
   {
     "name": "dismiss",
-    "trigger": { "text": "空白处关闭", "box": [880, 990, 1020, 1025], "redundancy": 30 },
-    "actions": [{ "text": "点击空白" }, { "sleep": 1 }]
+    "trigger": {
+      "text": "空白处关闭",
+      "box": [
+        880,
+        990,
+        1020,
+        1025
+      ],
+      "redundancy": 30
+    },
+    "actions": [
+      {
+        "text": "点击空白"
+      },
+      {
+        "sleep": 1
+      }
+    ]
+  },
+  {
+    "name": "bless",
+    "trigger": {
+      "text": "选择祝福",
+      "box": [
+        90,
+        55,
+        220,
+        105
+      ],
+      "interval": 1
+    },
+    "actions": [
+      "choose_bless"
+    ]
   },
   {
     "name": "masks",
-    "trigger": { "text": "选择惊世奇迹", "box": [650, 50, 1300, 200], "interval": 2 },
-    "actions": ["stop"]
+    "trigger": {
+      "text": "选择惊世奇迹",
+      "box": [
+        650,
+        50,
+        1300,
+        200
+      ],
+      "interval": 2
+    },
+    "actions": [
+      "stop"
+    ]
   },
   {
     "name": "masks",
-    "trigger": { "text": "请选择方程", "box": [650, 50, 1300, 200] },
-    "actions": ["stop"]
+    "trigger": {
+      "text": "请选择方程",
+      "box": [
+        650,
+        50,
+        1300,
+        200
+      ]
+    },
+    "actions": [
+      "stop"
+    ]
   },
   {
     "name": "masks",
-    "trigger": { "text": "欢愉假面", "box": [0, 0, 400, 160], "interval": 3 },
-    "actions": ["select_mask"]
+    "trigger": {
+      "text": "欢愉假面",
+      "box": [
+        0,
+        0,
+        400,
+        160
+      ],
+      "interval": 3
+    },
+    "actions": [
+      "select_mask"
+    ]
   }
 ]

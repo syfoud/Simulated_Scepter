@@ -908,12 +908,9 @@ def main(default_stage="entry"):
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
         if args.stage == "bless":
-            kernel.prepare_script()
-            kernel.ts.forward(kernel.get_screen())
-            icons = kernel.find_recommend_icons()
-            CUS_LOGGER.debug(f"检测到 {len(icons)} 个推荐图标：{icons}", extra={"flush": True})
-            kernel.choose_bless()
-            CUS_LOGGER.debug("已选择祝福并确认", extra={"flush": True})
+            # 走 JSON 主循环，验证「识别到选择祝福 → 选推荐 → 确认」整条链路
+            kernel.action_groups = ["dismiss", "bless"]
+            run_script(kernel, str(ACTION_SCRIPT))
             return 0
         if args.stage == "waitend":
             kernel.prepare_script()
