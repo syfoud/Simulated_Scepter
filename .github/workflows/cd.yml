@@ -24,10 +24,11 @@ permissions:
 
 jobs:
   prepare:
-    # push（PR 合并后触发）与 workflow_dispatch 都执行
+    # 仅主仓库被 push 时才触发打包；手动触发本 workflow 不受上述限制。
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push'
+      (github.event_name == 'push' &&
+      github.repository == 'syfoud/Simulated_Scepter')
 
     runs-on: windows-latest
 
