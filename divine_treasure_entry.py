@@ -660,6 +660,20 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.06)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
+    def handle_popup(self):
+        """找怪途中若弹出通用界面（点击空白处关闭），关掉并返回 True。
+
+        打地图上的可破坏物有概率掉奇物，会弹出这类界面。此时脚本还在盲走+普攻，
+        不先关掉的话点击可能落到界面上的按钮上。
+        """
+        if not self.has_dismiss_screen():
+            return False
+        CUS_LOGGER.debug("找怪途中弹出通用界面，先关掉", extra={"flush": True})
+        self.click_text("点击空白")
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+        return True
+
     def scan_for_monster(self):
         """原地转一圈找怪：没看到就转视角，看到就前进靠近，红圈出现再普攻。
 
@@ -668,6 +682,8 @@ class DivineTreasureKernel(ScriptKernel):
         for _ in range(24):          # 最多转一圈（24 × TURN_PIXELS）
             if self.in_battle():
                 return True
+            if self.handle_popup():   # 转视角途中也可能弹界面
+                continue
             if not self.has_monster_info():
                 self.turn_view(TURN_PIXELS)
                 time.sleep(0.35)
@@ -678,10 +694,14 @@ class DivineTreasureKernel(ScriptKernel):
             for _ in range(12):
                 if self.in_battle():
                     return True
+                if self.handle_popup():
+                    continue
                 self.walk()
                 time.sleep(0.15)
                 self.attack()
                 time.sleep(1.0)   # 普攻频率按实测减半
+                if self.handle_popup():   # 打碎可破坏物可能掉奇物并弹界面
+                    continue
                 if self.in_battle():
                     return True
         return False
@@ -691,10 +711,14 @@ class DivineTreasureKernel(ScriptKernel):
         for _ in range(14):
             if self.in_battle():
                 return True
+            if self.handle_popup():
+                continue
             self.walk()
             time.sleep(0.15)
             self.attack()
             time.sleep(1.0)   # 普攻频率按实测减半
+            if self.handle_popup():   # 打碎可破坏物可能掉奇物并弹界面
+                continue
             if self.in_battle():
                 return True
         return False
