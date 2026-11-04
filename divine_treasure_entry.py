@@ -44,6 +44,35 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 
+# ── 3D 区域（战斗 / 寻路）────────────────────────────────────────────────
+# 不认怪物外观（千奇百怪），只认两个信号：
+#   1. 顶部出现「等级XX xxx团」信息条 = 视野内有怪（等级与名字都会变，只用结构判据）
+#   2. 红圈准星 = 已锁定怪物
+# 小旗子 = 已进入战斗界面，这是判断「打没打起来」最可靠的信号。
+ASSET_DIR = ROOT / "tool" / "divine_treasure" / "assets"
+BATTLE_FLAG = str(ASSET_DIR / "battle_flag.png")
+LOCK_RING = str(ASSET_DIR / "lock_ring.png")
+MONSTER_INFO_BOX = (500, 0, 1400, 100)   # 顶部怪物信息区 [x1, y1, x2, y2]
+BATTLE_FLAG_POINT = (75, 25)             # 小旗子中心（战斗界面左上角）
+AREA_LABEL_BOX = (0, 10, 400, 60)        # 左上角「(N/20) 第X位面-类型」[x1, y1, x2, y2]
+# 自动战斗按钮（战斗界面右上角）。开/关图标形状相同、只差颜色：开启是黄色
+# （色相~18、饱和~138），未开启是蓝灰（色相~117、饱和~44）。模板匹配反而分不开，
+# 所以用 HSV 判色。
+AUTO_BATTLE_BOX = (1744, 38, 1780, 56)   # [x1, y1, x2, y2]
+AUTO_BATTLE_POINT = (1762, 47)
+# 选择祝福：推荐图标是绿色圆形，卡片数量 1/2/3 时排列都不同，所以不猜坐标，
+# 直接按颜色找图标（实测三卡时命中 x=649/1126/1603，与实机采集一致）。
+BLESS_ICON_ROI = (200, 380)      # 只扫这个纵向区间，避开顶部 UI 和底部按钮
+BLESS_CARD_Y = 450               # 点在图标正下方的卡片内
+BLESS_TITLE_BOX = (90, 55, 220, 105)  # 左上角「选择祝福」标题 [x1, y1, x2, y2]
+# 左上角的差分宇宙标志：出现在所有「需要玩家选择」的界面（祝福/方程/奇遇…），
+# 战斗界面和 3D 场景都没有。实测选择界面 0.998、战斗 0.393、3D 0.38x。
+CHOICE_LOGO = str(ASSET_DIR / "choice_logo.png")
+CHOICE_LOGO_POINT = (67, 67)
+TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
+WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
+
+
 # ── 对局面板（左上角，可展开/收起）──────────────────────────────────────
 # 展开后才看得到面具等级与进度。识别方式是「读 Lv N/20」而不是给 14 张面具各写一套
 # 愿力算法——等级和进度条是游戏自己算好的，直接读出来就行。
@@ -393,6 +422,351 @@ class DivineTreasureKernel(ScriptKernel):
         key_mouse_manager.wait()
         time.sleep(0.8)
 
+    # ── 3D 区域：找怪与进入战斗 ──────────────────────────────────────────
+    def has_bless_screen(self):
+        """界面上是否还有「选择祝福」标题。"""
+        x1, y1, x2, y2 = BLESS_TITLE_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "选择祝福" in (self.ts.ocr_one_row(crop) or "")
+
+    def find_recommend_icons(self):
+        """找祝福界面上的推荐图标（绿色圆形），返回按 x 排序的中心点列表。
+
+        不按「三张卡各占多少宽度」去算——1 / 2 / 3 张卡时排列完全不同，而图标的
+        颜色和形状始终不变，按颜色找最省事。
+        """
+        y1, y2 = BLESS_ICON_ROI
+        roi = self.get_screen()[y1:y2]
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, (40, 100, 100), (85, 255, 255))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        centers = []
+        for contour in contours:
+            if cv2.contourArea(contour) > 150:
+                moment = cv2.moments(contour)
+                if moment["m00"]:
+                    centers.append((int(moment["m10"] / moment["m00"]),
+                                    int(moment["m01"] / moment["m00"]) + y1))
+        return sorted(centers)
+
+    def find_bless_cards(self):
+        """用轮廓找祝福卡片本体，返回按 x 排序的中心点。
+
+        卡片名 OCR 会漏检（读成「自由」而不是「自由蛹」，后面的卡干脆读不到），
+        所以没有推荐图标时改找卡片矩形。
+        """
+        gray = cv2.cvtColor(self.get_screen(), cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 50, 150)
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        raw = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            # 卡片尺寸；y>200 排除顶部 UI，y<520 只留卡片主体（内部元素会重复命中）
+            if w > 300 and h > 250 and 200 < y < 520:
+                raw.append((x + w // 2, y + h // 2))
+        # 同一张卡会被拆成多个矩形，按 x 间距聚类去重
+        cards = []
+        for cx, cy in sorted(raw):
+            if not cards or cx - cards[-1][0] > 100:
+                cards.append((cx, cy))
+        return cards
+
+    def choose_bless(self):
+        """选祝福：优先带推荐图标的（取最左一个），否则选最左边的卡片。
+
+        不能「没有推荐就点屏幕正中」——两张卡时正中间是空隙，会点空。
+        """
+        icons = self.find_recommend_icons()
+        if icons:
+            x = icons[0][0]
+            CUS_LOGGER.debug(f"推荐祝福 @ x={x}（共 {len(icons)} 个推荐）", extra={"flush": True})
+            self.click_position((x, BLESS_CARD_Y))
+        else:
+            cards = self.find_bless_cards()
+            if cards:
+                CUS_LOGGER.debug(f"无推荐图标，选最左卡片 @ {cards[0]}（共 {len(cards)} 张）",
+                                 extra={"flush": True})
+                self.click_position(cards[0])
+            else:
+                CUS_LOGGER.warning("既没推荐图标也没找到卡片轮廓，点最左卡位置兜底",
+                                   extra={"flush": True})
+                self.click_position((480, BLESS_CARD_Y))
+        key_mouse_manager.wait()
+        time.sleep(0.5)
+        self.click_text("确认")
+        key_mouse_manager.wait()
+        # 点完确认后可能闪过「获得祝福」通知或加载画面，紧接着又弹下一个祝福。
+        # 所以不能看一眼就判结束：给 8 秒窗口，期间只要「选择祝福」再出现就继续，
+        # 整个窗口都没再出现才认为这一批处理完。
+        deadline = time.time() + 8.0
+        while time.time() < deadline:
+            if self.has_bless_screen():
+                CUS_LOGGER.debug("还有下一个祝福，继续", extra={"flush": True})
+                return
+            time.sleep(0.5)
+        CUS_LOGGER.debug("8 秒内没有新祝福，本状态处理完毕", extra={"flush": True})
+        self.stop()
+
+    def in_3d_scene(self):
+        """是否在 3D 场景里：左上角有「(N/20) 第X位面-类型」这行。
+
+        这是区分战斗界面与 3D 场景最干净的判据——战斗界面这行不存在。
+        """
+        return bool(self.current_area_type())
+
+    def has_choice_ui(self):
+        """左上角有差分宇宙标志 = 「需要玩家选择」的界面。"""
+        return bool(self.check(CHOICE_LOGO, x=CHOICE_LOGO_POINT[0], y=CHOICE_LOGO_POINT[1],
+                               threshold=0.9, fresh=True))
+
+    def is_non_battle_ui(self):
+        """不是战斗界面。
+
+        用「肯定不是战斗」的三个特征取并集：
+        · 差分宇宙标志（需要选择的界面）
+        · 点击空白处关闭（通用通知）
+        · 区域标识（回到 3D 大世界）
+        战斗界面三样都没有；终结技期间 UI 整个隐藏，三样也都没有——所以都不会误判。
+        """
+        logo = self.has_choice_ui()
+        dismiss = self.has_dismiss_screen()
+        area = self.in_3d_scene()
+        if logo or dismiss or area:
+            CUS_LOGGER.debug(f"判定为非战斗界面：标志={logo} 通用通知={dismiss} 区域标识={area}",
+                             extra={"flush": True})
+            return True
+        return False
+
+    def has_dismiss_screen(self):
+        """界面上是否有「点击空白处关闭」（通用通知）。"""
+        x1, y1, x2, y2 = (880, 990, 1020, 1025)
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "空白" in (self.ts.ocr_one_row(crop) or "")
+
+    def wait_battle_end(self, timeout=180.0):
+        """等战斗结束。
+
+        不用「旗子消失 N 秒」这种时间阈值——终结技动画期间整个 UI 都会隐藏，旗子同样
+        消失，靠时间去猜永远要给终结技留不确定的余量。
+
+        改成等一个「战斗里不可能出现」的新界面：3D 区域标签 / 选择祝福 / 通用通知。
+        这三样在战斗进行中都不会出现，所以终结技放多久都不会误判。超时兜底。
+        """
+        CUS_LOGGER.debug("等待战斗结束", extra={"flush": True})
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.is_non_battle_ui():
+                CUS_LOGGER.debug("战斗结束：已离开战斗界面", extra={"flush": True})
+                return True
+            time.sleep(1.0)
+        CUS_LOGGER.warning(f"{timeout:.0f} 秒内没等到战斗结束", extra={"flush": True})
+        return False
+
+    def auto_battle_on(self):
+        """自动战斗是否已开启：按钮呈黄色即开启，蓝灰即未开。"""
+        x1, y1, x2, y2 = AUTO_BATTLE_BOX
+        patch = self.get_screen()[y1:y2, x1:x2]
+        if patch.size == 0:
+            return False
+        hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+        return bool(hsv[:, :, 0].mean() < 40 and hsv[:, :, 1].mean() > 90)
+
+    def ensure_auto_battle(self):
+        """战斗里没开自动战斗就点一下（可选步骤，调用方自己决定要不要用）。"""
+        if self.auto_battle_on():
+            return True
+        CUS_LOGGER.debug("自动战斗未开启，点一下按钮", extra={"flush": True})
+        self.click_position(AUTO_BATTLE_POINT)
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+        return self.auto_battle_on()
+
+    def current_area_type(self):
+        """读左上角「(N/20) 第X位面-类型」，返回类型文字（战斗/事件/精英…）。
+
+        这行是判断「当前区域要不要打怪」的唯一依据：战斗区才需要找怪进战，
+        事件区直接走过去交互即可。区域序号和位面号都会变，只取「-」后面的类型。
+        """
+        x1, y1, x2, y2 = AREA_LABEL_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return ""
+        crop = cv2.resize(crop, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        text = (self.ts.ocr_one_row(crop) or "").strip()
+        # 必须含「位面」才算区域标签。战斗界面左上角是「1/3」这类波次 UI，
+        # 不加这层过滤会被当成「在 3D 场景」——战斗结束判断就会在开局几秒内误触发。
+        if "位面" not in text:
+            return ""
+        match = re.search(r"[-—–]\s*([^\s\-(]+)", text)
+        return match.group(1) if match else ""
+
+    def in_battle_area(self):
+        """当前区域是不是「战斗」类型。"""
+        return "战斗" in self.current_area_type()
+
+    def has_monster_info(self):
+        """顶部出现「等级XX xxx团」信息条 → 视野内有怪。
+
+        等级数字和团名都会变（不同区域、不同怪物），所以只判「这块区域有没有文字 +
+        是否含『等级』二字」，不碰具体内容。001 无怪 / 005 打完怪时这块都是空的。
+        """
+        x1, y1, x2, y2 = MONSTER_INFO_BOX
+        for item in self.ts.res:
+            box = item["box"]
+            if box[0] >= x1 and box[3] <= y2 and "等级" in item["raw_text"]:
+                return True
+        return False
+
+    def in_battle(self):
+        """左上角小旗子出现 = 已在战斗界面（实测战斗 0.998 / 3D 场景 0.6x）。
+
+        check() 必须给 x/y 或 mask，否则会走到 get_local(None, None) 抛 int(None)。
+        """
+        # fresh=True：battle 阶段不走主循环，self.screen 不会自动刷新，必须自己抓一帧
+        return bool(self.check(BATTLE_FLAG, x=BATTLE_FLAG_POINT[0], y=BATTLE_FLAG_POINT[1],
+                               threshold=0.85, fresh=True))
+
+    def has_lock_on(self):
+        """红圈准星出现 = 已锁定怪物。红圈不一定在屏幕内（多只怪时可能锁到视野外）。"""
+        return bool(self.check(LOCK_RING, mask=(0, 0, 1920, 1080), threshold=0.75, fresh=True))
+
+    def turn_view(self, pixels):
+        """鼠标相对移动转视角。用 mouse_event 的 MOVE 而不是 SetCursorPos：
+        游戏读的是相对位移，绝对定位会被当成「瞬移」而丢失视角。"""
+        import win32api
+        import win32con
+
+        # dx 才是水平位移；早先误写成 dy，结果每"转一次"都在把视角往下拉
+        win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(pixels), 0, 0, 0)
+
+    def walk(self, seconds=None):
+        """按住前进键走一小段。"""
+        seconds = WALK_SECONDS if seconds is None else seconds
+        key_mouse_manager.keyDown("move_w")
+        time.sleep(seconds)
+        key_mouse_manager.keyUp("move_w")
+
+    def attack(self):
+        """原地左键普攻（不移动准星，避免打空）。"""
+        import win32api
+        import win32con
+
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        time.sleep(0.06)
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+    def scan_for_monster(self):
+        """原地转一圈找怪：没看到就转视角，看到就前进靠近，红圈出现再普攻。
+
+        不保证一次普攻就进战斗（角色攻击范围较小时会打空），所以普攻后复查小旗子。
+        """
+        for _ in range(24):          # 最多转一圈（24 × TURN_PIXELS）
+            if self.in_battle():
+                return True
+            if not self.has_monster_info():
+                self.turn_view(TURN_PIXELS)
+                time.sleep(0.35)
+                continue
+            # 视野里有怪：朝当前朝向靠近，边走边砍
+            # 不靠红圈判断「能否攻击」——红圈常与怪物身体重合，模板匹配实测只有 0.5，
+            # 而且不一定落在屏幕内。靠近途中反复普攻，打中就进战斗，打空继续走。
+            for _ in range(12):
+                if self.in_battle():
+                    return True
+                self.walk()
+                time.sleep(0.15)
+                self.attack()
+                time.sleep(1.0)   # 普攻频率按实测减半
+                if self.in_battle():
+                    return True
+        return False
+
+    def engage_front(self):
+        """从出生点正面推进：差分宇宙的出生点怪物必定在正前方，直接前进+普攻。"""
+        for _ in range(14):
+            if self.in_battle():
+                return True
+            self.walk()
+            time.sleep(0.15)
+            self.attack()
+            time.sleep(1.0)   # 普攻频率按实测减半
+            if self.in_battle():
+                return True
+        return False
+
+    def wait_and_click(self, text, timeout=8.0):
+        """等某段文字出现再点它，超时返回 False。
+
+        比「固定 sleep + 点一次」可靠：界面加载快慢不定，点早了会落空。
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.click_text(text):
+                return True
+            time.sleep(0.5)
+        return False
+
+    def reset_to_spawn(self):
+        """卡住时的兜底：ESC → 暂离 → F → 开始游戏 → 继续进度，把角色重置回出生点。
+
+        链路来自实机截图 ex1~ex4。重置后怪物必定在正前方，直接前进就能撞上。
+        F 要重试：退回大世界后角色落点/加载时机不定，一次没进很常见。
+        """
+        CUS_LOGGER.debug("尝试重置回出生点", extra={"flush": True})
+        paused = False
+        for _ in range(3):                   # ESC 也可能被吞，重试三次
+            key_mouse_manager.press("esc")
+            key_mouse_manager.wait()
+            if self.wait_and_click("暂离", timeout=3):
+                paused = True
+                break
+        if not paused:
+            CUS_LOGGER.warning("三次 ESC 都没出现暂停界面", extra={"flush": True})
+            return False
+        time.sleep(2.5)                      # 退回大世界
+        entered = False
+        for _ in range(3):                   # F 最多试三次
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            time.sleep(2.0)
+            if self.click_text("开始游戏"):
+                entered = True
+                break
+        if not entered:
+            CUS_LOGGER.warning("三次按 F 都没进到差分宇宙主页", extra={"flush": True})
+            return False
+        if not self.wait_and_click("继续进度", timeout=6):
+            CUS_LOGGER.warning("模式选择页没找到「继续进度」", extra={"flush": True})
+            return False
+        time.sleep(3.5)                      # 等重新加载进 3D
+        return True
+
+    def find_and_engage(self):
+        """找怪并进入战斗。
+
+        顺序按「最可能命中」排：
+        1. 先正面推进——出生点/重置后的怪必定在正前方，这一步就够的情况最多
+        2. 走偏了再转一圈找
+        3. 还不行为重置回出生点，再正面推一次
+        """
+        if self.engage_front():
+            return True
+        CUS_LOGGER.debug("正面没撞上，转视角找一圈", extra={"flush": True})
+        if self.scan_for_monster():
+            return True
+        CUS_LOGGER.warning("一圈也没找到，重置回出生点", extra={"flush": True})
+        if not self.reset_to_spawn():
+            return False
+        if self.engage_front():
+            return True
+        CUS_LOGGER.error("重置后正面推进仍没进战斗", extra={"flush": True})
+        return False
+
     def read_mask_progress(self):
         """读面板上的面具等级与经验进度；面板收起时返回 None。
 
@@ -532,7 +906,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "combat", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -621,6 +995,48 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "combat":
+            # 完整战斗链路：找怪 → 进战斗 → 自动战斗 → 等结束 → 选祝福（可连续）
+            kernel.prepare_script()
+            if not kernel.find_and_engage():
+                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
+                return 2
+            CUS_LOGGER.debug("已进入战斗", extra={"flush": True})
+            kernel.ensure_auto_battle()
+            if not kernel.wait_battle_end():
+                CUS_LOGGER.error("没能确认战斗结束", extra={"flush": True})
+                return 2
+            # 祝福可能连续弹多次，交给 JSON 主循环处理（bless 组在标题消失时 stop）
+            kernel.action_groups = ["dismiss", "bless"]
+            run_script(kernel, str(ACTION_SCRIPT))
+            return 0
+        if args.stage == "bless":
+            # 走 JSON 主循环，验证「识别到选择祝福 → 选推荐 → 确认」整条链路
+            kernel.action_groups = ["dismiss", "bless"]
+            run_script(kernel, str(ACTION_SCRIPT))
+            return 0
+        if args.stage == "waitend":
+            kernel.prepare_script()
+            if not kernel.wait_battle_end():
+                CUS_LOGGER.error("没能确认战斗结束", extra={"flush": True})
+                return 2
+            CUS_LOGGER.debug(f"战斗结束，当前区域类型：{kernel.current_area_type()}", extra={"flush": True})
+            return 0
+        if args.stage == "auto":
+            # 自动战斗是可选步骤：单独跑，验证「没开就点、已开不动」
+            kernel.prepare_script()
+            before = kernel.auto_battle_on()
+            CUS_LOGGER.debug(f"自动战斗当前：{'已开启' if before else '未开启'}", extra={"flush": True})
+            ok = kernel.ensure_auto_battle()
+            CUS_LOGGER.debug(f"处理后：{'已开启' if ok else '仍未开启'}", extra={"flush": True})
+            return 0 if ok else 2
+        if args.stage == "battle":
+            kernel.prepare_script()
+            if not kernel.find_and_engage():
+                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
+                return 2
+            CUS_LOGGER.debug("已进入战斗界面（小旗子）", extra={"flush": True})
+            return 0
         if args.stage == "panel":
             # 不走 run_script 就没有 prepare_script，键鼠管理器线程不会启动，
             # 此时 click_position 只是入队、没人执行
