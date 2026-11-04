@@ -231,7 +231,7 @@ class SimulatedCurrency(CurrencyUtils):
             hwnd,Text = get_hwnd_and_text ()
             warn_game = False
             cnt = 0
-            focus_reclaim_wait = max(1, 2 * load_settings().get("game_focus_reclaim_wait_seconds", 600))
+            focus_reclaim_wait = max(1, 2*load_settings().get("game_focus_reclaim_wait_seconds", 600))
             while Text != "崩坏：星穹铁道" and Text != "云·星穹铁道" and not self._stop:
                 self.last_interact_time = time.time ()
                 if self._stop:
