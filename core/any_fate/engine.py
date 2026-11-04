@@ -261,7 +261,7 @@ class AnyFateUniverse(SimulatedUniverse):
                     self.switch_current_role(num=1)
                 if "黑塔的办公" not in self.area:
                     # 空打一拳，5秒内不重复操作
-                    if self.auto_attack_breakable and time.time() - self.attack_time >= 5:
+                    if self.auto_attack_breakable and not self.big_map_init and time.time() - self.attack_time >= 5:
                         key_mouse_manager.click_point(960, 540)
                         CUS_LOGGER.debug("尝试空打一拳")
                         self.attack_time = time.time()
