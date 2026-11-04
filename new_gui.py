@@ -1513,6 +1513,7 @@ class MainWindow(QMainWindowLog):
             self.update_settings({
                 "start_game_on_task": self.start_game_checkbox.isChecked(),
                 "game_executable_path": self.game_path_input.text().strip(),
+                "game_focus_reclaim_wait_seconds": int(self.focus_reclaim_wait_input.text()),
                 "recording_state": self.recording_checkBox.isChecked(),
                 "recording_iron_blood": self.recording_checkBox2.isChecked(),
                 "del_record_time": int(self.recording_time_input.text()),
