@@ -174,6 +174,24 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
             self.assertEqual(load_settings()["debug"], debug)
             self.assertIsNone(self.window.findChild(QWidget, "debug_checkbox2"))
 
+    def test_focus_reclaim_wait_setting_is_nonnegative_integer_and_persists(self):
+        wait_label = self.window.focus_reclaim_wait_label
+        wait_input = self.window.focus_reclaim_wait_input
+        self.assertEqual(wait_label.text(), "游戏窗口失焦时，自动重新聚焦的等待秒数（默认600）")
+        self.assertEqual(wait_input.text(), "600")
+        self.window.tabWidget.setCurrentWidget(self.window.AbyssTab)
+        self.show_window()
+        self.assertTrue(wait_label.isVisible())
+        self.assertGreater(wait_label.width(), 0)
+        self.assertLessEqual(wait_label.y() - self.window.ocr_row.geometry().bottom(), 20)
+        self.assertLessEqual(abs(wait_label.geometry().center().y() - wait_input.geometry().center().y()), 1)
+        wait_input.setText("123")
+        with patch.object(QMessageBox, "information"):
+            self.window.general_settings_save_btn.click()
+
+        self.assertEqual(load_settings()["game_focus_reclaim_wait_seconds"], 123)
+        self.assertIs(type(load_settings()["game_focus_reclaim_wait_seconds"]), int)
+
     def test_empty_module_directory_disables_run_and_diagnostics(self):
         self.dispose_window()
         with patch.object(self.module, "KernelRegistry", return_value=KernelRegistry(Path(self.folder.name) / "missing")):

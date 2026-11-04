@@ -731,6 +731,7 @@ class MainWindow(QMainWindowLog):
         self.opt = data = load_settings()
         self.start_game_checkbox.setChecked(data.get("start_game_on_task", False))
         self.game_path_input.setText(data.get("game_executable_path", ""))
+        self.focus_reclaim_wait_input.setText(str(data.get("game_focus_reclaim_wait_seconds", 600)))
         self.recording_checkBox.setChecked(data.get("recording_state", False))
         self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
         self.recording_time_input.setText(str(data.get("del_record_time", 14)))
@@ -1512,6 +1513,7 @@ class MainWindow(QMainWindowLog):
             self.update_settings({
                 "start_game_on_task": self.start_game_checkbox.isChecked(),
                 "game_executable_path": self.game_path_input.text().strip(),
+                "game_focus_reclaim_wait_seconds": int(self.focus_reclaim_wait_input.text()),
                 "recording_state": self.recording_checkBox.isChecked(),
                 "recording_iron_blood": self.recording_checkBox2.isChecked(),
                 "del_record_time": int(self.recording_time_input.text()),

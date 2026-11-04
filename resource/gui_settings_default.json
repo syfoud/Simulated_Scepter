@@ -3,6 +3,7 @@
     "script_file": "",
     "start_game_on_task": false,
     "game_executable_path": "",
+    "game_focus_reclaim_wait_seconds": 600,
     "ocr_device": "auto",
     "recording_state": false,
     "record_map": false,
