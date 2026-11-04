@@ -131,11 +131,7 @@ class DivergentUniverse(UniverseUtils):
             hwnd, Text = get_hwnd_and_text()
             warn_game = False
             cnt = 0
-            focus_reclaim_wait = load_settings().get("game_focus_reclaim_wait_seconds", 600)
-            if focus_reclaim_wait:
-                focus_reclaim_wait = 2 * focus_reclaim_wait
-            else:
-                focus_reclaim_wait = 1
+            focus_reclaim_wait = max(1, 2*load_settings().get("game_focus_reclaim_wait_seconds", 600))
             while Text != "崩坏：星穹铁道" and Text != "云·星穹铁道" and not self._stop:
                 self.lst_changed = time.time()
                 if self._stop:
