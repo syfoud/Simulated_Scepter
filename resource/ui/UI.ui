@@ -1213,6 +1213,24 @@
                        </item>
                       </layout>
                      </item>
+                     <item>
+                      <layout class="QHBoxLayout" name="focus_reclaim_wait_row">
+                       <item>
+                        <widget class="QLabel" name="focus_reclaim_wait_label">
+                         <property name="text">
+                          <string>游戏窗口失焦时，自动重新聚焦的等待秒数（默认600）</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item stretch="1">
+                        <widget class="QLineEdit" name="focus_reclaim_wait_input">
+                         <property name="placeholderText">
+                          <string>600</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </item>
                     </layout>
                    </widget>
                   </item>
