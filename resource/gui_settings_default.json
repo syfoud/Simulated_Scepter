@@ -1,6 +1,7 @@
 {
     "script_engine": "Simulated",
     "script_file": "",
+    "calibration_angle": 1.0,
     "start_game_on_task": false,
     "game_executable_path": "",
     "game_focus_reclaim_wait_seconds": 600,

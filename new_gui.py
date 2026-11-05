@@ -1,5 +1,6 @@
 import argparse
 import ctypes
+import datetime
 import hashlib
 import os
 import subprocess
@@ -1624,20 +1625,19 @@ class MainWindow(QMainWindowLog):
         self.kill_num_text.setText(num)
 
     def check_first_launch(self):
-        """
-        检查是否首次启动，如果是则显示用户协议弹窗
-        """
-        cache_dir = os.path.join(PATHS["root"], "cache")
-        agreement_file = os.path.join(cache_dir, "agreement_accepted.txt")
+        """未接受过协议时显示用户协议弹窗。
 
-        # 如果标记文件不存在，则为首次启动
+        标记文件随 user 目录保存，升级替换程序包时连同用户数据一起保留，不再重复弹出。
+        """
+        agreement_file = os.path.join(PATHS["user"], "agreement_accepted.txt")
         if not os.path.exists(agreement_file):
             self.show_agreement_dialog(agreement_file)
 
     def show_agreement_dialog(self, agreement_file):
-        """
-        显示用户协议弹窗
-        :param agreement_file: 协议接受标记文件路径
+        """显示用户协议弹窗。
+
+        Args:
+            agreement_file: 协议接受标记文件路径。
         """
         dialog = QDialog(self)
         dialog.setWindowTitle("用户协议与免责声明")
@@ -1706,15 +1706,10 @@ class MainWindow(QMainWindowLog):
 
         # 按钮事件处理
         def on_accept():
-            # 创建cache目录（如果不存在）
-            cache_dir = os.path.dirname(agreement_file)
-            if not os.path.exists(cache_dir):
-                os.makedirs(cache_dir)
-
-            # 创建标记文件
+            os.makedirs(PATHS["user"], exist_ok=True)
+            # 标记文件内容仅用于排查接受时间，是否存在决定是否再弹窗
             with open(agreement_file, 'w', encoding='utf-8') as f:
-                from datetime import datetime
-                f.write(f"Agreement accepted at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Agreement accepted at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("User has read and agreed to the terms and conditions.\n")
 
             dialog.accept()

@@ -5,6 +5,7 @@ import pyuac
 
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
+from tool.settings import update_settings
 
 
 def get_angle(su):
@@ -28,7 +29,6 @@ def main(ang=[1,1,3], su=None):
         if spec is None:
             raise ValueError("没有可用于校准的内核")
         su = registry.create_engine(spec.id)
-    config = su.config
     CUS_LOGGER.info("开始校准")
     key_mouse_manager.multi = 1
     init_ang = get_angle(su)
@@ -74,8 +74,7 @@ def main(ang=[1,1,3], su=None):
 
 
     CUS_LOGGER.info("所有校准完成")
-    config.angle = str(key_mouse_manager.multi)
-    config.save()
+    update_settings({"calibration_angle": float(key_mouse_manager.multi)})
     return True
 
 
