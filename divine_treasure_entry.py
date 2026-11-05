@@ -70,6 +70,7 @@ BLESS_TITLE_BOX = (90, 55, 220, 105)  # 左上角「选择祝福」标题 [x1, y
 CHOICE_LOGO = str(ASSET_DIR / "choice_logo.png")
 CHOICE_LOGO_POINT = (67, 67)
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
+COMBAT_STEP_LIMIT = 40   # 连续多少步没撞上怪就重置回出生点（配合 interval 约 80 秒）
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
 
@@ -255,6 +256,7 @@ class DivineTreasureKernel(ScriptKernel):
     target_protocol = DEFAULT_PROTOCOL  # 目标阈值协议，由 --protocol 覆盖
     _foreground_misses = 0
     _miss_count = 0
+    _combat_steps = 0
 
     def run_static(self, json_path=None, json_file=None, action_list=None, skip_check=False):
         # 按 --stage 指定的组运行，便于只验证当次改动的那一段
@@ -660,68 +662,25 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.06)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
-    def handle_popup(self):
-        """找怪途中若弹出通用界面（点击空白处关闭），关掉并返回 True。
+    def combat_step(self):
+        """状态机在 3D 场景里调一次：走一步或转一下视角。
 
-        打地图上的可破坏物有概率掉奇物，会弹出这类界面。此时脚本还在盲走+普攻，
-        不先关掉的话点击可能落到界面上的按钮上。
+        这里不再写「走→sleep→砍→sleep」这种固定节奏——节奏交给 JSON 的 interval，
+        低配机器上状态机自己会慢下来，高配上一帧一步，不用给不同设备写不同等待。
+        弹窗、祝福这些中间界面由 dismiss / bless 组先处理掉，走到这里说明确实是 3D 场景。
         """
-        if not self.has_dismiss_screen():
-            return False
-        CUS_LOGGER.debug("找怪途中弹出通用界面，先关掉", extra={"flush": True})
-        self.click_text("点击空白")
-        key_mouse_manager.wait()
-        time.sleep(0.8)
-        return True
-
-    def scan_for_monster(self):
-        """原地转一圈找怪：没看到就转视角，看到就前进靠近，红圈出现再普攻。
-
-        不保证一次普攻就进战斗（角色攻击范围较小时会打空），所以普攻后复查小旗子。
-        """
-        for _ in range(24):          # 最多转一圈（24 × TURN_PIXELS）
-            if self.in_battle():
-                return True
-            if self.handle_popup():   # 转视角途中也可能弹界面
-                continue
-            if not self.has_monster_info():
-                self.turn_view(TURN_PIXELS)
-                time.sleep(0.35)
-                continue
-            # 视野里有怪：朝当前朝向靠近，边走边砍
-            # 不靠红圈判断「能否攻击」——红圈常与怪物身体重合，模板匹配实测只有 0.5，
-            # 而且不一定落在屏幕内。靠近途中反复普攻，打中就进战斗，打空继续走。
-            for _ in range(12):
-                if self.in_battle():
-                    return True
-                if self.handle_popup():
-                    continue
-                self.walk()
-                time.sleep(0.15)
-                self.attack()
-                time.sleep(1.0)   # 普攻频率按实测减半
-                if self.handle_popup():   # 打碎可破坏物可能掉奇物并弹界面
-                    continue
-                if self.in_battle():
-                    return True
-        return False
-
-    def engage_front(self):
-        """从出生点正面推进：差分宇宙的出生点怪物必定在正前方，直接前进+普攻。"""
-        for _ in range(14):
-            if self.in_battle():
-                return True
-            if self.handle_popup():
-                continue
+        self._combat_steps += 1
+        if self._combat_steps >= COMBAT_STEP_LIMIT:
+            self._combat_steps = 0
+            CUS_LOGGER.warning("找怪步数用完，重置回出生点", extra={"flush": True})
+            self.reset_to_spawn()
+            return
+        if self.has_monster_info():
+            # 视野里有怪：前进一小段再砍一刀。走和砍都在同一个状态机步骤里，不额外 sleep。
             self.walk()
-            time.sleep(0.15)
             self.attack()
-            time.sleep(1.0)   # 普攻频率按实测减半
-            if self.handle_popup():   # 打碎可破坏物可能掉奇物并弹界面
-                continue
-            if self.in_battle():
-                return True
-        return False
+        else:
+            self.turn_view(TURN_PIXELS)
 
     def wait_and_click(self, text, timeout=8.0):
         """等某段文字出现再点它，超时返回 False。
@@ -752,13 +711,13 @@ class DivineTreasureKernel(ScriptKernel):
         if not paused:
             CUS_LOGGER.warning("三次 ESC 都没出现暂停界面", extra={"flush": True})
             return False
-        time.sleep(2.5)                      # 退回大世界
+        # 退出暂离后角色会回到大世界，按 F 进差分宇宙主页。
+        # 不用「等 2.5 秒再按」，而是按了就等文字出现——加载快慢跟着机器走。
         entered = False
-        for _ in range(3):                   # F 最多试三次
+        for _ in range(3):
             key_mouse_manager.press("interact")
             key_mouse_manager.wait()
-            time.sleep(2.0)
-            if self.click_text("开始游戏"):
+            if self.wait_and_click("开始游戏", timeout=6):
                 entered = True
                 break
         if not entered:
@@ -767,28 +726,13 @@ class DivineTreasureKernel(ScriptKernel):
         if not self.wait_and_click("继续进度", timeout=6):
             CUS_LOGGER.warning("模式选择页没找到「继续进度」", extra={"flush": True})
             return False
-        time.sleep(3.5)                      # 等重新加载进 3D
-        return True
-
-    def find_and_engage(self):
-        """找怪并进入战斗。
-
-        顺序按「最可能命中」排：
-        1. 先正面推进——出生点/重置后的怪必定在正前方，这一步就够的情况最多
-        2. 走偏了再转一圈找
-        3. 还不行为重置回出生点，再正面推一次
-        """
-        if self.engage_front():
-            return True
-        CUS_LOGGER.debug("正面没撞上，转视角找一圈", extra={"flush": True})
-        if self.scan_for_monster():
-            return True
-        CUS_LOGGER.warning("一圈也没找到，重置回出生点", extra={"flush": True})
-        if not self.reset_to_spawn():
-            return False
-        if self.engage_front():
-            return True
-        CUS_LOGGER.error("重置后正面推进仍没进战斗", extra={"flush": True})
+        # 等重新加载进 3D：认「位面」这行出现，而不是干等一个固定时长
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if self.in_3d_scene():
+                return True
+            time.sleep(0.5)
+        CUS_LOGGER.warning("继续进度后没等到 3D 场景", extra={"flush": True})
         return False
 
     def read_mask_progress(self):
@@ -1020,18 +964,8 @@ def main(default_stage="entry"):
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
         if args.stage == "combat":
-            # 完整战斗链路：找怪 → 进战斗 → 自动战斗 → 等结束 → 选祝福（可连续）
-            kernel.prepare_script()
-            if not kernel.find_and_engage():
-                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
-                return 2
-            CUS_LOGGER.debug("已进入战斗", extra={"flush": True})
-            kernel.ensure_auto_battle()
-            if not kernel.wait_battle_end():
-                CUS_LOGGER.error("没能确认战斗结束", extra={"flush": True})
-                return 2
-            # 祝福可能连续弹多次，交给 JSON 主循环处理（bless 组在标题消失时 stop）
-            kernel.action_groups = ["dismiss", "bless"]
+            # 全程交给状态机：弹窗(dismiss) → 祝福(bless) → 3D 里走一步(combat) → 进战斗后开自动战斗并停
+            kernel.action_groups = ["dismiss", "bless", "combat"]
             run_script(kernel, str(ACTION_SCRIPT))
             return 0
         if args.stage == "bless":
@@ -1055,11 +989,9 @@ def main(default_stage="entry"):
             CUS_LOGGER.debug(f"处理后：{'已开启' if ok else '仍未开启'}", extra={"flush": True})
             return 0 if ok else 2
         if args.stage == "battle":
-            kernel.prepare_script()
-            if not kernel.find_and_engage():
-                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
-                return 2
-            CUS_LOGGER.debug("已进入战斗界面（小旗子）", extra={"flush": True})
+            # 只验证「找怪→进战斗」这一段，进战斗后 combat 组自动停
+            kernel.action_groups = ["dismiss", "combat"]
+            run_script(kernel, str(ACTION_SCRIPT))
             return 0
         if args.stage == "panel":
             # 不走 run_script 就没有 prepare_script，键鼠管理器线程不会启动，

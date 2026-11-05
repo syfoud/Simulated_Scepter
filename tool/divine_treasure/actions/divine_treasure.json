@@ -155,6 +155,37 @@
     ]
   },
   {
+    "name": "combat",
+    "trigger": {
+      "text": "位面",
+      "box": [
+        50,
+        10,
+        320,
+        50
+      ],
+      "interval": 2
+    },
+    "actions": [
+      "combat_step"
+    ]
+  },
+  {
+    "name": "combat",
+    "trigger": {
+      "photo": "E:/Simulated_Scepter/Simulated_Scepter/tool/divine_treasure/assets/battle_flag.png",
+      "pos": {
+        "x": 75,
+        "y": 25
+      },
+      "threshold": 0.85
+    },
+    "actions": [
+      "ensure_auto_battle",
+      "stop"
+    ]
+  },
+  {
     "name": "equation",
     "trigger": {
       "text": "请选择方程",
