@@ -1,12 +1,12 @@
 import json
 
+from tool.settings import load_settings
 from tool.storage import config_path, save_json_values
 
 
 class Config:
     def __init__(self):
         self.order_text = "1 2 3 4"
-        self.angle = "1.0"
         self.difficult = "5"
         self.allow_difficult = [1, 2, 3, 4, 5]
         self.fate = "巡猎"
@@ -28,11 +28,10 @@ class Config:
 
     @property
     def multi(self) -> float:
-        x = float(self.angle)
-        if x > 5 or x <= 0:
-            self.angle = '1.0'
-            return 1.0
-        return x
+        """本机校准得到的鼠标转向倍率，校准结果统一保存在全局设置 calibration_angle。"""
+        value = float(load_settings()["calibration_angle"])
+        # 超出合理范围说明配置被改动过，按未校准处理，避免转向量异常。
+        return value if 0 < value <= 5 else 1.0
 
     @property
     def order(self) -> list[int]:
@@ -48,7 +47,6 @@ class Config:
             data = json.load(file)
         config = data["config"]
         self.order_text = " ".join(str(x) for x in config['order_text'])
-        self.angle = str(config['angle'])
         self.difficult = config['difficulty']
         self.fate = config['fate']
         self.map_sha = config['map_sha']
@@ -70,7 +68,6 @@ class Config:
         save_json_values(__file__, {
                 "config": {
                     "order_text": list(map(lambda x: int(x), self.order_text.split(' '))),
-                    "angle": float(self.angle),
                     "difficulty": self.diffi,
                     "fate": self.fate,
                     "secondary_fate": data["config"]["secondary_fate"],
