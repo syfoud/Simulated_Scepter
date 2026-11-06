@@ -69,6 +69,12 @@ BLESS_TITLE_BOX = (90, 55, 220, 105)  # 左上角「选择祝福」标题 [x1, y
 # 战斗界面和 3D 场景都没有。实测选择界面 0.998、战斗 0.393、3D 0.38x。
 CHOICE_LOGO = str(ASSET_DIR / "choice_logo.png")
 CHOICE_LOGO_POINT = (67, 67)
+# 找门用的 YOLO 模型（Ultralytics YOLO26n，类别只有 door / event）。
+# 输入 640x640 letterbox，输出 [1,300,6] 端到端框。
+DOOR_MODEL = str(ROOT / "resource" / "models" / "divergent.onnx")
+DOOR_PROMPT_BOX = (1180, 580, 1320, 645)  # 走近门后的「随意门」提示 [x1, y1, x2, y2]
+# 框不能放太大：实测 (1150,560)-(1400,670) 反而读成「→门」，带进了箭头干扰
+DOOR_TURN_GAIN = 0.25                     # 门偏出中心时，转视角的位移比例
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
 COMBAT_STEP_LIMIT = 40   # 连续多少步没撞上怪就重置回出生点（配合 interval 约 80 秒）
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
@@ -662,6 +668,42 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.06)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
+    def detect_doors(self):
+        """用 YOLO 找门，返回 [(置信度, [x1, y1, x2, y2])]，坐标已换算回 1920x1080。
+
+        模型只有 door / event 两类，只要 door。走 YOLO 而不是模板匹配：门在不同距离、
+        不同角度下外观差别很大（远处一个小方块，走近占满屏幕），模板匹配扛不住。
+        """
+        if not getattr(self, "_door_session", None):
+            import onnxruntime as ort
+            self._door_session = ort.InferenceSession(DOOR_MODEL, providers=["CPUExecutionProvider"])
+            self._door_input = self._door_session.get_inputs()[0].name
+        screen = self.get_screen()
+        height, width = screen.shape[:2]
+        scale = min(640 / height, 640 / width)
+        new_h, new_w = int(height * scale), int(width * scale)
+        pad_x, pad_y = (640 - new_w) // 2, (640 - new_h) // 2
+        canvas = np.full((640, 640, 3), 114, dtype=np.uint8)
+        canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = cv2.resize(screen, (new_w, new_h))
+        blob = canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
+        rows = self._door_session.run(None, {self._door_input: blob})[0][0]
+        doors = []
+        for row in rows:
+            if len(row) < 6 or row[4] <= 0.35 or int(row[5]) != 0:
+                continue
+            box = [int((row[0] - pad_x) / scale), int((row[1] - pad_y) / scale),
+                   int((row[2] - pad_x) / scale), int((row[3] - pad_y) / scale)]
+            doors.append((float(row[4]), box))
+        return sorted(doors, reverse=True)
+
+    def has_door_prompt(self):
+        """走到门前会出现「随意门」交互提示。"""
+        x1, y1, x2, y2 = DOOR_PROMPT_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "随意门" in (self.ts.ocr_one_row(crop) or "")
+
     def combat_step(self):
         """状态机在 3D 场景里调一次：走一步或转一下视角。
 
@@ -679,8 +721,23 @@ class DivineTreasureKernel(ScriptKernel):
             # 视野里有怪：前进一小段再砍一刀。走和砍都在同一个状态机步骤里，不额外 sleep。
             self.walk()
             self.attack()
+            return
+        # 这一区没怪了（或本来就是非战斗区）→ 找随意门离开
+        if self.has_door_prompt():
+            CUS_LOGGER.debug("走到门前，按 F 进入随意门", extra={"flush": True})
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            return
+        doors = self.detect_doors()
+        if not doors:
+            self.turn_view(TURN_PIXELS)      # 视野里没有门就转视角找
+            return
+        score, (x1, y1, x2, y2) = doors[0]
+        offset = (x1 + x2) // 2 - 960
+        if abs(offset) > 120:
+            self.turn_view(int(offset * DOOR_TURN_GAIN))   # 门偏了先对准
         else:
-            self.turn_view(TURN_PIXELS)
+            self.walk()                                     # 对准了往前压
 
     def wait_and_click(self, text, timeout=8.0):
         """等某段文字出现再点它，超时返回 False。
@@ -874,7 +931,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "combat", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "combat", "door", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -963,6 +1020,11 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "door":
+            # 只验证「3D 里找门 → 走到门前 → 按 F」这一段
+            kernel.action_groups = ["dismiss", "combat"]
+            run_script(kernel, str(ACTION_SCRIPT))
+            return 0
         if args.stage == "combat":
             # 全程交给状态机：弹窗(dismiss) → 祝福(bless) → 3D 里走一步(combat) → 进战斗后开自动战斗并停
             kernel.action_groups = ["dismiss", "bless", "combat"]
