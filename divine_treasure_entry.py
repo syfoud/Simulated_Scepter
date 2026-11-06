@@ -20,6 +20,7 @@ import numpy as np
 from core.common.runtime import ScriptKernel
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
+from tool.public_ocr import merge_text
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tool" / "divine_treasure"))  # 面具/图鉴模块已归入子包；worker 子进程的 sys.path[0] 只有仓库根
@@ -549,12 +550,15 @@ class DivineTreasureKernel(ScriptKernel):
         return False
 
     def has_dismiss_screen(self):
-        """界面上是否有「点击空白处关闭」（通用通知）。"""
-        x1, y1, x2, y2 = (880, 990, 1020, 1025)
-        crop = self.get_screen()[y1:y2, x1:x2]
-        if crop.size == 0:
-            return False
-        return "空白" in (self.ts.ocr_one_row(crop) or "")
+        """界面上是否有「点击空白处关闭」（通用通知）。
+
+        全屏 OCR 而不是固定框：不同弹窗的提示位置能差一百多像素（面具获得在 y≈1000，
+        面具升级在 y≈890），固定框必漏。用本项目 7 个界面验证过——四个通知类全中，
+        3D 场景/战斗界面/祝福界面全不中。
+        """
+        self.ts.forward(self.get_screen())
+        items = self.ts.find_with_box([0, 0, 1920, 1080], redundancy=30)
+        return "空白处关闭" in merge_text(items)
 
     def wait_battle_end(self, timeout=180.0):
         """等战斗结束。
