@@ -94,6 +94,9 @@ DOOR_PROMPT_BOX = (1180, 580, 1320, 645)  # 走近门后的「随意门」提示
 DOOR_TURN_GAIN = 0.25                     # 门偏出中心时，转视角的位移比例
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
 COMBAT_STEP_LIMIT = 40   # 连续多少步没撞上怪就重置回出生点（配合 interval 约 80 秒）
+# 战斗型区域：这几种的链路完全一致（进入→找怪→进战斗→找门），共用 combat_step。
+# 其它区域（事件/商店/财富/奖励…）画面特征不同，不能让它走这里，否则会被"找门走人"跳过。
+COMBAT_AREAS = {"战斗", "精英", "首领", "转化"}
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
 
@@ -731,6 +734,12 @@ class DivineTreasureKernel(ScriptKernel):
         低配机器上状态机自己会慢下来，高配上一帧一步，不用给不同设备写不同等待。
         弹窗、祝福这些中间界面由 dismiss / bless 组先处理掉，走到这里说明确实是 3D 场景。
         """
+        # 只处理战斗型区域。左上角标签是「(N/20) 第X位面-类型」，类型读得到就按它分流：
+        # 「位面」这个触发词覆盖全部 19 种区域，不在这里拦一道的话，事件/商店这些
+        # 非战斗区域也会被当成「没怪 → 找门走人」直接跳过。
+        area = self.current_area_type()
+        if area and area not in COMBAT_AREAS:
+            return
         self._combat_steps += 1
         if self._combat_steps >= COMBAT_STEP_LIMIT:
             self._combat_steps = 0
