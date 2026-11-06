@@ -1193,8 +1193,9 @@ def main(default_stage="entry"):
             run_script(kernel, str(ACTION_SCRIPT))
             return 0
         if args.stage == "combat":
-            # 全程交给状态机：弹窗(dismiss) → 祝福(bless) → 3D 里走一步(combat) → 进战斗后开自动战斗并停
-            kernel.action_groups = ["dismiss", "bless", "combat"]
+            # 全程交给状态机：弹窗 → 祝福 → 3D 里走一步（战斗区走 combat，事件区走 event）
+            # 两个组都靠「位面」触发，靠各自 step 里的区域门禁分流。
+            kernel.action_groups = ["dismiss", "bless", "combat", "event"]
             run_script(kernel, str(ACTION_SCRIPT))
             return 0
         if args.stage == "bless":
