@@ -97,6 +97,17 @@ COMBAT_STEP_LIMIT = 40   # 连续多少步没撞上怪就重置回出生点（�
 # 战斗型区域：这几种的链路完全一致（进入→找怪→进战斗→找门），共用 combat_step。
 # 其它区域（事件/商店/财富/奖励…）画面特征不同，不能让它走这里，否则会被"找门走人"跳过。
 COMBAT_AREAS = {"战斗", "精英", "首领", "转化"}
+# ── 事件类区域（事件/奖励/异常/铸造/奇遇-铸造/奇遇-惊喜事件）──────────────
+# 链路一致：进入 → 找事件卡片 → 按 F 交互 → 内部连续点空白/选选项 → 退出 → 找门。
+# 交互完之前**门不会出现**，所以「有没有随意门」不能拿来判断事件做完没做完。
+EVENT_TITLE_BOX = (185, 940, 830, 1010)   # 事件内部左下角的标题（实测在大世界为空）
+EVENT_TITLE_MIN_LEN = 4                   # 标题至少这么长才算「确实在事件里」
+EVENT_FLOAT_TITLE_BOX = (600, 100, 1350, 260)   # 大世界里浮在卡片上方的标题
+EVENT_CHOICE_BOX = (1330, 690, 1850, 790)       # 事件内部的「选择」按钮
+EVENT_OPTION_BOX = (1300, 330, 1890, 800)       # 选项块区域
+EVENT_BLANK_POINT = (960, 300)                  # 推进文字时点的空白处
+# 事件类区域：链路一致（进入→找卡片→按 F→内部点空白/选选项→退出→找门）
+EVENT_AREAS = {"事件", "奖励", "异常", "铸造", "奇遇-铸造", "奇遇-惊喜事件"}
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
 
@@ -693,6 +704,102 @@ class DivineTreasureKernel(ScriptKernel):
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
         time.sleep(0.06)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+    def in_event_inner(self):
+        """是否在事件内部：左下角出现事件标题（大世界那里是空的）。
+
+        不用左上角——实测「差分宇宙/事件」那两行 OCR 极不稳（读成空或「品」）。
+        用左上角更不能用「当前不在事件界面」的反向判据，退出时会有中间态。
+        """
+        if self.in_3d_scene():
+            return False
+        x1, y1, x2, y2 = EVENT_TITLE_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        text = (self.ts.ocr_one_row(crop) or "").replace(" ", "")
+        return len(text) >= EVENT_TITLE_MIN_LEN
+
+    def has_event_prompt(self):
+        """走到事件卡片前会出现「事件」交互提示（和「随意门」同一个提示框）。"""
+        x1, y1, x2, y2 = DOOR_PROMPT_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "事件" in (self.ts.ocr_one_row(crop) or "")
+
+    def find_event_title(self):
+        """大世界里找浮在事件卡片上方的标题，返回 (x, y)；没有返回 None。
+
+        太远看不到、太近被卡片挡住，所以只在「中等距离」有效——这是靠近过程的中间态。
+        """
+        x1, y1, x2, y2 = EVENT_FLOAT_TITLE_BOX
+        best = None
+        for item in self.ts.res:
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if not (x1 < cx < x2 and y1 < cy < y2):
+                continue
+            if len(item["raw_text"].strip()) < 3:
+                continue
+            if best is None or cy < best[1]:
+                best = (cx, cy)
+        return best
+
+    def handle_event_inner(self):
+        """事件内部推进一步：有「选择」就点，有选项就选，都没有就点空白推进。"""
+        # 1) 选项已出：挑第一个含「开展/接受/挑战」之类主动词，否则选第一个
+        options = []
+        x1, y1, x2, y2 = EVENT_OPTION_BOX
+        for item in self.ts.res:
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if x1 < cx < x2 and y1 < cy < y2 and len(item["raw_text"].strip()) >= 3:
+                options.append((item["raw_text"], cx, cy))
+        # 选项块以「米/»」这类箭头打头，先过滤出真正的选项行
+        picked = [o for o in options if o[0].lstrip().startswith(("米", "»", ">"))]
+        if picked:
+            text, cx, cy = picked[0]
+            CUS_LOGGER.debug(f"事件选项：{text[:24]} → 选第一项", extra={"flush": True})
+            self.click_position((cx, cy))
+            key_mouse_manager.wait()
+            time.sleep(0.8)
+            return
+        # 2) 有「选择」按钮：点它进入选项
+        if self.click_text("选择"):
+            key_mouse_manager.wait()
+            time.sleep(0.8)
+            CUS_LOGGER.debug("事件内点「选择」", extra={"flush": True})
+            return
+        # 3) 都没有：点空白推进文字
+        self.click_position(EVENT_BLANK_POINT)
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+
+    def event_step(self):
+        """事件类区域的一步：在事件内部就推进，在大世界就找事件卡片靠近。"""
+        # 事件内部没有「位面」标签，门禁要放到最前面判断
+        if not self.in_event_inner():
+            area = self.current_area_type()
+            if area and area not in EVENT_AREAS:
+                return
+        if self.in_event_inner():
+            self.handle_event_inner()
+            return
+        if self.has_event_prompt():
+            CUS_LOGGER.debug("走到事件卡片前，按 F 进入", extra={"flush": True})
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            return
+        title = self.find_event_title()
+        if title is None:
+            self.turn_view(TURN_PIXELS)      # 视野里没有事件就转视角找
+            return
+        offset = int(title[0]) - 960
+        if abs(offset) > 120:
+            self.turn_view(int(offset * DOOR_TURN_GAIN))   # 偏了先对准
+        else:
+            self.walk()                                     # 对准了往前压
 
     def detect_doors(self):
         """用 YOLO 找门，返回 [(置信度, [x1, y1, x2, y2])]，坐标已换算回 1920x1080。

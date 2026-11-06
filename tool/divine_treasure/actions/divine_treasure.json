@@ -1,5 +1,21 @@
 [
   {
+    "name": "event",
+    "trigger": {
+      "text": "位面",
+      "box": [
+        50,
+        10,
+        320,
+        50
+      ],
+      "interval": 2
+    },
+    "actions": [
+      "event_step"
+    ]
+  },
+  {
     "name": "entry",
     "trigger": {
       "text": "欢愉假面",
