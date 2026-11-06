@@ -73,6 +73,22 @@ CHOICE_LOGO_POINT = (67, 67)
 # 找门用的 YOLO 模型（Ultralytics YOLO26n，类别只有 door / event）。
 # 输入 640x640 letterbox，输出 [1,300,6] 端到端框。
 DOOR_MODEL = str(ROOT / "resource" / "models" / "divergent.onnx")
+# 门的检测模型做成模块级单例：整局只加载一次，多个 Kernel 实例共用同一个会话。
+# 与 OCR 那边的 get_global_my_ts() 是同一套思路——别把会话挂在实例上，
+# 否则每 new 一个 Kernel 都要重新解析 4.8MB 模型。
+_door_session = None
+_door_input = None
+
+
+def get_door_session():
+    """懒加载门的检测模型，进程内只加载一次。"""
+    global _door_session, _door_input
+    if _door_session is None:
+        import onnxruntime as ort
+        _door_session = ort.InferenceSession(DOOR_MODEL, providers=["CPUExecutionProvider"])
+        _door_input = _door_session.get_inputs()[0].name
+        CUS_LOGGER.debug("门检测模型已加载：%s", Path(DOOR_MODEL).name, extra={"flush": True})
+    return _door_session, _door_input
 DOOR_PROMPT_BOX = (1180, 580, 1320, 645)  # 走近门后的「随意门」提示 [x1, y1, x2, y2]
 # 框不能放太大：实测 (1150,560)-(1400,670) 反而读成「→门」，带进了箭头干扰
 DOOR_TURN_GAIN = 0.25                     # 门偏出中心时，转视角的位移比例
@@ -681,10 +697,7 @@ class DivineTreasureKernel(ScriptKernel):
         模型只有 door / event 两类，只要 door。走 YOLO 而不是模板匹配：门在不同距离、
         不同角度下外观差别很大（远处一个小方块，走近占满屏幕），模板匹配扛不住。
         """
-        if not getattr(self, "_door_session", None):
-            import onnxruntime as ort
-            self._door_session = ort.InferenceSession(DOOR_MODEL, providers=["CPUExecutionProvider"])
-            self._door_input = self._door_session.get_inputs()[0].name
+        session, input_name = get_door_session()
         screen = self.get_screen()
         height, width = screen.shape[:2]
         scale = min(640 / height, 640 / width)
@@ -693,7 +706,7 @@ class DivineTreasureKernel(ScriptKernel):
         canvas = np.full((640, 640, 3), 114, dtype=np.uint8)
         canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = cv2.resize(screen, (new_w, new_h))
         blob = canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
-        rows = self._door_session.run(None, {self._door_input: blob})[0][0]
+        rows = session.run(None, {input_name: blob})[0][0]
         doors = []
         for row in rows:
             if len(row) < 6 or row[4] <= 0.35 or int(row[5]) != 0:
