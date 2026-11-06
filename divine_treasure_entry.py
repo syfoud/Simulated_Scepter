@@ -81,7 +81,10 @@ DOOR_TURN_GAIN = 0.25                     # 门偏出中心时，转视角的位
 # 时卡片会重排，按标题定位天然兼容。
 MIRACLE_TITLE_BOX = (200, 450, 1750, 600)  # 标题所在的横条，避免匹配到描述里的字
 MIRACLE_TITLE_KEYS = ("寻常奇迹", "罕见奇迹", "非凡奇迹")
-# 档位优先级：等问卷结果出来再按评分重排，先按星级降序
+# 每条普通奇迹的评分表（-2~2），由主人逐条打分生成；key 是卡面效果描述原文。
+# 描述文本是固定的（参数在解包里就定了），所以可以直接查表，比归纳关键词规则准得多。
+MIRACLE_SCORES = ROOT / "tool" / "divine_treasure" / "assets" / "miracle_scores.json"
+# 档位兜底：描述匹配不上时按星级排（问卷结论：档位越高平均分越高）
 MIRACLE_TIER_RANK = {"非凡奇迹": 0, "罕见奇迹": 1, "寻常奇迹": 2}
 MIRACLE_CLICK_OFFSET = 60                 # 点标题下方多少像素（落在卡面上）
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
@@ -702,18 +705,75 @@ class DivineTreasureKernel(ScriptKernel):
                 titles.append((key, int(cx), int(cy)))
         return titles
 
+    def load_miracle_scores(self):
+        """加载普通奇迹评分表（描述 → 分数）。"""
+        if getattr(self, "_miracle_scores", None) is None:
+            try:
+                data = json.loads(MIRACLE_SCORES.read_text(encoding="utf-8"))
+                self._miracle_scores = data.get("scores", {})
+            except (OSError, ValueError) as error:
+                CUS_LOGGER.warning(f"评分表读取失败，退回按档位选：{error}", extra={"flush": True})
+                self._miracle_scores = {}
+        return self._miracle_scores
+
+    def read_miracle_cards(self):
+        """读三张卡：(标题, 描述, x, y)。描述取标题下方、同一列的文字。"""
+        cards = []
+        for item in self.ts.res:
+            text = item["raw_text"]
+            key = next((k for k in MIRACLE_TITLE_KEYS if k in text), None)
+            if key is None:
+                continue
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if not (MIRACLE_TITLE_BOX[0] < cx < MIRACLE_TITLE_BOX[2]
+                    and MIRACLE_TITLE_BOX[1] < cy < MIRACLE_TITLE_BOX[3]):
+                continue
+            descs = []
+            for other in self.ts.res:
+                ob = other["box"]
+                ox, oy = (ob[0] + ob[2]) // 2, (ob[1] + ob[3]) // 2
+                if cy + 10 < oy < cy + 150 and abs(ox - cx) < 260:
+                    descs.append((oy, other["raw_text"]))
+            descs.sort()
+            cards.append({"title": key, "desc": "".join(d for _, d in descs),
+                          "x": int(cx), "y": int(cy)})
+        return sorted(cards, key=lambda c: c["x"])
+
+    def score_miracle(self, desc):
+        """查表给分；匹配不上用档位兜底（返回 None 表示要退回按档位选）。"""
+        scores = self.load_miracle_scores()
+        if desc in scores:
+            return scores[desc]
+        # OCR 可能带空格/标点差异，用去标点后的形式再找一次
+        pattern = re.compile(r"[\s，。、；：,.;:（）()【】\[\]「」]")
+        target = pattern.sub("", desc)
+        for text, value in scores.items():
+            if pattern.sub("", text) == target:
+                return value
+        return None
+
     def choose_miracle(self):
-        """选普通奇迹：按档位优先级挑一张，点标题正下方，再点确认。
+        """选普通奇迹：读三张卡的描述，查评分表挑分最高的，点标题正下方再确认。
 
         重随次数和惊世奇迹共用，要留到面具 8 级用，所以这边绝不点「重随」。
         """
-        titles = self.find_miracle_titles()
-        if not titles:
-            CUS_LOGGER.warning("没识别到奇迹标题，跳过本次选择", extra={"flush": True})
+        cards = self.read_miracle_cards()
+        if not cards:
+            CUS_LOGGER.warning("没识别到奇迹卡，跳过本次选择", extra={"flush": True})
             return
-        best = min(titles, key=lambda t: (MIRACLE_TIER_RANK.get(t[0], 99), t[1]))
-        CUS_LOGGER.debug(f"可选奇迹 {[(t[0], t[1]) for t in titles]} → 选 {best[0]}",
-                         extra={"flush": True})
+        scored = []
+        for card in cards:
+            value = self.score_miracle(card["desc"])
+            scored.append((value, MIRACLE_TIER_RANK.get(card["title"], 99), card))
+        known = [s for s in scored if s[0] is not None]
+        if known:
+            best = max(known, key=lambda s: (s[0], -s[1]))[2]
+            CUS_LOGGER.debug("可选奇迹：" + " | ".join(
+                f"{c['title']}{'' if v is None else f'({v:+d})'}" for v, _, c in scored), extra={"flush": True})
+        else:
+            best = min(scored, key=lambda s: (s[1], s[2]["x"]))[2]
+            CUS_LOGGER.debug(f"评分表没命中，按档位选 {best['title']}", extra={"flush": True})
         self.click_position((best[1], best[2] + MIRACLE_CLICK_OFFSET))
         key_mouse_manager.wait()
         time.sleep(0.5)
