@@ -56,6 +56,8 @@ AREA_TYPES = set(AREA_PRIORITY) | {"首领", "休整", "转化"}
 STATION_TYPE_Y = (650, 800)      # 卡片底部类型名的 y 范围
 STATION_REFRESH_BOX = (500, 880, 800, 940)   # 「重抽 N」[x1, y1, x2, y2]
 STATION_REFRESH_RESERVE = 3      # 重抽留底：剩这么多次就不再赌
+STATION_MASK_BOX = (40, 940, 320, 1000)   # 左下角当前面具名 [x1, y1, x2, y2]
+STATION_MERGE_MASK = "机铠"      # 只有机铠重抽时才「保留数量最多的区域类型」
 
 # ── 面具选择（「欢愉假面」页）──────────────────────────────────────────────
 # 优先级来自 214 题人工评分：本体分 + 专属奇迹均值×0.6 的综合排序，
@@ -339,6 +341,14 @@ class DivineTreasureKernel(ScriptKernel):
                 return int(match.group(1))
         return 0
 
+    def read_station_mask(self):
+        """读左下角的当前面具名；读不到返回空串。"""
+        x1, y1, x2, y2 = STATION_MASK_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return ""
+        return (self.ts.ocr_one_row(crop) or "").replace(" ", "")
+
     def station_rank(self, area_type):
         """区域优先级，越小越好。"""
         return AREA_PRIORITY.index(area_type) if area_type in AREA_PRIORITY else 99
@@ -366,9 +376,23 @@ class DivineTreasureKernel(ScriptKernel):
         else:
             events = [c for c in cards if c["type"] == "事件"]
             left = self.read_refresh_left()
+            mask_name = self.read_station_mask()
+            is_merge_mask = STATION_MERGE_MASK in mask_name
+            # 机铠重抽会保留数量最多的类型——手上已有 2 个以上事件时，事件就是那个
+            # 「最多」，重抽会朝它集中，凑成 4 个事件的把握比随机大得多，值得赌。
+            chase_merge = is_merge_mask and len(events) >= 2 and left > STATION_REFRESH_RESERVE
+            if chase_merge:
+                CUS_LOGGER.debug(
+                    f"机铠+{len(events)}个事件区域，重抽还剩 {left} 次，追事件合体",
+                    extra={"flush": True})
+                self.click_text("重抽")
+                key_mouse_manager.wait()
+                time.sleep(0.8)
+                return
             if events:
                 best = max(events, key=lambda c: c["level"])
-                CUS_LOGGER.debug(f"有事件区域，选等级 {best['level']} 那张", extra={"flush": True})
+                CUS_LOGGER.debug(f"有事件区域（{len(events)}个），选等级 {best['level']} 那张",
+                                 extra={"flush": True})
             elif left > STATION_REFRESH_RESERVE:
                 CUS_LOGGER.debug(f"没事件区域，重抽还剩 {left} 次，再抽一次", extra={"flush": True})
                 self.click_text("重抽")
