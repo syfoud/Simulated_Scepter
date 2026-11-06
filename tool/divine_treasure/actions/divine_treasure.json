@@ -173,7 +173,7 @@
   {
     "name": "combat",
     "trigger": {
-      "photo": "E:/Simulated_Scepter/Simulated_Scepter/tool/divine_treasure/assets/battle_flag.png",
+      "photo": "divine_battle_flag",
       "pos": {
         "x": 75,
         "y": 25
