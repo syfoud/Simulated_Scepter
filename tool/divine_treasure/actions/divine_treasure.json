@@ -223,22 +223,6 @@
     ]
   },
   {
-    "name": "miracle",
-    "trigger": {
-      "text": "选择你的奇迹",
-      "box": [
-        400,
-        100,
-        1100,
-        180
-      ],
-      "interval": 2
-    },
-    "actions": [
-      "choose_miracle"
-    ]
-  },
-  {
     "name": "bless",
     "trigger": {
       "text": "选择祝福",
