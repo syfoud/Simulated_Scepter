@@ -774,7 +774,7 @@ class DivineTreasureKernel(ScriptKernel):
         else:
             best = min(scored, key=lambda s: (s[1], s[2]["x"]))[2]
             CUS_LOGGER.debug(f"评分表没命中，按档位选 {best['title']}", extra={"flush": True})
-        self.click_position((best[1], best[2] + MIRACLE_CLICK_OFFSET))
+        self.click_position((best["x"], best["y"] + MIRACLE_CLICK_OFFSET))
         key_mouse_manager.wait()
         time.sleep(0.5)
         self.click_text("确认")
