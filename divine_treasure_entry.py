@@ -44,6 +44,19 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 
+# ── 选择下一站（抽卡选区域）────────────────────────────────────────────────
+# 卡片 3~5 张不固定，类型名在卡片底部固定横带里，所以按文字定位而不依赖坐标。
+# 排序来自主人（2026-11-06），越靠前越想要——刷神赐珍宝的核心是「事件」区域。
+AREA_PRIORITY = ["事件", "奇遇-宝箱", "奇遇-奇物合成", "奇遇-惊喜事件", "异常", "奖励",
+                 "财富", "商店", "奇遇-祝福", "奇遇-铸造", "冒险", "铸造", "精英", "战斗",
+                 "空白", "储蓄间"]
+# 固定格子：走到时只显示一张卡，不参与优先级比较（首领/休整/转化）
+AREA_FIXED = set()
+AREA_TYPES = set(AREA_PRIORITY) | {"首领", "休整", "转化"}
+STATION_TYPE_Y = (650, 800)      # 卡片底部类型名的 y 范围
+STATION_REFRESH_BOX = (500, 880, 800, 940)   # 「重抽 N」[x1, y1, x2, y2]
+STATION_REFRESH_RESERVE = 3      # 重抽留底：剩这么多次就不再赌
+
 # ── 面具选择（「欢愉假面」页）──────────────────────────────────────────────
 # 优先级来自 214 题人工评分：本体分 + 专属奇迹均值×0.6 的综合排序，
 # 依据见 canon/divine-treasure/_10-面具选择判据.md
@@ -268,6 +281,111 @@ class DivineTreasureKernel(ScriptKernel):
                 name = name.replace(alias, real)
         return name
 
+    def read_station_cards(self):
+        """读抽卡界面上的区域卡：[(类型, 等级, x, y)]，按 x 排序。"""
+        cards = []
+        y1, y2 = STATION_TYPE_Y
+        for item in self.ts.res:
+            text = item["raw_text"].strip()
+            if text not in AREA_TYPES:
+                continue
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if not (y1 < cy < y2):
+                continue
+            cards.append({"type": text, "level": self.read_card_level(cx, cy),
+                          "x": int(cx), "y": int(cy)})
+        return sorted(cards, key=lambda c: c["x"])
+
+    def read_card_level(self, cx, cy):
+        """读卡片等级：找 x 最接近、y 在卡片中上部的那条「等级 N」，取它右侧的数字。
+
+        固定在裁某个框里读不稳（不同卡片位置会偏），改成从整屏 OCR 结果里找「等级」二字，
+        再按它右边一块区域认数字。读不到按 1 处理，不影响选卡方向。
+        """
+        best = None
+        for item in self.ts.res:
+            if "等级" not in item["raw_text"]:
+                continue
+            box = item["box"]
+            lx, ly = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if not (cy - 90 < ly < cy):
+                continue
+            if best is None or abs(lx - cx) < abs(best[0] - cx):
+                best = (lx, ly, box)
+        if best is None:
+            return 1
+        _, _, box = best
+        # 数字比「等级」两个字高十几像素（字号大、底对齐），所以 y 要往上多留 28；
+        # 横向只取「等级」右侧 52 像素，再宽会把相邻的数字带进来读成 "21"。
+        crop = self.get_screen()[box[1] - 28:box[3] + 6, box[2]:box[2] + 52]
+        if crop.size == 0:
+            return 1
+        crop = cv2.resize(crop, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+        match = re.search(r"(\d)", (self.ts.ocr_one_row(crop) or "").replace(" ", ""))
+        return int(match.group(1)) if match else 1
+
+    def read_refresh_left(self):
+        """读「重抽 N」的剩余次数；按钮变灰（合体后）时读不到数字，返回 0。
+
+        直接从整屏 OCR 里找含「重抽」的那条——按钮位置固定但裁框容易偏，
+        OCR 已经把它当一整条文字认出来了。
+        """
+        for item in self.ts.res:
+            if "重抽" not in item["raw_text"]:
+                continue
+            match = re.search(r"(\d+)", item["raw_text"])
+            if match:
+                return int(match.group(1))
+        return 0
+
+    def station_rank(self, area_type):
+        """区域优先级，越小越好。"""
+        return AREA_PRIORITY.index(area_type) if area_type in AREA_PRIORITY else 99
+
+    def choose_station(self):
+        """选下一站：挑一张卡点掉，再点确定。
+
+        决策顺序：
+        1. 机铠合体（4 张同类型，重抽已禁用）→ 选等级最高那张
+        2. 有「事件」→ 直接选（等级最高），不浪费重抽
+        3. 没事件且重抽还有余量 → 搏一次（机铠靠这个凑合体，事件卡还不进弃牌堆）
+        4. 重抽见底或读不到 → 按优先级选最好的一张
+        """
+        cards = self.read_station_cards()
+        if not cards:
+            CUS_LOGGER.warning("没读到区域卡，跳过本次选择", extra={"flush": True})
+            return
+        types = [c["type"] for c in cards]
+        CUS_LOGGER.debug("站点卡：" + " | ".join(f"{c['type']}{c['level']}" for c in cards),
+                         extra={"flush": True})
+        if len(cards) >= 4 and len(set(types)) == 1:
+            best = max(cards, key=lambda c: c["level"])
+            CUS_LOGGER.debug(f"已合体（{best['type']}×{len(cards)}），选等级最高的 {best['level']}",
+                             extra={"flush": True})
+        else:
+            events = [c for c in cards if c["type"] == "事件"]
+            left = self.read_refresh_left()
+            if events:
+                best = max(events, key=lambda c: c["level"])
+                CUS_LOGGER.debug(f"有事件区域，选等级 {best['level']} 那张", extra={"flush": True})
+            elif left > STATION_REFRESH_RESERVE:
+                CUS_LOGGER.debug(f"没事件区域，重抽还剩 {left} 次，再抽一次", extra={"flush": True})
+                self.click_text("重抽")
+                key_mouse_manager.wait()
+                time.sleep(0.8)
+                return
+            else:
+                best = min(cards, key=lambda c: (self.station_rank(c["type"]), -c["level"]))
+                CUS_LOGGER.debug(f"重抽见底（{left}），按优先级选 {best['type']}{best['level']}",
+                                 extra={"flush": True})
+        self.click_position((best["x"], best["y"] - 100))   # 点类型名上方，落在卡面上
+        key_mouse_manager.wait()
+        time.sleep(0.5)
+        self.click_text("确定")
+        key_mouse_manager.wait()
+        time.sleep(1.0)
+
     def read_mask_detail(self):
         """读右侧详情面板的面具名。
 
@@ -444,7 +562,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "station", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -528,8 +646,10 @@ def main(default_stage="entry"):
     elif args.stage == "mask":
         # dismiss 放前面：选完面具会弹「点击空白处关闭」，先把它关掉才看得到下一界面
         kernel.action_groups = ["dismiss", "masks"]
+    elif args.stage == "station":
+        kernel.action_groups = ["dismiss", "station"]
     try:
-        if args.stage in ("entry", "team", "mask"):
+        if args.stage in ("entry", "team", "mask", "station"):
             run_script(kernel, str(ACTION_SCRIPT))
         if args.stage in ("masks", "opening"):
             from divine_treasure_masks import run
