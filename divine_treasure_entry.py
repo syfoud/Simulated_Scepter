@@ -44,6 +44,18 @@ DEFAULT_PROTOCOL = 4                  # 默认目标协议，可用 --protocol �
 # 对刷事件真正有用的是区域数量（N4 起已给足）。评估见 canon/divine-treasure/_02-乐园漫记玩法.md
 ACTION_SCRIPT = ROOT / "tool" / "divine_treasure" / "actions" / "divine_treasure.json"
 
+# ── 选择普通奇迹（「选择你的奇迹」，高级通用界面）────────────────────────
+# 每升一级都会弹，比惊世奇迹频繁得多。点「标题正下方」而不是固定坐标——只有 2 个奇迹
+# 时卡片会重排，按标题定位天然兼容。
+MIRACLE_TITLE_BOX = (200, 450, 1750, 600)  # 标题所在的横条，避免匹配到描述里的字
+MIRACLE_TITLE_KEYS = ("寻常奇迹", "罕见奇迹", "非凡奇迹")
+# 每条普通奇迹的评分表（-2~2），由主人逐条打分生成；key 是卡面效果描述原文。
+# 描述文本是固定的（参数在解包里就定了），所以可以直接查表，比归纳关键词规则准得多。
+MIRACLE_SCORES = ROOT / "tool" / "divine_treasure" / "assets" / "miracle_scores.json"
+# 档位兜底：描述匹配不上时按星级排（问卷结论：档位越高平均分越高）
+MIRACLE_TIER_RANK = {"非凡奇迹": 0, "罕见奇迹": 1, "寻常奇迹": 2}
+MIRACLE_CLICK_OFFSET = 60                 # 点标题下方多少像素（落在卡面上）
+
 # ── 面具选择（「欢愉假面」页）──────────────────────────────────────────────
 # 优先级来自 214 题人工评分：本体分 + 专属奇迹均值×0.6 的综合排序，
 # 依据见 canon/divine-treasure/_10-面具选择判据.md
@@ -288,6 +300,101 @@ class DivineTreasureKernel(ScriptKernel):
                 return rank
         return len(MASK_PRIORITY)
 
+    def find_miracle_titles(self):
+        """OCR 找出三张卡上的奇迹标题，返回 [(档位, x, y)]。
+
+        用 OCR 的 box 而不是固定坐标：只有 2 个奇迹时卡片会重排，按标题定位才稳。
+        注意 box 是 [x1, y1, x2, y2]，不是 [x1, x2, y1, y2]。
+        """
+        titles = []
+        bx1, by1, bx2, by2 = MIRACLE_TITLE_BOX
+        for item in self.ts.res:
+            text = item["raw_text"]
+            key = next((k for k in MIRACLE_TITLE_KEYS if k in text), None)
+            if key is None:
+                continue
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if bx1 < cx < bx2 and by1 < cy < by2:
+                titles.append((key, int(cx), int(cy)))
+        return titles
+
+    def load_miracle_scores(self):
+        """加载普通奇迹评分表（描述 → 分数）。"""
+        if getattr(self, "_miracle_scores", None) is None:
+            try:
+                data = json.loads(MIRACLE_SCORES.read_text(encoding="utf-8"))
+                self._miracle_scores = data.get("scores", {})
+            except (OSError, ValueError) as error:
+                CUS_LOGGER.warning(f"评分表读取失败，退回按档位选：{error}", extra={"flush": True})
+                self._miracle_scores = {}
+        return self._miracle_scores
+
+    def read_miracle_cards(self):
+        """读三张卡：(标题, 描述, x, y)。描述取标题下方、同一列的文字。"""
+        cards = []
+        for item in self.ts.res:
+            text = item["raw_text"]
+            key = next((k for k in MIRACLE_TITLE_KEYS if k in text), None)
+            if key is None:
+                continue
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if not (MIRACLE_TITLE_BOX[0] < cx < MIRACLE_TITLE_BOX[2]
+                    and MIRACLE_TITLE_BOX[1] < cy < MIRACLE_TITLE_BOX[3]):
+                continue
+            descs = []
+            for other in self.ts.res:
+                ob = other["box"]
+                ox, oy = (ob[0] + ob[2]) // 2, (ob[1] + ob[3]) // 2
+                if cy + 10 < oy < cy + 150 and abs(ox - cx) < 260:
+                    descs.append((oy, other["raw_text"]))
+            descs.sort()
+            cards.append({"title": key, "desc": "".join(d for _, d in descs),
+                          "x": int(cx), "y": int(cy)})
+        return sorted(cards, key=lambda c: c["x"])
+
+    def score_miracle(self, desc):
+        """查表给分；匹配不上用档位兜底（返回 None 表示要退回按档位选）。"""
+        scores = self.load_miracle_scores()
+        if desc in scores:
+            return scores[desc]
+        # OCR 可能带空格/标点差异，用去标点后的形式再找一次
+        pattern = re.compile(r"[\s，。、；：,.;:（）()【】\[\]「」]")
+        target = pattern.sub("", desc)
+        for text, value in scores.items():
+            if pattern.sub("", text) == target:
+                return value
+        return None
+
+    def choose_miracle(self):
+        """选普通奇迹：读三张卡的描述，查评分表挑分最高的，点标题正下方再确认。
+
+        重随次数和惊世奇迹共用，要留到面具 8 级用，所以这边绝不点「重随」。
+        """
+        cards = self.read_miracle_cards()
+        if not cards:
+            CUS_LOGGER.warning("没识别到奇迹卡，跳过本次选择", extra={"flush": True})
+            return
+        scored = []
+        for card in cards:
+            value = self.score_miracle(card["desc"])
+            scored.append((value, MIRACLE_TIER_RANK.get(card["title"], 99), card))
+        known = [s for s in scored if s[0] is not None]
+        if known:
+            best = max(known, key=lambda s: (s[0], -s[1]))[2]
+            CUS_LOGGER.debug("可选奇迹：" + " | ".join(
+                f"{c['title']}{'' if v is None else f'({v:+d})'}" for v, _, c in scored), extra={"flush": True})
+        else:
+            best = min(scored, key=lambda s: (s[1], s[2]["x"]))[2]
+            CUS_LOGGER.debug(f"评分表没命中，按档位选 {best['title']}", extra={"flush": True})
+        self.click_position((best["x"], best["y"] + MIRACLE_CLICK_OFFSET))
+        key_mouse_manager.wait()
+        time.sleep(0.5)
+        self.click_text("确认")
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+
     def read_mask_names(self):
         """一次裁三条名字条、放大 3 倍后识别，返回 [(归一化名字, 卡片序号)]。
 
@@ -444,7 +551,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "miracle", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -528,8 +635,10 @@ def main(default_stage="entry"):
     elif args.stage == "mask":
         # dismiss 放前面：选完面具会弹「点击空白处关闭」，先把它关掉才看得到下一界面
         kernel.action_groups = ["dismiss", "masks"]
+    elif args.stage == "miracle":
+        kernel.action_groups = ["dismiss", "miracle"]
     try:
-        if args.stage in ("entry", "team", "mask"):
+        if args.stage in ("entry", "team", "mask", "miracle"):
             run_script(kernel, str(ACTION_SCRIPT))
         if args.stage in ("masks", "opening"):
             from divine_treasure_masks import run
