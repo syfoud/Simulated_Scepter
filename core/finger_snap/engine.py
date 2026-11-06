@@ -26,8 +26,7 @@ from tool.countdown_evaluator import (
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
-from core.simulated.config import config
-from core.simulated.text_key import text_keys
+from core.any_fate.text_key import FATES, text_keys
 from tool.utils.analysis_map import (
     build_rightward_graph2,
     compute_start_point_from_crop,
@@ -47,10 +46,13 @@ from tool.utils.ocr_num import (
 class FingerSnap(AnyFateUniverse):
     """弹指一挥：丰饶命途专属，累计80倒计时以达成成就。"""
 
+    # 弹指用 count.txt 的第 2 行计数
+    count_line = 1
+
     def __init__(self):
         super().__init__()
         self.fate = "丰饶"
-        self.my_fate = config.fates.index(self.fate)
+        self.my_fate = FATES.index(self.fate)
         self.tk = text_keys(self.my_fate)
         self.countdown=15
         model_settings = load_finger_snap_settings()
@@ -94,41 +96,6 @@ class FingerSnap(AnyFateUniverse):
         self.recorder.stop_recording(need_del)
     def select_fate(self):
         key_mouse_manager.click_point(850, 798)
-    def update_count(self, read=True):
-        """
-        更新或读取弹指模块的计数器值（使用 count.txt 的第二行）
-        """
-        file_name = os.path.join(PATHS["backup"], "count.txt")
-        if read:
-            new_cnt = 0
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                    if len(lines) >= 2:
-                        try:
-                            new_cnt = int(lines[1].strip())
-                        except Exception:
-                            pass
-            else:
-                os.makedirs(PATHS["backup"], exist_ok=True)
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.write("0\n0\n")
-            self.count = new_cnt
-        else:
-            new_cnt = self.count + 1
-            lines = ["0\n", "0\n"]
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                    if len(lines) < 2:
-                        lines += ["0\n"] * (2 - len(lines))
-            lines[1] = str(new_cnt) + "\n"
-            try:
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.writelines(lines)
-                self.count = new_cnt
-            except Exception as e:
-                CUS_LOGGER.error(f"写入弹指计数失败 {e}")
     def end_of_university(self):
         # 本局的开始时间与用时必须在父类之前取：父类会把 run_start_time 重置为下一局的开始时间
         elapsed = int(time.time() - self.run_start_time)

@@ -1276,13 +1276,6 @@
                       </widget>
                      </item>
                      <item>
-                      <widget class="QCheckBox" name="recording_checkBox">
-                       <property name="text">
-                        <string>模拟宇宙视频录制</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
                       <widget class="QCheckBox" name="recording_checkBox2">
                        <property name="text">
                         <string>寰宇内核视频录制（铁血 / 命途 / 弹指）</string>

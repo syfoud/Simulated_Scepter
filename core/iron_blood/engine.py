@@ -10,8 +10,7 @@ from core.any_fate.engine import AnyFateUniverse
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
-from core.simulated.config import config
-from core.simulated.text_key import text_keys
+from core.any_fate.text_key import FATES, text_keys
 from tool.utils.Error import NoBossError, NoMatchError
 from tool.utils.analysis_map import evaluate_best_single_replacement
 from tool.utils.image_tool import find_image_by_name
@@ -24,6 +23,9 @@ from tool.utils.ocr_num import (
 class IronBloodUniverse(AnyFateUniverse):
     """铁血战士：毁灭命途专属，累计40击杀数以达成成就。"""
 
+    # 铁血用 count.txt 的第 1 行计数
+    count_line = 0
+
     def __init__(self):
         super().__init__()
         self.opt.update(load_module_settings(__file__))
@@ -35,7 +37,7 @@ class IronBloodUniverse(AnyFateUniverse):
         self.third_plane_pause_count = self.opt.get("third_plane_pause_count", 0)
         self.boss_before_pause_count = self.opt.get("boss_before_pause_count", 0)
         self.fate = "毁灭"
-        self.my_fate = config.fates.index(self.fate)
+        self.my_fate = FATES.index(self.fate)
         self.tk = text_keys(self.my_fate)
         self.expectation_weight = 0 # 地图路径期望
         # 保存开局期望。-5 表示本局还没走到开局节点图识别，直接开局的局会以这个值写入记录
@@ -118,42 +120,6 @@ class IronBloodUniverse(AnyFateUniverse):
                 CUS_LOGGER.info("无所谓，旅途本就会改变一个人。")
             self.stop()
             CUS_LOGGER.info("恭喜，您获得了铁血战士！")
-
-    def update_count(self, read=True):
-        """
-        更新或读取计数器值（铁血战士使用 count.txt 的第一行）
-        """
-        file_name = os.path.join(PATHS["backup"], "count.txt")
-        if read:
-            new_cnt = 0
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                    if lines:
-                        try:
-                            new_cnt = int(lines[0].strip())
-                        except Exception:
-                            pass
-            else:
-                os.makedirs(PATHS["backup"], exist_ok=True)
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.write("0\n0\n")
-            self.count = new_cnt
-        else:
-            new_cnt = self.count + 1
-            lines = ["0\n", "0\n"]
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                    if len(lines) < 2:
-                        lines += ["0\n"] * (2 - len(lines))
-            lines[0] = str(new_cnt) + "\n"
-            try:
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.writelines(lines)
-                self.count = new_cnt
-            except Exception as e:
-                CUS_LOGGER.error(f"写入铁血计数失败 {e}")
 
     def select_fate(self):
         key_mouse_manager.click_point(1292, 798)
@@ -257,7 +223,7 @@ class IronBloodUniverse(AnyFateUniverse):
         """
         planes = [(1, "一"), (2, "二"), (3, "三")]
         parts = []
-        
+
         # self.kill_count 已包含三面结算补上的 boss（如果有）
         final_kills = self.kill_count
 

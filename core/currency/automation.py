@@ -6,7 +6,6 @@ import cv2
 import numpy as np
 import pyautogui
 
-from core.currency.config import config
 from core.currency.investment_selection import choose_fallback_investment
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
@@ -138,9 +137,8 @@ class SimulatedCurrency(CurrencyUtils):
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
 
-    def __init__ (self, find, debug, speed, consumable, slow, nums = -1, bonus = False):
-        super ().__init__ (speed)
-        key_mouse_manager.set_config (config)
+    def __init__ (self, debug):
+        super ().__init__ ()
         # 设置屏幕参数以支持坐标转换
         key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
         # 普通位面选择、立即奖励和延迟奖励的状态
@@ -185,7 +183,6 @@ class SimulatedCurrency(CurrencyUtils):
             pyautogui.FAILSAFE = False
 
         CUS_LOGGER.debug (f"开始运行,初始计数：{self.count}")
-        self.last_interact_time = time.time ()
 
         # 首次运行时用默认配置补全游戏与脚本设置。
         load_settings()
@@ -233,7 +230,6 @@ class SimulatedCurrency(CurrencyUtils):
             cnt = 0
             focus_reclaim_wait = max(1, 2*load_settings().get("game_focus_reclaim_wait_seconds", 600))
             while Text != "崩坏：星穹铁道" and Text != "云·星穹铁道" and not self._stop:
-                self.last_interact_time = time.time ()
                 if self._stop:
                     raise NormalEndError
                 if not warn_game:

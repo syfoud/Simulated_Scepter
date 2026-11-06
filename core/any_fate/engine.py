@@ -8,17 +8,17 @@ import cv2 as cv
 import numpy as np
 
 from route import PATHS
-from tool.settings import load_settings
 from core.common.config import load_runtime_settings
+from core.common.runtime import set_forground, sprint
+from core.any_fate.utils import FateUtils
+from core.any_fate.text_key import FATES
+from tool.settings import load_settings
 from tool.storage import load_module_settings
 from tool.storage import resource_path
-from core.simulated.engine import SimulatedUniverse
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER, log_emitter
-from tool.mask import MASK
+from tool.mask import MASK, crop_region
 from tool.public_ocr import load_actions, merge_text
-from core.simulated.config import config
-from core.simulated.text_key import text_keys
 from tool.utils.analysis_map import (
     build_rightward_graph,
     compute_all_max_steps,
@@ -42,30 +42,34 @@ from tool.utils.ocr_num import (
     match_locked_roll_count_in_region,
     match_roll_count_in_region,
 )
-from tool.utils.tool import find_latest_modified_file
+from tool.utils.tool import find_latest_modified_file, get_center, get_dis
 from tool.window_recorder import WindowRecorder
 from tool.utils.ocr_num import match_skill_numbers_in_region
 from tool.silver_wolf_manager import SilverWolfManager
 
 
-class AnyFateUniverse(SimulatedUniverse):
+class AnyFateUniverse(FateUtils):
     """任意命途寰宇蝗灾：各命途通用的寻路、骰子、事件等公共流程。"""
 
     def __init__(self):
         self.opt = load_settings() | load_runtime_settings()
         self.opt.update(load_module_settings(__file__))
-        super().__init__(find=True,speed=False,consumable=False, slow=False,debug=self.opt.get("debug", True), nums=self.opt.get("max_run_time", 0))
         # 任意命途：从设置读取命途并重建祝福优先级
         fate = self.opt.get("any_fate", "巡猎")
-        if fate not in config.fates:
+        if fate not in FATES:
             CUS_LOGGER.warning(f"未知命途「{fate}」，已回退为巡猎")
             fate = "巡猎"
-        self.fate = fate
-        self.my_fate = config.fates.index(fate)
-        self.tk = text_keys(self.my_fate)
+        super().__init__(
+            fate=fate,
+            debug=self.opt.get("debug", True),
+            max_run_time=self.opt.get("max_run_time", 0),
+        )
         CUS_LOGGER.info(f"任意命途寰宇蝗灾已就绪，当前命途：{self.fate}")
         self.plane_floor = -1
         self.need_record = False
+        # 连续卡住计数的作用范围：同一局内同一张地图，换图或换区域时清零
+        self.fail_map = None
+        self.fail_area = ""
         self.record_event_map_enabled = bool(
             self.debug and self.opt.get("record_event_map", False)
         )
@@ -130,6 +134,7 @@ class AnyFateUniverse(SimulatedUniverse):
         self.silver_wolf_manager = SilverWolfManager(self)
         self.now_area=[]
         self.cheat_target = None  # 本次作弊要选的骰面效果名，由各模式在点「作弊」按钮前写入
+        self.last_interact_time = time.time() # 上次有效交互时间（移动、施法、交互等），用于判定是否暂离
         CUS_LOGGER.info("宇宙的中心有一团火种,它愈烧愈旺,直至燃尽整片星河。")
 
     def restart_recording(self):
@@ -146,43 +151,11 @@ class AnyFateUniverse(SimulatedUniverse):
         self.run_start_time = time.time()  # 开始下一局计时
         self.need_end=False
         self.silver_wolf_manager.silver_wolf_slot = None  # 重置银狼位置缓存
+        # 新一局重新统计连续卡住次数
+        self.fail_count = 0
+        self.fail_map = None
+        self.fail_area = ""
         self.init_map()
-
-    def update_count(self, read=True):
-        """
-        更新或读取计数器值（任意命途使用 count.txt 的第三行）
-        """
-        file_name = os.path.join(PATHS["backup"], "count.txt")
-        if read:
-            new_cnt = 0
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                    if len(lines) > 2:
-                        try:
-                            new_cnt = int(lines[2].strip())
-                        except Exception:
-                            pass
-            else:
-                os.makedirs(PATHS["backup"], exist_ok=True)
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.write("0\n0\n0\n")
-            self.count = new_cnt
-        else:
-            new_cnt = self.count + 1
-            lines = ["0\n", "0\n", "0\n"]
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                while len(lines) < 3:
-                    lines.append("0\n")
-            lines[2] = str(new_cnt) + "\n"
-            try:
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.writelines(lines)
-                self.count = new_cnt
-            except Exception as e:
-                CUS_LOGGER.error(f"写入任意命途计数失败 {e}")
 
     # 切换指定位置的角色
     def switch_current_role(self, num):
@@ -244,6 +217,10 @@ class AnyFateUniverse(SimulatedUniverse):
                     ocr_text = self.ts.find_with_box(box=[55, 12, 164, 40],forward=True,re_screen=False)
                     self.area=merge_text(ocr_text) if len(ocr_text) else ""
                     CUS_LOGGER.debug(f"当前区域{self.area}")
+                    # 进入新区域说明已经走出来，连续卡住次数重新开始
+                    if self.area != getattr(self, "fail_area", ""):
+                        self.fail_area = self.area
+                        self.fail_count = 0
                 # 当前节点为祝福扑满且非精英区域时，根据开关决定切人策略
                 pig = self.is_pig_node() and "战斗" in self.area
                 if pig:
@@ -356,19 +333,21 @@ class AnyFateUniverse(SimulatedUniverse):
                 self.update_state("ui")
                 self.init_map()
                 self.floor_init = 0
+                # 连续卡住只统计同一局、同一张地图：换图后从头计数
+                if self.now_map != getattr(self, "fail_map", None):
+                    self.fail_map = self.now_map
+                    self.fail_count = 0
+                if not self.need_end:
+                    self.fail_count += 1
+                    if self.fail_count >= 5:
+                        self.need_end = True
+                        CUS_LOGGER.error(f"地图{self.now_map}同一局内连续卡住 5 次，判定为无法修复的错误，提前结束本局并结算")
                 if self.need_end:
                     self.update_state("exit")
                     CUS_LOGGER.info(f"{factor}将跨越旧世界的余烬，不断燃烧……")
                     return 1
-                elif self.fail_count <= 1:
-                    CUS_LOGGER.error(f"地图{self.now_map}未发现目标,相似度{self.now_map_sim}，尝试暂离")
-                    CUS_LOGGER.info(f"纵使神火已经如此炽烈，以至于…每次回归起点的瞬间，它便会顷刻将{factor}烧尽…… ")
-                    self.fail_count += 1
-                else:
-                    CUS_LOGGER.error(f"地图{self.now_map}多次未发现目标,相似度{self.now_map_sim},尝试退出重进")
-                    CUS_LOGGER.info(f"但，所有人的的愿望…引领{factor}抵达轮回尽头")
-                    if self.debug == 0:
-                        self.fail_count = 0
+                CUS_LOGGER.error(f"地图{self.now_map}长时间无有效交互，尝试暂离")
+                CUS_LOGGER.info(f"纵使神火已经如此炽烈，以至于…每次回归起点的瞬间，它便会顷刻将{factor}烧尽…… ")
                 self.last_interact_time = time.time()
                 return 1
             return 2
@@ -699,9 +678,6 @@ class AnyFateUniverse(SimulatedUniverse):
         key_mouse_manager.click_point(1712, 971)
         if con:
             CUS_LOGGER.info("继续，燃烧下去。只要我们不曾熄灭……逐火就不会终结…")
-            return
-        else:
-            self.update_floor(1)
 
     def select_fate(self):
         self.click_text(text=self.fate, box=[159, 782, 1761, 816], allow_fail=True)
@@ -883,18 +859,12 @@ class AnyFateUniverse(SimulatedUniverse):
             # current_role 不一致时（例如 silver_wolf_manager 在秘技点
             # 耗尽时直接按 "1" 切回一号位，未经过 switch_current_role），
             # 以检测结果为准更新 current_role，使该属性始终反映实际状态。
-            center, details = compute_start_point_from_crop(
-                image, return_details=True, preferred_slot=self.current_role)
+            center, details = compute_start_point_from_crop(image, return_details=True, preferred_slot=self.current_role)
             if center is None:
-                center, details = compute_start_point_from_crop(
-                    image, th=0.7, return_details=True,
-                    preferred_slot=self.current_role)
+                center, details = compute_start_point_from_crop(image, th=0.7, return_details=True,preferred_slot=self.current_role)
             start = center
             if details is not None and details['slot'] != self.current_role:
-                CUS_LOGGER.debug(
-                    f"角色位与 current_role 不一致："
-                    f"current_role={self.current_role} 检测={details['slot']}，"
-                    f"同步为检测结果")
+                CUS_LOGGER.debug(f"角色位与 current_role 不一致：current_role={self.current_role} 检测={details['slot']}，同步为检测结果")
                 self.current_role = details['slot']
         elif mode==3:
             start = compute_start_point_from_crop(image,mode=mode)
@@ -1427,7 +1397,7 @@ class AnyFateUniverse(SimulatedUniverse):
         key_mouse_manager.press("esc")
 
     # 命途选项卡 →「确定」按钮的手量固定偏移：选项卡是固定尺寸的单行卡片（不折行），所以这个偏移一直准；
-    # 事件路径的「确定」贴在会折行的选项文本下方，两处不能共用一个偏移，见 SimulatedUniverse.confirm_point
+    # 事件路径的「确定」贴在会折行的选项文本下方，两处不能共用一个偏移，见 AnyFateUniverse.confirm_point
     def select_secret(self):
         # 点击优先级：对话条金色 ▼ →「选择」栏白色箭头 → 命途选项卡 → 都不在时点「秘闻」
         if self.check("arrow_dialog", mask=MASK["dialog"], fresh=True):
@@ -1463,7 +1433,76 @@ class AnyFateUniverse(SimulatedUniverse):
         return tuple(f"fate{i}" for i in range(1, 9))
 
     def select_event(self):
-        super().select_event()
+        """事件界面：先处理弹窗/推进图标/选项，选项处理完再记节点日志。"""
+        screen = self.get_screen()
+        if self.check("arrow_dialog", mask=MASK["dialog"]):
+            key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
+            return
+        for photo in ("arrow", "arrow_1", "shop_herta"):
+            if self.check(photo, mask=MASK["event_icon"]):
+                key_mouse_manager.click_point(self.tx, self.ty, box=self.tb)
+                return
+        # 若检测到切换到奇物商店或祝福强化界面：交给对应动作处理
+        label = self.event_ui_label(screen)
+        if any(skip in label for skip in ("商店", "奇物", "祝福", "强化")):
+            if getattr(self, "_skip_label_logged", None) != label:
+                self._skip_label_logged = label
+                CUS_LOGGER.debug(f"当前界面是「{label}」，交给它的动作处理")
+            return
+        self._skip_label_logged = None
+        # 选项图标（星号 ※）出现代表选项出现
+        rows = self.event_option_rows(names=self.option_icon_names())
+        if not rows:
+            # 选项区一个字都没有：选完选项正在进战斗、或玩家已经离开事件界面时
+            CUS_LOGGER.debug(
+                f"事件「{getattr(self, 'event', '') or '未知事件'}」选项列表区域没有识别到任何文本或已退出事件，本帧不点击"
+            )
+            if not getattr(self, "_option_icons", None) and getattr(self, "_nothing_logged", None) is not True:
+                # 金色▼、推进图标、标题、选项图标、选项文字全没认到
+                self._nothing_logged = True
+                CUS_LOGGER.info("「救世主」…在命运三相神谕的语境下，这张牌意味着谐调和完美无缺。")
+            # 已经离开选项界面：忘掉上一个事件的名字，下一个事件写日志时重新读
+            self.event = ""
+            self._option_shown_at = None
+            return
+        self._nothing_logged = None
+        if getattr(self, "_option_shown_at", None) is None:
+            # 面板上第一次认到选项：记下时刻，用来等它淡入完（见下面的兜底决定）
+            self._option_shown_at = time.time()
+        # 事件名只在写日志时才需要，交给 event_name_for_log 读
+        prior = self.click_event_prior("", rows)
+        if not prior:
+            # 第一遍只认主要图标，没命中优选项时再用 extra_option_icon_names() 补认一遍。
+            extra_names = self.extra_option_icon_names()
+            if extra_names:
+                all_rows = self.event_option_rows(names=self.option_icon_names() + tuple(extra_names))
+                if len(all_rows) > len(rows):
+                    rows = all_rows
+                    prior = self.click_event_prior("", rows)
+        if not prior:
+            # 事件名先读出来：下面不管是「先等面板淡入」还是兜底，日志里都要写事件名。
+            # 读到的名字会缓存进 self.event，本帧只读这一次，后面的帧直接用缓存。
+            event_name = self.event_name_for_log(screen)
+            if self._option_shown_at is not None and time.time() - self._option_shown_at < 1.5:
+                # 选项面板是淡入的：先出选项文字、后出选项图标，在这不到 1.5 s 的窗口里按兜底点会点错。
+                # 所以本帧先不决定，也不 sleep：直接返回，下一帧重新截图重新认，
+                # 那时图标已经正常显示，优选项自然就命中了。等满 1.5 s 还没命中才照旧走兜底。
+                CUS_LOGGER.debug(f"事件「{event_name}」选项面板刚出现（图标可能还在淡入），本帧不点击")
+                return
+            # 没有战斗的事件不存在优选项
+            CUS_LOGGER.debug(f"事件「{event_name}」没有匹配到优选项，将改选识别范围内的选项")
+            picked = self.pick_fallback_option(rows)
+            if picked is None or not self.click_event_option(event_name, picked):
+                # 认到了选项图标与选项文字，但兜底选项的点击点落在选项面板外
+                CUS_LOGGER.warning(f"事件「{event_name}」的兜底选项点击点不在选项面板内，本帧不点击")
+                return
+            self.confirm_event(event_name, self.confirm_point(picked))
+            return
+
+        if self.confirm_event(point=self.confirm_point(prior)):
+            return
+
+        # 节点日志：选项处理完落到这里才记录，避免选项还没点完就写日志
         if self.new_node:
             event_name = self.ts.find_with_box(box=[185, 953, 750, 1008], forward=True, re_screen=False)
             if any(isinstance(ev, dict) and "阮·梅" in ev.get("raw_text", "") and "其二" in ev.get("raw_text", "") for ev in event_name):
@@ -1601,6 +1640,731 @@ class AnyFateUniverse(SimulatedUniverse):
         # 此方法的调用点存在后续识图，统一在这里建立同步边界
         key_mouse_manager.wait()
         return True
+
+    def auto_battle(self):
+        # 需要打开自动战斗
+        key_mouse_manager.press("V")
+        if self.mini_state==3:
+            self.mini_state=5
+        if self.fate == "丰饶":
+            if random.randint(0, 6) == 3:
+                key_mouse_manager.press("R")
+        self.update_state("battle")
+        return 1
+
+    def do_interaction(self):
+        # is_killed：是否是禁用的交互（复活装置、下载装置）
+        is_killed = False
+        if self.check("interact", mask=MASK["interact_icon"], threshold=0.96, fresh=True):
+            for _ in range(4):
+                img = self.get_small_interaction_img(MASK["interact_text"])
+                text = self.ts.similar_list(self.tk.interacts, img)
+                if text is None:
+                    img = self.get_small_interaction_img(MASK["interact_text_2"])
+                    text = self.ts.similar_list(self.tk.interacts, img)
+                if text is not None:
+                    break
+                self.get_screen()
+            # 使用同一次交互文字裁片的结果识别黑塔。
+            if text == "黑塔" or self.ts.similar("黑塔"):
+                # 与黑塔交互后30秒内禁止再次交互
+                if time.time() - self.quit > 30:
+                    self.quit = time.time()
+                    key_mouse_manager.press("interact", force=True)
+                else:
+                    is_killed = 1
+            else:
+                if self.ts.similar("区域"):
+                    # tele：区域-xx  exit：离开模拟宇宙
+                    CUS_LOGGER.info("「众人将与一人离别，惟其人将觐见奇迹」")
+                    key_mouse_manager.press("interact", force=True)
+                    return self.nof()
+                is_killed = text in ["复活", "下载"]
+                if not is_killed:
+                    key_mouse_manager.press("interact", force=True)
+            if not is_killed:
+                return 1
+            else:
+                self.update_state("run")
+
+    def select_start_bless(self):
+        """选择开局奖励。
+
+        复用本帧整屏 OCR 的结果找包含目标名字的文本框，
+        点到该文本框中心；两个目标都没有时点中间。
+        """
+        # 正常流程里 run_static 已经做过整屏 OCR；缓存为空时补一次 OCR
+        if not self.ts.res:
+            self.ts.forward(self.get_screen())
+        for name in ("神奇宇宙", "巨胃宇宙"):
+            for res in self.ts.find_with_box(box=[511, 477, 1409, 519], redundancy=30):
+                if name not in res["raw_text"]:
+                    continue
+                box = res["box"]
+                key_mouse_manager.click_point(
+                    (box[0] + box[2]) / 2,
+                    (box[1] + box[3]) / 2,
+                    box=box,
+                )
+                key_mouse_manager.click_point(948, 965)
+                return
+        key_mouse_manager.click_point(960, 540)
+        key_mouse_manager.click_point(948, 965)
+
+    def click_event_option(self, event_name, row, from_prior=False):
+        """
+        点击一条选项（row 来自 event_option_rows），位置不在选项面板里就放弃。
+        与 click_text / click_box 一致，使用 OCR 返回的选项文本框中心作为点击点。
+        from_prior=True 表示优选项命中（正常路径）；
+        False 表示优选项都没命中、挑了一个识别到的选项兜底。
+        """
+        # 选项面板在右侧 [左, 上, 右, 下]（1920x1080 基准）：点击点必须落在里面才算点到了选项。
+        left, top, right, bottom = [1320, 110, 1850, 1010]
+        x = (row["box"][0] + row["box"][2]) / 2
+        y = (row["box"][1] + row["box"][3]) / 2
+        text = row["raw_text"]
+        # OCR 结果有时会把选项左侧星号识别成「米」字
+        if text.startswith("米"):
+            text = text[1:]
+        # 事件名只在出问题（越界、退而求其次）时才读：正常命中优选项的路径不读，省一次 OCR。
+        if not (left <= x <= right and top <= y <= bottom):
+            name = event_name or self.event_name_for_log(self.screen)
+            CUS_LOGGER.error(f"「{name}」选项「{text}」位置 ({x:.0f}, {y:.0f}) 不在选项列表区域内，放弃点击")
+            return False
+        if from_prior:
+            CUS_LOGGER.debug(f"点击优选项：「{text}」")
+        else:
+            name = event_name or self.event_name_for_log(self.screen)
+            CUS_LOGGER.warning(f"「{name}」选项列表里没有优选项命中，点击「{text}」")
+        key_mouse_manager.click_point(x, y, box=row["box"])
+        return True
+
+    def click_event_prior(self, event_name, rows):
+        """
+        在已识别到的选项行里找优选项并点击，命中返回被点的那个选项，没命中返回 None。
+        返回命中的选项是为了让调用方拿它的文本框算「确定」按钮的固定偏移。
+        """
+        for text in self.event_prior + [self.fate]:
+            for row in rows:
+                if text in row["raw_text"]:
+                    if self.click_event_option(event_name, row, from_prior=True):
+                        return row
+                    return None
+        return None
+
+    def pick_fallback_option(self, rows):
+        """优选项都不在时挑一条选项兜底：先按优选项优先级挑，都命中不了就取最长的那一行。"""
+        if not rows:
+            return None
+        for text in self.event_prior + [self.fate]:
+            for row in rows:
+                if text in row["raw_text"]:
+                    return row
+        return max(rows, key=lambda row: len(row["raw_text"].strip()))
+
+    def confirm_point(self, row):
+        """
+        按被点中那条选项的文字行，推算「确定」按钮中心的 1920x1080 像素坐标。
+        以选项文字行的底边当基准—，按钮贴在选中选项框的右下角。
+        """
+        bottom = max(line["box"][3] for line in row.get("lines") or [row])
+        # 76 是按钮中心在选项文字行底边下方的距离；x 取按钮中心固定的 1702。
+        return 1702, bottom + 76
+
+    def confirm_text_box(self):
+        """
+        在框内寻找「确定」文字，返回它的屏幕文本框 [x0,y0,x1,y1]，没有返回 None。
+        find_with_box(forward=1, re_screen=True) 会重新截一帧、只对这条竖条进行 OCR。
+        """
+        box = [1590, 240, 1830, 1070]
+        for res in self.ts.find_with_box(box=box, forward=True, re_screen=True):
+            if isinstance(res, dict) and "确定" in res.get("raw_text", ""):
+                return list(res["box"])
+        return None
+
+    def click_confirm_text(self, box):
+        """点按钮文字框的中心（「确定」「确认」共用，与 click_text 一致，用 1920x1080 像素坐标）。"""
+        center_x = (box[0] + box[2]) / 2
+        center_y = (box[1] + box[3]) / 2
+        key_mouse_manager.click_point(center_x, center_y, box=box)
+
+    def confirm_event(self, event_name=None, point=None, timeout=1.5):
+        """
+        点掉选项框右下角浮出的「确定」按钮，事件才会真的往下走；优选项命中和兜底共用。
+        point 是固定偏移算出来的按钮位置（confirm_point 的 1920x1080 像素坐标）：选项点中后按钮必然
+        出现，先直接点这一下（不用识别，省一次 OCR）；点完再 OCR 复核一次——按钮文字还在就说明
+        固定偏移没点中，按文字位置补点。point=None（拿不到选项框）时退回纯文字轮询。
+        """
+        key_mouse_manager.wait()
+        if point is not None:
+            key_mouse_manager.click_point(*point)
+            time.sleep(0.2)  # 等游戏把「确定」按钮收掉，再复核它是不是真被点掉了
+            box = self.confirm_text_box()
+            if box is None:
+                self._option_shown_at = None
+                return True
+            name = event_name or self.event_name_for_log(getattr(self, "screen", None))
+            CUS_LOGGER.warning(f"事件「{name}」按固定偏移没点中「确定」，按文字识别的位置补点")
+            self.click_confirm_text(box)
+            self._option_shown_at = None
+            return True
+        tm = time.time()
+        while time.time() - tm < timeout:
+            box = self.confirm_text_box()
+            if box is not None:
+                CUS_LOGGER.debug("选项已选中，点击「确定」推进事件")
+                self.click_confirm_text(box)
+                self._option_shown_at = None
+                return True
+        return False
+
+    def event_ui_label(self, img=None):
+        """读左上角界面标题栏的文字（「事件」/「奇物商店」/「祝福强化」），读不到返回空串。"""
+        if img is None:
+            img = self.get_screen()
+        if img is None:
+            return ""
+        try:
+            return self.ts.ocr_one_row(img, [93, 50, 230, 100]) or ""
+        except Exception as e:
+            CUS_LOGGER.warning(f"界面标题识别失败：{e}")
+            return ""
+
+    def event_name_for_log(self, screen=None):
+        """
+        读取并缓存当前事件名，供日志使用；读不到时返回「未知事件」。
+
+        事件名只在写日志时才有用，所以这里才去 OCR，且每次事件最多读一次
+        （读到的存进 self.event 复用）。离开选项界面（选项区一个字都读不到）时
+        会把 self.event 清空，下一个事件重新读。
+        """
+        if not getattr(self, "event", ""):
+            if screen is None:
+                screen = self.get_screen()
+            if screen is not None:
+                try:
+                    name = self.ts.ocr_one_row(screen, [190, 960, 800, 1000])
+                except Exception as e:  # OCR 失败不该拖垮事件流程，退回空串
+                    CUS_LOGGER.warning(f"事件名识别失败：{e}")
+                    name = ""
+                if name:
+                    name = name.strip().replace("事件", "").replace("秘闻", "").replace("修改", "")
+                    name = name.strip(" 　，,。.、·:：；;！!？?「」『』[]()（）")
+                    if len(name) > 1:
+                        self.event = name
+        return getattr(self, "event", "") or "未知事件"
+
+    def option_icon_names(self):
+        """
+        第一遍要匹配的选项图标模板名。模拟宇宙的选项图标只有星号（※）。
+        个别事件会给某个选项配别的图标，那种内核自己补。
+        """
+        return ("star",)
+
+    def event_option_icons(self, names=None):
+        """
+        找出图标列里**所有**选项图标的中心，返回[{"x","y","score","icon"}]（屏幕坐标，按 y 排序，icon 是模板名）
+        check() 只能拿到全局最高分的一个位置：一帧里有 3~5 条选项时只有最靠上的那个图标会被认出来。
+        图标既是「选项出现了」的标志，也是每条选项横条的锚点，所以这里自己做多目标匹配，
+        与 check() 完全同一个搜索区域（MASK["event_icon"]），逐个模板取所有 > 0.95 的峰值，12 px 内只留最高的那个。
+        names：要匹配的图标模板名，默认就是 option_icon_names() 那一遍；补认的模板由
+        extra_option_icon_names() 给出，只有第一遍没命中优选项时才会走到（见 select_event）。
+        一个星号都没有说明这一帧不是选项界面，补认的模板那时也不匹配。
+        """
+        names = self.option_icon_names() if names is None else tuple(names)
+        region = MASK["event_icon"]
+        local = crop_region(self.screen, region)
+        left, top = region[0], region[1]
+        icons = []
+        for name in names:
+            if name != "star" and "star" in names and not icons:
+                # 一个星号都没认到：这一帧不是选项界面，补认的模板不再匹配。
+                break
+            target = find_image_by_name(name)
+            if target is None:
+                continue
+            target = cv.resize(
+                target,
+                dsize=(int(self.scx * target.shape[1]), int(self.scx * target.shape[0])),
+            )
+            result = cv.matchTemplate(local, target, cv.TM_CCORR_NORMED)
+            ys, xs = np.where(result > 0.95)
+            for score, px, py in sorted(
+                (
+                    (float(result[py, px]), int(px), int(py))
+                    for py, px in zip(ys.tolist(), xs.tolist())
+                ),
+                reverse=True,
+            ):
+                center_x = left + px + target.shape[1] / 2
+                center_y = top + py + target.shape[0] / 2
+                if any(
+                    abs(center_x - icon["x"]) <= 12 and abs(center_y - icon["y"]) <= 12
+                    for icon in icons
+                ):
+                    continue
+                icons.append({"x": center_x, "y": center_y, "score": score, "icon": name})
+        icons.sort(key=lambda icon: icon["y"])
+        # 记下这一帧认到的图标：select_event 用「一个图标都没有」判断这一帧是不是什么都没识别到，
+        # 免得为了写那条 warning 再匹配一次。
+        self._option_icons = icons
+        return icons
+
+    def drop_disabled_options(self, rows):
+        """
+        丢掉置灰（当前不可用）的选项行，只留正常亮度的选项。
+
+        游戏用置灰表示选项此刻不可用，所以它不能进入优选项匹配和兜底候选，否则会永久卡在事件界面。
+        亮度取每个选项标题文字框里最亮的通道值（V = max(R,G,B)）：标题笔画很细，均值会被
+        大片深色背景稀释；按通道峰值而不是灰度，金色等彩色标题也不会被误判成置灰。
+        一帧里所有选项一样亮（面板淡入、或本来就只认到一条）时全部保留。
+
+        Args:
+            rows: event_option_rows 识别出的选项行，每行含 "box"（标题文字的屏幕框）与 "raw_text"。
+
+        Returns:
+            亮度达标的选项行，顺序不变；整帧没有亮度信息（全黑）时原样返回。
+        """
+        if not rows:
+            return rows
+        h, w = self.screen.shape[:2]
+        brightness = []
+        for row in rows:
+            x1, x2 = max(int(row["box"][0]), 0), min(int(row["box"][2]), w)
+            y1, y2 = max(int(row["box"][1]), 0), min(int(row["box"][3]), h)
+            patch = self.screen[y1:y2, x1:x2]
+            brightness.append(int(patch.max()) if patch.size else 0)
+        top = max(brightness)
+        if top == 0:
+            # 整帧全黑说明没有亮度信息可比较（例如测试里的空白画面），此时不做取舍。
+            return rows
+        kept = [row for row, value in zip(rows, brightness) if value * 5 >= top * 3]
+        dropped = [row for row, value in zip(rows, brightness) if value * 5 < top * 3]
+        if dropped:
+            CUS_LOGGER.debug(
+                "跳过不可用（置灰）的选项：" + "、".join(row["raw_text"] for row in dropped)
+            )
+        return kept
+
+    def event_option_rows(self, fresh=False, names=None):
+        """
+        按每条选项左侧的图标（模拟宇宙里就是星号 ※）只 OCR 它右侧的横条，返回识别到且可点的选项行。
+        每行 = {"raw_text": 选项文字, "box": 选项文字行的屏幕框,
+        "lines": 这一条读到的全部文字行, "icon": 图标位置}。
+        选项文字一定在图标右侧，所以只认与图标同一行的选项文字。
+        左边包含 ※ 在内：正屏 OCR 会把 ※ 和选项文字并进同一个文本框，
+        横条左缘必须容得下它，否则 box_contain 过滤不出来。
+        置灰（不能点）的选项在这里就被丢掉，所以调用方拿到的都是能点出反应的选项。
+        names：交给 event_option_icons 的图标模板名，默认 option_icon_names() 那一遍。
+        """
+        panel_right = 1850
+        rows = []
+        for icon in self.event_option_icons(names):
+            band = [
+                int(icon["x"] - 30),
+                int(icon["y"] - 30),
+                panel_right,
+                int(icon["y"] + 20),
+            ]
+            lines = [
+                res
+                for res in self.ts.find_with_box(box=band, forward=fresh, re_screen=fresh)
+                if isinstance(res, dict)
+                and len(res.get("raw_text", "").strip()) > 1
+                and "UID" not in res.get("raw_text", "")
+                and "确定" not in res.get("raw_text", "")
+            ]
+            if not lines:
+                continue
+            lines.sort(key=lambda res: res["box"][1])
+            row = dict(lines[0])  # 第一行才是选项文字，下面是说明文字
+            row["lines"] = lines
+            row["icon"] = icon
+            rows.append(row)
+        rows.sort(key=lambda row: row["box"][1])
+        return self.drop_disabled_options(rows)
+
+    def drop_strange(self):
+        key_mouse_manager.click_point(1015, 486)
+        key_mouse_manager.click_point(1663, 969)
+        self.wait_flag(lambda: self.click_text(text="丢弃奇物",box=[10, 0, 220, 112],click=False,ocr_line=False,warning=False), 1.4)
+
+    def drop_bless(self):
+        st = set(self.tk.fates) - set(self.tk.secondary)
+        clicked = 0
+        for i, ft in enumerate(self.tk.secondary[::-1]):
+            if ft != self.fate or i == len(self.tk.secondary):
+                img_down = self.get_small_interaction_img(MASK["bless_path"], fresh=True)
+                if self.debug == 2:
+                    CUS_LOGGER.debug(f"St: {list(st)}, Secondary: {self.tk.secondary}")
+                res_down = self.ts.split_and_find(list(st), img_down, mode="bless")
+                if res_down[1] == 2:
+                    key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
+                    clicked = 1
+                    break
+                st.add(ft)
+        if not clicked:
+            key_mouse_manager.click_point(1015, 486)
+        key_mouse_manager.click_point(1689, 962)
+
+    def enhance(self):
+        self.quit = time.time()
+        for i in [None, (387, 343), (603, 343)]:
+            if self.check("enhance_fail",1715,982, fresh=True):
+                break
+            if i is not None:
+                key_mouse_manager.click_point(i[0], i[1])
+            key_mouse_manager.click_point(1711, 980)
+            tm = time.time()
+            while not self.click_text(text="祝福强化",box=[70, 9, 236, 125],click=False,ocr_line=False,warning=False) and time.time() - tm < 7:
+                key_mouse_manager.click_point(1524, 858)
+        key_mouse_manager.press("esc")
+
+    def confirm_yes(self):
+        """
+        点掉弹窗上的「确认」按钮。点击位置只取这一帧 OCR 到的「确认」文字块。
+        这一帧没认到就不点，等下一帧重新识别。
+        """
+        # 若处于作弊界面，则不点「确认」
+        if self.click_text(text="作弊", box=[923, 230, 996, 270], click=False, allow_fail=True):
+            CUS_LOGGER.debug("当前处于作弊选项窗，跳过点击「确认」")
+            return 0
+        # 在弹窗中找「确认」按钮的文字框 [左,上,右,下]; re_screen=True 让这里每次独立截一帧。
+        rows = [
+            row for row in self.ts.find_with_box(box=[232, 154, 1690, 928], forward=True, re_screen=True)
+            if isinstance(row, dict) and "确认" in (row.get("raw_text") or "")
+        ]
+        # 弹窗标题里也可能带「确认」（如「确认丢弃祝福「X」？」），按钮永远在标题下方，所以取最靠下的那一块文字。
+        box = list(max(rows, key=lambda row: row["box"][3])["box"]) if rows else None
+        if box is None:
+            CUS_LOGGER.warning("没识别到弹窗的「确认」文字，等下一帧重试")
+            return 0
+        self.click_confirm_text(box)
+        key_mouse_manager.wait()
+        return 0
+
+    def del_pt(self, img, A, S, f):
+        """
+        递归删除图像中的连接点
+
+        该函数通过递归方式删除图像中与起始点相连的像素点，用于清理图像中的特定区域。
+        删除条件包括超出边界、像素值为黑色、不满足特定函数条件且距离起始点较远等情况。
+
+        参数:
+            img: 图像数组，要处理的图像数据
+            A: tuple，当前处理的像素点坐标 (row, col)
+            S: tuple，起始点坐标 (row, col)
+            f: function，判断像素点是否符合条件的函数
+
+        返回值:
+            无返回值
+        """
+        if (
+            A[0] < 0
+            or A[1] < 0
+            or A[0] >= img.shape[0]
+            or A[1] >= img.shape[1]
+            or (img[A] == [0, 0, 0]).all()
+            or (not f(img[A]) and get_dis(A, S) > 5)
+            or get_dis(A, S) > 10
+        ):
+            return
+        else:
+            img[A] = [0, 0, 0]
+        for dx, dy in [(0, -1), (0, 1), (1, 0), (-1, 0)]:
+            self.del_pt(img, (A[0] + dx, A[1] + dy), S, f)
+
+    def get_target(self, pth, x, y, target_mode="battle"):
+        """根据地图获取目标路径点位及类型。"""
+        img = cv.imread(pth)
+        res = set()
+        f_set = [
+            lambda p: p[2] < 85 and p[1] < 85 and p[0] > 180,  # path, blue
+            lambda p: p[2] > 180 and p[1] < 70 and p[0] < 70,  # enemy, red
+        ]
+        if target_mode == "battle":
+            f_set += [
+                lambda p: p[2] < 90 and p[1] > 220 and p[0] < 90,  # interaction, green
+                lambda p: p[2] > 180 and p[1] > 180 and p[0] < 70,  # end, yellow
+            ]
+        elif target_mode == "special":
+            f_set += [
+                # JPEG compression shifts the annotated yellow-green
+                # (roughly RGB 181, 230, 29), hence the deliberately bounded
+                # red channel. Pure green is the generated start marker and
+                # pure yellow remains the end marker.
+                lambda p: 120 < p[2] < 230 and p[1] > 180 and p[0] < 90,
+                lambda p: p[2] >= 230 and p[1] > 180 and p[0] < 70,
+            ]
+        else:
+            raise ValueError(f"unknown target map mode: {target_mode}")
+        for i in range(img.shape[0]):
+            for j in range(img.shape[1]):
+                for k in range(4):
+                    if f_set[k](img[i, j]):
+                        p = get_center(img, i, j)
+                        #记录坐标，类型，坐标取整
+                        # CUS_LOGGER.debug(f"原始位置{(i,j)}，加权位置{p},类型{k}")
+                        nep=tuple(re_get_position((p[1]+x,p[0]+y),re=True))
+                        # CUS_LOGGER.debug(f"映射坐标{nep}")
+                        res.add((nep, k))
+                        p = (int(p[0]), int(p[1]))
+                        #引用传递，会影响img源图像
+                        self.del_pt(img, p, p, f_set[k])
+                        if k == 3:
+                            #记录终点
+                            self.last = p
+
+        # 聚类合并相近点
+        if len(res) > 1:
+            # 按类型分组
+            groups = {}
+            for p in res:
+                groups.setdefault(p[1], []).append(p)
+
+            # 对每组进行距离聚类
+            merged = []
+            for pts in groups.values():
+                if len(pts) <= 1:
+                    merged.extend(pts)
+                    continue
+
+                # 聚类逻辑
+                used, clusters = set(), []
+                for i, p1 in enumerate(pts):
+                    if i in used:
+                        continue
+                    cluster = [p1]
+                    used.add(i)
+                    for j, p2 in enumerate(pts[i+1:], i+1):
+                        if j not in used and get_dis(p1[0], p2[0]) < 5:
+                            cluster.append(p2)
+                            used.add(j)
+                    clusters.append(cluster)
+
+                # 选择代表点
+                for c in clusters:
+                    rep = min(c, key=lambda x: get_dis(x[0], self.last)) if hasattr(self, 'last') else c[0]
+                    merged.append(rep)
+            CUS_LOGGER.debug(f"聚类合并: {len(res)}-> {len(merged)}")
+            res = set(merged)
+        return res
+
+    def show_map(self):
+        """
+        实时显示模拟宇宙地图的可视化窗口
+
+        该方法在一个独立线程中运行，创建一个OpenCV窗口用于显示当前游戏地图，
+        并实时更新玩家位置、目标位置和朝向等信息。主要包括以下功能：
+        1. 创建可缩放且不自动聚焦的OpenCV窗口
+        2. 监控角色位置、目标位置和朝向等状态变化，仅在有更新时重绘地图
+        3. 在地图上绘制当前位置（绿色）、目标位置（根据类型着色）及朝向箭头
+        4. 显示当前角度和目标坐标，并通过颜色变化提示角度更新时间
+        5. 放大地图图像并维持合理刷新率，按'q'键退出
+
+        注意：该方法应在单独的线程中调用，不应直接调用
+        """
+        try:
+            # 创建窗口时使用 WINDOW_FREERATIO 标志以避免自动获取焦点
+            cv.namedWindow("Map", cv.WINDOW_FREERATIO | cv.WINDOW_NORMAL)
+            # 设置窗口初始大小
+            win_width, win_height = 600, 600
+            cv.resizeWindow("Map", win_width, win_height)
+            cv.startWindowThread()
+            set_forground()
+            # 缓存上一次的状态，避免不必要的重绘
+            last_real_loc = None
+            last_target_loc = None
+            last_target_type = None
+            last_ang = None
+
+            while not self._stop:
+                if self.debug_map is not None:
+                    pass
+                elif self.big_map is None or self.now_loc is None or self.target_loc is None :
+                    # 使用cv.pollKey()替代cv.waitKey()以避免阻塞
+                    key = cv.pollKey()
+                    if key == ord('q'):
+                        break
+                    time.sleep(0.1)  # 短暂休眠避免CPU占用过高
+                    continue
+
+                # 检查是否有变化，如果没有变化则跳过更新
+                current_now_loc = self.now_loc
+                current_target_loc = self.target_loc
+                current_target_type = self.target_type
+                current_ang = self.ang
+
+                # 如果没有重要变化，则短暂等待后继续
+                if (last_real_loc == current_now_loc and
+                    last_target_loc == current_target_loc and
+                    last_target_type == current_target_type and
+                    last_ang == current_ang):
+                    # 使用cv.pollKey()替代cv.waitKey()以避免阻塞
+                    key = cv.pollKey()
+                    if key == ord('q'):
+                        break
+                    time.sleep(0.1)  # 短暂休眠避免CPU占用过高
+                    continue
+
+                # 更新缓存值
+                last_real_loc = current_now_loc
+                last_target_loc = current_target_loc
+                last_target_type = current_target_type
+                last_ang = current_ang
+                # 只在需要时才拷贝图像
+                if self.debug_map is not None:
+                    updated_image = self.debug_map.copy()
+                else:
+                    updated_image = self.pos_predictor.draw_position_on_map(show=False)
+                    current_target_loc = re_get_position(current_target_loc)
+                    current_now_loc = re_get_position(current_now_loc)
+                # 初始化坐标偏移量
+                x_offset = 0
+                y_offset = 0
+                # 检查是否存在tmp地图，如果有则与原始地图拼接
+                if self.pos_map is not None:
+                    tmp_colored = self.pos_map.copy()
+                    # 调整图像尺寸以匹配垂直拼接的宽度
+                    max_width = max(updated_image.shape[1], tmp_colored.shape[1])
+                    # 调整两个图像的宽度以匹配最大宽度
+                    if updated_image.shape[1] < max_width:
+                        # 为updated_image添加右侧填充
+                        width_diff = max_width - updated_image.shape[1]
+                        left_pad = width_diff // 2
+                        right_pad = width_diff - left_pad
+                        updated_image = np.pad(updated_image, ((0, 0), (left_pad, right_pad), (0, 0)), mode='constant', constant_values=0)
+                        x_offset = left_pad  # 更新x方向偏移量
+
+                    elif tmp_colored.shape[1] < max_width:
+                        # 对updated_image进行resize以匹配tmp_colored的宽度
+                        scale_factor = tmp_colored.shape[1] / updated_image.shape[1]
+                        new_height = int(updated_image.shape[0] * scale_factor)
+                        updated_image = cv.resize(updated_image, (tmp_colored.shape[1], new_height), interpolation=cv.INTER_AREA)
+                        max_width = tmp_colored.shape[1]  # 更新max_width为tmp_colored的宽度
+                    top_spacing = 10
+                    top_spacing_img = np.zeros((top_spacing, max_width, 3), dtype=np.uint8)
+                    y_offset = top_spacing
+                    middle_spacing = 10
+                    middle_spacing_img = np.zeros((middle_spacing, max_width, 3), dtype=np.uint8)
+                    # 垂直拼接：上方间距 + 小地图 + 中间间距 + 大地图
+                    updated_image = np.vstack((top_spacing_img, tmp_colored, middle_spacing_img,updated_image ))
+                else:
+                    top_spacing = 10
+                    top_spacing_img = np.zeros((top_spacing, updated_image.shape[1], 3), dtype=np.uint8)
+                    down_spacing = max(0,3*updated_image.shape[1]-updated_image.shape[0])
+                    if self.debug_map is None:
+                        down_spacing_img = np.zeros((down_spacing, updated_image.shape[1], 3), dtype=np.uint8)
+                        updated_image = np.vstack((top_spacing_img,updated_image,down_spacing_img))
+
+                # 确保坐标值为整数类型，避免切片索引错误
+                real_x, real_y = current_now_loc
+                real_x = int(real_x + x_offset -self.upx)
+                real_y = int(real_y + y_offset-self.upy)
+                # 绘制当前位置（绿色）
+                for dx in range(-2, 3):
+                    for dy in range(-2, 3):
+                        if (0 <= real_y + dy < updated_image.shape[0] and
+                            0 <= real_x + dx < updated_image.shape[1]):
+                            updated_image[real_y + dy, real_x + dx] = [49, 140, 49]
+                if current_target_loc is not None:
+                    target_x, target_y = current_target_loc
+                    target_x = int(target_x + x_offset - self.upx)
+                    target_y = int(target_y + y_offset - self.upy)
+                # 调整坐标以适应图像拼接后的偏移
+                    # 绘制目标位置
+                    color_map = {
+                        0: [140, 49, 49],  # 蓝色
+                        1: [49, 49, 140],   # 红色
+                        2: [29, 230, 181],  # 黄绿色交互点，与绿色当前位置区分
+                        3: [49, 140, 140]   # 黄色
+                    }
+                    target_color = color_map.get(current_target_type, [49, 140, 140])
+
+
+                    for dx in range(-2, 3):
+                        for dy in range(-2, 3):
+                            if (0 <= target_y + dy < updated_image.shape[0] and
+                                0 <= target_x + dx < updated_image.shape[1]):
+                                updated_image[target_y + dy, target_x + dx] = target_color
+                    # 在左上角显示目标坐标
+                    target_text = f"target: ({target_x - x_offset - self.upx}, {target_y - y_offset - self.upy})"
+                    cv.putText(updated_image, target_text, (x_offset, 20),
+                               cv.FONT_HERSHEY_SIMPLEX, 0.25, (0, 255, 255), 1)
+
+                # 绘制朝向箭头
+                if current_ang is not None:
+                    import math
+                    angle_rad = math.radians(-current_ang)
+                    line_length = 20
+                    end_point = (
+                        int(real_x + line_length * math.cos(angle_rad)),
+                        int(real_y - line_length * math.sin(angle_rad))
+                    )
+
+                    # 确保线条端点在图像范围内
+                    if (0 <= real_y < updated_image.shape[0] and
+                        0 <= real_x < updated_image.shape[1] and
+                        0 <= end_point[1] < updated_image.shape[0] and
+                        0 <= end_point[0] < updated_image.shape[1]):
+                        cv.arrowedLine(
+                            updated_image,
+                            (real_x, real_y),  # 注意：cv.arrowedLine使用(x,y)坐标
+                            end_point,
+                            (0, 255, 0),
+                            1,
+                            tipLength=0.4
+                        )
+
+                cv.imshow("Map", updated_image)
+                # 使用cv.pollKey()替代cv.waitKey()以避免阻塞
+                key = cv.pollKey()
+                if key == ord('q'):
+                    break
+                # 检查停止标志
+                if self._stop:
+                    break
+        except Exception as e:
+            raise e
+        finally:
+            # 无论如何都要确保窗口被关闭
+            try:
+                cv.destroyAllWindows()
+                cv.waitKey(1)
+            except Exception as e:
+                CUS_LOGGER.error(f'异常关闭窗口{e}')
+
+    def goto_herta_office(self):
+        """
+        前往黑塔办公室
+
+        该函数负责自动导航到黑塔办公室，主要流程包括：
+        1. 检查是否已经在办公室内
+        2. 如果不在办公室，则通过地图导航到黑塔办公室
+        3. 进行传送操作并移动到最终目的地
+
+        函数会利用一系列图像识别和文本识别来确定当前位置，
+        并执行相应的点击、拖拽和键盘操作来完成导航。
+        """
+        if self.state=="init2":
+            return
+        self.update_state("init")
+        if self.click_text(text="模拟宇宙",box=[1231, 595, 1360, 631],click=False,allow_fail= True):
+            CUS_LOGGER.info("已在办公室，打开模拟宇宙")
+            key_mouse_manager.press("interact")
+            return
+        CUS_LOGGER.info("前往黑塔办公室：打开地图")
+        key_mouse_manager.press("map")
+
+    def goto_survival_room(self):
+        key_mouse_manager.turn(15)
+        key_mouse_manager.keyDown("move_w")
+        sprint()
+        key_mouse_manager.sleep(4)
+        key_mouse_manager.keyUp("move_w")
+        key_mouse_manager.wait()
+        self.update_state("survival_room")
+
 
 
 def create_engine(*, script=False):

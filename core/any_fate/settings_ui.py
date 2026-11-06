@@ -3,7 +3,7 @@
 from core.common import config as runtime_config
 from core.common.config import load_runtime_settings
 from core.common.runtime_ui import RuntimeSettings
-from core.simulated.config import config
+from core.any_fate.text_key import FATES
 from tool.gui.settings_dialog import SettingsDialog as BaseDialog
 from tool.storage import (
     load_module_settings,
@@ -19,7 +19,7 @@ class SettingsDialog(BaseDialog):
         self.runtime = RuntimeSettings(data, self)
         self.content_layout.addWidget(self.runtime)
         self.section = ui = self.add_section(resource_path(__file__, "ui/settings.ui"))
-        ui.Any_fate_combo.addItems(config.fates)
+        ui.Any_fate_combo.addItems(FATES)
         ui.Any_fate_combo.setCurrentText(data.get("any_fate", "巡猎"))
 
     def persist(self):

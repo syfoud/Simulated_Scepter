@@ -29,7 +29,6 @@ from tool.mask import MASK
 from tool.public_ocr import clean_text, load_actions, merge_text
 from tool.utils.image_tool import find_image_by_name
 from tool.utils.tool import get_hwnd_and_text
-from tool.window_recorder import WindowRecorder
 
 # 版本号
 version = "v8.042"
@@ -57,7 +56,7 @@ class DivergentUniverse(UniverseUtils):
         self.keys = KeyController(self)
         super().prepare_script()
 
-    def __init__(self, debug=0, nums=-1, speed=0, task_owner=None):
+    def __init__(self, debug=0, nums=-1, speed=0):
         super().__init__()
         # 设置并启动键鼠管理器
         key_mouse_manager.set_config(config)
@@ -117,10 +116,6 @@ class DivergentUniverse(UniverseUtils):
         self.update_count()
         CUS_LOGGER.info(f"开始运行:初始计数：{self.count}")
         # set_debug(debug > 0)
-        data = load_settings()
-        self.record = data.get("recording_state", True)
-        self.recorder = WindowRecorder(output_path=PATHS["video"], fps=30, window_title="崩坏：星穹铁道",
-                                       window_class_name="UnityWndClass", see_time=True, offsets=[10, 50, 10, 10], simul_instance=self, task_owner=task_owner)
 
     def route(self):
         self.goto_diver_universe()
@@ -1164,12 +1159,6 @@ class DivergentUniverse(UniverseUtils):
 
     def stop(self, *_, **__):
         CUS_LOGGER.info("尝试停止运行")
-        if self.record and self._u1a:
-            CUS_LOGGER.info("尝试停止录制")
-            try:
-                self.recorder.stop_recording()
-            except Exception as e:
-                CUS_LOGGER.error(f"停止录制时发生错误: {e}")
         try:
             self.init_floor()
         except Exception:
@@ -1181,8 +1170,6 @@ class DivergentUniverse(UniverseUtils):
     def start(self):
         self._stop = False
         self.prepare_script()
-        if self.record and self._u1a:
-            self.recorder.start_recording(self.count)
         try:
             self.route()
         except KeyboardInterrupt:

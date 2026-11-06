@@ -180,6 +180,7 @@ class My_TS:
         if black and find==1:
             find=3
         return (rcx-img.shape[1]//2,rcy-img.shape[0]//2),find+black
+
     def split_strange(self,img):
         yellow=[126,162,180]
         binary_image = np.zeros_like(img[:, :, 0])
@@ -207,10 +208,18 @@ class My_TS:
             res.append(self.text)
         CUS_LOGGER.debug(f'识别奇物结果：{res}')
         return point_list,res
+
     def find_text(self, img, text,find_all=False):
+        """
+        在图像中查找文本并返回匹配框
+
+        text 为列表时按列表顺序表示优先级：扫描完所有结果后再取优先级最高的一条，
+        避免先扫描到的低优先文本压过后面出现的高优先文本。
+        """
         self.nothing = 1
         results = self.ts.ocr(img)
         find_all_return = None
+        list_matches = []  # 列表模式下收集所有命中 (优先级下标, box, 命中文本)
         for res in results:
             res = {'raw_text': res[1][0], 'box': np.array(res[0]), 'score': res[1][1]}
             self.text = res['raw_text']
@@ -220,8 +229,9 @@ class My_TS:
             found = False
             matched_text = text
             if isinstance(text, list):
-                for t in text:
+                for idx, t in enumerate(text):
                     if t in self.text:
+                        list_matches.append((idx, res['box'], t))
                         found = True
                         matched_text = t
                         break
@@ -230,14 +240,24 @@ class My_TS:
 
             if found:
                 CUS_LOGGER.debug(f"识别到文本：{matched_text}匹配文本：{self.text},位置：{[int(res['box'][0][0]), int(res['box'][1][0]), int(res['box'][0][1]), int(res['box'][2][1])]}")
+                if isinstance(text, list):
+                    continue  # 列表模式：收集完再按优先级选
                 if not find_all:
                     return res['box']
                 else:
                     find_all_return = res['box']
                     continue
+        if isinstance(text, list) and list_matches:
+            list_matches.sort(key=lambda item: item[0])
+            best_idx, best_box, best_text = list_matches[0]
+            CUS_LOGGER.debug(
+                f"列表匹配：共{len(list_matches)}个命中，按优先级选择「{best_text}」(优先级#{best_idx})"
+            )
+            return best_box
         if find_all_return is not None:
             return find_all_return
         return None
+
     def forward(self, img):
         """
         识别传入图像的文本并保存在self.res中
@@ -255,6 +275,7 @@ class My_TS:
         if len(self.res):
             self.nothing = 0
         self.res = merge(self.res)
+
     def find_with_box(self, box=None, redundancy=10, forward=0, mode=0,re_screen=False):
         """
         在指定文本框内

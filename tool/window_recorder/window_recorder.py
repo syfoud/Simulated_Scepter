@@ -63,7 +63,7 @@ class WindowRecorder:
         self.overlay_map = overlay_map
         # 地图透明度 (0.0-1.0，1.0为完全不透明)
         self.map_alpha = map_alpha
-        # SimulatedUniverse实例引用
+        # 内核实例引用，覆盖录像用于把内核状态文字画到地图上
         self.simul_instance = simul_instance
         # 停止信号，代表一个尚未被响应的停止请求，必须保留到下一次启动被拒绝
         self.stop_event = threading.Event()
@@ -362,7 +362,7 @@ class WindowRecorder:
                                     map_resized_width = int(img_cv.shape[1] * map_scale)  # 基于主窗口宽度计算
                                     map_resized_height = int(map_resized_width * (map_img_cv.shape[0] / map_img_cv.shape[1]))  # 保持比例
                                     map_img_resized = cv2.resize(map_img_cv, (map_resized_width, map_resized_height))
-                                    # 动态读取SimulatedUniverse的state属性并绘制到地图图像上
+                                    # 动态读取内核实例的state属性并绘制到地图图像上
                                     if self.simul_instance is not None and self.simul_instance.state is not None:
                                         state_text = "state:" + str(self.simul_instance.state)
                                         font = cv2.FONT_HERSHEY_SIMPLEX

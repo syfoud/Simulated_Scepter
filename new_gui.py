@@ -12,6 +12,7 @@ import keyboard
 from PyQt5.QtGui import QFont
 
 from route import PATHS
+from logger_printer import QMainWindowLog
 from tool.action_script import run_script as run_action_script
 from tool.cleanup import (
     CATEGORIES,
@@ -77,10 +78,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from align_angle import main as align_angle_main
-from logger_printer import QMainWindowLog
-
-HOTKEY_DEBOUNCE_SECONDS = 1.0
+from tool.calibration import create_kernel as create_calibration_kernel
+from tool.calibration import main as align_angle_main
 
 # 程序热键在 keyboard 库里的键名与 pyautogui 不同：修饰键必须写成 "left shift"
 # 这类带左右的形式，否则 keyboard 解析不到扫描码，热键注册会静默失败。
@@ -194,17 +193,12 @@ def resolve_startup_task(args):
     settings = load_settings()
     registry = KernelRegistry()
     configured_script = settings.get("script_file", "")
-    has_configured_script = isinstance(configured_script, str) and bool(configured_script)
     if args.file is not None:
         script_name = args.file
-    elif configured_script in (None, ""):
-        script_name = "insect.json"
-    elif has_configured_script:
-        script_name = configured_script
     else:
-        raise ValueError("gui_settings.json 中的 script_file|检查 gui_settings.json 必须是脚本路径或名称")
+        script_name = configured_script
 
-    default_engine = settings.get("script_engine", "") if has_configured_script else "IronBlood"
+    default_engine = settings.get("script_engine", "ironblood")
     engine_name = args.engine or default_engine
 
     if not isinstance(engine_name, str) or not engine_name:
@@ -219,7 +213,7 @@ def resolve_startup_task(args):
         raise ValueError(f"设置的内核不可用：{engine_name!r}；可用内核 ID：{available}")
 
     if not isinstance(script_name, str) or not script_name:
-        raise ValueError("未设置可用脚本；请gui_settings.json 中的 script_file|检查 gui_settings.json 或使用 --file:SCRIPT 指定脚本")
+        raise ValueError("未设置可用脚本；请在界面选择脚本，或使用 --file:SCRIPT 指定脚本")
 
     scripts = discover_scripts(registry)
     script_key_name = script_name.replace("\\", "/").casefold()
@@ -733,7 +727,6 @@ class MainWindow(QMainWindowLog):
         self.start_game_checkbox.setChecked(data.get("start_game_on_task", False))
         self.game_path_input.setText(data.get("game_executable_path", ""))
         self.focus_reclaim_wait_input.setText(str(data.get("game_focus_reclaim_wait_seconds", 600)))
-        self.recording_checkBox.setChecked(data.get("recording_state", False))
         self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
         self.recording_time_input.setText(str(data.get("del_record_time", 14)))
         self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
@@ -908,7 +901,7 @@ class MainWindow(QMainWindowLog):
 
         # 防重复触发
         last_time = self._last_key_time.get(key, 0)
-        if current_time - last_time > HOTKEY_DEBOUNCE_SECONDS:
+        if current_time - last_time > 1.0:
             self._last_key_time[key] = current_time
 
             if action in {"stop", "test", "print"}:
@@ -1135,7 +1128,8 @@ class MainWindow(QMainWindowLog):
         available = self.engine_combo.count() > 0
         for widget in (self.engine_combo, self.engine_settings_btn, self.test_btn, self.print_btn):
             widget.setEnabled(available)
-        self.calibrate_btn.setEnabled(any(spec.calibration for spec in self.registry.runnable()))
+        # 没有可用内核时说明程序安装不完整，此时各入口统一禁用。
+        self.calibrate_btn.setEnabled(available)
         self.run_script_btn.clicked.connect(self.run_script)
         self.refresh_scripts()
         engine_index = self.engine_combo.findData(self.opt.get("script_engine", ""))
@@ -1323,17 +1317,23 @@ class MainWindow(QMainWindowLog):
 
 
     def calibrate(self):
-        spec = next((spec for spec in self.registry.runnable() if spec.calibration), None)
-        if spec is None:
-            return
+        """执行角度校准。
+
+        校准只依赖前台截图与小地图朝向识别，与具体内核无关，因此使用通用内核执行。
+        """
 
         def task():
+            kernel = None
             try:
-                self.current_task = self.create_task_engine(spec.id)
-                res = align_angle_main(su=self.current_task)
+                kernel = self.current_task = create_calibration_kernel()
+                res = align_angle_main(su=kernel)
                 self.calibration_finished.emit(res)
             except Exception as e:
                 self.calibration_finished.emit(e)
+            finally:
+                # 校准用的通用内核持有截图对象，用完立即释放
+                if kernel is not None:
+                    kernel.stop()
 
         try:
             self.start_task(task)
@@ -1515,7 +1515,6 @@ class MainWindow(QMainWindowLog):
                 "start_game_on_task": self.start_game_checkbox.isChecked(),
                 "game_executable_path": self.game_path_input.text().strip(),
                 "game_focus_reclaim_wait_seconds": int(self.focus_reclaim_wait_input.text()),
-                "recording_state": self.recording_checkBox.isChecked(),
                 "recording_iron_blood": self.recording_checkBox2.isChecked(),
                 "del_record_time": int(self.recording_time_input.text()),
                 "record_event_map": self.record_event_map_checkbox.isChecked(),
