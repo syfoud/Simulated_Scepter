@@ -181,8 +181,7 @@
       "threshold": 0.85
     },
     "actions": [
-      "ensure_auto_battle",
-      "stop"
+      "ensure_auto_battle"
     ]
   },
   {

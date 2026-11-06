@@ -264,6 +264,7 @@ class DivineTreasureKernel(ScriptKernel):
     _foreground_misses = 0
     _miss_count = 0
     _combat_steps = 0
+    stop_after_bless = False   # 只有 --stage bless 单独验证时才在选完祝福后停下
 
     def run_static(self, json_path=None, json_file=None, action_list=None, skip_check=False):
         # 按 --stage 指定的组运行，便于只验证当次改动的那一段
@@ -516,8 +517,10 @@ class DivineTreasureKernel(ScriptKernel):
                 CUS_LOGGER.debug("还有下一个祝福，继续", extra={"flush": True})
                 return
             time.sleep(0.5)
-        CUS_LOGGER.debug("8 秒内没有新祝福，本状态处理完毕", extra={"flush": True})
-        self.stop()
+        CUS_LOGGER.debug("8 秒内没有新祝福，祝福处理完毕", extra={"flush": True})
+        # 单独验证（--stage bless）时才停；在完整链路里要接着去找门
+        if getattr(self, "stop_after_bless", False):
+            self.stop()
 
     def in_3d_scene(self):
         """是否在 3D 场景里：左上角有「(N/20) 第X位面-类型」这行。
@@ -1036,6 +1039,7 @@ def main(default_stage="entry"):
             return 0
         if args.stage == "bless":
             # 走 JSON 主循环，验证「识别到选择祝福 → 选推荐 → 确认」整条链路
+            kernel.stop_after_bless = True    # 单独验证：选完就停
             kernel.action_groups = ["dismiss", "bless"]
             run_script(kernel, str(ACTION_SCRIPT))
             return 0
