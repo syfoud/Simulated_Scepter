@@ -235,17 +235,24 @@ class GuiPreferencesTests(unittest.TestCase):
         self.assertEqual(reopened.script_combo.currentData(), str(self.actions / "中文脚本.json"))
         self.assertEqual(json.loads(self.settings.read_text(encoding="utf-8")), saved)
 
+    def test_shipped_defaults_point_to_ironblood_and_insect(self):
+        """出厂默认值指向仍在维护的铁血内核与昆虫脚本；模拟宇宙录制开关已删除。"""
+        default = json.loads((ROOT / "resource" / "gui_settings_default.json").read_text(encoding="utf-8"))
+        self.assertEqual(default["script_engine"], "ironblood")
+        self.assertEqual(default["script_file"], "insect")
+        self.assertNotIn("recording_state", default)
+
     def test_restoration_defaults_do_not_write_during_startup(self):
         original = self.settings.read_bytes()
         self.gui.init_script_controls()
-        self.assertEqual(self.gui.engine_combo.currentText(), "Simulated")
+        self.assertEqual(self.gui.engine_combo.currentText(), "Divergent")
         self.assertEqual(Path(self.gui.script_combo.currentData()).name, "a.json")
         self.assertEqual(self.settings.read_bytes(), original)
 
     def test_unavailable_saved_options_fall_back_to_first_available_items(self):
         self.gui.opt.update({"script_engine": "RemovedEngine", "script_file": "missing.json"})
         self.gui.init_script_controls()
-        self.assertEqual(self.gui.engine_combo.currentText(), "Simulated")
+        self.assertEqual(self.gui.engine_combo.currentText(), "Divergent")
         self.assertEqual(self.gui.script_combo.currentText(), "a")
         self.assertTrue(self.gui.run_script_btn.isEnabled())
 

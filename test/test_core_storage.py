@@ -48,27 +48,25 @@ class CoreStorageTests(unittest.TestCase):
         return path
 
     def test_missing_fields_are_filled_from_default_config(self):
-        self.write_settings("simulated", {"config": {"max_run": 8}})
+        self.write_settings("divergent", {"config": {"max_run": 8}})
 
-        path = config_path(self.source("simulated"))
+        path = config_path(self.source("divergent"))
         values = json.loads(path.read_text(encoding="utf-8"))
-        defaults = self.default_values("simulated")
+        defaults = self.default_values("divergent")
 
         self.assertEqual(values["config"]["max_run"], 8)
-        self.assertEqual(values["config"]["fate"], defaults["config"]["fate"])
-        self.assertEqual(values["config"]["order_text"], defaults["config"]["order_text"])
-        self.assertEqual(values["prior"], defaults["prior"])
-        # key_mapping 已废弃：键位改由 gui_settings.game_keys 管理，模块配置里不再有该字段
-        self.assertNotIn("key_mapping", values)
+        self.assertEqual(values["config"]["team"], defaults["config"]["team"])
+        self.assertEqual(values["config"]["timezone"], defaults["config"]["timezone"])
+        self.assertEqual(values["config"]["portal_prior"], defaults["config"]["portal_prior"])
 
     def test_existing_values_win_over_default_config(self):
-        self.write_settings("simulated", {"config": {"fate": "虚无"}})
+        self.write_settings("divergent", {"config": {"team": "击破"}})
 
-        values = load_module_settings(self.source("simulated"))
-        defaults = self.default_values("simulated")
+        values = load_module_settings(self.source("divergent"))
+        defaults = self.default_values("divergent")
 
-        self.assertEqual(values["config"]["fate"], "虚无")
-        self.assertEqual(values["config"]["order_text"], defaults["config"]["order_text"])
+        self.assertEqual(values["config"]["team"], "击破")
+        self.assertEqual(values["config"]["timezone"], defaults["config"]["timezone"])
 
     def test_existing_module_config_wins_and_future_fields_survive_save(self):
         self.write_settings("any_fate", {"any_fate": "智识", "future": {"value": 7}})
@@ -81,15 +79,15 @@ class CoreStorageTests(unittest.TestCase):
         self.assertEqual(values["future"], {"value": 7})
 
     def test_save_json_values_keeps_unknown_values_and_merges_config_fields(self):
-        self.write_settings("simulated", {"config": {"max_run": 8, "future": 7}, "custom": True})
+        self.write_settings("divergent", {"config": {"max_run": 8, "future": 7}, "custom": True})
 
-        save_json_values(self.source("simulated"), {"config": {"max_run": 10}})
+        save_json_values(self.source("divergent"), {"config": {"max_run": 10}})
 
-        values = json.loads(self.settings_path("simulated").read_text(encoding="utf-8"))
+        values = json.loads(self.settings_path("divergent").read_text(encoding="utf-8"))
         self.assertEqual(values["config"]["max_run"], 10)
         self.assertEqual(values["config"]["future"], 7)
         self.assertIs(values["custom"], True)
-        self.assertEqual(values["config"]["fate"], self.default_values("simulated")["config"]["fate"])
+        self.assertEqual(values["config"]["team"], self.default_values("divergent")["config"]["team"])
 
     def test_second_file_write_failure_restores_first_file(self):
         first = config_path(self.source("common"))

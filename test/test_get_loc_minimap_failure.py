@@ -18,13 +18,13 @@ import numpy as np
 from tool.utils.image_tool import load_all_images_from_directory
 
 ROOT = Path(__file__).resolve().parents[1]
-# core.simulated.utils 在 import 时就会读模板图，必须先载入资源图
+# core.any_fate.utils 在 import 时就会读模板图，必须先载入资源图
 load_all_images_from_directory(str(ROOT / "resource" / "imgs"))
 
-import core.simulated.utils as simulated_utils  # 必须在资源图载入之后导入
+import core.any_fate.utils as any_fate_utils  # 必须在资源图载入之后导入
 from tool.utils.mminimap import PositionPredict  # 必须在资源图载入之后导入
 
-SimulatedUniverse = importlib.import_module("core.simulated.engine").SimulatedUniverse
+AnyFateUniverse = importlib.import_module("core.any_fate.engine").AnyFateUniverse
 
 # get_loc 的起始坐标，测试断言它在失败路径上保持原值
 NOW_LOC = (100.0, 200.0)
@@ -45,7 +45,7 @@ def make_universe(directions=(None, None), big_world=False, positions=(MATCHED_L
     directions：每次朝向识别的结果，None 表示蓝色箭头缺失；positions：每次窗口位置匹配的结果；
     relocate_results：每次整图重定位的返回值 (position, gave_up)，position 为 None 表示仍在等待确认。
     """
-    universe = SimulatedUniverse.__new__(SimulatedUniverse)
+    universe = AnyFateUniverse.__new__(AnyFateUniverse)
     universe.now_loc = NOW_LOC
     universe.screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
     universe.minimap_fail_count = fail_count
@@ -66,7 +66,7 @@ class GetLocMinimapFailureTest(unittest.TestCase):
         """两次识别都失败且不在模拟宇宙中：不改缓存、返回 False、只记一条 warning。"""
         universe = make_universe(directions=[None, None], big_world=False)
 
-        with patch("core.simulated.utils.time.sleep"), patch.object(simulated_utils.CUS_LOGGER, "warning") as warning:
+        with patch("core.any_fate.utils.time.sleep"), patch.object(any_fate_utils.CUS_LOGGER, "warning") as warning:
             result = universe.get_loc(False)
 
         self.assertFalse(result)
@@ -81,7 +81,7 @@ class GetLocMinimapFailureTest(unittest.TestCase):
         """首次识别失败后重新截图再识别一次；两次都失败才进入失败分支。"""
         universe = make_universe(directions=[None, None], big_world=True)
 
-        with patch("core.simulated.utils.time.sleep") as sleep, patch.object(simulated_utils.CUS_LOGGER, "warning"):
+        with patch("core.any_fate.utils.time.sleep") as sleep, patch.object(any_fate_utils.CUS_LOGGER, "warning"):
             result = universe.get_loc(False)
 
         self.assertTrue(result)
@@ -94,7 +94,7 @@ class GetLocMinimapFailureTest(unittest.TestCase):
         """分析失败但仍在模拟宇宙中（例如瞬时遮挡）：不改缓存、返回 True、不记 warning。"""
         universe = make_universe(directions=[None, None], big_world=True)
 
-        with patch("core.simulated.utils.time.sleep"), patch.object(simulated_utils.CUS_LOGGER, "warning") as warning:
+        with patch("core.any_fate.utils.time.sleep"), patch.object(any_fate_utils.CUS_LOGGER, "warning") as warning:
             result = universe.get_loc(False)
 
         self.assertTrue(result)
@@ -107,7 +107,7 @@ class GetLocMinimapFailureTest(unittest.TestCase):
         """重新截图后识别成功：按原逻辑更新坐标，且不累计失败次数。"""
         universe = make_universe(directions=[None, 90.0], positions=[MATCHED_LOC])
 
-        with patch("core.simulated.utils.time.sleep"), patch.object(simulated_utils.CUS_LOGGER, "warning") as warning:
+        with patch("core.any_fate.utils.time.sleep"), patch.object(any_fate_utils.CUS_LOGGER, "warning") as warning:
             result = universe.get_loc(False)
 
         self.assertTrue(result)
@@ -122,7 +122,7 @@ class GetLocMinimapFailureTest(unittest.TestCase):
         """朝向箭头识别正常时走原逻辑：更新 now_loc 并返回 True。"""
         universe = make_universe(directions=[90.0], big_world=True)
 
-        with patch.object(simulated_utils.CUS_LOGGER, "warning") as warning:
+        with patch.object(any_fate_utils.CUS_LOGGER, "warning") as warning:
             result = universe.get_loc(False)
 
         self.assertTrue(result)
@@ -150,8 +150,8 @@ class GetLocRelocateTest(unittest.TestCase):
         """连续失败达到阈值后交给预测器整图重定位；候选尚未确认时保持旧坐标与失败计数。"""
         universe = make_universe(directions=[90.0], fail_count=3, relocate_results=[(None, False)])
 
-        with patch.object(simulated_utils.CUS_LOGGER, "warning") as warning, \
-                patch.object(simulated_utils.CUS_LOGGER, "info") as info:
+        with patch.object(any_fate_utils.CUS_LOGGER, "warning") as warning, \
+                patch.object(any_fate_utils.CUS_LOGGER, "info") as info:
             result = universe.get_loc(False)
 
         self.assertTrue(result)
@@ -167,8 +167,8 @@ class GetLocRelocateTest(unittest.TestCase):
         universe = make_universe(directions=[90.0, 90.0], fail_count=3,
                                  relocate_results=[(None, False), (CANDIDATE_LOC, False)])
 
-        with patch.object(simulated_utils.CUS_LOGGER, "warning") as warning, \
-                patch.object(simulated_utils.CUS_LOGGER, "info") as info:
+        with patch.object(any_fate_utils.CUS_LOGGER, "warning") as warning, \
+                patch.object(any_fate_utils.CUS_LOGGER, "info") as info:
             self.assertTrue(universe.get_loc(False))
             self.assertEqual(NOW_LOC, universe.now_loc)
             self.assertTrue(universe.get_loc(False))
@@ -183,7 +183,7 @@ class GetLocRelocateTest(unittest.TestCase):
         """整图重定位放弃时保留上次可信坐标，并清空失败计数等下一轮重来。"""
         universe = make_universe(directions=[90.0], fail_count=3, relocate_results=[(None, True)])
 
-        with patch.object(simulated_utils.CUS_LOGGER, "warning") as warning:
+        with patch.object(any_fate_utils.CUS_LOGGER, "warning") as warning:
             result = universe.get_loc(False)
 
         self.assertTrue(result)
@@ -215,7 +215,7 @@ class PositionPredictRelocateTest(unittest.TestCase):
         """第一帧：搜索中心清零做整图匹配，结果只作候选，搜索中心恢复原值。"""
         predictor = self.make_predictor([CANDIDATE_LOC])
 
-        with patch.object(simulated_utils.CUS_LOGGER, "debug"):
+        with patch.object(any_fate_utils.CUS_LOGGER, "debug"):
             position, gave_up = predictor.relocate(np.zeros((1080, 1920, 3), dtype=np.uint8))
 
         self.assertIsNone(position)
@@ -228,7 +228,7 @@ class PositionPredictRelocateTest(unittest.TestCase):
         """第二帧结果与候选一致：提交为当前坐标并清空候选。"""
         predictor = self.make_predictor([CANDIDATE_LOC, CANDIDATE_LOC])
 
-        with patch.object(simulated_utils.CUS_LOGGER, "debug"):
+        with patch.object(any_fate_utils.CUS_LOGGER, "debug"):
             predictor.relocate(np.zeros((1080, 1920, 3), dtype=np.uint8))
             position, gave_up = predictor.relocate(np.zeros((1080, 1920, 3), dtype=np.uint8))
 
@@ -243,7 +243,7 @@ class PositionPredictRelocateTest(unittest.TestCase):
         predictor = self.make_predictor([(100.0, 100.0), (500.0, 100.0), (900.0, 100.0), (1300.0, 100.0),
                                          (1700.0, 100.0)])
 
-        with patch.object(simulated_utils.CUS_LOGGER, "debug"):
+        with patch.object(any_fate_utils.CUS_LOGGER, "debug"):
             results = [predictor.relocate(np.zeros((1080, 1920, 3), dtype=np.uint8)) for _ in range(5)]
 
         self.assertEqual([(None, False)] * 4 + [(None, True)], results)
@@ -255,7 +255,7 @@ class PositionPredictRelocateTest(unittest.TestCase):
         """换图后上一张地图的候选坐标不再适用。"""
         predictor = self.make_predictor([CANDIDATE_LOC])
 
-        with patch.object(simulated_utils.CUS_LOGGER, "debug"), patch.object(simulated_utils.CUS_LOGGER, "info"):
+        with patch.object(any_fate_utils.CUS_LOGGER, "debug"), patch.object(any_fate_utils.CUS_LOGGER, "info"):
             predictor.relocate(np.zeros((1080, 1920, 3), dtype=np.uint8))
             predictor.set_now_map(1)
 

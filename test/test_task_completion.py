@@ -31,8 +31,6 @@ class TaskCompletionTests(unittest.TestCase):
         self.manager.press.side_effect = self.pending.append
         self.manager.wait.side_effect = self.drain_queue
         self.manager.stop.side_effect = self.stop_manager
-        self.recorder = Mock(recording=True)
-        self.recorder.stop_recording.side_effect = lambda: setattr(self.recorder, "recording", False)
         self.namespace = {
             "CUS_LOGGER": Mock(),
             "key_mouse_manager": self.manager,
@@ -49,45 +47,36 @@ class TaskCompletionTests(unittest.TestCase):
         self.manager.running = False
         self.pending.clear()
 
-    def test_simul_completion_finishes_exit_action_and_releases_resources(self):
-        task = load_task("core/simulated/engine.py", "SimulatedUniverse", {"re_init", "stop"}, self.namespace)
-        task.end = task.record = task.bveerelbcpgyqan = True
+    def test_kernel_stop_releases_shared_input_and_screenshot(self):
+        """内核自身停止时停掉键鼠线程、保存收尾截图并放弃地图线程引用。"""
+        task = load_task("core/any_fate/utils.py", "FateUtils", {"stop"}, self.namespace)
         task._stop = False
-        task.recorder = self.recorder
+        task.record = False
+        task.bveerelbcpgyqan = False
+        task.map_thread = object()
         task.save_screen = Mock()
 
-        self.assertEqual(task.re_init(), 1)
+        task.stop()
 
-        self.assertEqual(self.executed, ["esc"])
         self.assertTrue(task._stop)
         self.assertFalse(self.manager.running)
-        self.assertFalse(self.recorder.recording)
-
-    def test_simul_next_round_keeps_resources_running(self):
-        task = load_task("core/simulated/engine.py", "SimulatedUniverse", {"re_init", "stop"}, self.namespace)
-        task.end = False
-        task.init_map = Mock()
-
-        task.re_init()
-
-        self.assertTrue(self.manager.running)
-        self.assertTrue(self.recorder.recording)
+        self.assertIsNone(task.map_thread)
+        self.assertEqual(task.save_screen.call_count, 2)
 
     def test_diver_only_releases_resources_after_final_loading_screen(self):
+        """Divergent 只在「加载界面」上结束本局：按两次 esc 退出，然后停止键鼠线程。"""
         for end, screen in [(True, "加载界面"), (False, "加载界面"), (True, "其他界面")]:
             with self.subTest(end=end, screen=screen):
-                self.manager.running = self.recorder.recording = True
+                self.manager.running = True
                 self.executed.clear()
                 task = load_task("core/divergent/engine.py", "DivergentUniverse", {"loop", "stop"}, self.namespace)
                 task.end = end
-                task.record = task._u1a = True
                 task._stop = False
                 task.ts = Mock()
                 task.get_screen = Mock()
                 task.run_static = Mock(return_value=screen)
                 task.press = self.executed.append
                 task.init_floor = Mock()
-                task.recorder = self.recorder
 
                 task.loop()
 
@@ -95,7 +84,6 @@ class TaskCompletionTests(unittest.TestCase):
                 self.assertEqual(self.executed, ["esc", "esc"] if finished else [])
                 self.assertEqual(bool(task._stop), finished)
                 self.assertEqual(self.manager.running, not finished)
-                self.assertEqual(self.recorder.recording, not finished)
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ load_img()
 from core.any_fate import engine as any_fate_engine
 from core.iron_blood import engine as iron_blood_engine
 from core.iron_blood.engine import IronBloodUniverse
-from core.simulated.engine import SimulatedUniverse
+from core.any_fate.engine import AnyFateUniverse
 
 EMPTY = "empty"      # 节点图还没出现
 PARTIAL = "partial"  # 节点图正在逐个生成节点
@@ -363,7 +363,7 @@ class RecordLineTest(unittest.TestCase):
         with TemporaryDirectory() as backup:
             with patch.object(iron_blood_engine, "PATHS", {"backup": backup}), \
                     patch.object(iron_blood_engine, "time", clock), \
-                    patch.object(SimulatedUniverse, "end_of_university", lambda self: None), \
+                    patch.object(AnyFateUniverse, "end_of_university", lambda self: None), \
                     patch.object(any_fate_engine.AnyFateUniverse, "init_map", lambda self: None), \
                     patch.object(iron_blood_engine, "CUS_LOGGER") as logger:
                 engine.end_of_university()

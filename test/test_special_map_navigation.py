@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 load_all_images_from_directory(str(ROOT / "resource" / "imgs"))
 
 IronBloodUniverse = importlib.import_module("core.iron_blood.engine").IronBloodUniverse
-SimulatedUniverse = importlib.import_module("core.simulated.engine").SimulatedUniverse
+AnyFateUniverse = importlib.import_module("core.any_fate.engine").AnyFateUniverse
+FateUtils = importlib.import_module("core.any_fate.utils").FateUtils
 
 
 class SpecialMapTargetParsingTest(unittest.TestCase):
@@ -25,7 +26,7 @@ class SpecialMapTargetParsingTest(unittest.TestCase):
         cv.circle(image, (65, 65), 1, (0, 242, 255), -1)
         cv.circle(image, (10, 65), 1, (36, 28, 237), -1)
 
-        universe = SimulatedUniverse.__new__(SimulatedUniverse)
+        universe = AnyFateUniverse.__new__(AnyFateUniverse)
         universe.speed = False
         with patch.object(cv, "imread", return_value=image.copy()):
             targets = universe.get_target("unused.png", 0, 0, target_mode="special")
@@ -92,7 +93,7 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
         self.assertIn(interaction, universe.target)
 
     def test_special_map_trusts_annotated_red_attack_target(self):
-        universe = SimulatedUniverse.__new__(SimulatedUniverse)
+        universe = AnyFateUniverse.__new__(AnyFateUniverse)
         red_target = ((280, 623), 1)
         universe.target = {red_target}
         universe.now_loc = (273, 640)
@@ -119,7 +120,7 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
 
     def test_special_red_target_clicks_once_without_using_skill(self):
         red_target = ((12, 34), 1)
-        universe = SimulatedUniverse.__new__(SimulatedUniverse)
+        universe = AnyFateUniverse.__new__(AnyFateUniverse)
         universe.target = {red_target}
         universe.target_loc = red_target[0]
         universe.target_type = 1
@@ -140,9 +141,9 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
         manager = Mock()
 
         with (
-            patch("core.simulated.utils.key_mouse_manager", manager),
-            patch("core.simulated.utils.sprint"),
-            patch("core.simulated.utils.match_skill_numbers_in_region", return_value=None),
+            patch("core.any_fate.utils.key_mouse_manager", manager),
+            patch("core.any_fate.utils.sprint"),
+            patch("core.any_fate.utils.match_skill_numbers_in_region", return_value=None),
         ):
             universe.get_path_with_big_map()
 
@@ -246,7 +247,8 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
         universe.area = "事件"
         universe.now_area = []
 
-        with patch.object(SimulatedUniverse, "init_map") as native_init:
+        # 基类 init_map 打桩：AnyFateUniverse.init_map 的真实清理逻辑仍要执行
+        with patch.object(FateUtils, "init_map") as native_init:
             universe.init_map()
 
         native_init.assert_called_once_with()
@@ -271,7 +273,7 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
             universe.big_map_init = False
 
         with patch.object(
-            SimulatedUniverse, "init_map", side_effect=reset_big_map
+            FateUtils, "init_map", side_effect=reset_big_map
         ) as native_init, patch("core.iron_blood.engine.key_mouse_manager", Mock()):
             universe.record_special_map_or_navigate(Mock())
 
@@ -336,7 +338,7 @@ class RecordedSpecialMapNavigationTest(unittest.TestCase):
 class HertaInteractionTest(unittest.TestCase):
     @staticmethod
     def make_universe(text="黑塔", global_herta_match=False, quit_time=0):
-        universe = SimulatedUniverse.__new__(SimulatedUniverse)
+        universe = AnyFateUniverse.__new__(AnyFateUniverse)
         universe.check = Mock(return_value=True)
         universe.get_small_interaction_img = Mock(
             return_value=np.zeros((10, 10), dtype=np.uint8)
@@ -354,8 +356,8 @@ class HertaInteractionTest(unittest.TestCase):
         universe = self.make_universe(global_herta_match=False)
         manager = Mock()
 
-        with patch("core.simulated.engine.time.time", return_value=100), patch(
-            "core.simulated.engine.key_mouse_manager", manager
+        with patch("core.any_fate.engine.time.time", return_value=100), patch(
+            "core.any_fate.engine.key_mouse_manager", manager
         ):
             result = universe.do_interaction()
 
@@ -367,8 +369,8 @@ class HertaInteractionTest(unittest.TestCase):
         universe = self.make_universe(quit_time=90)
         manager = Mock()
 
-        with patch("core.simulated.engine.time.time", return_value=100), patch(
-            "core.simulated.engine.key_mouse_manager", manager
+        with patch("core.any_fate.engine.time.time", return_value=100), patch(
+            "core.any_fate.engine.key_mouse_manager", manager
         ):
             result = universe.do_interaction()
 
