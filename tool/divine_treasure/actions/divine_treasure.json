@@ -1,5 +1,21 @@
 [
   {
+    "name": "event",
+    "trigger": {
+      "text": "位面",
+      "box": [
+        50,
+        10,
+        320,
+        50
+      ],
+      "interval": 2
+    },
+    "actions": [
+      "event_step"
+    ]
+  },
+  {
     "name": "entry",
     "trigger": {
       "text": "欢愉假面",
@@ -155,6 +171,36 @@
     ]
   },
   {
+    "name": "combat",
+    "trigger": {
+      "text": "位面",
+      "box": [
+        50,
+        10,
+        320,
+        50
+      ],
+      "interval": 2
+    },
+    "actions": [
+      "combat_step"
+    ]
+  },
+  {
+    "name": "combat",
+    "trigger": {
+      "photo": "divine_battle_flag",
+      "pos": {
+        "x": 75,
+        "y": 25
+      },
+      "threshold": 0.85
+    },
+    "actions": [
+      "ensure_auto_battle"
+    ]
+  },
+  {
     "name": "equation",
     "trigger": {
       "text": "请选择方程",
@@ -176,10 +222,10 @@
     "trigger": {
       "text": "空白处关闭",
       "box": [
-        880,
-        990,
-        1020,
-        1025
+        0,
+        0,
+        1920,
+        1080
       ],
       "redundancy": 30
     },

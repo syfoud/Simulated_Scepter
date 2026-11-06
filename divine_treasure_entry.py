@@ -20,6 +20,7 @@ import numpy as np
 from core.common.runtime import ScriptKernel
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
+from tool.public_ocr import merge_text
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tool" / "divine_treasure"))  # 面具/图鉴模块已归入子包；worker 子进程的 sys.path[0] 只有仓库根
@@ -69,7 +70,47 @@ BLESS_TITLE_BOX = (90, 55, 220, 105)  # 左上角「选择祝福」标题 [x1, y
 # 战斗界面和 3D 场景都没有。实测选择界面 0.998、战斗 0.393、3D 0.38x。
 CHOICE_LOGO = str(ASSET_DIR / "choice_logo.png")
 CHOICE_LOGO_POINT = (67, 67)
+# 找门用的 YOLO 模型（Ultralytics YOLO26n，类别只有 door / event）。
+# 输入 640x640 letterbox，输出 [1,300,6] 端到端框。
+DOOR_MODEL = str(ROOT / "resource" / "models" / "divergent.onnx")
+# 门的检测模型做成模块级单例：整局只加载一次，多个 Kernel 实例共用同一个会话。
+# 与 OCR 那边的 get_global_my_ts() 是同一套思路——别把会话挂在实例上，
+# 否则每 new 一个 Kernel 都要重新解析 4.8MB 模型。
+_door_session = None
+_door_input = None
+
+
+def get_door_session():
+    """懒加载门的检测模型，进程内只加载一次。"""
+    global _door_session, _door_input
+    if _door_session is None:
+        import onnxruntime as ort
+        _door_session = ort.InferenceSession(DOOR_MODEL, providers=["CPUExecutionProvider"])
+        _door_input = _door_session.get_inputs()[0].name
+        CUS_LOGGER.debug("门检测模型已加载：%s", Path(DOOR_MODEL).name, extra={"flush": True})
+    return _door_session, _door_input
+DOOR_PROMPT_BOX = (1180, 580, 1320, 645)  # 走近门后的「随意门」提示 [x1, y1, x2, y2]
+# 框不能放太大：实测 (1150,560)-(1400,670) 反而读成「→门」，带进了箭头干扰
+DOOR_TURN_GAIN = 0.25                     # 门偏出中心时，转视角的位移比例
 TURN_PIXELS = 300        # 每转一次视角的鼠标位移；太小找不到怪，太大容易漏
+COMBAT_STEP_LIMIT = 40   # 连续多少步没撞上怪就重置回出生点（配合 interval 约 80 秒）
+# 战斗型区域：这几种的链路完全一致（进入→找怪→进战斗→找门），共用 combat_step。
+# 其它区域（事件/商店/财富/奖励…）画面特征不同，不能让它走这里，否则会被"找门走人"跳过。
+COMBAT_AREAS = {"战斗", "精英", "首领", "转化"}
+# ── 事件类区域（事件/奖励/异常/铸造/奇遇-铸造/奇遇-惊喜事件）──────────────
+# 链路一致：进入 → 找事件卡片 → 按 F 交互 → 内部连续点空白/选选项 → 退出 → 找门。
+# 交互完之前**门不会出现**，所以「有没有随意门」不能拿来判断事件做完没做完。
+EVENT_TITLE_BOX = (185, 940, 830, 1010)   # 事件内部左下角的标题（实测在大世界为空）
+EVENT_TITLE_MIN_LEN = 4                   # 标题至少这么长才算「确实在事件里」
+EVENT_FLOAT_TITLE_BOX = (600, 100, 1350, 260)   # 大世界里浮在卡片上方的标题
+EVENT_CHOICE_BOX = (1330, 690, 1850, 790)       # 事件内部的「选择」按钮
+EVENT_OPTION_BOX = (1300, 330, 1890, 800)       # 选项块区域
+EVENT_BLANK_POINT = (960, 300)                  # 推进文字时点的空白处
+# 事件类区域：链路一致（进入→找卡片→按 F→内部点空白/选选项→退出→找门）
+EVENT_AREAS = {"事件", "奖励", "异常", "铸造", "奇遇-铸造", "奇遇-惊喜事件"}
+# 一个区域可能有多个事件。判断「还有没有没交互的」靠的是大世界里悬在卡片上方的标题：
+# 有标题 = 还有事件；转一圈都没有 = 这个区域的事件全做完了，该找门走了。
+EVENT_SCAN_LIMIT = 24    # 连续转这么多步都没看到标题，判定事件已清空（约转一圈）
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
 
@@ -255,6 +296,9 @@ class DivineTreasureKernel(ScriptKernel):
     target_protocol = DEFAULT_PROTOCOL  # 目标阈值协议，由 --protocol 覆盖
     _foreground_misses = 0
     _miss_count = 0
+    _combat_steps = 0
+    _event_scans = 0
+    stop_after_bless = False   # 只有 --stage bless 单独验证时才在选完祝福后停下
 
     def run_static(self, json_path=None, json_file=None, action_list=None, skip_check=False):
         # 按 --stage 指定的组运行，便于只验证当次改动的那一段
@@ -507,8 +551,10 @@ class DivineTreasureKernel(ScriptKernel):
                 CUS_LOGGER.debug("还有下一个祝福，继续", extra={"flush": True})
                 return
             time.sleep(0.5)
-        CUS_LOGGER.debug("8 秒内没有新祝福，本状态处理完毕", extra={"flush": True})
-        self.stop()
+        CUS_LOGGER.debug("8 秒内没有新祝福，祝福处理完毕", extra={"flush": True})
+        # 单独验证（--stage bless）时才停；在完整链路里要接着去找门
+        if getattr(self, "stop_after_bless", False):
+            self.stop()
 
     def in_3d_scene(self):
         """是否在 3D 场景里：左上角有「(N/20) 第X位面-类型」这行。
@@ -541,12 +587,15 @@ class DivineTreasureKernel(ScriptKernel):
         return False
 
     def has_dismiss_screen(self):
-        """界面上是否有「点击空白处关闭」（通用通知）。"""
-        x1, y1, x2, y2 = (880, 990, 1020, 1025)
-        crop = self.get_screen()[y1:y2, x1:x2]
-        if crop.size == 0:
-            return False
-        return "空白" in (self.ts.ocr_one_row(crop) or "")
+        """界面上是否有「点击空白处关闭」（通用通知）。
+
+        全屏 OCR 而不是固定框：不同弹窗的提示位置能差一百多像素（面具获得在 y≈1000，
+        面具升级在 y≈890），固定框必漏。用本项目 7 个界面验证过——四个通知类全中，
+        3D 场景/战斗界面/祝福界面全不中。
+        """
+        self.ts.forward(self.get_screen())
+        items = self.ts.find_with_box([0, 0, 1920, 1080], redundancy=30)
+        return "空白处关闭" in merge_text(items)
 
     def wait_battle_end(self, timeout=180.0):
         """等战斗结束。
@@ -660,44 +709,202 @@ class DivineTreasureKernel(ScriptKernel):
         time.sleep(0.06)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
-    def scan_for_monster(self):
-        """原地转一圈找怪：没看到就转视角，看到就前进靠近，红圈出现再普攻。
+    def in_event_inner(self):
+        """是否在事件内部：左下角出现事件标题（大世界那里是空的）。
 
-        不保证一次普攻就进战斗（角色攻击范围较小时会打空），所以普攻后复查小旗子。
+        不用左上角——实测「差分宇宙/事件」那两行 OCR 极不稳（读成空或「品」）。
+        用左上角更不能用「当前不在事件界面」的反向判据，退出时会有中间态。
         """
-        for _ in range(24):          # 最多转一圈（24 × TURN_PIXELS）
-            if self.in_battle():
-                return True
-            if not self.has_monster_info():
-                self.turn_view(TURN_PIXELS)
-                time.sleep(0.35)
-                continue
-            # 视野里有怪：朝当前朝向靠近，边走边砍
-            # 不靠红圈判断「能否攻击」——红圈常与怪物身体重合，模板匹配实测只有 0.5，
-            # 而且不一定落在屏幕内。靠近途中反复普攻，打中就进战斗，打空继续走。
-            for _ in range(12):
-                if self.in_battle():
-                    return True
-                self.walk()
-                time.sleep(0.15)
-                self.attack()
-                time.sleep(1.0)   # 普攻频率按实测减半
-                if self.in_battle():
-                    return True
-        return False
+        if self.in_3d_scene():
+            return False
+        x1, y1, x2, y2 = EVENT_TITLE_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        text = (self.ts.ocr_one_row(crop) or "").replace(" ", "")
+        return len(text) >= EVENT_TITLE_MIN_LEN
 
-    def engage_front(self):
-        """从出生点正面推进：差分宇宙的出生点怪物必定在正前方，直接前进+普攻。"""
-        for _ in range(14):
-            if self.in_battle():
-                return True
+    def has_event_prompt(self):
+        """走到事件卡片前会出现「事件」交互提示（和「随意门」同一个提示框）。"""
+        x1, y1, x2, y2 = DOOR_PROMPT_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "事件" in (self.ts.ocr_one_row(crop) or "")
+
+    def _leave_event_area(self):
+        """事件全做完后找门离开：有「随意门」提示就按 F，看到门就靠近。"""
+        if self.has_door_prompt():
+            CUS_LOGGER.debug("走到门前，按 F 进入随意门", extra={"flush": True})
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            return
+        doors = self.detect_doors()
+        if not doors:
+            self.turn_view(TURN_PIXELS)
+            return
+        _, (x1, y1, x2, y2) = doors[0]
+        offset = (x1 + x2) // 2 - 960
+        if abs(offset) > 120:
+            self.turn_view(int(offset * DOOR_TURN_GAIN))
+        else:
             self.walk()
-            time.sleep(0.15)
+
+    def find_event_title(self):
+        """大世界里找浮在事件卡片上方的标题，返回 (x, y)；没有返回 None。
+
+        太远看不到、太近被卡片挡住，所以只在「中等距离」有效——这是靠近过程的中间态。
+        """
+        x1, y1, x2, y2 = EVENT_FLOAT_TITLE_BOX
+        best = None
+        for item in self.ts.res:
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if not (x1 < cx < x2 and y1 < cy < y2):
+                continue
+            if len(item["raw_text"].strip()) < 3:
+                continue
+            if best is None or cy < best[1]:
+                best = (cx, cy)
+        return best
+
+    def handle_event_inner(self):
+        """事件内部推进一步：有「选择」就点，有选项就选，都没有就点空白推进。"""
+        # 1) 选项已出：挑第一个含「开展/接受/挑战」之类主动词，否则选第一个
+        options = []
+        x1, y1, x2, y2 = EVENT_OPTION_BOX
+        for item in self.ts.res:
+            box = item["box"]
+            cx, cy = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+            if x1 < cx < x2 and y1 < cy < y2 and len(item["raw_text"].strip()) >= 3:
+                options.append((item["raw_text"], cx, cy))
+        # 选项块以「米/»」这类箭头打头，先过滤出真正的选项行
+        picked = [o for o in options if o[0].lstrip().startswith(("米", "»", ">"))]
+        if picked:
+            text, cx, cy = picked[0]
+            CUS_LOGGER.debug(f"事件选项：{text[:24]} → 选第一项", extra={"flush": True})
+            self.click_position((cx, cy))
+            key_mouse_manager.wait()
+            time.sleep(0.8)
+            return
+        # 2) 有「选择」按钮：点它进入选项
+        if self.click_text("选择"):
+            key_mouse_manager.wait()
+            time.sleep(0.8)
+            CUS_LOGGER.debug("事件内点「选择」", extra={"flush": True})
+            return
+        # 3) 都没有：点空白推进文字
+        self.click_position(EVENT_BLANK_POINT)
+        key_mouse_manager.wait()
+        time.sleep(0.8)
+
+    def event_step(self):
+        """事件类区域的一步：在事件内部就推进，在大世界就找事件卡片靠近。"""
+        # 事件内部没有「位面」标签，门禁要放到最前面判断
+        if not self.in_event_inner():
+            area = self.current_area_type()
+            if area and area not in EVENT_AREAS:
+                return
+        if self.in_event_inner():
+            self.handle_event_inner()
+            return
+        if self.has_event_prompt():
+            CUS_LOGGER.debug("走到事件卡片前，按 F 进入", extra={"flush": True})
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            return
+        title = self.find_event_title()
+        if title is not None:
+            self._event_scans = 0
+            offset = int(title[0]) - 960
+            if abs(offset) > 120:
+                self.turn_view(int(offset * DOOR_TURN_GAIN))   # 偏了先对准
+            else:
+                self.walk()                                     # 对准了往前压
+            return
+        # 视野里没有悬空标题：可能是还没转到，也可能这个区域的事件已经做完了。
+        # 转一圈都没有，就认为清零——事件交互完门才会出现，这时候才去找门。
+        self._event_scans += 1
+        if self._event_scans >= EVENT_SCAN_LIMIT:
+            self._event_scans = 0
+            CUS_LOGGER.debug("转一圈没再看到事件标题，本区域事件已清空，找门", extra={"flush": True})
+            self._leave_event_area()
+            return
+        self.turn_view(TURN_PIXELS)
+
+    def detect_doors(self):
+        """用 YOLO 找门，返回 [(置信度, [x1, y1, x2, y2])]，坐标已换算回 1920x1080。
+
+        模型只有 door / event 两类，只要 door。走 YOLO 而不是模板匹配：门在不同距离、
+        不同角度下外观差别很大（远处一个小方块，走近占满屏幕），模板匹配扛不住。
+        """
+        session, input_name = get_door_session()
+        screen = self.get_screen()
+        height, width = screen.shape[:2]
+        scale = min(640 / height, 640 / width)
+        new_h, new_w = int(height * scale), int(width * scale)
+        pad_x, pad_y = (640 - new_w) // 2, (640 - new_h) // 2
+        canvas = np.full((640, 640, 3), 114, dtype=np.uint8)
+        canvas[pad_y:pad_y + new_h, pad_x:pad_x + new_w] = cv2.resize(screen, (new_w, new_h))
+        blob = canvas[:, :, ::-1].transpose(2, 0, 1)[None].astype(np.float32) / 255.0
+        rows = session.run(None, {input_name: blob})[0][0]
+        doors = []
+        for row in rows:
+            if len(row) < 6 or row[4] <= 0.35 or int(row[5]) != 0:
+                continue
+            box = [int((row[0] - pad_x) / scale), int((row[1] - pad_y) / scale),
+                   int((row[2] - pad_x) / scale), int((row[3] - pad_y) / scale)]
+            doors.append((float(row[4]), box))
+        return sorted(doors, reverse=True)
+
+    def has_door_prompt(self):
+        """走到门前会出现「随意门」交互提示。"""
+        x1, y1, x2, y2 = DOOR_PROMPT_BOX
+        crop = self.get_screen()[y1:y2, x1:x2]
+        if crop.size == 0:
+            return False
+        return "随意门" in (self.ts.ocr_one_row(crop) or "")
+
+    def combat_step(self):
+        """状态机在 3D 场景里调一次：走一步或转一下视角。
+
+        这里不再写「走→sleep→砍→sleep」这种固定节奏——节奏交给 JSON 的 interval，
+        低配机器上状态机自己会慢下来，高配上一帧一步，不用给不同设备写不同等待。
+        弹窗、祝福这些中间界面由 dismiss / bless 组先处理掉，走到这里说明确实是 3D 场景。
+        """
+        # 只处理战斗型区域。左上角标签是「(N/20) 第X位面-类型」，类型读得到就按它分流：
+        # 「位面」这个触发词覆盖全部 19 种区域，不在这里拦一道的话，事件/商店这些
+        # 非战斗区域也会被当成「没怪 → 找门走人」直接跳过。
+        area = self.current_area_type()
+        if area and area not in COMBAT_AREAS:
+            return
+        self._combat_steps += 1
+        if self._combat_steps >= COMBAT_STEP_LIMIT:
+            self._combat_steps = 0
+            CUS_LOGGER.warning("找怪步数用完，重置回出生点", extra={"flush": True})
+            self.reset_to_spawn()
+            return
+        if self.has_monster_info():
+            # 视野里有怪：前进一小段再砍一刀。走和砍都在同一个状态机步骤里，不额外 sleep。
+            self.walk()
             self.attack()
-            time.sleep(1.0)   # 普攻频率按实测减半
-            if self.in_battle():
-                return True
-        return False
+            return
+        # 这一区没怪了（或本来就是非战斗区）→ 找随意门离开
+        if self.has_door_prompt():
+            CUS_LOGGER.debug("走到门前，按 F 进入随意门", extra={"flush": True})
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            return
+        doors = self.detect_doors()
+        if not doors:
+            self.turn_view(TURN_PIXELS)      # 视野里没有门就转视角找
+            return
+        score, (x1, y1, x2, y2) = doors[0]
+        offset = (x1 + x2) // 2 - 960
+        if abs(offset) > 120:
+            self.turn_view(int(offset * DOOR_TURN_GAIN))   # 门偏了先对准
+        else:
+            self.walk()                                     # 对准了往前压
 
     def wait_and_click(self, text, timeout=8.0):
         """等某段文字出现再点它，超时返回 False。
@@ -728,13 +935,13 @@ class DivineTreasureKernel(ScriptKernel):
         if not paused:
             CUS_LOGGER.warning("三次 ESC 都没出现暂停界面", extra={"flush": True})
             return False
-        time.sleep(2.5)                      # 退回大世界
+        # 退出暂离后角色会回到大世界，按 F 进差分宇宙主页。
+        # 不用「等 2.5 秒再按」，而是按了就等文字出现——加载快慢跟着机器走。
         entered = False
-        for _ in range(3):                   # F 最多试三次
+        for _ in range(3):
             key_mouse_manager.press("interact")
             key_mouse_manager.wait()
-            time.sleep(2.0)
-            if self.click_text("开始游戏"):
+            if self.wait_and_click("开始游戏", timeout=6):
                 entered = True
                 break
         if not entered:
@@ -743,28 +950,13 @@ class DivineTreasureKernel(ScriptKernel):
         if not self.wait_and_click("继续进度", timeout=6):
             CUS_LOGGER.warning("模式选择页没找到「继续进度」", extra={"flush": True})
             return False
-        time.sleep(3.5)                      # 等重新加载进 3D
-        return True
-
-    def find_and_engage(self):
-        """找怪并进入战斗。
-
-        顺序按「最可能命中」排：
-        1. 先正面推进——出生点/重置后的怪必定在正前方，这一步就够的情况最多
-        2. 走偏了再转一圈找
-        3. 还不行为重置回出生点，再正面推一次
-        """
-        if self.engage_front():
-            return True
-        CUS_LOGGER.debug("正面没撞上，转视角找一圈", extra={"flush": True})
-        if self.scan_for_monster():
-            return True
-        CUS_LOGGER.warning("一圈也没找到，重置回出生点", extra={"flush": True})
-        if not self.reset_to_spawn():
-            return False
-        if self.engage_front():
-            return True
-        CUS_LOGGER.error("重置后正面推进仍没进战斗", extra={"flush": True})
+        # 等重新加载进 3D：认「位面」这行出现，而不是干等一个固定时长
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            if self.in_3d_scene():
+                return True
+            time.sleep(0.5)
+        CUS_LOGGER.warning("继续进度后没等到 3D 场景", extra={"flush": True})
         return False
 
     def read_mask_progress(self):
@@ -906,7 +1098,7 @@ def main(default_stage="entry"):
     mode.add_argument("--samples", type=Path, help="Offline recognition only, never sends input")
     mode.add_argument("--run", action="store_true", help="One bounded sequence; F8 stops input")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "combat", "masks", "opening", "gallery"), default=default_stage,
+    parser.add_argument("--stage", choices=("entry", "team", "mask", "equation", "panel", "battle", "auto", "waitend", "bless", "combat", "door", "masks", "opening", "gallery"), default=default_stage,
                         help="entry: 全流程到面具页；team: 只验证配队那一段；masks/opening: 开局筛选")
     parser.add_argument("--protocol", type=int, default=DEFAULT_PROTOCOL,
                         help=f"目标阈值协议（{PROTOCOL_RANGE[0]}~{PROTOCOL_RANGE[1]}），默认 {DEFAULT_PROTOCOL}")
@@ -995,23 +1187,20 @@ def main(default_stage="entry"):
     try:
         if args.stage in ("entry", "team", "mask", "equation"):
             run_script(kernel, str(ACTION_SCRIPT))
+        if args.stage == "door":
+            # 只验证「3D 里找门 → 走到门前 → 按 F」这一段
+            kernel.action_groups = ["dismiss", "combat"]
+            run_script(kernel, str(ACTION_SCRIPT))
+            return 0
         if args.stage == "combat":
-            # 完整战斗链路：找怪 → 进战斗 → 自动战斗 → 等结束 → 选祝福（可连续）
-            kernel.prepare_script()
-            if not kernel.find_and_engage():
-                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
-                return 2
-            CUS_LOGGER.debug("已进入战斗", extra={"flush": True})
-            kernel.ensure_auto_battle()
-            if not kernel.wait_battle_end():
-                CUS_LOGGER.error("没能确认战斗结束", extra={"flush": True})
-                return 2
-            # 祝福可能连续弹多次，交给 JSON 主循环处理（bless 组在标题消失时 stop）
-            kernel.action_groups = ["dismiss", "bless"]
+            # 全程交给状态机：弹窗 → 祝福 → 3D 里走一步（战斗区走 combat，事件区走 event）
+            # 两个组都靠「位面」触发，靠各自 step 里的区域门禁分流。
+            kernel.action_groups = ["dismiss", "bless", "combat", "event"]
             run_script(kernel, str(ACTION_SCRIPT))
             return 0
         if args.stage == "bless":
             # 走 JSON 主循环，验证「识别到选择祝福 → 选推荐 → 确认」整条链路
+            kernel.stop_after_bless = True    # 单独验证：选完就停
             kernel.action_groups = ["dismiss", "bless"]
             run_script(kernel, str(ACTION_SCRIPT))
             return 0
@@ -1031,11 +1220,9 @@ def main(default_stage="entry"):
             CUS_LOGGER.debug(f"处理后：{'已开启' if ok else '仍未开启'}", extra={"flush": True})
             return 0 if ok else 2
         if args.stage == "battle":
-            kernel.prepare_script()
-            if not kernel.find_and_engage():
-                CUS_LOGGER.error("没能找到并进入战斗", extra={"flush": True})
-                return 2
-            CUS_LOGGER.debug("已进入战斗界面（小旗子）", extra={"flush": True})
+            # 只验证「找怪→进战斗」这一段，进战斗后 combat 组自动停
+            kernel.action_groups = ["dismiss", "combat"]
+            run_script(kernel, str(ACTION_SCRIPT))
             return 0
         if args.stage == "panel":
             # 不走 run_script 就没有 prepare_script，键鼠管理器线程不会启动，
