@@ -108,6 +108,9 @@ EVENT_OPTION_BOX = (1300, 330, 1890, 800)       # 选项块区域
 EVENT_BLANK_POINT = (960, 300)                  # 推进文字时点的空白处
 # 事件类区域：链路一致（进入→找卡片→按 F→内部点空白/选选项→退出→找门）
 EVENT_AREAS = {"事件", "奖励", "异常", "铸造", "奇遇-铸造", "奇遇-惊喜事件"}
+# 一个区域可能有多个事件。判断「还有没有没交互的」靠的是大世界里悬在卡片上方的标题：
+# 有标题 = 还有事件；转一圈都没有 = 这个区域的事件全做完了，该找门走了。
+EVENT_SCAN_LIMIT = 24    # 连续转这么多步都没看到标题，判定事件已清空（约转一圈）
 WALK_SECONDS = 1.5       # 每次前进时长（实机调过：0.35 太短走不到怪）
 
 
@@ -294,6 +297,7 @@ class DivineTreasureKernel(ScriptKernel):
     _foreground_misses = 0
     _miss_count = 0
     _combat_steps = 0
+    _event_scans = 0
     stop_after_bless = False   # 只有 --stage bless 单独验证时才在选完祝福后停下
 
     def run_static(self, json_path=None, json_file=None, action_list=None, skip_check=False):
@@ -728,6 +732,24 @@ class DivineTreasureKernel(ScriptKernel):
             return False
         return "事件" in (self.ts.ocr_one_row(crop) or "")
 
+    def _leave_event_area(self):
+        """事件全做完后找门离开：有「随意门」提示就按 F，看到门就靠近。"""
+        if self.has_door_prompt():
+            CUS_LOGGER.debug("走到门前，按 F 进入随意门", extra={"flush": True})
+            key_mouse_manager.press("interact")
+            key_mouse_manager.wait()
+            return
+        doors = self.detect_doors()
+        if not doors:
+            self.turn_view(TURN_PIXELS)
+            return
+        _, (x1, y1, x2, y2) = doors[0]
+        offset = (x1 + x2) // 2 - 960
+        if abs(offset) > 120:
+            self.turn_view(int(offset * DOOR_TURN_GAIN))
+        else:
+            self.walk()
+
     def find_event_title(self):
         """大世界里找浮在事件卡片上方的标题，返回 (x, y)；没有返回 None。
 
@@ -792,14 +814,23 @@ class DivineTreasureKernel(ScriptKernel):
             key_mouse_manager.wait()
             return
         title = self.find_event_title()
-        if title is None:
-            self.turn_view(TURN_PIXELS)      # 视野里没有事件就转视角找
+        if title is not None:
+            self._event_scans = 0
+            offset = int(title[0]) - 960
+            if abs(offset) > 120:
+                self.turn_view(int(offset * DOOR_TURN_GAIN))   # 偏了先对准
+            else:
+                self.walk()                                     # 对准了往前压
             return
-        offset = int(title[0]) - 960
-        if abs(offset) > 120:
-            self.turn_view(int(offset * DOOR_TURN_GAIN))   # 偏了先对准
-        else:
-            self.walk()                                     # 对准了往前压
+        # 视野里没有悬空标题：可能是还没转到，也可能这个区域的事件已经做完了。
+        # 转一圈都没有，就认为清零——事件交互完门才会出现，这时候才去找门。
+        self._event_scans += 1
+        if self._event_scans >= EVENT_SCAN_LIMIT:
+            self._event_scans = 0
+            CUS_LOGGER.debug("转一圈没再看到事件标题，本区域事件已清空，找门", extra={"flush": True})
+            self._leave_event_area()
+            return
+        self.turn_view(TURN_PIXELS)
 
     def detect_doors(self):
         """用 YOLO 找门，返回 [(置信度, [x1, y1, x2, y2])]，坐标已换算回 1920x1080。
