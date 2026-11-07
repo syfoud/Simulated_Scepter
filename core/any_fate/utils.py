@@ -11,6 +11,7 @@ from math import atan2, pi
 
 import cv2 as cv
 import numpy as np
+import pyautogui
 import win32api
 import win32con
 
@@ -55,6 +56,8 @@ class FateUtils(ScriptKernel):
     def __init__(self, *, fate=None, debug=False, max_run_time=0):
         # 先把游戏窗口切到前台，否则 ScriptKernel 等窗口时焦点可能仍停在别处
         set_forground()
+        # 自动化会把鼠标频繁移到屏幕角落；pyautogui 的 fail-safe 会据此抛异常并终止键鼠线程
+        pyautogui.FAILSAFE = False
         super().__init__()
         self.debug = 1 if debug else 0
         self.max_run_time = max_run_time
