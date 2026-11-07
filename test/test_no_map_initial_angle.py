@@ -9,13 +9,13 @@ from tool.utils.image_tool import load_all_images_from_directory
 ROOT = Path(__file__).resolve().parents[1]
 load_all_images_from_directory(str(ROOT / "resource" / "imgs"))
 
-from core.simulated.engine import SimulatedUniverse  # noqa: E402
-from core.simulated.utils import UniverseUtils  # noqa: E402
+from core.any_fate.engine import AnyFateUniverse  # noqa: E402
+from core.any_fate.utils import FateUtils  # noqa: E402
 
 
 class InitialAngleRestoreTest(unittest.TestCase):
     def make_utils(self, mini_state):
-        utils = UniverseUtils.__new__(UniverseUtils)
+        utils = FateUtils.__new__(FateUtils)
         utils.mini_state = mini_state
         utils.stop_move = 1
         utils.ready = 0
@@ -30,8 +30,8 @@ class InitialAngleRestoreTest(unittest.TestCase):
         manager = Mock()
 
         with (
-            patch("core.simulated.utils.key_mouse_manager", manager),
-            patch("core.simulated.utils.CUS_LOGGER", Mock()),
+            patch("core.any_fate.utils.key_mouse_manager", manager),
+            patch("core.any_fate.utils.CUS_LOGGER", Mock()),
         ):
             utils.restore_initial_angle(359)
 
@@ -43,7 +43,7 @@ class InitialAngleRestoreTest(unittest.TestCase):
         utils.move_direct_to_text = Mock(return_value=False)
         utils.restore_initial_angle = Mock()
 
-        with patch("core.simulated.utils.CUS_LOGGER", Mock()):
+        with patch("core.any_fate.utils.CUS_LOGGER", Mock()):
             utils.move_direct_thread(initial_angle=359)
 
         utils.restore_initial_angle.assert_called_once_with(359)
@@ -54,7 +54,7 @@ class InitialAngleRestoreTest(unittest.TestCase):
         utils.move_to_end = Mock(return_value=0)
         utils.restore_initial_angle = Mock()
 
-        with patch("core.simulated.utils.CUS_LOGGER", Mock()):
+        with patch("core.any_fate.utils.CUS_LOGGER", Mock()):
             utils.move_direct_thread(device=1, initial_angle=359)
 
         utils.move_to_end.assert_called_once_with(mode=2, device=1)
@@ -66,7 +66,7 @@ class InitialAngleRestoreTest(unittest.TestCase):
         utils.move_to_end = Mock(return_value=1)
         utils.restore_initial_angle = Mock()
 
-        with patch("core.simulated.utils.CUS_LOGGER", Mock()):
+        with patch("core.any_fate.utils.CUS_LOGGER", Mock()):
             utils.move_direct_thread(device=1, initial_angle=359)
 
         self.assertTrue(utils.has_target)
@@ -108,9 +108,9 @@ class InitialAngleRestoreTest(unittest.TestCase):
 
         manager = Mock()
         with (
-            patch("core.simulated.utils.ThreadWithException", ImmediateThread),
-            patch("core.simulated.utils.key_mouse_manager", manager),
-            patch("core.simulated.utils.CUS_LOGGER", Mock()),
+            patch("core.any_fate.utils.ThreadWithException", ImmediateThread),
+            patch("core.any_fate.utils.key_mouse_manager", manager),
+            patch("core.any_fate.utils.CUS_LOGGER", Mock()),
         ):
             utils.get_path_only_minimap()
             self.assertEqual(359, utils.initial_angle)
@@ -120,12 +120,12 @@ class InitialAngleRestoreTest(unittest.TestCase):
         utils.pos_predictor.update_minimap_data.assert_called_once_with("frame")
 
     def test_manual_leave_selection_clears_area_angle(self):
-        universe = SimulatedUniverse.__new__(SimulatedUniverse)
+        universe = AnyFateUniverse.__new__(AnyFateUniverse)
         universe.initial_angle = 359
         universe.state = "run"
         manager = Mock()
 
-        with patch("core.simulated.engine.key_mouse_manager", manager):
+        with patch("core.any_fate.utils.key_mouse_manager", manager):
             universe.setting_exit()
 
         self.assertIsNone(universe.initial_angle)

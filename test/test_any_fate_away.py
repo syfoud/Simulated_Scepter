@@ -146,11 +146,11 @@ class AwayBeforeMovementTest(unittest.TestCase):
             text="暂离", box=AWAY_BOX, click=False, allow_fail=True
         )
 
-    def test_away_clears_area_without_switching_state(self):
-        """识别到「暂离」后只清空区域名、累计失败次数，不切状态也不重建地图。
+    def test_away_marks_ui_state_and_rebuilds_the_map(self):
+        """识别到「暂离」后切到 ui 状态、清空区域名并重建地图。
 
         暂离会回到「黑塔的办公室」，区域名必须清空，否则下一轮仍按旧区域名寻路；
-        状态与地图的复位交给后续流程按需处理，暂离流程本身不再越权改动。
+        状态和地图都要复位，主循环下一轮才不会继续按旧地图寻找目标。
         """
         engine = make_engine(last_interact_time=0.0)
 
@@ -158,8 +158,8 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         self.assertEqual(engine.area, "")
         self.assertEqual(engine.fail_count, 1)
-        engine.update_state.assert_not_called()
-        engine.init_map.assert_not_called()
+        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("ui",)])
+        engine.init_map.assert_called_once_with()
 
     def test_esc_miss_returns_to_the_main_loop_without_walking(self):
         """3 秒没唤出暂离界面：直接回主循环，不补按 esc、不走动、不施放秘技。"""
@@ -187,9 +187,11 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         self.assertEqual(engine.normal(), 1)
 
-        # need_end 直接进结算：只有 exit 一次状态切换，不再先挂 ui 再 exit
-        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("exit",)])
+        # need_end 直接进结算：先挂 ui（显示回到办公室），再切 exit 结束本局
+        self.assertEqual([c.args for c in engine.update_state.call_args_list],
+                         [("ui",), ("exit",)])
         self.assertEqual(self._pressed_keys(), ["esc"])
+        engine.init_map.assert_called_once_with()
         engine.navigate_battle.assert_not_called()
         self.assertEqual(engine.area, "")
 

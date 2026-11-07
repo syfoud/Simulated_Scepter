@@ -8,7 +8,6 @@ from tool.log import CUS_LOGGER
 
 class Config:
     def __init__(self):
-        self.angle = "1.0"
         self.difficult = "5"
         self.allow_difficult = [1, 2, 3, 4, 5]
         self.skill_char = ['黄泉', '白厄']
@@ -19,7 +18,6 @@ class Config:
         self.all_list = ['流萤','黄泉','波提欧','真理医生','丹恒饮月','瓦尔特杨','克拉拉','银枝','刃','希儿','景元','镜流','卡芙卡','托帕账账','黑天鹅','翡翠','云璃','砂金','椒丘','彦卿','姬子','杰帕德','藿藿','白露','阿兰','素裳','加拉赫','知更鸟','阮梅','布洛妮娅','花火','符玄','银狼','罗刹','寒鸦','卢卡','桂乃芬','虎克','艾丝妲','米沙','佩拉','黑塔','三月七','停云','桑博','雪衣','青雀','玲可','驭空','娜塔莎','希露瓦','大黑塔','忘归人','星期日','灵砂','缇宝', '白厄']
         self.angles = [912,891,870,848,828,805,784,765,745,724,704,685,667,648,629,612,594,574,557,538,523,505,489,472,456,438,422,408,391,374,358,342,327,313,297,280,265,251,235,222,205,192,160,146,134,118,101,87,73,59,44,28,12,0,-14,-31,-45,-56,-76,-89,-99,-117,-131,-145,-152,-173,-196,-206,-221,-235,-255,-268,-284,-297,-311,-329,-339,-354,-375,-391,-407,-422,-440,-457,-473,-486,-506,-523,-540,-555,-576,-592,-613,-630,-649,-668,-687,-707,-725,-744,-765,-786,-807,-827,-849,-872,-893,-907,-918]
         self.angles = self.angles[::-1]
-        self.long_press_sprint = 0
         self.debug_mode = 0
         self.speed_mode = 0
         self.weekly_mode = 0
@@ -35,17 +33,6 @@ class Config:
         with open(os.path.join(PATHS["root"], "actions", "character.json"), encoding='utf-8') as file:
             self.match = json.load(file)
         self.read()
-
-    @property
-    def multi(self) -> float:
-        x = float(self.angle)
-        if x > 5:
-            self.angle = '1.0'
-            return 1.0
-        elif x > 2:
-            return x - 2
-        else:
-            return x
 
     @property
     def diffi(self) -> int:
@@ -82,7 +69,6 @@ class Config:
         with open(config_path(__file__), encoding="utf-8") as file:
             data = json.load(file)
         config = data['config']
-        self.angle = str(config['angle'])
         self.difficult = config['difficulty']
         self.team = config['team']
         self.speed_mode = config['speed_mode']
@@ -100,7 +86,6 @@ class Config:
     def save(self):
         save_json_values(__file__, {
                 "config": {
-                    "angle": float(self.angle),
                     "difficulty": self.diffi,
                     "team": self.team,
                     "speed_mode": self.speed_mode,

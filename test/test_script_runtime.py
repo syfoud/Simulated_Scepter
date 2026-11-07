@@ -25,15 +25,15 @@ ROOT = Path(__file__).resolve().parents[1]
 def script_fixture(kernel_id, path):
     """加载实际业务方法及继承链，替换窗口、地图与键鼠设备边界。"""
     manager = Mock()
-    namespace = {"StateKernel": StateKernel, "key_mouse_manager": manager,
+    namespace = {"StateKernel": StateKernel,
+                 "key_mouse_manager": manager,
                  "CUS_LOGGER": Mock(), "time": SimpleNamespace(time=lambda: 100, sleep=Mock()),
                  "os": os, "PATHS": PATHS, "random": random, "factor": "测试",
                  "merge_text": merge_text, "NormalEndError": NormalEndError,
-                 "set_forground": Mock()}
+                 "load_settings": Mock(return_value={}), "set_forground": Mock()}
     definitions = [
-        ("simulated/utils.py", "UniverseUtils", {"is_run"}),
-        ("simulated/engine.py", "SimulatedUniverse", {"start", "route", "normal", "auto_battle"}),
-        ("any_fate/engine.py", "AnyFateUniverse", {"normal"}),
+        ("any_fate/utils.py", "FateUtils", {"is_run", "start", "route"}),
+        ("any_fate/engine.py", "AnyFateUniverse", {"normal", "auto_battle"}),
         ("iron_blood/engine.py", "IronBloodUniverse", set()),
         ("finger_snap/engine.py", "FingerSnap", set()),
     ]
@@ -42,9 +42,12 @@ def script_fixture(kernel_id, path):
         tree = ast.parse(source.read_text(encoding="utf-8"))
         node = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name)
         node.body = [node for node in node.body if isinstance(node, ast.FunctionDef) and node.name in methods] or [ast.Pass()]
+        if name == "FateUtils":
+            # 基类改回 StateKernel：ScriptKernel.__init__ 会等真实游戏窗口，单测不需要也不该走那一套
+            node.bases = [ast.Name(id="StateKernel", ctx=ast.Load())]
         module = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
         exec(compile(module, str(source), "exec"), namespace)
-    classes = {"Simulated": "SimulatedUniverse", "AnyFate": "AnyFateUniverse",
+    classes = {"AnyFate": "AnyFateUniverse",
                "IronBlood": "IronBloodUniverse", "FingerSnap": "FingerSnap"}
     engine = namespace[classes[kernel_id]]()
     engine._stop = False
@@ -81,7 +84,7 @@ def script_fixture(kernel_id, path):
         phases.append("battle_ready")
         return True
 
-    engine.navigate_battle = engine.get_direc_only_minimap = Mock(side_effect=navigate)
+    engine.navigate_battle = Mock(side_effect=navigate)
 
     def stop():
         engine._stop = True
@@ -95,7 +98,7 @@ def script_fixture(kernel_id, path):
         return 1, "崩坏：星穹铁道"
 
     namespace["get_hwnd_and_text"] = window
-    source = "simulated/actions/universe.json" if kernel_id == "Simulated" else "any_fate/actions/insect.json"
+    source = "any_fate/actions/insect.json"
     events = json.loads((ROOT / "core" / source).read_text(encoding="utf-8"))
     event = copy.deepcopy(next(event for event in events if event["trigger"].get("photo") == "big_world"))
     data = [{"name": "进入战斗", "trigger": {"photo": "battle_ready", "pos": {"x": 0.5, "y": 0.5}},
@@ -109,7 +112,7 @@ class ScriptRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, \
                 patch("tool.action_script.get_global_stop_flag", return_value=False):
             path = Path(temporary) / "selected.json"
-            for kernel_id in ("Simulated", "AnyFate", "IronBlood", "FingerSnap"):
+            for kernel_id in ("AnyFate", "IronBlood", "FingerSnap"):
                 with self.subTest(kernel_id=kernel_id):
                     engine, manager, phases = script_fixture(kernel_id, path)
                     with patch("core.common.engine.key_mouse_manager", manager):
@@ -120,7 +123,7 @@ class ScriptRuntimeTests(unittest.TestCase):
                     self.assertEqual(engine.default_json_path, str(path))
                     self.assertTrue(engine._stop)
                     manager.start.assert_called_once()
-                    manager.press.assert_any_call("v")
+                    manager.press.assert_any_call("V")
                     manager.stop.assert_called_once()
                     engine.stop.assert_called_once()
 

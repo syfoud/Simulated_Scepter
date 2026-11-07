@@ -318,12 +318,7 @@ class KeyMouseManager:
             pyautogui.keyDown(resolve_key(operation['key']))
 
         elif op_type == 'keyUp':
-            key = resolve_key(operation['key'])
-            # 长按加速：走 W 的时候把加速键一并松开，否则会一直处于加速状态
-            if (self.config and hasattr(self.config, 'long_press_sprint') and
-                self.config.long_press_sprint and operation['key'] == 'move_w'):
-                pyautogui.keyUp(resolve_key('sprint'))
-            pyautogui.keyUp(key)
+            pyautogui.keyUp(resolve_key(operation['key']))
 
         elif op_type == 'press':
             key = resolve_key(operation['key'])

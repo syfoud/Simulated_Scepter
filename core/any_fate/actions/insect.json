@@ -591,7 +591,9 @@
         },
         "actions":
         [
-            "pre_start"
+            {
+                "position": [1606, 966]
+            }
         ]
     },
         {

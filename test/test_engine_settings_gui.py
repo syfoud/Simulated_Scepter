@@ -101,10 +101,7 @@ class EngineSettingsGuiTests(unittest.TestCase):
             self.assertEqual(importer.call_count, len(self.registry.runnable()))
 
     def test_json_settings_save_only_the_selected_engine_and_restore_visible_values(self):
-        for engine, filename, field in (
-            ("Simulated", "info_old.json", "Simul_max_run_input"),
-            ("Divergent", "info.json", "Diver_max_run_input"),
-        ):
+        for engine, field in (("Divergent", "Diver_max_run_input"),):
             with self.subTest(engine=engine):
                 others = self.snapshot(exclude=self.paths[engine])
                 dialog = self.dialog(engine)
@@ -220,10 +217,7 @@ class EngineSettingsGuiTests(unittest.TestCase):
         self.assertTrue(dialog.runtime.Aboutupdatelock.isVisible())
 
     def test_kernel_settings_do_not_offer_debug_toggles_or_overwrite_debug_flags(self):
-        for engine, filename, old_control in (
-            ("Simulated", "info_old.json", "Simul_debug_checkbox"),
-            ("Divergent", "info.json", "Diver_debug_checkbox"),
-        ):
+        for engine, old_control in (("Divergent", "Diver_debug_checkbox"),):
             path = self.paths[engine]
             values = json.loads(path.read_text(encoding="utf-8"))
             values["config"]["debug_mode"] = 1
@@ -256,18 +250,18 @@ class EngineSettingsGuiTests(unittest.TestCase):
         self.assertEqual(self.settings.read_bytes(), before)
 
     def test_json_write_failure_restores_running_configuration(self):
-        import core.simulated.settings_ui as module
+        import core.divergent.settings_ui as module
 
-        dialog = self.dialog("Simulated")
+        dialog = self.dialog("Divergent")
         previous = module.config.max_run
-        before = self.paths["Simulated"].read_bytes()
-        dialog.section.Simul_max_run_input.setText("99")
+        before = self.paths["Divergent"].read_bytes()
+        dialog.section.Diver_max_run_input.setText("99")
         with patch.object(module.config, "save", side_effect=OSError("无法写入")), \
                 patch.object(QMessageBox, "critical") as critical:
             dialog.buttons.button(QDialogButtonBox.Save).click()
             critical.assert_called_once()
         self.assertEqual(module.config.max_run, previous)
-        self.assertEqual(self.paths["Simulated"].read_bytes(), before)
+        self.assertEqual(self.paths["Divergent"].read_bytes(), before)
         self.assertTrue(dialog.isVisible())
 
     def test_battle_weight_warning_intercepts_first_edit_and_survives_reopening(self):

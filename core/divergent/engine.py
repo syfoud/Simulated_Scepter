@@ -20,26 +20,16 @@ from route import PATHS
 from tool.storage import resource_path
 from tool.settings import load_settings
 from tool import GLOBAL
+from core.common.runtime import set_forground
 from core.divergent.config import config
 from core.divergent.keyops import KeyController
-from core.divergent.utils import UniverseUtils, set_forground
+from core.divergent.utils import UniverseUtils
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER, print_exc
 from tool.mask import MASK
 from tool.public_ocr import clean_text, load_actions, merge_text
 from tool.utils.image_tool import find_image_by_name
 from tool.utils.tool import get_hwnd_and_text
-from tool.window_recorder import WindowRecorder
-
-# 版本号
-version = "v8.042"
-
-
-
-
-
-
-
 
 class DivergentUniverse(UniverseUtils):
     def run_static(self, json_path=None, json_file=None, action_list=None, skip_check=0):
@@ -57,15 +47,13 @@ class DivergentUniverse(UniverseUtils):
         self.keys = KeyController(self)
         super().prepare_script()
 
-    def __init__(self, debug=0, nums=-1, speed=0, task_owner=None):
+    def __init__(self, debug=0, nums=-1, speed=0):
         super().__init__()
         # 设置并启动键鼠管理器
-        key_mouse_manager.set_config(config)
+        key_mouse_manager.set_config(self)
         # 设置屏幕参数以支持坐标转换
         key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
 
-        self.is_get_team = True #首次进入差分宇宙后,获取队伍成员
-        self.team_detect = {} #队伍成员检测
 
         self._stop = True
         self.end = 0
@@ -73,7 +61,6 @@ class DivergentUniverse(UniverseUtils):
 
         # 允许使用秘技,秘技消耗品不足的时候就用不了
         self.allow_e = 1
-        self.threshold = 0.97
 
         self.count = self.my_cnt = 0
         self.debug = debug
@@ -117,14 +104,9 @@ class DivergentUniverse(UniverseUtils):
         self.update_count()
         CUS_LOGGER.info(f"开始运行:初始计数：{self.count}")
         # set_debug(debug > 0)
-        data = load_settings()
-        self.record = data.get("recording_state", True)
-        self.recorder = WindowRecorder(output_path=PATHS["video"], fps=30, window_title="崩坏：星穹铁道",
-                                       window_class_name="UnityWndClass", see_time=True, offsets=[10, 50, 10, 10], simul_instance=self, task_owner=task_owner)
 
     def route(self):
         self.goto_diver_universe()
-        self.is_get_team = True #启动后重置状态
         while True:
             if self._stop:
                 break
@@ -133,7 +115,6 @@ class DivergentUniverse(UniverseUtils):
             cnt = 0
             focus_reclaim_wait = max(1, 2*load_settings().get("game_focus_reclaim_wait_seconds", 600))
             while Text != "崩坏：星穹铁道" and Text != "云·星穹铁道" and not self._stop:
-                self.lst_changed = time.time()
                 if self._stop:
                     raise KeyboardInterrupt
                 if not warn_game:
@@ -222,9 +203,6 @@ class DivergentUniverse(UniverseUtils):
     def init_floor(self):
         self.portal_cnt = 0
         self.area_state = 0
-        self.event_solved = 0
-        self.bless_solved = 0
-        self.fail_cnt = 0
         self.now_event = ''
         if hasattr(self, 'keys'):
             self.keys.fff = 0
@@ -279,10 +257,6 @@ class DivergentUniverse(UniverseUtils):
             if i[:prefix] in text:
                 return i
         return None
-
-    def test(self):
-        self.find_team_member(self.team_member)
-
 
     def find_team_member(self,team_member=None):
         boxes = [[1620, 289, 1790, 335],[1620, 384, 1790, 427],[1620, 478, 1790, 521],[1620, 570, 1790, 618]]
@@ -514,7 +488,6 @@ class DivergentUniverse(UniverseUtils):
 
     def event(self):
         event_id = (-1, '')
-        self.event_solved = 1
         tm = time.time()
         while time.time() - tm < 20:
             title_text = clean_text(self.ts.ocr_one_row(self.screen, [185, 945, 820, 1005]), char=0)
@@ -1059,7 +1032,6 @@ class DivergentUniverse(UniverseUtils):
         self.bless(blood=1)
 
     def bless(self, reverse=1, blood=0):
-        self.bless_solved = 1
         # 屏幕下方
         # text = self.ts.find_with_box([350, 795, 1550, 819])
         # 金血祝福的位置会上下浮动, 故加大识别区域
@@ -1164,12 +1136,6 @@ class DivergentUniverse(UniverseUtils):
 
     def stop(self, *_, **__):
         CUS_LOGGER.info("尝试停止运行")
-        if self.record and self._u1a:
-            CUS_LOGGER.info("尝试停止录制")
-            try:
-                self.recorder.stop_recording()
-            except Exception as e:
-                CUS_LOGGER.error(f"停止录制时发生错误: {e}")
         try:
             self.init_floor()
         except Exception:
@@ -1181,8 +1147,6 @@ class DivergentUniverse(UniverseUtils):
     def start(self):
         self._stop = False
         self.prepare_script()
-        if self.record and self._u1a:
-            self.recorder.start_recording(self.count)
         try:
             self.route()
         except KeyboardInterrupt:
@@ -1200,13 +1164,6 @@ class DivergentUniverse(UniverseUtils):
             CUS_LOGGER.info("发生错误，尝试停止运行")
             self.stop()
             raise
-
-    def screen_test(self):
-        try:
-            cv.imshow("screen", self.save_screen())
-            cv.waitKey(0)
-        except Exception:
-            pass
 
     def goto_diver_universe(self):
         CUS_LOGGER.info("前往差分宇宙")

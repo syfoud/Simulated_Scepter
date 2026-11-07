@@ -11,15 +11,12 @@
 （回到大地图时 is_run 写 "run"，开局写 "exit"/"init"），所以下一局不会误判。动作脚本里的接线
 由 test_settle_wiring.py 锁定。
 
-这里锁定：闸门的三种分支（首次结算 / 已结算过只补点击 / 达次数上限后停在结算界面）、
-state 的写入时机（记账时写、且在录像分支之外无条件写）、各模式的录像切分决策。
+这里锁定：闸门的三种分支（首次结算 / 已结算过只补点击 / 达到运行次数后退出并停止）、
+记账的 state 写入时机、以及各模式的录像切分决策。
 """
 
-import json
 import time
 import unittest
-from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from importing import load_img
@@ -27,42 +24,19 @@ from importing import load_img
 # 内核在导入期就会读图像记忆切片，必须先预热图片缓存
 load_img()
 
-from core.any_fate import engine as any_fate_engine  # noqa: E402
+from core.any_fate import utils as any_fate_utils  # noqa: E402
+from core.any_fate.engine import AnyFateUniverse  # noqa: E402
 from core.finger_snap.engine import FingerSnap  # noqa: E402
 from core.iron_blood.engine import IronBloodUniverse  # noqa: E402
-from core.simulated import engine as simulated_engine  # noqa: E402
-from core.simulated.engine import SimulatedUniverse  # noqa: E402
 
 # 结算界面上点掉的落点（报告界面上的空白处，与 settle_university 同值）
 SETTLE_CLICK = [900, 1000]
 
-# do_action 支持的字典动作（见 core/common/engine.py:114-143）：主键决定走哪个分支，
-# 分支内部还会读几个附加键；除这些以外的键会被静默忽略。
-ACTION_KEYS = {
-    "text": {"text", "box", "redundancy"},
-    "photo": {"photo", "threshold"},
-    "position": {"position"},
-    "sleep": {"sleep"},
-    "real_sleep": {"real_sleep"},
-    "press": {"press", "time"},
-    "drag": {"drag"},
-    "scroll": {"scroll"},
-    "set_state": {"set_state"},
-}
-# 普通模拟宇宙里「点击空白处继续」的六类界面
-BLANK_CLICK_EVENTS = (
-    "获得祝福",
-    "获得奇物",
-    "获得物品",
-    "失去祝福",
-    "失去奇物",
-    "失去物品",
-)
-# 四个内核都由同一条结算流程驱动
-KERNELS = (SimulatedUniverse, any_fate_engine.AnyFateUniverse, IronBloodUniverse, FingerSnap)
+# 三条内核都由同一个 base 结算流程驱动；普通模拟宇宙入口已删除
+KERNELS = (AnyFateUniverse, IronBloodUniverse, FingerSnap)
 
 
-def make_engine(cls=SimulatedUniverse, state="exit"):
+def make_engine(cls=AnyFateUniverse, state="exit"):
     """造一个只装了结算所需属性的假内核：object.__new__ 跳过 __init__ 的窗口与录像初始化。"""
     engine = object.__new__(cls)
     engine.state = state
@@ -71,100 +45,105 @@ def make_engine(cls=SimulatedUniverse, state="exit"):
     engine.states = []
     engine.update_state = engine.states.append
     engine.click_position = lambda position: engine.calls.append(("click", list(position)))
+    engine.max_run_time = 0
+    engine.my_cnt = 0
+    engine.stop = Mock()
     return engine
 
 
 class SettleUniversityGateTest(unittest.TestCase):
     """闸门：state 为 restart 说明本局已结算过，只补一次点击，不再记账也不再切录像。"""
 
-    def settle(self, cls=SimulatedUniverse, state="exit", stop_at_end=False):
+    def setUp(self):
+        manager = self.enterContext(patch.object(any_fate_utils, "key_mouse_manager", Mock()))
+        self.manager = manager
+
+    def settle(self, cls=AnyFateUniverse, state="exit", reached_limit=False):
         engine = make_engine(cls, state)
         calls = engine.calls
 
         def end_of_university(inner):
             calls.append(("end_of_university", None))
-            if stop_at_end:
-                inner._stop = 1
+            if reached_limit:
+                inner.my_cnt = 1
+                inner.max_run_time = 1
 
         with patch.object(cls, "end_of_university", end_of_university), \
                 patch.object(cls, "restart_recording",
                              lambda inner: calls.append(("restart_recording", None))):
             engine.settle_university()
-        return calls
+        return calls, engine
 
     def test_first_settlement_accounts_clicks_and_cuts_recording(self):
         """首次结算按固定顺序：先记账（含子类写记录），再点掉界面，最后切分录像。"""
         self.assertEqual(
-            self.settle(),
+            self.settle()[0],
             [("end_of_university", None), ("click", SETTLE_CLICK), ("restart_recording", None)],
         )
 
     def test_every_kernel_settles_with_the_same_gate(self):
-        """四个内核共用基类的结算流程，子类只在自己的钩子里追加动作。"""
+        """所有内核共用基类的结算流程，子类只在自己的钩子里追加动作。"""
         for cls in KERNELS:
             with self.subTest(kernel=cls.__name__):
                 self.assertEqual(
-                    self.settle(cls),
+                    self.settle(cls)[0],
                     [("end_of_university", None), ("click", SETTLE_CLICK),
                      ("restart_recording", None)],
                 )
 
     def test_settled_round_only_clicks_again(self):
         """结算界面没被点掉时下一轮会再次命中：只补点一次，不再记账、不再切录像。"""
-        self.assertEqual(self.settle(state="restart"), [("click", SETTLE_CLICK)])
+        self.assertEqual(self.settle(state="restart")[0], [("click", SETTLE_CLICK)])
 
     def test_rounds_started_outside_the_report_screen_settle_fully(self):
         """开局流程写入的 exit/init/run，以及进程刚启动时的空状态，都必须走完整结算。"""
         for state in ("exit", "init", "run", None):
             with self.subTest(state=state):
-                self.assertEqual(len(self.settle(state=state)), 3)
+                self.assertEqual(len(self.settle(state=state)[0]), 3)
 
-    def test_round_limit_keeps_the_report_screen(self):
-        """达到次数上限时 stop() 已经关掉了键鼠：不再点击，界面留在屏幕上。"""
-        self.assertEqual(self.settle(stop_at_end=True), [("end_of_university", None)])
+    def test_run_limit_exits_instead_of_clicking_again(self):
+        """达到设定的运行次数后退出并停止，不再点结算界面进入下一局。"""
+        calls, engine = self.settle(reached_limit=True)
+
+        self.assertEqual(calls, [("end_of_university", None)])
+        self.manager.press.assert_called_once_with("esc")
+        self.manager.wait.assert_called_once_with()
+        engine.stop.assert_called_once_with()
 
 
 class SettlementStateTest(unittest.TestCase):
-    """state 的写入：记账完成时进入 restart，录像权限关掉也要写。"""
+    """记账的落点：state 必须进入 restart，且与录像权限无关。"""
 
     def test_bookkeeping_marks_the_round_as_settled(self):
         engine = make_engine(state="exit")
         engine.update_count = lambda read=True: None
         engine.my_cnt = 0
-        engine.nums = 0
-        engine.check_bonus = 1
-        engine.end = 0
         engine.count = 128
         engine.init_time = time.time()
-        engine.update_floor = Mock()
 
-        engine.end_of_university()
+        any_fate_utils.FateUtils.end_of_university(engine)
 
         self.assertEqual(engine.states, ["restart"])
-        engine.update_floor.assert_called_once_with(1)
-        self.assertEqual(engine.end, 0)
+        self.assertEqual(engine.my_cnt, 1)
+        self.assertEqual(engine.count, 128)
 
-    def test_last_round_raises_the_stop_flag(self):
-        """取消奖励次数用尽时置 self.end=1，让主流程在本次结算后停车。"""
+    def test_remaining_rounds_are_computed_from_the_run_limit(self):
         engine = make_engine(state="exit")
         engine.update_count = lambda read=True: None
+        engine.max_run_time = 3
         engine.my_cnt = 0
-        engine.nums = 1
-        engine.check_bonus = 0
-        engine.end = 0
-        engine.count = 128
+        engine.count = 0
         engine.init_time = time.time()
-        engine.update_floor = Mock()
 
-        engine.end_of_university()
+        any_fate_utils.FateUtils.end_of_university(engine)
 
-        self.assertEqual(engine.end, 1)
+        self.assertEqual(engine.my_cnt, 1)
+        self.assertEqual(engine.states, ["restart"])
 
     def test_settled_state_is_written_even_when_recording_is_off(self):
         """没有录制权限（例如高级模式未授权）时状态也必须离开结算态，否则闸门永远不关。"""
         engine = make_engine()
         engine.record = False
-        engine.cut_video = False
         engine.bveerelbcpgyqan = False
         engine.YKItDYvq3FpnOYx = False
         engine.recorder = Mock()
@@ -179,12 +158,12 @@ class SettlementStateTest(unittest.TestCase):
     def test_recording_is_cut_between_rounds(self):
         """有权限时停止本局录像、等界面淡出、再以新的轮回次数开始录制。"""
         engine = make_engine()
-        for name in ("record", "cut_video", "bveerelbcpgyqan", "YKItDYvq3FpnOYx"):
+        for name in ("record", "bveerelbcpgyqan", "YKItDYvq3FpnOYx"):
             setattr(engine, name, True)
         engine.recorder = Mock()
         engine.count = 7
 
-        with patch.object(simulated_engine, "time", SimpleNamespace(sleep=lambda seconds: None)):
+        with patch.object(any_fate_utils, "time", Mock(sleep=Mock())):
             engine.restart_recording()
 
         engine.recorder.stop_recording.assert_called_once_with()
@@ -192,9 +171,9 @@ class SettlementStateTest(unittest.TestCase):
         self.assertEqual(engine.states, ["restart"])
 
     def test_any_fate_resets_per_run_flags(self):
-        """跨轮回的标记必须逐轮清零：阮·梅其二决定下一轮是否裁剪录像。"""
-        engine = make_engine(cls=any_fate_engine.AnyFateUniverse)
-        engine.record = engine.cut_video = False
+        """跨轮回的标记必须逐轮清零：阮·梅其二/超验之镜决定后续录像与战斗权重。"""
+        engine = make_engine(cls=AnyFateUniverse)
+        engine.record = False
         engine.fail_match_count = 3
         engine.node_count = 4
         engine.now_area = ["区域"]
@@ -209,6 +188,26 @@ class SettlementStateTest(unittest.TestCase):
         self.assertEqual(engine.now_area, [])
         self.assertFalse(engine.chaoyan_seen)
         self.assertFalse(engine.ruanmei2)
+
+    def test_any_fate_resets_run_state_on_settlement(self):
+        """结算时清掉本局的连续卡住计数与角色缓存，并重建地图状态。"""
+        engine = make_engine(cls=AnyFateUniverse)
+        engine.update_count = lambda read=True: None
+        engine.count = 0
+        engine.init_time = time.time()
+        engine.silver_wolf_manager = Mock(silver_wolf_slot="2")
+        engine.fail_count = 7
+        engine.fail_map = "m1"
+        engine.fail_area = "事件"
+        engine.init_map = Mock()
+
+        engine.end_of_university()
+
+        self.assertIsNone(engine.silver_wolf_manager.silver_wolf_slot)
+        self.assertEqual(engine.fail_count, 0)
+        self.assertIsNone(engine.fail_map)
+        self.assertEqual(engine.fail_area, "")
+        engine.init_map.assert_called_once_with()
 
 
 class RoundRecordingTest(unittest.TestCase):
