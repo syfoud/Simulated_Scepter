@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import numpy as np
 
+import core.common.ocr as ocr
 from core.common.ocr import My_TS
 
 
@@ -67,6 +68,31 @@ class FindTextPriorityTest(unittest.TestCase):
         self.assertIsNone(
             engine.find_text(np.zeros((1080, 1920, 3), dtype=np.uint8), ["不存在"])
         )
+
+
+class GlobalOcrWrapperTest(unittest.TestCase):
+    """全局唯一包装器必须由构造函数生成，避免手写字段清单漏项。"""
+
+    def test_global_wrapper_exposes_every_constructor_field(self):
+        self.addCleanup(setattr, ocr, "_global_my_ts_instance", None)
+        ocr._global_my_ts_instance = None
+
+        wrapper = ocr.get_global_my_ts()
+
+        for name in ("lang", "father", "forward_img", "res", "nothing", "text",
+                     "_ts", "det_limit_side_len"):
+            self.assertTrue(hasattr(wrapper, name), name)
+
+    def test_global_wrapper_updates_owner_without_rebuilding(self):
+        self.addCleanup(setattr, ocr, "_global_my_ts_instance", None)
+        ocr._global_my_ts_instance = None
+        first = ocr.get_global_my_ts()
+        owner = Mock()
+
+        second = ocr.get_global_my_ts(father=owner)
+
+        self.assertIs(first, second)
+        self.assertIs(second.father, owner)
 
 
 if __name__ == "__main__":

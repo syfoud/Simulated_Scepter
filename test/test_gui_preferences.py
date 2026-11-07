@@ -31,7 +31,7 @@ from test.core_fixture import copy_core
 from test.test_task_completion import load_task
 from tool.gui.appearance import AnimatedButton
 from tool.registry import KernelRegistry
-from tool.script_files import discover_scripts, read_script, script_key, script_path
+from tool.script_files import discover_scripts, match_script, read_script, script_key, script_path
 from tool.settings import load_settings, update_settings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,7 +84,7 @@ class GuiPreferencesTests(unittest.TestCase):
             "QSizePolicy": QSizePolicy, "QToolButton": QToolButton,
             "CUS_LOGGER": self.logger, "QMessageBox": self.dialogs,
             "run_action_script": self.script_runner,
-            "discover_scripts": discover_scripts, "read_script": read_script,
+            "discover_scripts": discover_scripts, "match_script": match_script, "read_script": read_script,
             "script_key": script_key, "script_path": script_path,
             "update_settings": update_settings,
             "EXTRA": SimpleNamespace(FILE_LOCK=threading.Lock()),
@@ -236,11 +236,23 @@ class GuiPreferencesTests(unittest.TestCase):
         self.assertEqual(json.loads(self.settings.read_text(encoding="utf-8")), saved)
 
     def test_shipped_defaults_point_to_ironblood_and_insect(self):
-        """出厂默认值指向仍在维护的铁血内核与昆虫脚本；模拟宇宙录制开关已删除。"""
+        """出厂默认值指向仍在维护的铁血内核与昆虫脚本，且用规范 ID / 项目相对路径。"""
         default = json.loads((ROOT / "resource" / "gui_settings_default.json").read_text(encoding="utf-8"))
-        self.assertEqual(default["script_engine"], "ironblood")
-        self.assertEqual(default["script_file"], "insect")
+        self.assertEqual(default["script_engine"], "IronBlood")
+        self.assertEqual(default["script_file"], "core/any_fate/actions/insect.json")
         self.assertNotIn("recording_state", default)
+
+    def test_saved_lowercase_engine_and_bare_script_name_are_restored(self):
+        """旧配置里的 ironblood / 裸文件名也要恢复到正确内核与脚本，不能悄悄换成第一个选项。"""
+        (self.actions / "insect.json").write_text(
+            '[{"name": "确认", "trigger": {"state_only": true}, "actions": [{"sleep": 1}]}]',
+            encoding="utf-8",
+        )
+        self.gui.opt.update({"script_engine": "ironblood", "script_file": "insect"})
+        self.gui.init_script_controls()
+
+        self.assertEqual(self.gui.engine_combo.currentText(), "IronBlood")
+        self.assertEqual(self.gui.script_combo.currentData(), str(self.actions / "insect.json"))
 
     def test_restoration_defaults_do_not_write_during_startup(self):
         original = self.settings.read_bytes()
