@@ -3,7 +3,6 @@ import time
 
 import pyautogui
 
-from core.divergent.config import config
 from tool.key_mouse_manager import resolve_key
 
 
@@ -12,9 +11,6 @@ def keyDown(x):
 
 
 def keyUp(x):
-    # 长按加速：走 W 的时候把加速键一并松开，否则会一直处于加速状态
-    if config.long_press_sprint and x == 'move_w':
-        pyautogui.keyUp(resolve_key('sprint'))
     pyautogui.keyUp(resolve_key(x))
 
 
