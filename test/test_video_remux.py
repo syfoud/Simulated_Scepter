@@ -47,6 +47,38 @@ def top_level_boxes(path, limit=8):
     return found
 
 
+def truncate_inside_last_box(path):
+    """把文件截断在最后一个顶层盒的中间，稳定模拟「录制被强制结束」。
+
+    按比例截断会依赖写入器实际丢了多少帧：可能正好落在盒边界上，文件结构仍然
+    完整，严格模式便会正常转换。截在盒内部则一定产生声明的长度大于实际字节的
+    残缺盒，与真实被强杀的录像一致，也与机器负载无关。
+    """
+    boxes = []
+    offset, total = 0, os.path.getsize(path)
+    with open(path, "rb") as file:
+        while offset + 8 <= total:
+            file.seek(offset)
+            header = file.read(8)
+            if len(header) < 8:
+                break
+            size = int.from_bytes(header[:4], "big")
+            if size < 8:
+                break
+            boxes.append((offset, size))
+            if offset + size > total:
+                break
+            offset += size
+    if not boxes:
+        raise AssertionError(f"录像里没有可截断的顶层盒：{path}")
+    last_offset, last_size = boxes[-1]
+    keep = last_offset + max(8, last_size // 2)
+    if keep >= total:
+        keep = last_offset + 8
+    with open(path, "r+b") as file:
+        file.truncate(keep)
+
+
 def decode_count(path):
     with av.open(path) as container:
         return sum(1 for _ in container.decode(video=0))
@@ -112,9 +144,7 @@ class VideoRemuxTests(unittest.TestCase):
     def test_strict_mode_keeps_killed_recording_untouched(self):
         # 标准流程（UI 手动转换的默认）：校验源文件，尾部残缺时不转换，交给用户决定
         path = self.make_recording("killed-strict.mp4", frames=FPS * 6)
-        full = os.path.getsize(path)
-        with open(path, "r+b") as file:
-            file.truncate(int(full * 0.55))
+        truncate_inside_last_box(path)
         truncated = os.path.getsize(path)
 
         self.assertFalse(convert_to_standard_mp4(path, check_source=True, check_output=True))
@@ -126,9 +156,7 @@ class VideoRemuxTests(unittest.TestCase):
         # 抢救模式尽力把可复用的包封装出去。截断落在不同位置时可能连复用都无法完成，
         # 那就必须保留原文件。两种结果都可接受，但绝不能丢数据或留下临时文件。
         path = self.make_recording("killed-rescue.mp4", frames=FPS * 6)
-        full = os.path.getsize(path)
-        with open(path, "r+b") as file:
-            file.truncate(int(full * 0.55))
+        truncate_inside_last_box(path)
         truncated_size = os.path.getsize(path)
 
         converted = convert_to_standard_mp4(path, check_source=False, check_output=False)
@@ -230,13 +258,10 @@ class VideoRemuxTests(unittest.TestCase):
         self.assertFalse(os.path.exists(target + TEMP_SUFFIX))
 
     def test_strict_trim_removes_undecodable_tail(self):
-        # 严格模式的意义：末尾坏帧被丢弃，产物解码干净。
-        # 写入器按背压可能丢帧，帧数太少时截断后可能整段都解不出来——
-        # 那属于合法失败（保留原文件），因此两种结果都接受，但各自的约束都要满足。
+        # 严格模式的意义：末尾坏帧被丢弃，产物解码干净。截断点固定落在盒内部，
+        # 若复用的数据太少导致整段解不出来，也属于合法失败（保留原文件），两种结果都接受。
         path = self.make_recording("strict-broken.mp4", frames=FPS * 6)
-        full = os.path.getsize(path)
-        with open(path, "r+b") as file:
-            file.truncate(int(full * 0.55))
+        truncate_inside_last_box(path)
         target = self.new_path("strict-broken-out.mp4")
         self.addCleanup(lambda: os.path.exists(target) and os.remove(target))
         source_before = os.path.getsize(path)
@@ -260,9 +285,7 @@ class VideoRemuxTests(unittest.TestCase):
     def test_rescue_mode_writes_target_and_keeps_source(self):
         # UI 的抢救模式：接受尾部损坏，输出到新文件，原文件保留
         path = self.make_recording("rescue-src.mp4", frames=FPS * 6)
-        full = os.path.getsize(path)
-        with open(path, "r+b") as file:
-            file.truncate(int(full * 0.55))
+        truncate_inside_last_box(path)
         target = self.new_path("rescue-out.mp4")
         self.addCleanup(lambda: os.path.exists(target) and os.remove(target))
 
