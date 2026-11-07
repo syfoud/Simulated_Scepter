@@ -41,7 +41,13 @@ from tool.gui.schedule_dialog import ScheduleDialog, ScheduleTimer
 from tool.gui.script_editor import ScriptEditor
 from tool.log import CUS_LOGGER, log_emitter
 from tool.registry import KernelRegistry
-from tool.script_files import discover_scripts, read_script, script_key, script_path
+from tool.script_files import (
+    discover_scripts,
+    match_script,
+    read_script,
+    script_key,
+    script_path,
+)
 from tool.script_tools import capture_sample, debug_events
 from tool.settings import load_default_settings, load_settings, update_settings
 from tool.thread import ThreadWithException
@@ -198,7 +204,7 @@ def resolve_startup_task(args):
     else:
         script_name = configured_script
 
-    default_engine = settings.get("script_engine", "ironblood")
+    default_engine = settings.get("script_engine", "IronBlood")
     engine_name = args.engine or default_engine
 
     if not isinstance(engine_name, str) or not engine_name:
@@ -216,23 +222,7 @@ def resolve_startup_task(args):
         raise ValueError("未设置可用脚本；请在界面选择脚本，或使用 --file:SCRIPT 指定脚本")
 
     scripts = discover_scripts(registry)
-    script_key_name = script_name.replace("\\", "/").casefold()
-    exact_matches = [path for path in scripts if script_key(path).casefold() == script_key_name]
-    if exact_matches:
-        matches = exact_matches
-    elif os.path.isabs(script_name) or "/" in script_name or "\\" in script_name:
-        path = script_path(script_name)
-        if not os.path.isfile(path):
-            raise ValueError(f"找不到脚本：{script_name}")
-        matches = [path]
-    else:
-        name = os.path.basename(script_name).casefold()
-        stem = os.path.splitext(name)[0]
-        matches = [
-            path for path in scripts
-            if path.name.casefold() == name or path.stem.casefold() == stem
-        ]
-
+    matches = match_script(scripts, script_name)
     if len(matches) > 1:
         raise ValueError(f"脚本名称不唯一，请使用相对路径指定：{script_name}")
     if matches:
@@ -1133,6 +1123,14 @@ class MainWindow(QMainWindowLog):
         self.run_script_btn.clicked.connect(self.run_script)
         self.refresh_scripts()
         engine_index = self.engine_combo.findData(self.opt.get("script_engine", ""))
+        if engine_index < 0:
+            # 旧配置里存的是小写 ID（如 ironblood），按大小写不敏感补一次匹配
+            wanted = str(self.opt.get("script_engine", "")).casefold()
+            engine_index = next(
+                (index for index in range(self.engine_combo.count())
+                 if str(self.engine_combo.itemData(index)).casefold() == wanted),
+                -1,
+            )
         if engine_index >= 0:
             self.engine_combo.setCurrentIndex(engine_index)
         saved = self.opt.get("script_file", "")
@@ -1161,19 +1159,34 @@ class MainWindow(QMainWindowLog):
         chosen = selected or self.script_combo.currentData()
         paths = discover_scripts(self.registry)
         saved = self.opt.get("script_file", "")
-        candidate = script_path(chosen or saved) if chosen or saved else None
-        if candidate is not None and candidate not in paths:
+        # 保存值可能是裸文件名或旧版本写法：按大小写不敏感匹配，选不中才回退到项目相对路径
+        resolved = None
+        for name in (chosen, saved):
+            matches = match_script(paths, str(name)) if name else []
+            if matches:
+                resolved = matches[0]
+                break
+        if resolved is not None and resolved not in paths:
+            # 绝对路径脚本不在发现列表里：校验后补进下拉框，否则选中项会丢失
+            try:
+                read_script(resolved)
+                paths.append(resolved)
+            except (OSError, ValueError):
+                resolved = None
+        if resolved is None and (chosen or saved):
+            candidate = script_path(chosen or saved)
             try:
                 read_script(candidate)
                 paths.append(candidate)
+                resolved = candidate
             except (OSError, ValueError):
-                candidate = None
+                resolved = None
         with QSignalBlocker(self.script_combo):
             self.script_combo.clear()
             for path in paths:
                 self.script_combo.addItem(path.stem, str(path))
                 self.script_combo.setItemData(self.script_combo.count() - 1, script_key(path), Qt.ToolTipRole)
-            index = self.script_combo.findData(str(candidate)) if candidate else -1
+            index = self.script_combo.findData(str(resolved)) if resolved else -1
             if index >= 0:
                 self.script_combo.setCurrentIndex(index)
             available = bool(paths)

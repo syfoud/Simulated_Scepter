@@ -63,13 +63,11 @@ class ScriptKernel(StateKernel):
         self.config = None
         self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
         self.scx = self.scy = 1.0
-        self.threshold = 0.97
-        self.last_info = ""
         self.fps_list = []
         self.last_get_screen_time = None
         # 游戏窗口句柄，供内核输出 DPI 等信息时复用
         self.hwnd = None
-        self.ts = get_global_my_ts(father=self)
+        self.ts = self.create_ts()
         set_game_foreground()
         deadline = time.monotonic() + self.window_timeout
         while not get_global_stop_flag():
@@ -93,6 +91,10 @@ class ScriptKernel(StateKernel):
                 raise TimeoutError("等待游戏窗口超过 300 秒，请启动游戏并将游戏窗口置于前台。")
             time.sleep(0.3)
         self._stop = True
+
+    def create_ts(self):
+        """创建 OCR 识别器；内核需要使用自己的识别精度时覆盖本方法。"""
+        return get_global_my_ts(father=self)
 
     def prepare_script(self):
         if self._stop or get_global_stop_flag():

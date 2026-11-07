@@ -1,6 +1,6 @@
 {
-    "script_engine": "ironblood",
-    "script_file": "insect",
+    "script_engine": "IronBlood",
+    "script_file": "core/any_fate/actions/insect.json",
     "calibration_angle": 1.0,
     "start_game_on_task": false,
     "game_executable_path": "",

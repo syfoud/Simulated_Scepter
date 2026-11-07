@@ -40,14 +40,7 @@ def get_global_my_ts(father=None):
     global _global_my_ts_instance
     if _global_my_ts_instance is None:
         CUS_LOGGER.info("欢呼「毁灭」的英雄，初次点燃生命的微光。原本晦暗的前路仿佛也变得有迹可循。")
-        _global_my_ts_instance = object.__new__(My_TS)
-        _global_my_ts_instance.lang = 'ch'
-        _global_my_ts_instance.father = father
-        _global_my_ts_instance.forward_img = None
-        _global_my_ts_instance.res = []
-        _global_my_ts_instance.nothing = 1
-        _global_my_ts_instance.text = ''
-        _global_my_ts_instance._ts = None
+        _global_my_ts_instance = My_TS(father=father)
     else:
         _global_my_ts_instance.father = father
     return _global_my_ts_instance
@@ -56,7 +49,7 @@ class My_TS:
     # 类变量，用于共享底层 OCR 引擎
     _ts_shared = None
 
-    def __init__(self, lang='ch', father=None):
+    def __init__(self, lang='ch', father=None, det_limit_side_len=None):
         self.lang = lang
         self.father = father
         self.forward_img = None
@@ -64,11 +57,18 @@ class My_TS:
         self.nothing = 1
         self.text = ''
         self._ts = None
+        # 非空时单独创建识别器（不同内核的识别精度不同，不能共用同一个实例）
+        self.det_limit_side_len = det_limit_side_len
 
     @property
     def ts(self):
         """懒加载 OCR 实例"""
         if self._ts is None:
+            if self.det_limit_side_len is not None:
+                self._ts = ONNXPaddleOcr(
+                    use_angle_cls=False, cpu=False, det_limit_side_len=self.det_limit_side_len
+                )
+                return self._ts
             if My_TS._ts_shared is None:
                 CUS_LOGGER.info("焚身作薪……为来世破晓…引火吧。")
                 CUS_LOGGER.info("其时已至……再度…开启一切……")

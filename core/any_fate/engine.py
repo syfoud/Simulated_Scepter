@@ -67,6 +67,8 @@ class AnyFateUniverse(FateUtils):
         CUS_LOGGER.info(f"任意命途寰宇蝗灾已就绪，当前命途：{self.fate}")
         self.plane_floor = -1
         self.need_record = False
+        # 录图模式下每张新地图只保存一次初始小地图；普通寻路也会读它，所以必须有初值
+        self.first_save_map = True
         # 连续卡住计数的作用范围：同一局内同一张地图，换图或换区域时清零
         self.fail_map = None
         self.fail_area = ""
@@ -535,9 +537,7 @@ class AnyFateUniverse(FateUtils):
         else:
             CUS_LOGGER.debug("地图交互点已处理，继续追踪剩余地图目标")
 
-    def map_data_load(
-            self, create=False, map_root=None, image_maps=None,
-            target_mode="battle"):
+    def map_data_load(self, create=False, map_root=None, image_maps=None, target_mode="battle"):
         create = self.debug and create
         if map_root is None:
             context = None
