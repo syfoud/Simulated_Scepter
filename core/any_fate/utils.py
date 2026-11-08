@@ -101,6 +101,8 @@ class FateUtils(ScriptKernel):
         self.big_map = None
         self.big_map_init = False
         self.start_pos = (0, 0)
+        # 地图标注图相对整张地图图片的偏移；调试窗口在首次匹配到地图前也会读它
+        self.upx = self.upy = 0
         # 红色阈值，避免误识别无限循环，识别到后会不断减少
         self.red_threshold = 4500
         # 特殊地图的人工红点无需依赖小地图上的实时敌人红环校验
