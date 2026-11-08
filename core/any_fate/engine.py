@@ -18,6 +18,7 @@ from tool.storage import resource_path
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER, log_emitter
 from tool.mask import MASK, crop_region
+from tool.thread import ThreadWithException
 from tool.public_ocr import load_actions, merge_text
 from tool.utils.analysis_map import (
     build_rightward_graph,
@@ -69,9 +70,12 @@ class AnyFateUniverse(FateUtils):
         self.need_record = False
         # 录图模式下每张新地图只保存一次初始小地图；普通寻路也会读它，所以必须有初值
         self.first_save_map = True
-        # 连续卡住计数的作用范围：同一局内同一张地图，换图或换区域时清零
-        self.fail_map = None
-        self.fail_area = ""
+        # 同一张地图的连续暂离次数：因超时暂离时 +1，换图/换位面/新一局归零
+        self.fail_count = 0
+        # 本局是否出现过同一张地图连续暂离 3 次；出现后本局录像必须保留
+        self.keep_round_video = False
+        # 是否需要暂离；只在成功识别到「暂离」文本后清除，避免网络/动画导致请求丢失
+        self.need_away = False
         self.record_event_map_enabled = bool(
             self.debug and self.opt.get("record_event_map", False)
         )
@@ -144,19 +148,86 @@ class AnyFateUniverse(FateUtils):
         self.fail_match_count=0
         self.node_count=0
         self.now_area=[]
+        # 新一局重新统计连续暂离；录像已在 super() 里按上一局的 keep_round_video 处理完
+        self.fail_count = 0
+        self.keep_round_video = False
         # 「超验之镜」标记由 select_event 写入、各模式建图都按它给战斗降权，漏清会让之后每一轮都在用错的权重
         self.chaoyan_seen = False
         self.ruanmei2 = False
 
+    def leave_universe(self, leave_away=False, leave_end=False, keep_status=False):
+        """统一处理离开模拟宇宙：手动暂离、超时暂离、提前结算、冒险后正常离开。
+
+        Args:
+            leave_away: 权杖发起暂离时为 True；动作脚本识别到「暂离」文本时保持 False，因为此时暂停菜单已经打开。
+            调用方需要先置 need_away=True，失败重试时靠它保留请求。
+            leave_end: 权杖发起提前结算时为 True；调用方需要先置 need_end=True。
+            keep_status: 暂离后不重置区域与地图；冒险节点交互完直接离开不属于异常，也不累计暂离次数。
+
+        Returns:
+            True 表示已处理完；False 表示暂停菜单没打开，请求保留到下一轮重试。
+        """
+        if leave_away or leave_end:
+            # 代码发起时必须自己按 esc 并等待菜单；动作脚本触发时菜单已经打开
+            found = self.click_text(text="暂离", box=[1321, 787, 1383, 821], click=False, allow_fail=True)
+            if not found:
+                key_mouse_manager.clean()
+                key_mouse_manager.wait()
+                key_mouse_manager.keyUp("move_w")
+                key_mouse_manager.press("esc")
+                key_mouse_manager.wait()
+                deadline = time.time() + 3
+                while time.time() < deadline:
+                    if self.click_text(text="暂离", box=[1321, 787, 1383, 821], click=False, allow_fail=True):
+                        found = True
+                        break
+                    key_mouse_manager.wait()
+            if not found:
+                CUS_LOGGER.debug("未识别到暂离文本，保留退出请求等待重试")
+                return False
+        timeout_area = self.area
+        if leave_end or self.need_end:
+            # 结算界面出现后由 settle_university 清除 need_end，这里只点「结束并结算」
+            self.update_state("exit")
+            key_mouse_manager.click_point(1393, 948)
+            key_mouse_manager.wait()
+            key_mouse_manager.click_point(1147, 676)
+            key_mouse_manager.wait()
+            CUS_LOGGER.info(f"{factor}将跨越旧世界的余烬，不断燃烧……")
+            return True
+        self.initial_angle = None
+        key_mouse_manager.click_point(1359, 811)
+        key_mouse_manager.wait()
+        self.update_state("ui")
+        if not keep_status:
+            self.area = ""
+            self.init_map()
+        if (leave_away or self.need_away) and not keep_status:
+            # 只统计同一张地图上的超时暂离
+            self.fail_count += 1
+            if self.fail_count >= 3:
+                # 同一节点反复暂离超过 3 次说明出现异常，结束时保留录像便于复盘
+                self.keep_round_video = True
+            CUS_LOGGER.error(f"当前第{self.plane_floor}位面，区域{timeout_area}，地图{self.now_map}，第{self.fail_count}次长时间无有效交互，尝试暂离")
+        self.need_away = False
+        self.last_interact_time = time.time()
+        CUS_LOGGER.info(f"纵使神火已经如此炽烈，以至于…每次回归起点的瞬间，它便会顷刻将{factor}烧尽…… ")
+        return True
+
+    def keep_video_reasons(self, manual_stop=False):
+        """在通用原因之外，再加上「同一张地图反复暂离」这一条。"""
+        reasons = super().keep_video_reasons(manual_stop)
+        if getattr(self, "keep_round_video", False):
+            reasons.append("同一张地图连续暂离达到 3 次")
+        return reasons
+
     def end_of_university(self):
         super().end_of_university()
         self.run_start_time = time.time()  # 开始下一局计时
+        # 结算界面已经出现，提前结束与本局暂离的请求都在这里清掉
         self.need_end=False
+        self.need_away=False
         self.silver_wolf_manager.silver_wolf_slot = None  # 重置银狼位置缓存
-        # 新一局重新统计连续卡住次数
-        self.fail_count = 0
-        self.fail_map = None
-        self.fail_area = ""
         self.init_map()
 
     # 切换指定位置的角色
@@ -210,19 +281,14 @@ class AnyFateUniverse(FateUtils):
             self.last_interact_time = bk_lst_changed
             # 本局是否需要暂离：长时间没有有效交互则暂离并重进。
             # 必须在走动和施放秘技之前判定：秘技施放动画期间按 esc 无效。
-            need_away = self.need_end or (
-                time.time() - self.last_interact_time >= self.max_interact_time and not self.need_record
-            )
+            if (time.time() - self.last_interact_time >= self.max_interact_time and not self.need_record):
+                self.need_away = True
             # 刚进图，初始化一些数据
-            if not need_away:
+            if not (self.need_end or self.need_away):
                 if not self.area:
                     ocr_text = self.ts.find_with_box(box=[55, 12, 164, 40],forward=True,re_screen=False)
                     self.area=merge_text(ocr_text) if len(ocr_text) else ""
                     CUS_LOGGER.debug(f"当前区域{self.area}")
-                    # 进入新区域说明已经走出来，连续卡住次数重新开始
-                    if self.area != getattr(self, "fail_area", ""):
-                        self.fail_area = self.area
-                        self.fail_count = 0
                 # 当前节点为祝福扑满且非精英区域时，根据开关决定切人策略
                 pig = self.is_pig_node() and "战斗" in self.area
                 if pig:
@@ -315,42 +381,8 @@ class AnyFateUniverse(FateUtils):
                     key_mouse_manager.turn(1)
                     key_mouse_manager.wait()
             else:
-                # 暂离或提前结算前不做任何走动和施法，否则 esc 会被动画吞掉
-                key_mouse_manager.clean()
-                key_mouse_manager.wait()
-                key_mouse_manager.keyUp("move_w")
-                key_mouse_manager.press("esc")
-                key_mouse_manager.wait()
-                tm=time.time()
-                found=False
-                # esc 有时不一定生效（动画、加载过程中），因此轮询到超时
-                while time.time()-tm<3:
-                    if self.click_text(text="暂离", box=[1321, 787, 1383, 821],click=False,allow_fail=True):
-                        found=True
-                        self.area=""
-                        break
-                if not found:
-                    CUS_LOGGER.debug("未识别到暂离文本")
-                    return 1
-                self.update_state("ui")
-                self.init_map()
-                self.floor_init = 0
-                # 连续卡住只统计同一局、同一张地图：换图后从头计数
-                if self.now_map != getattr(self, "fail_map", None):
-                    self.fail_map = self.now_map
-                    self.fail_count = 0
-                if not self.need_end:
-                    self.fail_count += 1
-                    if self.fail_count >= 5:
-                        self.need_end = True
-                        CUS_LOGGER.error(f"地图{self.now_map}同一局内连续卡住 5 次，判定为无法修复的错误，提前结束本局并结算")
-                if self.need_end:
-                    self.update_state("exit")
-                    CUS_LOGGER.info(f"{factor}将跨越旧世界的余烬，不断燃烧……")
-                    return 1
-                CUS_LOGGER.error(f"地图{self.now_map}长时间无有效交互，尝试暂离")
-                CUS_LOGGER.info(f"纵使神火已经如此炽烈，以至于…每次回归起点的瞬间，它便会顷刻将{factor}烧尽…… ")
-                self.last_interact_time = time.time()
+                # 暂离或提前结算都走统一出口；失败时退出请求保留，下一轮重试
+                self.leave_universe(leave_away=not self.need_end, leave_end=self.need_end)
                 return 1
             return 2
         key_mouse_manager.wait()
@@ -1005,6 +1037,7 @@ class AnyFateUniverse(FateUtils):
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return
+        self.fail_count = 0
         self.try_analysis_map(1)
         for _ in range(5):
             self.click_text(text="进入位面", box=[907, 857, 1009, 891])
@@ -1026,6 +1059,7 @@ class AnyFateUniverse(FateUtils):
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
             return
         CUS_LOGGER.debug(f"当前地图位面{self.plane_floor}")
+        self.fail_count = 0
         self.try_analysis_map(3)
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
@@ -1320,6 +1354,8 @@ class AnyFateUniverse(FateUtils):
         # 而它通常已被上一节点消费掉，这里必须自己清
         self.area=""
         self.new_node=True
+        # 已离开当前地图，同一张地图的暂离计数从头开始
+        self.fail_count = 0
 
     def read_action_counts(self):
         """
@@ -1367,6 +1403,7 @@ class AnyFateUniverse(FateUtils):
         self.loaded_map_root = None
         CUS_LOGGER.debug(f"是否新节点: {self.new_node}")
         if self.new_node:
+            self.fail_count = 0
             self.node_count+=1
             if self.area:
                 self.now_area.append(self.area)
@@ -2365,6 +2402,107 @@ class AnyFateUniverse(FateUtils):
         key_mouse_manager.wait()
         self.update_state("survival_room")
 
+    def get_adventure(self):
+        """
+        self.mini_state 含义
+        0: 初始状态
+        1: 寻路中状态
+        3: 接近目标点状态
+        >=7: 完成一轮寻路
+        """
+        CUS_LOGGER.info("「这样的世界……正在呼唤著英雄的到来吧……」")
+        self.should_update_map=True
+        ThreadWithException(target=self.auto_update_map,name="更新地图").start()
+        if self.debug:
+            CUS_LOGGER.debug(f'当前状态{self.mini_state}')
+        self.is_target = 0
+        self.moving_direct=False
+        self.has_target=True
+        self.is_find_end = 0
+        self.get_screen()
+        CUS_LOGGER.info("「哪怕百次，万次，千万次…英雄可以被毁灭，但绝不会被打败……」")
+        self.target_type = -1
+        if self.mini_state > 2:
+            CUS_LOGGER.info(f"到达终点时，{factor}才会得知自己已行过漫长的路。")
+            self.is_find_end = self.move_to_end(mode=2,device=1)
+            self.has_target = bool(self.is_find_end)
+            if self.has_target:
+                self.target_type = 4
+        key_mouse_manager.keyDown("move_w")
+        run_wait_time = 2
+        self.first_mini = 0
+        self.is_sprinting = 0
+        if self.has_target:
+            run_wait_time+=5
+        if self.mini_state==1:
+            run_wait_time += 2
+            sprint()
+            self.is_sprinting = 1
+        init_time = time.time()
+        while True:
+            key_mouse_manager.wait()
+            CUS_LOGGER.info(f"{factor}请求：「成为回应世界期许，背负众人心愿的人。」")
+            if self._stop == 1:
+                key_mouse_manager.keyUp("move_w")
+                break
+            if self.mini_state > 1:
+                key_mouse_manager.keyUp("move_w")
+                key_mouse_manager.wait()
+            self.get_screen()
+            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
+            if not have_f:
+                CUS_LOGGER.info("响应：「一个孑然一身的人。」")
+                key_mouse_manager.keyDown("move_w")
+            if have_f:
+                if self.mini_state <=1:
+                    key_mouse_manager.keyUp("move_w")
+                judge, _ = self.good_f()
+                if judge:
+                    key_mouse_manager.keyUp("move_w")
+                    key_mouse_manager.press("interact")
+                    key_mouse_manager.wait()
+                    self.should_update_map = False
+                    first_visit = self.mini_state <= 1
+                    if self.nof(must_be="challenge"):
+                        CUS_LOGGER.info(f"最后一次，{factor}回想起那个朝阳初升的时刻，自己曾刻下理想的雏形…")
+                        key_mouse_manager.keyUp("move_w")
+                        if not self.is_run():
+                            break
+                        if first_visit:
+                            self.mini_state += 2
+                            self.need_away = True
+                            self.leave_universe(leave_away=True, keep_status=True)
+                            self.should_update_map = False
+                            return
+                        self.should_update_map = True
+                        self.is_find_end = self.move_to_end(mode=2, device=1)
+                        if self.is_find_end:
+                            continue
+                        break
+                else:
+                    CUS_LOGGER.info(f"{factor}为它取另外一个名字——「救世主」。而他自己的名，就此在记忆中零落。")
+            if not self.is_run():
+                key_mouse_manager.keyUp("move_w")
+                self.should_update_map = False
+                key_mouse_manager.wait()
+                CUS_LOGGER.info("警告：进度无法更新,检测到其它界面,退出循环")
+                return
+            if time.time()-init_time>run_wait_time:
+                CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
+                key_mouse_manager.keyUp("move_w")
+                self.mini_state+=2
+                if self.mini_state>=7:
+                    # self.last_interact_time = 0
+                    self.should_update_map = False
+                    # key_mouse_manager.press('esc')
+                    # key_mouse_manager.wait()
+                    # self.update_state("ui")
+                    return
+                break
+        key_mouse_manager.keyUp("move_w")
+        self.update_state("check")
+        self.should_update_map = False
+        return
 
 
 def create_engine(*, script=False):

@@ -5,7 +5,7 @@
 「结束并结算」推迟到结算界面出现时，这样各内核的结算都由同一处完成。
 
 这里锁定：结算界面事件的识别文字与识别框、结算只用一个内核动作、结算界面排在点击空白类
-事件之前（run_static 每轮只执行第一个命中事件）、「设置界面进行结算」只负责关界面并确认退出
+事件之前（run_static 每轮只执行第一个命中事件）、「离开模拟宇宙」负责暂离与结算
 （改用 interval 抑制连续命中）、以及全仓动作脚本里没有等已删除 end 状态的事件、
 也没有 do_action 不认识的字典键。
 """
@@ -83,17 +83,14 @@ class BaseModeSettlementWiringTest(unittest.TestCase):
 
         self.assertLess(settle, min(blank))
 
-    def test_settings_screen_closes_the_panel_then_confirms_exit(self):
-        """「结束并结算」只负责关掉设置界面并确认退出，本局的记账推迟到结算界面出现时。"""
-        event = self.events[event_index(self.events, "设置界面进行结算")]
+    def test_leaving_event_delegates_to_leave_universe(self):
+        """暂停菜单的暂离与结算合并成一个事件，具体动作由 leave_universe 判断。"""
+        event = self.events[event_index(self.events, "离开模拟宇宙")]
 
-        self.assertEqual(
-            event["actions"],
-            [{"position": [1393, 948]}, {"position": [1147, 676]}],
-        )
-        # 动作不改变状态，靠 interval 抑制连续命中
+        self.assertEqual(event["actions"], ["leave_universe"])
+        self.assertEqual(event["trigger"]["text"], "暂离")
         self.assertEqual(event["trigger"]["interval"], 1)
-        self.assertEqual(event["trigger"]["condition"], "exit")
+        self.assertNotIn("condition", event["trigger"])
 
     def test_ready_action_is_a_fixed_position_click(self):
         """「备战开始」不再经过已删除的 pre_start 方法，直接点固定坐标。"""

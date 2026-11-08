@@ -89,11 +89,29 @@ class FingerSnap(AnyFateUniverse):
         self._target_decided = False
         self.cheat_target = None  # 新轮回清掉上一轮留下的作弊目标
 
+    def keep_video_reasons(self, manual_stop=False):
+        """弹指的录像保留条件：异常、同图反复暂离、倒计时达阈值、遇到阮·梅（其二）。"""
+        reasons = super().keep_video_reasons(manual_stop)
+        if manual_stop:
+            if self.countdown > 0:
+                reasons.append(f"手动停止时倒计时 {self.countdown}")
+            return reasons
+        if self.del_record_time and self.countdown >= self.del_record_time:
+            reasons.append(f"倒计时 {self.countdown} 达到保存阈值 {self.del_record_time}")
+        if self.ruanmei2:
+            reasons.append("本轮遇到阮·梅（其二）")
+        return reasons
+
     def stop_round_recording(self):
-        """按倒计时决定本轮录像是否删除"""
-        need_del=(self.del_record_time and self.del_record_time>self.countdown) and not self.ruanmei2
-        CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}，本轮是否遇到阮梅其二{self.ruanmei2}")
-        self.recorder.stop_recording(need_del)
+        """按本局倒计时决定是否删除录像；保留原因见 keep_video_reasons。"""
+        reasons = self.keep_video_reasons()
+        keep_video = bool(reasons)
+        CUS_LOGGER.debug(
+            f"本局录像保留{keep_video}"
+            + (f"，原因：{'、'.join(reasons)}"
+               if reasons else f"，倒计时 {self.countdown} 未达保存阈值 {self.del_record_time}")
+        )
+        self.recorder.stop_recording(not keep_video)
     def select_fate(self):
         key_mouse_manager.click_point(850, 798)
     def end_of_university(self):
@@ -229,6 +247,8 @@ class FingerSnap(AnyFateUniverse):
         # 而它通常已被上一节点消费掉，这里必须自己清
         self.area = ""
         self.new_node=True
+        # 已离开当前地图，同一张地图的暂离计数从头开始
+        self.fail_count = 0
     def initing_map(self):
         if not self.debug:
             CUS_LOGGER.error("本功能为实验性功能，当前仅供开发人员测试，现已终止程序")
@@ -243,6 +263,7 @@ class FingerSnap(AnyFateUniverse):
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return
+        self.fail_count = 0
         self.try_analysis_map(1)
         self.save_screen(save_path=os.path.join(PATHS["temp"], "map"))
         for _ in range(5):

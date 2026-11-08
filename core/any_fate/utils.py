@@ -91,7 +91,6 @@ class FateUtils(ScriptKernel):
         self.mini_state = 0
         self.target = set()
         self.stop_move = 0
-        self.fail_count = 0
         self.first_mini = 1
         self.target_type = -1
         self.allow_e = 1
@@ -135,6 +134,8 @@ class FateUtils(ScriptKernel):
         self.my_cnt = 0
         self.init_time = time.time()
         self.count = 0
+        # 本局是否因异常终止：异常终止的录像默认保留，便于排查
+        self.keep_video_for_error = False
         self.load_img_map()
         self.update_count()
         self.CrTU5s61E1dMnT()
@@ -568,8 +569,7 @@ class FateUtils(ScriptKernel):
                     self.mini_state = 1
                     self.add_floor()
                     if self.floor in [1, 6]:
-                        self.floor_init=0
-                    self.last_interact_time = time.time()
+                        self.last_interact_time = time.time()
                     CUS_LOGGER.debug(f"地图{self.now_map}已完成,相似度{self.now_map_sim},进入{self.floor}层")
             else:
                 if self.ts.similar("黑塔"):
@@ -1082,108 +1082,6 @@ class FateUtils(ScriptKernel):
                 key_mouse_manager.wait()
             key_mouse_manager.click_point(960, 540)
             self.should_update_map = False
-    def get_adventure(self):
-        """
-        self.mini_state 含义
-        0: 初始状态
-        1: 寻路中状态
-        3: 接近目标点状态
-        >=7: 完成一轮寻路
-        """
-        CUS_LOGGER.info("「这样的世界……正在呼唤著英雄的到来吧……」")
-        self.should_update_map=True
-        ThreadWithException(target=self.auto_update_map,name="更新地图").start()
-        if self.debug:
-            CUS_LOGGER.debug(f'当前状态{self.mini_state}')
-        self.is_target = 0
-        self.moving_direct=False
-        self.has_target=True
-        self.is_find_end = 0
-        self.get_screen()
-        CUS_LOGGER.info("「哪怕百次，万次，千万次…英雄可以被毁灭，但绝不会被打败……」")
-        self.target_type = -1
-        if self.mini_state > 2:
-            CUS_LOGGER.info(f"到达终点时，{factor}才会得知自己已行过漫长的路。")
-            self.is_find_end = self.move_to_end(mode=2,device=1)
-            self.has_target = bool(self.is_find_end)
-            if self.has_target:
-                self.target_type = 4
-        key_mouse_manager.keyDown("move_w")
-        run_wait_time = 2
-        self.first_mini = 0
-        self.is_sprinting = 0
-        if self.has_target:
-            run_wait_time+=5
-        if self.mini_state==1:
-            run_wait_time += 2
-            sprint()
-            self.is_sprinting = 1
-        init_time = time.time()
-        while True:
-            key_mouse_manager.wait()
-            CUS_LOGGER.info(f"{factor}请求：「成为回应世界期许，背负众人心愿的人。」")
-            if self._stop == 1:
-                key_mouse_manager.keyUp("move_w")
-                break
-            if self.mini_state > 1:
-                key_mouse_manager.keyUp("move_w")
-                key_mouse_manager.wait()
-            self.get_screen()
-            have_f=self.check("interact", mask=MASK["interact_icon"], threshold=0.96)
-            if not have_f:
-                CUS_LOGGER.info("响应：「一个孑然一身的人。」")
-                key_mouse_manager.keyDown("move_w")
-            if have_f:
-                if self.mini_state <=1:
-                    key_mouse_manager.keyUp("move_w")
-                judge, _ = self.good_f()
-                if judge:
-                    key_mouse_manager.keyUp("move_w")
-                    key_mouse_manager.press("interact")
-                    key_mouse_manager.wait()
-                    self.should_update_map = False
-                    first_visit = self.mini_state <= 1
-                    if self.nof(must_be="challenge"):
-                        CUS_LOGGER.info(f"最后一次，{factor}回想起那个朝阳初升的时刻，自己曾刻下理想的雏形…")
-                        key_mouse_manager.keyUp("move_w")
-                        if not self.is_run():
-                            break
-                        if first_visit:
-                            self.mini_state += 2
-                            key_mouse_manager.press("esc")
-                            key_mouse_manager.wait()
-                            self.update_state("ui")
-                            self.should_update_map = False
-                            return
-                        self.should_update_map = True
-                        self.is_find_end = self.move_to_end(mode=2, device=1)
-                        if self.is_find_end:
-                            continue
-                        break
-                else:
-                    CUS_LOGGER.info(f"{factor}为它取另外一个名字——「救世主」。而他自己的名，就此在记忆中零落。")
-            if not self.is_run():
-                key_mouse_manager.keyUp("move_w")
-                self.should_update_map = False
-                key_mouse_manager.wait()
-                CUS_LOGGER.info("警告：进度无法更新,检测到其它界面,退出循环")
-                return
-            if time.time()-init_time>run_wait_time:
-                CUS_LOGGER.warning("警告：等待时间超时,"+("不" if not self.has_target else "")+"存在「毁灭」目标")
-                key_mouse_manager.keyUp("move_w")
-                self.mini_state+=2
-                if self.mini_state>=7:
-                    # self.last_interact_time = 0
-                    self.should_update_map = False
-                    # key_mouse_manager.press('esc')
-                    # key_mouse_manager.wait()
-                    # self.update_state("ui")
-                    return
-                break
-        key_mouse_manager.keyUp("move_w")
-        self.update_state("check")
-        self.should_update_map = False
-        return
     def get_shop_only_minimap(self):
         """
         self.mini_state 含义
@@ -2053,14 +1951,19 @@ class FateUtils(ScriptKernel):
         self.update_state("restart")
 
     def stop_round_recording(self):
-        """停止本轮录像，默认整段保留；需按局裁剪的模块覆盖此方法并用 need_del 决定是否删除"""
+        """停止本轮录像；基类没有按局删除规则，整段保留，子类按各自指标覆盖。"""
         self.recorder.stop_recording()
 
-    def setting_exit(self):
-        self.initial_angle = None
-        if self.state != "exit":
-            key_mouse_manager.click_point(1359, 811)
-            key_mouse_manager.wait()
+    def keep_video_reasons(self, manual_stop=False):
+        """列出本局录像必须保留的理由；返回空列表表示按内核规则可以删除。
+
+        Args:
+            manual_stop: 是否由用户手动停止任务；手动停止时已有进度的录像默认保留。
+        """
+        reasons = []
+        if getattr(self, "keep_video_for_error", False):
+            reasons.append("运行异常终止")
+        return reasons
 
     def start(self):
         """
@@ -2088,6 +1991,7 @@ class FateUtils(ScriptKernel):
             raise
         except Exception as e:
             CUS_LOGGER.error(f'异常终止进程{e}')
+            self.keep_video_for_error = True
             if not self._stop:
                 self.stop()
             # 重新抛出异常，以便上层能够捕获
@@ -2113,7 +2017,13 @@ class FateUtils(ScriptKernel):
             CUS_LOGGER.info("以「爱」的名义，她将逝去的一切尽数珍藏……直到世间的尽头……")
             try:
                 if hasattr(self, "kill_count"):
-                    self.recorder.stop_recording(delete_video=self.kill_count == 0)
+                    reasons = self.keep_video_reasons(manual_stop=True)
+                    keep_video = bool(reasons)
+                    CUS_LOGGER.debug(
+                        f"本局录像保留{keep_video}"
+                        + (f"，原因：{'、'.join(reasons)}" if reasons else "")
+                    )
+                    self.recorder.stop_recording(delete_video=not keep_video)
                 else:
                     self.recorder.stop_recording()
             except Exception as e:

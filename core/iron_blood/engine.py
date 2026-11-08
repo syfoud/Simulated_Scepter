@@ -56,36 +56,41 @@ class IronBloodUniverse(AnyFateUniverse):
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
         self.plane_records = {}
 
+    def keep_video_reasons(self, manual_stop=False):
+        """铁血的录像保留条件：异常、同图反复暂离、击杀数达阈值、调试开关。"""
+        reasons = super().keep_video_reasons(manual_stop)
+        if manual_stop:
+            if self.kill_count > 0:
+                reasons.append(f"手动停止时已有击杀 {self.kill_count}")
+            return reasons
+        if self.del_record_time and self.kill_count >= self.del_record_time:
+            reasons.append(f"击杀数 {self.kill_count} 达到保存阈值 {self.del_record_time}")
+        if self.debug and self.opt.get("recording_keep_long_run", False):
+            minutes_divide_kill = (self.elapsed_time / 60 / self.kill_count
+                                   if self.kill_count else 0)
+            threshold = self.opt.get("recording_keep_long_run_threshold", 1.2)
+            if minutes_divide_kill >= threshold:
+                reasons.append(f"演算时间过长（{minutes_divide_kill:.2f} 分钟/杀，阈值 {threshold}）")
+        if (self.debug and self.opt.get("record_abnormal_first_plane_weight", False)
+                and self.first_plane_weight <= 0):
+            reasons.append(f"开局期望异常（{self.first_plane_weight}）")
+        return reasons
+
     def stop_round_recording(self):
-        """按击杀数决定本轮录像是否删除，并把本局数据写进保留视频的文件名"""
-        # 增加演算时间过长保留录制配置
-        minutes = self.elapsed_time / 60
-        if self.kill_count == 0:
-            minutes_divide_kill = 0
-        else:
-            minutes_divide_kill = minutes/self.kill_count
-        # 演算时间过长保留录制仅服务于调试
-        recording_keep_long_run_threshold = self.opt.get("recording_keep_long_run_threshold", 1.2)
-        del_time = (
-            self.del_record_time
-            and self.del_record_time>self.kill_count
+        """按本局指标决定本轮录像是否删除；保留原因见 keep_video_reasons。"""
+        reasons = self.keep_video_reasons()
+        keep_video = bool(reasons)
+        CUS_LOGGER.debug(
+            f"本局录像保留{keep_video}"
+            + (f"，原因：{'、'.join(reasons)}"
+               if reasons else f"，击杀数 {self.kill_count} 未达保存阈值 {self.del_record_time}")
         )
-        keep_long_run = (
-            self.debug
-            and self.opt.get("recording_keep_long_run", False)
-            and minutes_divide_kill >= recording_keep_long_run_threshold # 演算时间过长录制保留阈值（分钟数÷战斗数）
+        self.recorder.stop_recording(
+            not keep_video,
+            battle_count=self.kill_count,
+            elapsed_time=self.elapsed_time,
+            first_plane_weight=self.first_plane_weight,
         )
-        abnormal_first_plane_weight = (
-            self.debug
-            and self.opt.get("record_abnormal_first_plane_weight", False)
-            and self.first_plane_weight <= 0 # 开局期望值异常（≤0）时保留录制
-        )
-        need_del = del_time and not keep_long_run and not abnormal_first_plane_weight
-        if self.first_plane_weight >= 0:
-            CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight:.2f}")
-        else:
-            CUS_LOGGER.debug(f"是否可删除{need_del}，限制数目{self.del_record_time}，当前数目{self.kill_count}；本局演算时间{minutes:.2f}分钟，与战斗数比值{minutes_divide_kill:.2f}；开局期望{self.first_plane_weight}")
-        self.recorder.stop_recording(need_del, battle_count=self.kill_count, elapsed_time=self.elapsed_time, first_plane_weight=self.first_plane_weight)
 
     def end_of_university(self):
         # 本局的开始时间与用时必须在父类之前取：父类会把 run_start_time 重置为下一局的开始时间
@@ -140,6 +145,7 @@ class IronBloodUniverse(AnyFateUniverse):
         else:
             CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
             return
+        self.fail_count = 0
         self.record_plane_start(self.plane_floor)
         # 「进入位面」按钮出现时，节点图可能还在逐个生成节点、甚至还在把随机节点替换成精英节点。
         # 此时识别会漏掉尚未出现的节点，得到一张不完整的图，期望值随之偏低，本应继续打的开局会被

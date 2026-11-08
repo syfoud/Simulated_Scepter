@@ -274,26 +274,7 @@
         ]
     },
     {
-        "name": "设置界面进行结算",
-        "trigger":{
-            "text": "结束并结算",
-            "box": [1321, 931, 1465, 964],
-            "interval": 1,
-            "redundancy": 30,
-            "condition": "exit"
-        },
-        "actions":
-        [
-            {
-                "position": [1393, 948]
-            },
-            {
-                "position": [1147, 676]
-            }
-        ]
-    },
-    {
-        "name": "设置界面暂离",
+        "name": "离开模拟宇宙",
         "trigger":{
             "text": "暂离",
             "box": [1328, 792, 1389, 829],
@@ -302,7 +283,7 @@
         },
         "actions":
         [
-            "setting_exit"
+            "leave_universe"
         ]
     },
     {

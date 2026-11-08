@@ -190,24 +190,35 @@ class SettlementStateTest(unittest.TestCase):
         self.assertFalse(engine.ruanmei2)
 
     def test_any_fate_resets_run_state_on_settlement(self):
-        """结算时清掉本局的连续卡住计数与角色缓存，并重建地图状态。"""
+        """结算时清掉角色缓存并重建地图状态；暂离计数留到新一局开始时复位。"""
         engine = make_engine(cls=AnyFateUniverse)
         engine.update_count = lambda read=True: None
         engine.count = 0
         engine.init_time = time.time()
         engine.silver_wolf_manager = Mock(silver_wolf_slot="2")
         engine.fail_count = 7
-        engine.fail_map = "m1"
-        engine.fail_area = "事件"
         engine.init_map = Mock()
 
         engine.end_of_university()
 
         self.assertIsNone(engine.silver_wolf_manager.silver_wolf_slot)
-        self.assertEqual(engine.fail_count, 0)
-        self.assertIsNone(engine.fail_map)
-        self.assertEqual(engine.fail_area, "")
+        self.assertEqual(engine.fail_count, 7)
         engine.init_map.assert_called_once_with()
+
+    def test_any_fate_resets_fail_count_when_the_next_round_starts(self):
+        """新一局开始时同一张地图的暂离计数与录像保留标记一起归零。"""
+        engine = make_engine(cls=AnyFateUniverse)
+        engine.record = False
+        engine.fail_count = 7
+        engine.keep_round_video = True
+        engine.node_count = 5
+        engine.now_area = []
+
+        engine.restart_recording()
+
+        self.assertEqual(engine.fail_count, 0)
+        self.assertFalse(engine.keep_round_video)
+        self.assertEqual(engine.node_count, 0)
 
 
 class RoundRecordingTest(unittest.TestCase):

@@ -120,15 +120,29 @@ class InitialAngleRestoreTest(unittest.TestCase):
         utils.pos_predictor.update_minimap_data.assert_called_once_with("frame")
 
     def test_manual_leave_selection_clears_area_angle(self):
+        """动作脚本识别到「暂离」后走统一退出方法：清初始角度并点暂离按钮。"""
         universe = AnyFateUniverse.__new__(AnyFateUniverse)
         universe.initial_angle = 359
         universe.state = "run"
+        universe.area = "战斗"
+        universe.need_away = True
+        universe.need_end = False
+        universe.fail_count = 0
+        universe.plane_floor = 1
+        universe.now_map = -1
+        universe.click_text = Mock(return_value=True)
+        universe.update_state = Mock()
+        universe.init_map = Mock()
         manager = Mock()
 
-        with patch("core.any_fate.utils.key_mouse_manager", manager):
-            universe.setting_exit()
+        for module in ("core.any_fate.utils", "core.any_fate.engine"):
+            self.enterContext(patch(f"{module}.key_mouse_manager", manager))
+
+        universe.leave_universe()
 
         self.assertIsNone(universe.initial_angle)
+        self.assertFalse(universe.need_away)
+        self.assertEqual(universe.area, "")
         manager.click_point.assert_called_once_with(1359, 811)
 
 
