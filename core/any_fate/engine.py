@@ -155,19 +155,19 @@ class AnyFateUniverse(FateUtils):
         self.chaoyan_seen = False
         self.ruanmei2 = False
 
-    def leave_universe(self, leave_away=False, leave_end=False, keep_status=False):
+    def leave_universe(self, leave_away=False, keep_status=False):
         """统一处理离开模拟宇宙：手动暂离、超时暂离、提前结算、冒险后正常离开。
 
         Args:
-            leave_away: 权杖发起暂离时为 True；动作脚本识别到「暂离」文本时保持 False，因为此时暂停菜单已经打开。
-            调用方需要先置 need_away=True，失败重试时靠它保留请求。
-            leave_end: 权杖发起提前结算时为 True；调用方需要先置 need_end=True。
+            leave_away: 代码发起暂离时为 True；动作脚本识别到「暂离」文本时保持 False，因为此时暂停菜单已经打开。
+                调用方需要先置 need_away=True，失败重试时靠它保留请求。
             keep_status: 暂离后不重置区域与地图；冒险节点交互完直接离开不属于异常，也不累计暂离次数。
+            提前结算由调用方先置 need_end=True 触发，不单独传参。
 
         Returns:
             True 表示已处理完；False 表示暂停菜单没打开，请求保留到下一轮重试。
         """
-        if leave_away or leave_end:
+        if leave_away or self.need_end:
             # 代码发起时必须自己按 esc 并等待菜单；动作脚本触发时菜单已经打开
             found = self.click_text(text="暂离", box=[1321, 787, 1383, 821], click=False, allow_fail=True)
             if not found:
@@ -186,7 +186,7 @@ class AnyFateUniverse(FateUtils):
                 CUS_LOGGER.debug("未识别到暂离文本，保留退出请求等待重试")
                 return False
         timeout_area = self.area
-        if leave_end or self.need_end:
+        if self.need_end:
             # 结算界面出现后由 settle_university 清除 need_end，这里只点「结束并结算」
             self.update_state("exit")
             key_mouse_manager.click_point(1393, 948)
@@ -382,7 +382,7 @@ class AnyFateUniverse(FateUtils):
                     key_mouse_manager.wait()
             else:
                 # 暂离或提前结算都走统一出口；失败时退出请求保留，下一轮重试
-                self.leave_universe(leave_away=not self.need_end, leave_end=self.need_end)
+                self.leave_universe(leave_away=not self.need_end)
                 return 1
             return 2
         key_mouse_manager.wait()
