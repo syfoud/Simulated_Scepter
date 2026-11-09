@@ -16,8 +16,6 @@ from core.any_fate.engine import AnyFateUniverse  # noqa: E402
 REWARD_BOX = [511, 477, 1409, 519]
 # 选完奖励后的确认按钮（固定坐标）
 CONFIRM_POINT = (948, 965)
-# 两个目标都没认到时的兜底点击点
-FALLBACK_POINT = (960, 540)
 
 
 class SelectStartBlessTest(unittest.TestCase):
@@ -66,19 +64,23 @@ class SelectStartBlessTest(unittest.TestCase):
 
         engine.ts.forward.assert_not_called()
 
-    def test_missing_cache_triggers_one_whole_screen_ocr(self):
+    def test_missing_cache_forces_a_fresh_whole_screen_ocr(self):
         engine = self.engine([], cached_res=False)
 
         engine.select_start_bless()
 
-        engine.ts.forward.assert_called_once_with(engine.get_screen.return_value)
+        # 第一轮缓存为空先补一次 OCR；仍未命中目标时再刷新一次后放弃点击
+        self.assertEqual(engine.ts.forward.call_count, 2)
+        self.assertEqual(engine.ts.forward.call_args_list[0].args, (engine.get_screen.return_value,))
 
-    def test_no_target_falls_back_to_the_middle_of_the_screen(self):
+    def test_no_target_skips_the_click_instead_of_attacking_the_world(self):
+        """目标没认到时不能退回点屏幕中间：误触发时那一下会落到大世界变成普通攻击。"""
         engine = self.engine([{"raw_text": "无关文本", "box": [600, 480, 900, 516]}])
 
         engine.select_start_bless()
 
-        self.assertEqual(self.clicks(), [FALLBACK_POINT, CONFIRM_POINT])
+        self.assertEqual(self.clicks(), [])
+        engine.ts.forward.assert_called_once_with(engine.get_screen.return_value)
 
 
 if __name__ == "__main__":

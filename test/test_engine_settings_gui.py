@@ -171,7 +171,11 @@ class EngineSettingsGuiTests(unittest.TestCase):
         with patch.dict(PATHS, {"user": str(self.config / "missing")}):
             for engine in ("AnyFate", "IronBlood", "FingerSnap"):
                 dialog = self.dialog(engine)
-                self.assertFalse(dialog.runtime.early_stop_checkbox.isEnabled())
+                if engine == "AnyFate":
+                    # 任意命途没有早停逻辑，配置窗口不显示早停开关
+                    self.assertTrue(dialog.runtime.early_stop_checkbox.isHidden())
+                else:
+                    self.assertFalse(dialog.runtime.early_stop_checkbox.isEnabled())
                 self.assertTrue(dialog.runtime.Aboutupdatelock.isVisible())
                 if engine == "IronBlood":
                     self.assertFalse(dialog.section.Iron_blood_first_plane_input.isEnabled())
@@ -184,10 +188,16 @@ class EngineSettingsGuiTests(unittest.TestCase):
         for engine in ("AnyFate", "IronBlood", "FingerSnap"):
             with self.subTest(engine=engine):
                 dialog = self.dialog(engine)
-                self.assertTrue(dialog.runtime.early_stop_checkbox.isEnabled())
                 self.assertTrue(dialog.runtime.Aboutupdatelock.isHidden())
                 self.assertEqual(dialog.runtime.advanced_label.text(), "高级用户功能")
-                self.assertLess(dialog.runtime.advanced_label.y(), dialog.runtime.early_stop_checkbox.y())
+                if engine == "AnyFate":
+                    # 任意命途没有早停逻辑，只保留录制开关
+                    self.assertTrue(dialog.runtime.early_stop_checkbox.isHidden())
+                else:
+                    self.assertTrue(dialog.runtime.early_stop_checkbox.isEnabled())
+                    self.assertLess(
+                        dialog.runtime.advanced_label.y(),
+                        dialog.runtime.early_stop_checkbox.y())
 
     def test_unlock_button_opens_shared_instructions_in_every_early_stop_window(self):
         captured = []

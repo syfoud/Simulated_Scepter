@@ -81,6 +81,7 @@ def make_engine(last_interact_time=1000.0, need_end=False):
     engine.fail_count = 0
     engine.keep_round_video = False
     engine.need_away = False
+    engine.away_keep_status = False
     engine.plane_floor = 1
     engine.node_count = 0
     engine.now_map = 1
@@ -209,9 +210,9 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         self.assertEqual(engine.normal(), 1)
 
-        # need_end 直接连点结算按钮与确认框
+        # need_end 直接连点结算按钮与确认框；由代码发起时仍需先按 esc 打开暂停菜单
         self.assertEqual([c.args for c in engine.update_state.call_args_list], [("exit",)])
-        self.assertEqual(self._pressed_keys(), [])  # 菜单默认已打开
+        self.assertEqual(self._pressed_keys(), ["esc"])
         engine.init_map.assert_not_called()
         engine.navigate_battle.assert_not_called()
         self.assertEqual(engine.area, AREA)
@@ -223,7 +224,7 @@ class AwayBeforeMovementTest(unittest.TestCase):
         """need_end 时连点结算按钮与确认框，不点暂离、不累计暂离次数。"""
         engine = make_engine(need_end=True)
 
-        self.assertTrue(engine.leave_universe(leave_end=True))
+        self.assertTrue(engine.leave_universe(need_press_esc=True))
 
         self.assertEqual([c.args for c in engine.update_state.call_args_list], [("exit",)])
         self.assertEqual(
@@ -236,8 +237,9 @@ class AwayBeforeMovementTest(unittest.TestCase):
     def test_normal_leave_keeps_status_and_does_not_count(self):
         """冒险节点交互后的正常离开保留状态与地图，不算异常暂离。"""
         engine = make_engine()
+        engine.away_keep_status = True
 
-        self.assertTrue(engine.leave_universe(leave_away=True, keep_status=True))
+        self.assertTrue(engine.leave_universe(need_press_esc=True))
 
         self.assertEqual(engine.fail_count, 0)
         self.assertFalse(engine.need_away)

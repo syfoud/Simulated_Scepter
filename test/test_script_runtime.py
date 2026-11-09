@@ -30,7 +30,8 @@ def script_fixture(kernel_id, path):
                  "CUS_LOGGER": Mock(), "time": SimpleNamespace(time=lambda: 100, sleep=Mock()),
                  "os": os, "PATHS": PATHS, "random": random, "factor": "测试",
                  "merge_text": merge_text, "NormalEndError": NormalEndError,
-                 "load_settings": Mock(return_value={}), "set_forground": Mock()}
+                 "load_settings": Mock(return_value={}), "set_forground": Mock(),
+                 "get_window_kind": lambda hwnd: "local"}
     definitions = [
         ("any_fate/utils.py", "FateUtils", {"is_run", "start", "route"}),
         ("any_fate/engine.py", "AnyFateUniverse", {"normal", "auto_battle"}),

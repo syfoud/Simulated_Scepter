@@ -126,6 +126,7 @@ class InitialAngleRestoreTest(unittest.TestCase):
         universe.state = "run"
         universe.area = "战斗"
         universe.need_away = True
+        universe.away_keep_status = False
         universe.need_end = False
         universe.fail_count = 0
         universe.plane_floor = 1

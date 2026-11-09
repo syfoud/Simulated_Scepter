@@ -2,6 +2,7 @@
 
 import unittest
 from pathlib import Path
+from threading import Lock
 from unittest.mock import Mock, patch
 
 from tool.utils.image_tool import load_all_images_from_directory
@@ -48,14 +49,20 @@ class SameMapCountingTest(FailCountTestBase):
                 for m in messages))
 
     def test_moving_to_the_next_map_restarts_the_counter(self):
-        """换图后从 1 重新计数：离开当前地图的入口会先清零。"""
+        """换图后从 1 重新计数：select_go 成功移动后会把计数清零。"""
         engine = make_engine()
         engine.fail_count = 2
+        engine.try_analysis_map = Mock(return_value=True)
+        engine.record_map_visit = Mock(return_value=1)
+        engine.next_node = {"cx": 1, "cy": 2}
+        engine.click_text = Mock(
+            side_effect=lambda text=None, **kwargs: text != "点击空白处关闭")
 
-        engine.fail_count = 0
-        self.away(engine)
+        self.assertTrue(engine.move_to_next_node())
 
-        self.assertEqual(engine.fail_count, 1)
+        self.assertEqual(engine.fail_count, 0)
+        self.assertEqual(engine.area, "")
+        self.assertTrue(engine.new_node)
 
     def test_special_room_without_map_id_still_counts(self):
         """事件等特殊房间没有地图编号时也按同一张地图累计，直到换图/换位面。"""
@@ -116,6 +123,7 @@ class VideoRetentionTest(unittest.TestCase):
         engine.kill_count = kill_count
         engine.first_plane_weight = -5
         engine.keep_round_video = keep_round_video
+        engine.keep_video_for_error = False
         return engine
 
     def test_iron_blood_keeps_the_video_after_three_stuck_timeouts(self):
@@ -123,14 +131,14 @@ class VideoRetentionTest(unittest.TestCase):
 
         engine.stop_round_recording()
 
-        self.assertFalse(engine.recorder.stop_recording.call_args.args[0])
+        self.assertFalse(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
 
     def test_iron_blood_still_deletes_normal_low_kill_rounds(self):
         engine = self.make_iron_blood(keep_round_video=False)
 
         engine.stop_round_recording()
 
-        self.assertTrue(engine.recorder.stop_recording.call_args.args[0])
+        self.assertTrue(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
 
     def make_finger_snap(self, keep_round_video, countdown=0):
         engine = FingerSnap.__new__(FingerSnap)
@@ -139,6 +147,7 @@ class VideoRetentionTest(unittest.TestCase):
         engine.countdown = countdown
         engine.ruanmei2 = False
         engine.keep_round_video = keep_round_video
+        engine.keep_video_for_error = False
         return engine
 
     def test_finger_snap_keeps_the_video_after_three_stuck_timeouts(self):
@@ -146,14 +155,14 @@ class VideoRetentionTest(unittest.TestCase):
 
         engine.stop_round_recording()
 
-        self.assertFalse(engine.recorder.stop_recording.call_args.args[0])
+        self.assertFalse(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
 
     def test_finger_snap_still_deletes_normal_low_countdown_rounds(self):
         engine = self.make_finger_snap(keep_round_video=False)
 
         engine.stop_round_recording()
 
-        self.assertTrue(engine.recorder.stop_recording.call_args.args[0])
+        self.assertTrue(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
 
     def test_finger_snap_keeps_the_video_when_ruanmei_appeared(self):
         engine = self.make_finger_snap(keep_round_video=False)
@@ -161,14 +170,14 @@ class VideoRetentionTest(unittest.TestCase):
 
         engine.stop_round_recording()
 
-        self.assertFalse(engine.recorder.stop_recording.call_args.args[0])
+        self.assertFalse(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
 
     def test_iron_blood_keeps_the_video_when_kill_threshold_is_reached(self):
         engine = self.make_iron_blood(keep_round_video=False, kill_count=31)
 
         engine.stop_round_recording()
 
-        self.assertFalse(engine.recorder.stop_recording.call_args.args[0])
+        self.assertFalse(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
 
     def test_error_exit_keeps_the_video_even_without_kills(self):
         engine = self.make_iron_blood(keep_round_video=False)
@@ -176,7 +185,7 @@ class VideoRetentionTest(unittest.TestCase):
 
         engine.stop_round_recording()
 
-        self.assertFalse(engine.recorder.stop_recording.call_args.args[0])
+        self.assertFalse(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
 
     def test_manual_stop_keeps_the_video_when_kills_exist(self):
         engine = self.make_iron_blood(keep_round_video=False, kill_count=3)
@@ -199,14 +208,23 @@ class ProgramStopVideoTest(unittest.TestCase):
         engine.bveerelbcpgyqan = True
         engine.kill_count = kill_count
         engine.keep_round_video = keep_round_video
+        engine.keep_video_for_error = False
+        engine.del_record_time = 31
+        engine.debug = 0
+        engine.opt = {}
+        engine.elapsed_time = 0
+        engine.first_plane_weight = -5
         engine.recorder = Mock()
         engine.save_screen = Mock()
         engine.map_thread = object()
+        engine._screen_lock = Lock()
+        engine.sct = None
         return engine
 
     def run_stop(self, engine):
         with patch("core.any_fate.utils.CUS_LOGGER"), \
-                patch("core.any_fate.utils.key_mouse_manager"):
+                patch("core.any_fate.utils.key_mouse_manager"), \
+                patch("core.common.runtime.key_mouse_manager"):
             engine.stop()
 
     def test_program_stop_keeps_the_video_when_the_round_needs_review(self):

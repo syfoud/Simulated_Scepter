@@ -20,7 +20,6 @@ class DebugMapWindowTest(unittest.TestCase):
     def setUp(self):
         self.manager = Mock()
         self.enterContext(patch.object(fate_utils, "set_forground"))
-        self.enterContext(patch.object(fate_utils, "get_multi", return_value=1.0))
         self.enterContext(patch.object(fate_utils, "key_mouse_manager", self.manager))
         self.enterContext(patch.object(fate_utils, "PositionPredict"))
         self.enterContext(patch.object(ScriptKernel, "__init__", lambda self: setattr(self, "hwnd", None)))

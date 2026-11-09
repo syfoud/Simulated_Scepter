@@ -32,7 +32,7 @@ from test.test_task_completion import load_task
 from tool.gui.appearance import AnimatedButton
 from tool.registry import KernelRegistry
 from tool.script_files import discover_scripts, match_script, read_script, script_key, script_path
-from tool.settings import load_settings, update_settings
+from tool.settings import load_default_settings, load_settings, update_settings
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,6 +87,7 @@ class GuiPreferencesTests(unittest.TestCase):
             "discover_scripts": discover_scripts, "match_script": match_script, "read_script": read_script,
             "script_key": script_key, "script_path": script_path,
             "update_settings": update_settings,
+            "load_default_settings": load_default_settings,
             "EXTRA": SimpleNamespace(FILE_LOCK=threading.Lock()),
             "PATHS": {"root": str(self.root), "user": str(self.config),
                       "core": str(self.core), "backup": str(self.root / "backup")},
@@ -130,14 +131,10 @@ class GuiPreferencesTests(unittest.TestCase):
         self.gui.connect_dependency_signals()
         for debug in (False, True):
             self.set_mode(debug)
-            self.gui.recording_checkBox2.setChecked(True)
             self.assertEqual(self.gui.test_btn.isHidden(), not debug)
             self.assertEqual(self.gui.kernel_buttons.isHidden(), debug)
-            self.assertTrue(self.gui.recording_time_input.isEnabled())
+            # 录像开关已移到各内核配置窗口，主界面只剩标签选项，随调试模式启用
             self.assertEqual(self.gui.recording_label_checkbox.isEnabled(), debug)
-            self.gui.recording_checkBox2.setChecked(False)
-            self.assertFalse(self.gui.recording_time_input.isEnabled())
-            self.assertFalse(self.gui.recording_label_checkbox.isEnabled())
 
     def test_long_script_names_leave_most_width_for_logs(self):
         self.gui.init_script_controls()

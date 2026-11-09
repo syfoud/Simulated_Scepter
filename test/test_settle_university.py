@@ -47,6 +47,8 @@ def make_engine(cls=AnyFateUniverse, state="exit"):
     engine.click_position = lambda position: engine.calls.append(("click", list(position)))
     engine.max_run_time = 0
     engine.my_cnt = 0
+    engine.keep_video_for_error = False
+    engine.keep_round_video = False
     engine.stop = Mock()
     return engine
 
@@ -166,7 +168,7 @@ class SettlementStateTest(unittest.TestCase):
         with patch.object(any_fate_utils, "time", Mock(sleep=Mock())):
             engine.restart_recording()
 
-        engine.recorder.stop_recording.assert_called_once_with()
+        engine.recorder.stop_recording.assert_called_once_with(delete_video=False)
         engine.recorder.start_recording.assert_called_once_with(8)
         self.assertEqual(engine.states, ["restart"])
 
@@ -241,7 +243,7 @@ class RoundRecordingTest(unittest.TestCase):
         engine.stop_round_recording()
 
         engine.recorder.stop_recording.assert_called_once_with(
-            True, battle_count=5, elapsed_time=600, first_plane_weight=3.5,
+            delete_video=True, battle_count=5, elapsed_time=600, first_plane_weight=3.5,
         )
 
     def test_iron_blood_keeps_recordings_above_the_kill_limit(self):
@@ -250,7 +252,7 @@ class RoundRecordingTest(unittest.TestCase):
         engine.stop_round_recording()
 
         engine.recorder.stop_recording.assert_called_once_with(
-            False, battle_count=20, elapsed_time=600, first_plane_weight=3.5,
+            delete_video=False, battle_count=20, elapsed_time=600, first_plane_weight=3.5,
         )
 
     def make_finger_snap(self, countdown, ruanmei2, del_record_time=10):
@@ -266,14 +268,14 @@ class RoundRecordingTest(unittest.TestCase):
 
         engine.stop_round_recording()
 
-        engine.recorder.stop_recording.assert_called_once_with(True)
+        engine.recorder.stop_recording.assert_called_once_with(delete_video=True)
 
     def test_finger_snap_keeps_recordings_that_ran_long_enough(self):
         engine = self.make_finger_snap(countdown=15, ruanmei2=False)
 
         engine.stop_round_recording()
 
-        engine.recorder.stop_recording.assert_called_once_with(False)
+        engine.recorder.stop_recording.assert_called_once_with(delete_video=False)
 
     def test_finger_snap_keeps_the_round_that_met_ruan_mei(self):
         """遇到「阮·梅（其二）」的一轮无论多短都保留，同时下一轮要能恢复正常裁剪。"""
@@ -281,7 +283,7 @@ class RoundRecordingTest(unittest.TestCase):
 
         engine.stop_round_recording()
 
-        engine.recorder.stop_recording.assert_called_once_with(False)
+        engine.recorder.stop_recording.assert_called_once_with(delete_video=False)
 
 
 if __name__ == "__main__":
