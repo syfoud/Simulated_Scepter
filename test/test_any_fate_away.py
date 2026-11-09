@@ -223,7 +223,7 @@ class AwayBeforeMovementTest(unittest.TestCase):
         """need_end 时连点结算按钮与确认框，不点暂离、不累计暂离次数。"""
         engine = make_engine(need_end=True)
 
-        self.assertTrue(engine.leave_universe())
+        self.assertTrue(engine.leave_universe(leave_end=True))
 
         self.assertEqual([c.args for c in engine.update_state.call_args_list], [("exit",)])
         self.assertEqual(
