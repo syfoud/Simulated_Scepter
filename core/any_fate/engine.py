@@ -163,7 +163,6 @@ class AnyFateUniverse(FateUtils):
                 调用方需要先置 need_away=True，失败重试时靠它保留请求。
             leave_end: 权杖发起提前结算时为 True；调用方需要先置 need_end=True。
             keep_status: 暂离后不重置区域与地图；冒险节点交互完直接离开不属于异常，也不累计暂离次数。
-            提前结算由调用方先置 need_end=True 触发，不单独传参。
 
         Returns:
             True 表示已处理完；False 表示暂停菜单没打开，请求保留到下一轮重试。
