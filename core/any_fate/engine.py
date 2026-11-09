@@ -55,11 +55,11 @@ class AnyFateUniverse(FateUtils):
     def __init__(self):
         self.opt = load_settings() | load_runtime_settings()
         self.opt.update(load_module_settings(__file__))
-        # 任意命途：从设置读取命途并重建祝福优先级
-        fate = self.opt.get("any_fate", "巡猎")
+        # 任意命途：默认值来自 config/default.json，这里只处理非法值
+        fate = self.opt["any_fate"]
         if fate not in FATES:
-            CUS_LOGGER.warning(f"未知命途「{fate}」，已回退为巡猎")
-            fate = "巡猎"
+            CUS_LOGGER.warning(f"未知命途「{fate}」，已回退为{FATES[4]}")
+            fate = FATES[4]
         super().__init__(
             fate=fate,
             debug=self.opt.get("debug", True),
@@ -76,6 +76,8 @@ class AnyFateUniverse(FateUtils):
         self.keep_round_video = False
         # 是否需要暂离；只在成功识别到「暂离」文本后清除，避免网络/动画导致请求丢失
         self.need_away = False
+        # 本次暂离是否要保留区域/地图状态；冒险节点正常离开时置位，成功暂离后清除
+        self.away_keep_status = False
         self.record_event_map_enabled = bool(
             self.debug and self.opt.get("record_event_map", False)
         )
@@ -120,12 +122,11 @@ class AnyFateUniverse(FateUtils):
         self.elapsed_time = 0 # 本轮演算持续时间
         self.attack_time = 0 # 上次空打一拳时间
         self.need_end=False
-        self.record = self.opt.get("recording_iron_blood", True)
-        self.recorder = WindowRecorder(output_path=PATHS["video"], fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", True), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", True) and self._show_map, simul_instance=self)
+        self.recorder = WindowRecorder(output_path=PATHS["video"], fps=30, window_title="崩坏：星穹铁道",window_class_name="UnityWndClass",see_time=self.opt.get("record_add_label", False), offsets=[10, 50, 10, 10], overlay_map=self.opt.get("record_add_label", False) and self._show_map, simul_instance=self)
         self.auto_attack_breakable=self.opt.get("auto_attack_breakable", False)
-        self.del_record_time=self.opt.get("del_record_time", 31)
         self.max_interact_time=self.opt.get("max_interact_time", 40)
         self.area=""
+        self.event=""
         self.now_map=-1
         self.new_node = True
         self.node_count=0
@@ -151,24 +152,26 @@ class AnyFateUniverse(FateUtils):
         # 新一局重新统计连续暂离；录像已在 super() 里按上一局的 keep_round_video 处理完
         self.fail_count = 0
         self.keep_round_video = False
+        self.away_keep_status = False
         # 「超验之镜」标记由 select_event 写入、各模式建图都按它给战斗降权，漏清会让之后每一轮都在用错的权重
         self.chaoyan_seen = False
         self.ruanmei2 = False
 
-    def leave_universe(self, leave_away=False, leave_end=False, keep_status=False):
+    def leave_universe(self, *, need_press_esc=False):
         """统一处理离开模拟宇宙：手动暂离、超时暂离、提前结算、冒险后正常离开。
 
         Args:
-            leave_away: 权杖发起暂离时为 True；动作脚本识别到「暂离」文本时保持 False，因为此时暂停菜单已经打开。
-                调用方需要先置 need_away=True，失败重试时靠它保留请求。
-            leave_end: 权杖发起提前结算时为 True；调用方需要先置 need_end=True。
-            keep_status: 暂离后不重置区域与地图；冒险节点交互完直接离开不属于异常，也不累计暂离次数。
+            need_press_esc: 由代码发起离开时为 True（需按 esc 打开暂停菜单）；
+                动作脚本识别到「暂离」文本时保持 False，因为此时暂停菜单已经打开。
 
         Returns:
             True 表示已处理完；False 表示暂停菜单没打开，请求保留到下一轮重试。
         """
-        if leave_away or leave_end:
-            # 权杖发起时必须自己按 esc 并等待菜单；动作脚本触发时菜单已经打开
+        # 暂停菜单淡出期间动作脚本可能再次命中「暂离」；已经离开时只确认请求，不重复点击。
+        if not need_press_esc and self.state == "ui":
+            return True
+        if need_press_esc:
+            # 代码发起时必须自己按 esc 并等待菜单；动作脚本触发时菜单已经打开
             key_mouse_manager.clean()
             key_mouse_manager.wait()
             key_mouse_manager.keyUp("move_w")
@@ -179,7 +182,7 @@ class AnyFateUniverse(FateUtils):
                 if self.click_text(text="暂离", box=[1321, 787, 1383, 821], click=False, allow_fail=True):
                     break
                 key_mouse_manager.wait()
-            if time.time() >= deadline:
+            else:
                 CUS_LOGGER.debug("未识别到暂离文本，保留退出请求等待重试")
                 return False
         timeout_area = self.area
@@ -190,16 +193,17 @@ class AnyFateUniverse(FateUtils):
             key_mouse_manager.wait()
             key_mouse_manager.click_point(1147, 676)
             key_mouse_manager.wait()
+            self.away_keep_status = False
             CUS_LOGGER.info(f"{factor}将跨越旧世界的余烬，不断燃烧……")
             return True
         self.initial_angle = None
         key_mouse_manager.click_point(1359, 811)
         key_mouse_manager.wait()
         self.update_state("ui")
-        if not keep_status:
+        if not self.away_keep_status:
             self.area = ""
             self.init_map()
-        if (leave_away or self.need_away) and not keep_status:
+        if self.need_away and not self.away_keep_status:
             # 只统计同一张地图上的超时暂离
             self.fail_count += 1
             if self.fail_count >= 3:
@@ -207,14 +211,15 @@ class AnyFateUniverse(FateUtils):
                 self.keep_round_video = True
             CUS_LOGGER.error(f"当前第{self.plane_floor}位面，区域{timeout_area}，地图{self.now_map}，第{self.fail_count}次长时间无有效交互，尝试暂离")
         self.need_away = False
+        self.away_keep_status = False
         self.last_interact_time = time.time()
         CUS_LOGGER.info(f"纵使神火已经如此炽烈，以至于…每次回归起点的瞬间，它便会顷刻将{factor}烧尽…… ")
         return True
 
-    def keep_video_reasons(self, manual_stop=False):
+    def round_keep_reasons(self):
         """在通用原因之外，再加上「同一张地图反复暂离」这一条。"""
-        reasons = super().keep_video_reasons(manual_stop)
-        if getattr(self, "keep_round_video", False):
+        reasons = super().round_keep_reasons()
+        if self.keep_round_video:
             reasons.append("同一张地图连续暂离达到 3 次")
         return reasons
 
@@ -224,6 +229,7 @@ class AnyFateUniverse(FateUtils):
         # 结算界面已经出现，提前结束与本局暂离的请求都在这里清掉
         self.need_end=False
         self.need_away=False
+        self.away_keep_status=False
         self.silver_wolf_manager.silver_wolf_slot = None  # 重置银狼位置缓存
         self.init_map()
 
@@ -379,7 +385,7 @@ class AnyFateUniverse(FateUtils):
                     key_mouse_manager.wait()
             else:
                 # 暂离或提前结算都走统一出口；失败时退出请求保留，下一轮重试
-                self.leave_universe(leave_away=not self.need_end, leave_end=self.need_end)
+                self.leave_universe(need_press_esc=True)
                 return 1
             return 2
         key_mouse_manager.wait()
@@ -570,7 +576,7 @@ class AnyFateUniverse(FateUtils):
         create = self.debug and create
         if map_root is None:
             context = None
-            if getattr(self, "record_event_map_enabled", False):
+            if self.record_event_map_enabled:
                 context = self.get_record_map_context()
             if context is None:
                 map_root = os.path.join(PATHS["image"], "nmaps")
@@ -1023,36 +1029,55 @@ class AnyFateUniverse(FateUtils):
                          font_size_override=14, alt_path=alt_path)
         return True
 
-    def initing_map(self):
+    def detect_plane(self, box):
+        """识别当前位面名并写入 plane_floor；识别失败返回 False。
+
+        Args:
+            box: 位面名所在识别区域 [x1, y1, x2, y2]。
+        """
         key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=2
-        elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=3
-        else:
-            CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
+        for text, plane in (("振翅", 1), ("浪潮", 2), ("消褪", 3)):
+            if self.click_text(text=text, box=box, click=False, warning=False):
+                self.plane_floor = plane
+                return True
+        CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
+        return False
+
+    def on_plane_detected(self):
+        """识别到位面后的内核差异处理；返回 False 终止本次进入。"""
+        return True
+
+    def after_plane_analysis(self):
+        """位面节点图识别完成后的内核差异处理。"""
+
+    def clear_plane_node_state(self):
+        self.node_count = 0
+        self.new_node = True
+        self.area = ""
+
+    def enter_plane(self, clicks=5):
+        """点「进入位面」并清空节点状态。
+
+        Args:
+            clicks: 点击次数；铁血在等待节点图稳定后只需点一次，其余内核保持 5 次。
+        """
+        for _ in range(clicks):
+            self.click_text(text="进入位面", box=[907, 857, 1009, 891])
+            self.clear_plane_node_state()
+        key_mouse_manager.wait()
+
+    def initing_map(self):
+        if not self.detect_plane([10, 0, 220, 112]):
+            return
+        if not self.on_plane_detected():
             return
         self.fail_count = 0
         self.try_analysis_map(1)
-        for _ in range(5):
-            self.click_text(text="进入位面", box=[907, 857, 1009, 891])
-            self.node_count=0
-            self.new_node = True
-            self.area = ""
-        key_mouse_manager.wait()
-        return
+        self.after_plane_analysis()
+        self.enter_plane()
 
     def initing_map2(self):
-        key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[385, 548, 449, 583],click=False,warning=False):
-            self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[385, 548, 449, 583],click=False,warning=False):
-            self.plane_floor=2
-        elif self.click_text(text="消褪",box=[385, 548, 449, 583],click=False,warning=False):
-            self.plane_floor=3
-        else:
+        if not self.detect_plane([385, 548, 449, 583]):
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
             return
         CUS_LOGGER.debug(f"当前地图位面{self.plane_floor}")
@@ -1060,7 +1085,6 @@ class AnyFateUniverse(FateUtils):
         self.try_analysis_map(3)
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
-        return
 
     def select_strange(self):
         img = self.get_small_interaction_img(MASK["strange_name"], fresh=True)
@@ -1317,6 +1341,10 @@ class AnyFateUniverse(FateUtils):
             key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
             key_mouse_manager.wait()
         elif self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False,allow_fail=True):
+            if res_up[1] == 0:
+                # 没有识别到任何可选祝福行时不能盲点：此时祝福界面可能已经关闭，点到大世界会误攻击
+                CUS_LOGGER.warning("未识别到可选祝福行，跳过本次点击等待重试")
+                return 1
             CUS_LOGGER.debug("未识别到具体祝福,随便选一个")
             key_mouse_manager.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
             key_mouse_manager.wait()
@@ -1324,35 +1352,61 @@ class AnyFateUniverse(FateUtils):
         key_mouse_manager.wait()
         return 1
 
-    def select_go(self):
+    def before_move_to_next_node(self, node):
+        """确认移动前的内核差异处理；返回 False 终止本次移动。"""
+        return True
+
+    def after_map_analyzed(self):
+        """选路界面识别成功后、移动前的内核差异处理。"""
+
+    def after_move_to_next_node(self, node):
+        """确认移动后的内核差异处理。"""
+
+    def move_to_next_node(self, path_mode=2):
+        """选择并确认下一个移动节点，返回是否已离开当前地图。
+
+        Args:
+            path_mode: 节点图构图方式，含义同 try_analysis_map。
+        """
         key_mouse_manager.clean()
         key_mouse_manager.keyUp("move_w")
         key_mouse_manager.wait()
+        node = None
         if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996],click=False,allow_fail=True):
             if self.click_text(text="点击空白处关闭", box=[876, 1008, 1047, 1035],click=False,allow_fail=True):
                 CUS_LOGGER.info("「下一世，真理定会解明，死生……将有序流转。」")
                 key_mouse_manager.wait()
-                return
-            self.try_analysis_map(mode=2)
-            if self.next_node is not None:
-                self.start_nodes=self.next_node
-                x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
-                key_mouse_manager.click_point(x,y)
-                key_mouse_manager.wait()
-                self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
-                if self.area != "" and self.now_map!=-1:
-                    visit_count = self.record_map_visit(self.now_map)
-                    CUS_LOGGER.debug(f"上次地图编号{self.now_map}, 累计访问次数: {visit_count}")
-            else:
+                return False
+            if not self.try_analysis_map(mode=2, path_mode=path_mode):
+                return False
+            self.after_map_analyzed()
+            node = self.next_node
+            if node is None:
                 CUS_LOGGER.error("未找到下一步路径点")
+                return False
+            if not self.before_move_to_next_node(node):
+                return False
+            self.start_nodes = node
+            x, y = int(node["cx"]), int(node["cy"])
+            key_mouse_manager.click_point(x, y)
+            key_mouse_manager.wait()
+            self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
+            if self.area != "" and self.now_map != -1:
+                visit_count = self.record_map_visit(self.now_map)
+                CUS_LOGGER.debug(f"上次地图编号{self.now_map}, 累计访问次数: {visit_count}")
+            self.after_move_to_next_node(node)
         else:
             self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
         # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
         # 而它通常已被上一节点消费掉，这里必须自己清
-        self.area=""
-        self.new_node=True
+        self.area = ""
+        self.new_node = True
         # 已离开当前地图，同一张地图的暂离计数从头开始
         self.fail_count = 0
+        return True
+
+    def select_go(self):
+        self.move_to_next_node()
 
     def read_action_counts(self):
         """
@@ -1489,7 +1543,7 @@ class AnyFateUniverse(FateUtils):
         if not rows:
             # 选项区一个字都没有：选完选项正在进战斗、或玩家已经离开事件界面时
             CUS_LOGGER.debug(
-                f"事件「{getattr(self, 'event', '') or '未知事件'}」选项列表区域没有识别到任何文本或已退出事件，本帧不点击"
+                f"事件「{self.event or '未知事件'}」选项列表区域没有识别到任何文本或已退出事件，本帧不点击"
             )
             if not getattr(self, "_option_icons", None) and getattr(self, "_nothing_logged", None) is not True:
                 # 金色▼、推进图标、标题、选项图标、选项文字全没认到
@@ -1657,8 +1711,8 @@ class AnyFateUniverse(FateUtils):
         key_mouse_manager.wait()
         if self._stop:
             return False
-        appeared = self.wait_flag(
-            lambda: not self.click_text(
+        appeared = self.wait_until(
+            lambda: self.click_text(
                 text="确认",
                 box=[1158, 650, 1220, 690],
                 click=False,
@@ -1724,26 +1778,26 @@ class AnyFateUniverse(FateUtils):
     def select_start_bless(self):
         """选择开局奖励。
 
-        复用本帧整屏 OCR 的结果找包含目标名字的文本框，
-        点到该文本框中心；两个目标都没有时点中间。
+        在整屏 OCR 结果里找包含目标名字的文本框并点击；缓存可能来自上一帧，
+        没找到时重新做一次整屏识别。仍找不到就跳过本次点击，由下一次触发重试——
+        不能退回「点屏幕中间」：误触发时那一下会落到大世界，变成一次普通攻击。
         """
-        # 正常流程里 run_static 已经做过整屏 OCR；缓存为空时补一次 OCR
-        if not self.ts.res:
-            self.ts.forward(self.get_screen())
-        for name in ("神奇宇宙", "巨胃宇宙"):
-            for res in self.ts.find_with_box(box=[511, 477, 1409, 519], redundancy=30):
-                if name not in res["raw_text"]:
-                    continue
-                box = res["box"]
-                key_mouse_manager.click_point(
-                    (box[0] + box[2]) / 2,
-                    (box[1] + box[3]) / 2,
-                    box=box,
-                )
-                key_mouse_manager.click_point(948, 965)
-                return
-        key_mouse_manager.click_point(960, 540)
-        key_mouse_manager.click_point(948, 965)
+        for attempt in range(2):
+            if attempt or not self.ts.res:
+                self.ts.forward(self.get_screen())
+            for name in ("神奇宇宙", "巨胃宇宙"):
+                for res in self.ts.find_with_box(box=[511, 477, 1409, 519], redundancy=30):
+                    if name not in res["raw_text"]:
+                        continue
+                    box = res["box"]
+                    key_mouse_manager.click_point(
+                        (box[0] + box[2]) / 2,
+                        (box[1] + box[3]) / 2,
+                        box=box,
+                    )
+                    key_mouse_manager.click_point(948, 965)
+                    return
+        CUS_LOGGER.warning("开局奖励界面没有识别到目标奖励，跳过本次点击等待重试")
 
     def click_event_option(self, event_name, row, from_prior=False):
         """
@@ -1837,7 +1891,7 @@ class AnyFateUniverse(FateUtils):
             if box is None:
                 self._option_shown_at = None
                 return True
-            name = event_name or self.event_name_for_log(getattr(self, "screen", None))
+            name = event_name or self.event_name_for_log(self.screen)
             CUS_LOGGER.warning(f"事件「{name}」按固定偏移没点中「确定」，按文字识别的位置补点")
             self.click_confirm_text(box)
             self._option_shown_at = None
@@ -1872,7 +1926,7 @@ class AnyFateUniverse(FateUtils):
         （读到的存进 self.event 复用）。离开选项界面（选项区一个字都读不到）时
         会把 self.event 清空，下一个事件重新读。
         """
-        if not getattr(self, "event", ""):
+        if not self.event:
             if screen is None:
                 screen = self.get_screen()
             if screen is not None:
@@ -1886,7 +1940,7 @@ class AnyFateUniverse(FateUtils):
                     name = name.strip(" 　，,。.、·:：；;！!？?「」『』[]()（）")
                     if len(name) > 1:
                         self.event = name
-        return getattr(self, "event", "") or "未知事件"
+        return self.event or "未知事件"
 
     def option_icon_names(self):
         """
@@ -2021,16 +2075,14 @@ class AnyFateUniverse(FateUtils):
     def drop_strange(self):
         key_mouse_manager.click_point(1015, 486)
         key_mouse_manager.click_point(1663, 969)
-        self.wait_flag(lambda: self.click_text(text="丢弃奇物",box=[10, 0, 220, 112],click=False,ocr_line=False,warning=False), 1.4)
+        self.wait_until(lambda: not self.click_text(text="丢弃奇物",box=[10, 0, 220, 112],click=False,ocr_line=False,warning=False), 1.4)
 
     def drop_bless(self):
         st = set(self.tk.fates) - set(self.tk.secondary)
         clicked = 0
-        for i, ft in enumerate(self.tk.secondary[::-1]):
-            if ft != self.fate or i == len(self.tk.secondary):
+        for ft in self.tk.secondary[::-1]:
+            if ft != self.fate:
                 img_down = self.get_small_interaction_img(MASK["bless_path"], fresh=True)
-                if self.debug == 2:
-                    CUS_LOGGER.debug(f"St: {list(st)}, Secondary: {self.tk.secondary}")
                 res_down = self.ts.split_and_find(list(st), img_down, mode="bless")
                 if res_down[1] == 2:
                     key_mouse_manager.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
@@ -2467,8 +2519,9 @@ class AnyFateUniverse(FateUtils):
                             break
                         if first_visit:
                             self.mini_state += 2
+                            self.away_keep_status = True
                             self.need_away = True
-                            self.leave_universe(leave_away=True, keep_status=True)
+                            self.leave_universe(need_press_esc=True)
                             self.should_update_map = False
                             return
                         self.should_update_map = True

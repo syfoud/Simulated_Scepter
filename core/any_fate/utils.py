@@ -1,6 +1,5 @@
 """寰宇命途内核的公共基类：地图识别、寻路、事件与祝福交互。"""
 
-import ctypes
 import hashlib as _h
 import json
 import os
@@ -19,13 +18,13 @@ from core.any_fate.text_key import FATES, text_keys
 from core.common.runtime import ScriptKernel, set_forground, sprint
 from route import PATHS
 from tool import GLOBAL
-from tool.calibration import get_multi
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.mask import MASK
 from tool.settings import load_settings
 from tool.thread import ThreadWithException
 from tool.utils.Error import NormalEndError
+from tool.utils.game_window import get_window_kind
 from tool.utils.image_tool import find_image_by_name, find_image_in_folder
 from tool.utils.minimap_util import (
     MINIMAP_RADIUS,
@@ -54,8 +53,6 @@ class FateUtils(ScriptKernel):
     count_line = 2
 
     def __init__(self, *, fate=None, debug=False, max_run_time=0):
-        # 先把游戏窗口切到前台，否则 ScriptKernel 等窗口时焦点可能仍停在别处
-        set_forground()
         # 自动化会把鼠标频繁移到屏幕角落；pyautogui 的 fail-safe 会据此抛异常并终止键鼠线程
         pyautogui.FAILSAFE = False
         super().__init__()
@@ -64,16 +61,9 @@ class FateUtils(ScriptKernel):
         self.fate = fate or FATES[4]
         self.my_fate = FATES.index(self.fate)
         self.tk = text_keys(self.my_fate)
-        self.multi = get_multi()
-        # ScriptKernel 初始化时把按键倍率重置为 1，这里按校准结果重新注入
-        key_mouse_manager.set_config(self)
-        # 任务开始输出窗口 DPI 缩放与校准倍率，转身速度异常时可据此判断是 DPI 还是校准值的问题
-        try:
-            dpi_scale = ctypes.windll.user32.GetDpiForWindow(self.hwnd) / 96.0 if self.hwnd else 1.0
-        except Exception:
-            dpi_scale = 1.0
-        CUS_LOGGER.debug("DPI: " + str(dpi_scale) + " A:" + str(int(self.multi * 100) / 100))
         GLOBAL.DEBUG_MODE = bool(self.debug)
+        # 是否录制本局视频：由各内核 core_settings 的 record 决定，start() 时读取
+        self.record = False
         # 调试时额外开启地图窗口
         self._show_map = bool(self.debug)
         # 层数是否变动
@@ -1847,13 +1837,12 @@ class FateUtils(ScriptKernel):
 
     def route(self):
         self.init_map()
-        set_forground()
         while not self._stop:
             hwnd,Text = get_hwnd_and_text()
             warn_game = False
             cnt = 0
             focus_reclaim_wait = max(1, 2*load_settings().get("game_focus_reclaim_wait_seconds", 600))
-            while Text != "崩坏：星穹铁道" and Text != "云·星穹铁道" and not self._stop:
+            while get_window_kind(hwnd) is None and not self._stop:
                 self.last_interact_time = time.time()
                 if self._stop:
                     raise NormalEndError
@@ -1874,7 +1863,6 @@ class FateUtils(ScriptKernel):
                         self.update_state("battle")
                 else:
                     CUS_LOGGER.warning("匹配不到任何图标与简中文本标志")
-            # 匹配到图片 res=1时等待一段时间
         CUS_LOGGER.info("演算世界：翁法罗斯已从缓冲区销毁。")
 
     def settle_university(self):
@@ -1946,15 +1934,31 @@ class FateUtils(ScriptKernel):
         因此子类可以在这里安全地复位本局计数。
         """
         if self.record and self.bveerelbcpgyqan and self.YKItDYvq3FpnOYx:
-            self.stop_round_recording()
+            self.stop_round_recording(**self.recording_metadata())
             time.sleep(0.8)
             self.recorder.start_recording(self.count + 1)
         # 状态必须无条件更新：没有录制权限时 state 也要离开结算态，否则结算门永远不关
         self.update_state("restart")
 
-    def stop_round_recording(self):
-        """停止本轮录像；基类没有按局删除规则，整段保留，子类按各自指标覆盖。"""
-        self.recorder.stop_recording()
+    def save_threshold(self):
+        """本内核按局删除录像的保存阈值；None 表示不按理由删除，整段保留。"""
+        return None
+
+    def manual_stop_reason(self):
+        """手动停止时已有的本局进度；没有进度返回 None。"""
+        return None
+
+    def round_keep_reasons(self):
+        """本局正常结束时需要保留录像的理由。"""
+        return []
+
+    def recording_metadata(self):
+        """保留录像时写进文件名等位置的本局统计信息。"""
+        return {}
+
+    def delete_reason(self):
+        """删除录像时日志里的阈值说明。"""
+        return ""
 
     def keep_video_reasons(self, manual_stop=False):
         """列出本局录像必须保留的理由；返回空列表表示按内核规则可以删除。
@@ -1963,9 +1967,37 @@ class FateUtils(ScriptKernel):
             manual_stop: 是否由用户手动停止任务；手动停止时已有进度的录像默认保留。
         """
         reasons = []
-        if getattr(self, "keep_video_for_error", False):
+        if self.keep_video_for_error:
             reasons.append("运行异常终止")
+        threshold = self.save_threshold()
+        if threshold == 0:
+            # 阈值为 0 表示无条件保留，包括手动停止时击杀数/倒计时为 0 的情况
+            reasons.append("保存阈值为0，保留所有录像")
+            return reasons
+        if manual_stop:
+            reason = self.manual_stop_reason()
+            if reason:
+                reasons.append(reason)
+        # 程序结束时也要遵守本局的保留条件（如连续暂离、击杀/倒计时阈值）
+        reasons.extend(self.round_keep_reasons())
         return reasons
+
+    def stop_round_recording(self, manual_stop=False, **metadata):
+        """按保留理由停止本轮录像：理由非空则保留，否则按保存阈值删除。
+
+        Args:
+            manual_stop: 是否手动停止任务；为 True 时检查手动停止的保留规则。
+            **metadata: 保留时传给录制器的本局统计信息。
+        """
+        reasons = self.keep_video_reasons(manual_stop)
+        keep_video = self.save_threshold() is None or bool(reasons)
+        details = "、".join(reasons) if reasons else self.delete_reason()
+        CUS_LOGGER.debug(
+            f"本局录像保留{keep_video}" + (f"：{details}" if details else "")
+        )
+        self.recorder.stop_recording(
+            delete_video=not keep_video, **(metadata or self.recording_metadata())
+        )
 
     def start(self):
         """
@@ -1979,6 +2011,9 @@ class FateUtils(ScriptKernel):
 
         如果在执行过程中发生异常，会尝试停止运行并重新抛出异常。
         """
+        # 各内核的录像开关保存在自己的 core_settings 中，启动时才读，
+        # 这样任何子类都能用同一份配置且不会在构造阶段读到别的内核的值。
+        self.record = bool(self.opt.get("record", False))
         self._stop = False
         key_mouse_manager.start()
         if self.record and self.gwypzmgzcndqlp:
@@ -2015,22 +2050,14 @@ class FateUtils(ScriptKernel):
         CUS_LOGGER.info("翁法罗斯已经等待了这一刻太久……还可以等待更久……只要祂还曾燃烧……")
         self._stop = 1
         key_mouse_manager.stop()
-        if self.record and self.bveerelbcpgyqan :
+        if self.record and self.bveerelbcpgyqan:
             CUS_LOGGER.info("以「爱」的名义，她将逝去的一切尽数珍藏……直到世间的尽头……")
             try:
-                if hasattr(self, "kill_count"):
-                    reasons = self.keep_video_reasons(manual_stop=True)
-                    keep_video = bool(reasons)
-                    CUS_LOGGER.debug(
-                        f"本局录像保留{keep_video}"
-                        + (f"，原因：{'、'.join(reasons)}" if reasons else "")
-                    )
-                    self.recorder.stop_recording(delete_video=not keep_video)
-                else:
-                    self.recorder.stop_recording()
+                self.stop_round_recording(manual_stop=True)
             except Exception as e:
                 CUS_LOGGER.error(f"停止录制时发生错误: {e}")
         self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "stop"))
-        self.save_screen(save_path=os.path.join(PATHS["temp"], "stop"))
         self.map_thread = None
+        # 释放截图器持有的 GDI 资源；基类 stop() 还会再停一次键鼠线程，可以安全重复调用
+        super().stop(*_, **__)
 
