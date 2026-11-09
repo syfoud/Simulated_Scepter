@@ -999,4 +999,7 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("终止任务")
         self._stop = 1
         key_mouse_manager.stop()
+        if self.sct is not None:
+            self.sct.close()
+            self.sct = None
         self.map_thread = None

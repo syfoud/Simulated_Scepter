@@ -7,6 +7,7 @@
 import ctypes
 import time
 
+import numpy as np
 import pythoncom
 import win32com.client
 
@@ -22,9 +23,6 @@ from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
 from tool.screenshot import Screen
 from tool.utils.game_window import (
-    BASE_HEIGHT,
-    BASE_WIDTH,
-    CLOUD_WINDOW_KIND,
     find_game_window,
     get_client_screen_rect,
     is_supported_resolution,
@@ -61,11 +59,18 @@ class CurrencyUtils(StateKernel):
         self.last_get_screen_time = None
         self.ts = get_global_my_ts(father=self)
         self.sct = None
-        self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
+        self.screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.xx, self.yy = 1920, 1080
         self.x0 = self.y0 = self.x1 = self.y1 = 0
         self.scx = self.scy = 1.0
         self.wait_game_window()
         self.sct = Screen()
+
+    def get_screen(self):
+        """停止后返回最后一帧，避免 GUI 线程关闭截图器后任务线程再访问空句柄。"""
+        if self._stop:
+            return self.screen
+        return super().get_screen()
 
     def wait_game_window(self):
         """等待游戏窗口出现并记录客户区坐标，用户中断时把 _stop 置位。"""
@@ -99,13 +104,13 @@ class CurrencyUtils(StateKernel):
         hwnd = game_window.hwnd
         self.xx = game_window.client_width
         self.yy = game_window.client_height
-        if game_window.kind == CLOUD_WINDOW_KIND:
+        if game_window.kind == "cloud":
             self.x0, self.y0, self.x1, self.y1 = get_client_screen_rect(hwnd)
         else:
             self.x0, self.y0, self.x1, self.y1 = get_window_rect(hwnd)
         self.x0 = max(0, self.x1 - self.xx)
         self.y0 = max(0, self.y1 - self.yy)
-        if game_window.kind != CLOUD_WINDOW_KIND and (
+        if game_window.kind != "cloud" and (
                 (self.xx == 1920 or self.yy == 1080)
                 and self.xx >= 1920
                 and self.yy >= 1080
@@ -115,23 +120,23 @@ class CurrencyUtils(StateKernel):
             self.y0 += (self.yy - 1080) // 2
             self.x1 -= (self.xx - 1920) // 2
             self.y1 -= (self.yy - 1080) // 2
-            self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
+            self.xx, self.yy = 1920, 1080
         if not is_supported_resolution(game_window.kind, self.xx, self.yy):
-            if game_window.kind == CLOUD_WINDOW_KIND:
+            if game_window.kind == "cloud":
                 CUS_LOGGER.error(
                     f"云游戏窗口大小错误 {self.xx} {self.yy}，"
-                    f"请将窗口调整到接近{BASE_WIDTH}*{BASE_HEIGHT}"
+                    f"请将窗口调整到接近1920*1080"
                 )
             else:
                 CUS_LOGGER.error(f"分辨率错误 {self.xx} {self.yy} 请设为1920*1080")
             time.sleep(0.3)
             return 0
-        if game_window.kind == CLOUD_WINDOW_KIND:
-            self.x1 = self.x0 + BASE_WIDTH
-            self.y1 = self.y0 + BASE_HEIGHT
-            self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
-        self.scx = self.xx / BASE_WIDTH
-        self.scy = self.yy / BASE_HEIGHT
+        if game_window.kind == "cloud":
+            self.x1 = self.x0 + 1920
+            self.y1 = self.y0 + 1080
+            self.xx, self.yy = 1920, 1080
+        self.scx = self.xx / 1920
+        self.scy = self.yy / 1080
         try:
             dpi_scale = ctypes.windll.user32.GetDpiForWindow(hwnd) / 96.0
         except Exception:

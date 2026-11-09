@@ -49,11 +49,8 @@ class DivergentUniverse(UniverseUtils):
 
     def __init__(self, debug=0, nums=-1, speed=0):
         super().__init__()
-        # 设置并启动键鼠管理器
-        key_mouse_manager.set_config(self)
         # 设置屏幕参数以支持坐标转换
         key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
-
 
         self._stop = True
         self.end = 0
@@ -1138,10 +1135,10 @@ class DivergentUniverse(UniverseUtils):
         CUS_LOGGER.info("尝试停止运行")
         try:
             self.init_floor()
-        except Exception:
-            pass
+        except Exception as e:
+            CUS_LOGGER.warning("停止时复位位面状态失败：%s", e)
         self._stop = True
-        key_mouse_manager.stop()
+        super().stop(*_, **__)
 
 
     def start(self):

@@ -1,4 +1,3 @@
-import ctypes
 import time
 
 import cv2 as cv
@@ -8,9 +7,8 @@ import pyautogui
 import core.divergent.keyops as keyops
 import core.divergent.ocr as ocr
 from core.any_fate.text_key import text_keys
-from core.common.runtime import ScriptKernel, set_forground
+from core.common.runtime import ScriptKernel
 from core.divergent.config import config
-from tool.calibration import get_multi
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.mask import MASK, crop_region
@@ -22,10 +20,7 @@ class UniverseUtils(ScriptKernel):
     def __init__(self):
         # 每次启动重新读配置，改过设置不需要重启程序
         config.read()
-        set_forground()
         super().__init__()
-        # 转身倍率与 DPI 缩放来自全局校准，和命途内核共用同一份机器级设置
-        self.multi = get_multi()
         self.diffi = config.diffi
         self.my_fate = -1
         self.fail_count = 0
@@ -33,17 +28,13 @@ class UniverseUtils(ScriptKernel):
         self.slow = 0
         self.allow_e = 1
         self.quan = 0
+        # 祝福文本表暂时沿用命途内核的数据，后续会替换为差分宇宙专用版本
         self.tk = text_keys(self.my_fate)
         # 祝福匹配需要一个「本命途」名字；差分宇宙不做命途选择，沿用默认下标
         self.fate = self.tk.fates[self.my_fate]
         self.debug = 0
         self.lst_mask = None
         self.event_mask = None
-        try:
-            self.scale = ctypes.windll.user32.GetDpiForWindow(self.hwnd) / 96.0 if self.hwnd else 1.0
-        except Exception:
-            self.scale = 1.0
-        CUS_LOGGER.info("DPI: " + str(self.scale) + " A:" + str(int(self.multi * 100) / 100))
 
     def create_ts(self):
         """差分宇宙使用自己配置的识别精度，不复用通用内核的 OCR 实例。"""
@@ -203,79 +194,6 @@ class UniverseUtils(ScriptKernel):
             raise ValueError("正在退出")
         key_mouse_manager.turn(degrees, fine)
         key_mouse_manager.wait()
-
-
-
-
-
-
-    def bless(self):
-        self.get_screen()
-        if self.wait_flag(lambda:not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False), 2.3):
-            self.wait_flag(lambda:not self.click_text(text="重置祝福",box=[1268, 929, 1444, 1025],click=False,warning=False), 0.7)
-            time.sleep(1.2)
-        else:
-            return
-        for _ in range(6):
-            chose = 0
-            self.get_screen()
-            if self.click_text(text="重置祝福",box=[1268, 929, 1444, 1025],click=False,warning=False):
-                for _ in range(14):
-                    self.get_screen()
-                    img_down = crop_region(self.screen, MASK["bless_path"])
-                    if (
-                        self.ts.split_and_find(self.tk.fates, img_down, mode="bless")[1]
-                        or self._stop
-                    ):
-                        time.sleep(0.2)
-                        break
-                    if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
-                        return 1
-                    time.sleep(0.2)
-                self.get_screen()
-                img_up = crop_region(self.screen, MASK["bless_name"])
-                res_up = self.ts.split_and_find(self.tk.prior_bless, img_up, bless_skip=self.tk.skip)
-                img_down = crop_region(self.screen, MASK["bless_path"])
-                res_down = self.ts.split_and_find([self.fate], img_down, mode="bless")
-                if res_up[1] == 2:
-                    self.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
-                    chose = 1
-                elif res_down[1] == 2:
-                    self.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
-                    chose = 1
-                if not chose:
-                    self.click_point(1346, 967)
-                    time.sleep(1.2)
-            # 未匹配到优先祝福，刷新祝福并再次匹配
-            if not chose:
-                for _ in range(8):
-                    self.get_screen()
-                    img_down = crop_region(self.screen, MASK["bless_path"])
-                    if self.ts.split_and_find(self.tk.fates, img_down)[1] or self._stop:
-                        time.sleep(0.2)
-                        break
-                    if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
-                        return 1
-                    time.sleep(0.2)
-                self.get_screen()
-                img_up = crop_region(self.screen, MASK["bless_name"])
-                res_up = self.ts.split_and_find(self.tk.prior_bless, img_up,bless_skip=self.tk.skip)
-                img_down = crop_region(self.screen, MASK["bless_path"])
-                res_down = self.ts.split_and_find(
-                    self.tk.secondary, img_down, mode="bless"
-                )
-                if res_up[1] == 2:
-                    self.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
-                elif res_down[1] >= 2:
-                    self.click_point(*self.calc_point(MASK["bless_path"], res_down[0]))
-                else:
-                    self.click_point(*self.calc_point(MASK["bless_name"], res_up[0]))
-                time.sleep(0.5)
-            self.click_point(1689, 962)
-            time.sleep(1.7)
-            self.get_screen()
-            if not self.click_text(text="选择祝福",box=[60, 0, 222, 113],click=False,ocr_line=False,warning=False):
-                return
 
     def get_text_position(self, clean=0):
         if self.event_mask is None:

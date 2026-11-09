@@ -22,7 +22,11 @@ def get_multi():
     Returns:
         float: 校准倍率。
     """
-    value = float(load_settings()["calibration_angle"])
+    try:
+        value = float(load_settings()["calibration_angle"])
+    except (KeyError, TypeError, ValueError):
+        CUS_LOGGER.warning("校准角度配置不是有效数字，按未校准处理")
+        return 1.0
     # 校准倍率的合理范围：超出说明测量被打断或配置被手改过
     if 0.0 < value <= 5.0:
         return value
@@ -115,11 +119,8 @@ def _calibrate(ang, su):
         CUS_LOGGER.debug(f"原始倍率：{key_mouse_manager.multi}倍率变化: {ax}/{ay}")
         key_mouse_manager.multi *= ax / ay
     key_mouse_manager.multi += 1e-9
-    try:
-        if abs(key_mouse_manager.multi) > 5.0 or key_mouse_manager.multi <= 0.0:
-            CUS_LOGGER.warning(f"校准结果{key_mouse_manager.multi}超出合理范围，重置为默认值1")
-            key_mouse_manager.multi = 1
-    except Exception:
+    if abs(key_mouse_manager.multi) > 5.0 or key_mouse_manager.multi <= 0.0:
+        CUS_LOGGER.warning(f"校准结果{key_mouse_manager.multi}超出合理范围，重置为默认值1")
         key_mouse_manager.multi = 1
 
     # 打印基本校准后的角度校准值

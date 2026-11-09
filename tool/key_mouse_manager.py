@@ -168,8 +168,6 @@ class KeyMouseManager:
         self.queue_lock = threading.Lock()  # 保护队列的锁
         self.worker_thread = None
         self.running = False
-        #键鼠配置
-        self.config = None
         self.x1 = 0
         self.x0 = 0
         self.y1 = 0
@@ -186,13 +184,11 @@ class KeyMouseManager:
         self.skipped_pointer = None
 
     def set_config(self, config):
-        """
-        设置配置对象
+        """应用内核的转身倍率与 DPI 缩放。
 
         Args:
-            config: 配置对象，包含键位映射等信息
+            config: 提供 multi（校准倍率）与 scale（DPI 缩放比）的内核对象。
         """
-        self.config = config
         if hasattr(config, 'multi'):
             self.multi = config.multi
         if hasattr(config, 'scale'):

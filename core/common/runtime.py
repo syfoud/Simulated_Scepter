@@ -1,5 +1,6 @@
 """通用内核的窗口、识别与 JSON 脚本运行入口。"""
 
+import ctypes
 import os
 import time
 from datetime import datetime
@@ -14,14 +15,13 @@ import win32com.client
 from core.common.engine import StateKernel
 from core.common.ocr import get_global_my_ts
 from route import PATHS
+from tool.calibration import get_multi
 from tool.GLOBAL import factor, get_global_stop_flag, key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.mask import crop_region, quad_box, region_center_point
 from tool.public_ocr import merge_text
 from tool.screenshot import Screen
 from tool.utils.game_window import (
-    BASE_HEIGHT,
-    BASE_WIDTH,
     get_client_screen_rect,
     get_foreground_game_window,
     is_supported_resolution,
@@ -59,16 +59,21 @@ class ScriptKernel(StateKernel):
         self._stop = False
         self.sct = None
         self._screen_lock = Lock()
-        self.screen = np.zeros((BASE_HEIGHT, BASE_WIDTH, 3), dtype=np.uint8)
-        self.config = None
-        self.xx, self.yy = BASE_WIDTH, BASE_HEIGHT
+        self.screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        self.xx, self.yy = 1920, 1080
         self.scx = self.scy = 1.0
         self.fps_list = []
         self.last_get_screen_time = None
         # 游戏窗口句柄，供内核输出 DPI 等信息时复用
         self.hwnd = None
+        # 转身倍率与 DPI 缩放：所有基于 ScriptKernel 的内核共用同一份机器级设置
+        # 转身倍率由校准结果提供；DPI 只用于诊断输出，不参与转身距离换算。
+        self.multi = 1.0
+        self.scale = 1.0
+        self.dpi_scale = 1.0
         self.ts = self.create_ts()
-        set_game_foreground()
+        # 先发一次空按键绕开 Windows 的后台抢焦点限制，再等窗口出现
+        set_forground()
         deadline = time.monotonic() + self.window_timeout
         while not get_global_stop_flag():
             window = get_foreground_game_window()
@@ -76,21 +81,32 @@ class ScriptKernel(StateKernel):
                 if not is_supported_resolution(window.kind, window.client_width, window.client_height):
                     raise ValueError(
                         f"当前游戏窗口为 {window.client_width} × {window.client_height}，"
-                        f"请调整到 {BASE_WIDTH} × {BASE_HEIGHT} 后重新运行。"
+                        f"请调整到 1920 × 1080 后重新运行。"
                     )
                 self.x0, self.y0, _, _ = get_client_screen_rect(window.hwnd)
                 self.hwnd = window.hwnd
                 self.x1, self.y1 = self.x0 + self.xx, self.y0 + self.yy
                 self.full = self.x0 == 0 and self.y0 == 0
                 self.sct = Screen(self.xx, self.yy)
-                key_mouse_manager.set_config(None)
-                key_mouse_manager.multi = key_mouse_manager.scale = 1.0
+                self.multi = get_multi()
+                self.dpi_scale = self._dpi_scale()
+                key_mouse_manager.set_config(self)
                 key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
+                # 转身速度异常时据此判断是 DPI 还是校准值的问题
+                CUS_LOGGER.debug(f"DPI: {self.dpi_scale} A: {int(self.multi * 100) / 100}")
                 return
             if time.monotonic() >= deadline:
                 raise TimeoutError("等待游戏窗口超过 300 秒，请启动游戏并将游戏窗口置于前台。")
             time.sleep(0.3)
         self._stop = True
+
+    def _dpi_scale(self):
+        """当前窗口的 DPI 缩放比（96 DPI 为 1.0），仅用于诊断日志。"""
+        try:
+            return ctypes.windll.user32.GetDpiForWindow(self.hwnd) / 96.0
+        except (AttributeError, OSError):
+            CUS_LOGGER.warning("获取窗口 DPI 失败，按 100% 缩放处理")
+            return 1.0
 
     def create_ts(self):
         """创建 OCR 识别器；内核需要使用自己的识别精度时覆盖本方法。"""
@@ -146,12 +162,12 @@ class ScriptKernel(StateKernel):
             delay: 进入识别前等待的秒数。
             box: 限定 OCR 区域 [x1, y1, x2, y2]；给出时优先走单行识别。
             after_delay: 命中后等待的秒数。
-            click: 是否真的点击，False 时只做识别。
-            find_all: 是否返回全部命中（仅识别模式有效）。
-            warning: 未命中时是否输出警告日志。
-            ocr_line: 为 False 时走“整块文本快速判定”分支，只判定不点击。
-            need_fresh: 是否重新截屏后再识别。
-            allow_fail: 单行识别未命中时是否直接返回 False、不再回退到全文匹配。
+            click: 是否真的点击，False 时只做识别。默认True。
+            find_all: 是否返回全部命中（仅识别模式有效）。默认False。
+            warning: 未命中时是否输出警告日志。默认True。
+            ocr_line: 为 False 时先走“整块文本快速判定”；未命中仍会继续普通识别流程。默认True。
+            need_fresh: 是否重新截屏后再识别。默认True。
+            allow_fail: 单行识别未命中时是否直接返回 False、不再回退到全文匹配。默认False。
 
         Returns:
             命中返回 True，未命中返回 False。
@@ -159,7 +175,7 @@ class ScriptKernel(StateKernel):
         if delay:
             time.sleep(delay)
         if not ocr_line:
-            ocr_text = self.ts.find_with_box(box=box, forward=need_fresh)
+            ocr_text = self.ts.find_with_box(box=box, re_screen=need_fresh)
             ocr_text_merged = merge_text(ocr_text) if len(ocr_text) else ""
             targets = text if isinstance(text, list) else [text]
             if any(t in ocr_text_merged for t in targets):
@@ -203,25 +219,29 @@ class ScriptKernel(StateKernel):
             CUS_LOGGER.warning(f"{text}文本未找到")
         return False
 
-    def wait_flag(self, f, timeout=3.0):
-        """轮询等待回调返回真值。
+    def wait_until(self, predicate, timeout=3.0):
+        """轮询直到回调返回真值。
 
-        每轮重新截屏，供 f 内部基于最新画面判断。
+        每轮重新截屏，供回调基于最新画面判断。
+
+        Args:
+            predicate: 条件回调；返回真值表示条件已满足，可以结束等待。
+            timeout: 最长等待秒数。
 
         Returns:
-            1 表示回调条件已满足；0 表示超时或被中断。
+            条件满足返回 True；超时或被停止返回 False。
         """
         end = time.time() + timeout
         while time.time() < end:
             if self._stop:
-                return 0
-            if not f():
-                return 1
+                return False
+            if predicate():
+                return True
             time.sleep(0.05)
             if self._stop:
-                return 0
+                return False
             self.get_screen()
-        return 0
+        return False
 
     def calc_point(self, point, offset):
         """把识别框或坐标加上偏移，得到实际点击点。
