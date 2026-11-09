@@ -98,7 +98,7 @@ def _has_incomplete_box(path):
         path: 待检查的 MP4 文件。
 
     Returns:
-        顶层盒结构完整（或无法判定）返回 False；存在越界/残缺盒返回 True。
+        顶层盒结构完整返回 False；存在越界/残缺盒或无法读取文件时返回 True（视为损坏）。
     """
     try:
         total = os.path.getsize(path)
@@ -110,10 +110,18 @@ def _has_incomplete_box(path):
                 if len(header) < 8:
                     return True
                 size = int.from_bytes(header[:4], "big")
+                header_size = 8
+                if size == 1:
+                    # ISO-BMFF 的 64 位长度扩展：真实长度在接下来的 8 字节
+                    extra = file.read(8)
+                    if len(extra) < 8:
+                        return True
+                    size = int.from_bytes(extra, "big")
+                    header_size = 16
                 if size == 0:
                     # 声明到文件末尾的最后一个盒
                     return False
-                if size < 8:
+                if size < header_size:
                     return True
                 if offset + size > total:
                     return True
@@ -197,6 +205,12 @@ def needs_conversion(path):
             size = int.from_bytes(header[:4], "big")
             if header[4:8] == b"moof":
                 return True
+            if size == 1:
+                # 64 位长度扩展：跳过后续 8 字节的真实长度再继续遍历
+                extra = file.read(8)
+                if len(extra) < 8:
+                    break
+                size = int.from_bytes(extra, "big")
             if size < 8 or offset + size > remaining:
                 # 结构不完整（例如被强制结束的录像），已扫描的部分没有分片盒
                 break

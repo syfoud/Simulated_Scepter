@@ -16,8 +16,6 @@ from route import PATHS
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 from tool.utils.game_window import (
-    CLOUD_WINDOW_KIND,
-    LOCAL_GAME_TITLE,
     find_game_window,
     get_client_screen_rect,
     get_window_kind,
@@ -193,7 +191,7 @@ class WindowRecorder:
         # Chrome_WidgetWin_1，避免精确标题命中 Explorer 的 TabProxyWindow。
         if (
             not is_usable_game_window(self.hwnd)
-            and self.window_title == LOCAL_GAME_TITLE
+            and self.window_title == "崩坏：星穹铁道"
         ):
             game_window = find_game_window(prefer_foreground=True)
             self.hwnd = game_window.hwnd if game_window else None
@@ -233,7 +231,7 @@ class WindowRecorder:
         # 获取窗口位置和尺寸
         try:
             # 云游戏只录制 Edge 客户区；本地客户端保持原窗口矩形逻辑。
-            if self.window_kind == CLOUD_WINDOW_KIND:
+            if self.window_kind == "cloud":
                 rect = get_client_screen_rect(self.hwnd)
             else:
                 rect = win32gui.GetWindowRect(self.hwnd)

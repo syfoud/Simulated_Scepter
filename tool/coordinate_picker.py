@@ -19,8 +19,6 @@ import win32api
 import win32con
 
 from tool.utils.game_window import (
-    BASE_HEIGHT,
-    BASE_WIDTH,
     GameWindow,
     find_game_window,
     get_client_screen_rect,
@@ -37,8 +35,8 @@ def to_base(x: int, y: int, rect: Iterable[int]) -> tuple[int, int]:
     if width <= 0 or height <= 0:
         raise ValueError(f"游戏窗口尺寸无效：{width}x{height}")
     return (
-        round((x - left) * BASE_WIDTH / width),
-        round((y - top) * BASE_HEIGHT / height),
+        round((x - left) * 1920 / width),
+        round((y - top) * 1080 / height),
     )
 
 
@@ -90,7 +88,7 @@ def pick_coordinates(
             if trigger_down and not trigger_was_down:
                 screen = win32api.GetCursorPos()
                 base = to_base(screen[0], screen[1], rect)
-                if 0 <= base[0] <= BASE_WIDTH and 0 <= base[1] <= BASE_HEIGHT:
+                if 0 <= base[0] <= 1920 and 0 <= base[1] <= 1080:
                     points.append(base)
                     if on_point is not None:
                         on_point(base, screen, format_point(base, screen, rect))
