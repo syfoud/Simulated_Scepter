@@ -1,4 +1,4 @@
-"""开局奖励选择：复用整屏 OCR 的文本框定位目标，不在固定中点盲点。"""
+"""开局奖励选择：一次整屏 OCR 后按固定优先级点击对应奖励文字。"""
 
 import unittest
 from unittest.mock import Mock, patch
@@ -22,10 +22,9 @@ class SelectStartBlessTest(unittest.TestCase):
     def setUp(self):
         self.manager = self.enterContext(patch("core.any_fate.engine.key_mouse_manager", Mock()))
 
-    def engine(self, rows, cached_res=True):
+    def engine(self, rows):
         engine = object.__new__(AnyFateUniverse)
         engine.ts = Mock()
-        engine.ts.res = [1] if cached_res else []
         engine.ts.forward = Mock()
         engine.ts.find_with_box = Mock(return_value=rows)
         engine.get_screen = Mock(return_value=np.zeros((1080, 1920, 3), dtype=np.uint8))
@@ -34,19 +33,20 @@ class SelectStartBlessTest(unittest.TestCase):
     def clicks(self):
         return [call.args for call in self.manager.click_point.call_args_list]
 
-    def test_target_reward_is_clicked_at_its_text_center(self):
+    def test_ocrs_exactly_once_and_clicks_preferred_reward(self):
         box = [600, 480, 900, 516]
         engine = self.engine([{"raw_text": "神奇宇宙", "box": box}])
 
         engine.select_start_bless()
 
+        engine.ts.forward.assert_called_once_with(engine.get_screen.return_value)
+        engine.ts.find_with_box.assert_called_once_with(box=REWARD_BOX, redundancy=30)
         self.assertEqual(
             self.clicks(),
             [((600 + 900) / 2, (480 + 516) / 2), CONFIRM_POINT],
         )
-        engine.ts.find_with_box.assert_called_with(box=REWARD_BOX, redundancy=30)
 
-    def test_giant_stomach_reward_is_also_matched(self):
+    def test_lower_priority_reward_is_clicked_when_higher_ones_are_absent(self):
         box = [950, 480, 1250, 516]
         engine = self.engine([{"raw_text": "巨胃宇宙", "box": box}])
 
@@ -57,30 +57,39 @@ class SelectStartBlessTest(unittest.TestCase):
             [((950 + 1250) / 2, (480 + 516) / 2), CONFIRM_POINT],
         )
 
-    def test_cached_ocr_result_is_reused_without_a_new_screen_ocr(self):
-        engine = self.engine([{"raw_text": "神奇宇宙", "box": [600, 480, 900, 516]}])
+    def test_full_priority_order(self):
+        priority = ("神奇宇宙", "巨胃宇宙", "破碎宇宙", "祝福宇宙", "有序宇宙", "嗜血宇宙")
+        rows = [
+            {"raw_text": name, "box": [600 + index * 100, 480, 800 + index * 100, 516]}
+            for index, name in enumerate(reversed(priority))
+        ]
+        for index, expected in enumerate(priority):
+            with self.subTest(expected=expected):
+                # 每次留下当前最高优先级及更低优先级的奖励，验证选择顺序
+                visible = [row for row in rows
+                           if priority.index(row["raw_text"]) >= index]
+                engine = self.engine(visible)
+                self.manager.reset_mock()
 
-        engine.select_start_bless()
+                engine.select_start_bless()
 
-        engine.ts.forward.assert_not_called()
+                target = next(row for row in visible if row["raw_text"] == expected)
+                box = target["box"]
+                self.assertEqual(
+                    self.clicks(),
+                    [((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), CONFIRM_POINT],
+                )
 
-    def test_missing_cache_forces_a_fresh_whole_screen_ocr(self):
-        engine = self.engine([], cached_res=False)
+    def test_unknown_or_no_text_skips_without_blind_click(self):
+        for rows in ([], [{"raw_text": "无关文本", "box": [600, 480, 900, 516]}]):
+            with self.subTest(rows=rows):
+                engine = self.engine(rows)
+                self.manager.reset_mock()
 
-        engine.select_start_bless()
+                engine.select_start_bless()
 
-        # 第一轮缓存为空先补一次 OCR；仍未命中目标时再刷新一次后放弃点击
-        self.assertEqual(engine.ts.forward.call_count, 2)
-        self.assertEqual(engine.ts.forward.call_args_list[0].args, (engine.get_screen.return_value,))
-
-    def test_no_target_skips_the_click_instead_of_attacking_the_world(self):
-        """目标没认到时不能退回点屏幕中间：误触发时那一下会落到大世界变成普通攻击。"""
-        engine = self.engine([{"raw_text": "无关文本", "box": [600, 480, 900, 516]}])
-
-        engine.select_start_bless()
-
-        self.assertEqual(self.clicks(), [])
-        engine.ts.forward.assert_called_once_with(engine.get_screen.return_value)
+                self.assertEqual(self.clicks(), [])
+                engine.ts.forward.assert_called_once_with(engine.get_screen.return_value)
 
 
 if __name__ == "__main__":

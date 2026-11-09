@@ -1776,28 +1776,30 @@ class AnyFateUniverse(FateUtils):
                 self.update_state("run")
 
     def select_start_bless(self):
-        """选择开局奖励。
+        """选择开拓命途的开局祝福。
 
-        在整屏 OCR 结果里找包含目标名字的文本框并点击；缓存可能来自上一帧，
-        没找到时重新做一次整屏识别。仍找不到就跳过本次点击，由下一次触发重试——
-        不能退回「点屏幕中间」：误触发时那一下会落到大世界，变成一次普通攻击。
+        该界面祝福名固定只有六种，因此四种祝福名可覆盖；
+        只做一次整屏 OCR，按优先级点击第一个识别到的奖励名。
         """
-        for attempt in range(2):
-            if attempt or not self.ts.res:
-                self.ts.forward(self.get_screen())
-            for name in ("神奇宇宙", "巨胃宇宙"):
-                for res in self.ts.find_with_box(box=[511, 477, 1409, 519], redundancy=30):
-                    if name not in res["raw_text"]:
-                        continue
-                    box = res["box"]
-                    key_mouse_manager.click_point(
-                        (box[0] + box[2]) / 2,
-                        (box[1] + box[3]) / 2,
-                        box=box,
-                    )
-                    key_mouse_manager.click_point(948, 965)
-                    return
-        CUS_LOGGER.warning("开局奖励界面没有识别到目标奖励，跳过本次点击等待重试")
+        self.ts.forward(self.get_screen())
+        rows = [
+            row for row in self.ts.find_with_box(box=[511, 477, 1409, 519], redundancy=30)
+            if (row.get("raw_text") or "").strip()
+        ]
+        for name in ("神奇宇宙", "巨胃宇宙", "破碎宇宙", "祝福宇宙"):
+            target = next((row for row in rows if name in row["raw_text"]), None)
+            if target is None:
+                continue
+            box = target["box"]
+            key_mouse_manager.click_point(
+                (box[0] + box[2]) / 2,
+                (box[1] + box[3]) / 2,
+                box=box,
+            )
+            key_mouse_manager.click_point(948, 965)
+            CUS_LOGGER.debug(f"识别到开局祝福：{[row['raw_text'] for row in rows]}，选择{name}")
+            return
+        CUS_LOGGER.warning("开局奖励界面未识别到具体祝福，跳过本次点击等待下一次触发")
 
     def click_event_option(self, event_name, row, from_prior=False):
         """
