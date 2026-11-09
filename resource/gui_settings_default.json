@@ -6,9 +6,6 @@
     "game_executable_path": "",
     "game_focus_reclaim_wait_seconds": 600,
     "ocr_device": "auto",
-    "record_map": false,
-    "recording_iron_blood": false,
-    "del_record_time": 14,
     "hotkeys": {
         "stop": "end",
         "test": "f6",

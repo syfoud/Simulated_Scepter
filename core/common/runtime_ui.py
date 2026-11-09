@@ -3,11 +3,16 @@
 from pathlib import Path
 
 from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QCheckBox, QWidget
 
 from route import PATHS
 from tool.gui.advanced_features import show_unlock_dialog
 from tool.storage import resource_path
+
+
+def advanced_user_file_exists():
+    """高级用户文件（kesln.onnx）存在时才允许开启录像。"""
+    return (Path(PATHS["user"]) / "kesln.onnx").is_file()
 
 
 class RuntimeSettings(QWidget):
@@ -37,6 +42,12 @@ class RuntimeSettings(QWidget):
 
     def early_stop_enabled(self):
         return self.early_stop_checkbox.isEnabled() and self.early_stop_checkbox.isChecked()
+
+    def add_record_checkbox(self, text):
+        """在高级用户功能区域内追加本内核的录像开关。"""
+        self.record_checkbox = QCheckBox(text)
+        self.layout().addWidget(self.record_checkbox)
+        return self.record_checkbox
 
     def collect(self):
         return {

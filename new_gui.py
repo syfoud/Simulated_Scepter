@@ -197,32 +197,43 @@ def resolve_startup_task(args):
         return None
 
     settings = load_settings()
+    defaults = load_default_settings() or {}
     registry = KernelRegistry()
     configured_script = settings.get("script_file", "")
     if args.file is not None:
         script_name = args.file
     else:
-        script_name = configured_script
+        script_name = configured_script or defaults.get("script_file", "")
 
-    default_engine = settings.get("script_engine", "IronBlood")
+    default_engine = settings.get("script_engine", "") or defaults.get("script_engine", "")
     engine_name = args.engine or default_engine
 
     if not isinstance(engine_name, str) or not engine_name:
         raise ValueError("未设置可用内核；请在界面选择内核，或使用 --engine:ID 指定内核")
     engine_key = engine_name.casefold()
+    runnable = registry.runnable()
     spec = next(
-        (item for item in registry.runnable() if item.id.casefold() == engine_key),
+        (item for item in runnable if item.id.casefold() == engine_key),
         None,
     )
     if spec is None:
-        available = ", ".join(item.id for item in registry.runnable())
-        raise ValueError(f"设置的内核不可用：{engine_name!r}；可用内核 ID：{available}")
-
-    if not isinstance(script_name, str) or not script_name:
-        raise ValueError("未设置可用脚本；请在界面选择脚本，或使用 --file:SCRIPT 指定脚本")
+        # 设置里可能是非法内核名；只对设置值回退内置默认内核，
+        # 命令行显式指定的内核写错时继续报错，避免掩盖参数错误。
+        if args.engine is None:
+            default_key = str(defaults.get("script_engine", "")).casefold()
+            spec = next(
+                (item for item in runnable if item.id.casefold() == default_key),
+                None,
+            )
+        if spec is None:
+            available = ", ".join(item.id for item in runnable)
+            raise ValueError(f"设置的内核不可用：{engine_name!r}；可用内核 ID：{available}")
 
     scripts = discover_scripts(registry)
     matches = match_script(scripts, script_name)
+    if not matches and args.file is None:
+        # 设置里的脚本可能属于已删除的内核；未显式指定脚本时回退内置默认脚本
+        matches = match_script(scripts, defaults.get("script_file", ""))
     if len(matches) > 1:
         raise ValueError(f"脚本名称不唯一，请使用相对路径指定：{script_name}")
     if matches:
@@ -717,13 +728,11 @@ class MainWindow(QMainWindowLog):
         self.start_game_checkbox.setChecked(data.get("start_game_on_task", False))
         self.game_path_input.setText(data.get("game_executable_path", ""))
         self.focus_reclaim_wait_input.setText(str(data.get("game_focus_reclaim_wait_seconds", 600)))
-        self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
-        self.recording_time_input.setText(str(data.get("del_record_time", 14)))
         self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
         self.record_abnormal_first_plane_weight.setChecked(data.get("record_abnormal_first_plane_weight", False))
         self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", False))
         self.recording_keep_long_run_threshold_input.setText(str(data.get("recording_keep_long_run_threshold", 1.2)))
-        self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
+        self.recording_label_checkbox.setChecked(data.get("record_add_label", False))
         self.check_model_file()
 
         self.cleanup_section = CleanupSettingsSection(self.advanced_settings_main_page)
@@ -968,8 +977,6 @@ class MainWindow(QMainWindowLog):
     def update_dependent_controls_state(self):
         self.game_path_input.setEnabled(self.start_game_checkbox.isChecked())
         debug_enabled = bool(self.opt.get("debug", False))
-        recording_enabled = self.recording_checkBox2.isEnabled() and self.recording_checkBox2.isChecked()
-        self.recording_time_input.setEnabled(recording_enabled)
         self.kernel_buttons.setVisible(not debug_enabled)
         for widget in (
             self.engine_label, self.engine_combo, self.engine_settings_btn,
@@ -982,12 +989,11 @@ class MainWindow(QMainWindowLog):
         for widget in (self.recording_keep_long_run_checkbox,
                        self.recording_keep_long_run_threshold_input,
                        self.recording_label_checkbox):
-            widget.setEnabled(debug_enabled and recording_enabled)
+            widget.setEnabled(debug_enabled)
 
 
     def connect_dependency_signals(self):
         self.start_game_checkbox.toggled.connect(self.update_dependent_controls_state)
-        self.recording_checkBox2.toggled.connect(self.update_dependent_controls_state)
         self.game_path_input.editingFinished.connect(self.save_game_path_config)
 
 
@@ -1131,6 +1137,10 @@ class MainWindow(QMainWindowLog):
                  if str(self.engine_combo.itemData(index)).casefold() == wanted),
                 -1,
             )
+        if engine_index < 0:
+            # 设置里仍是旧内核或尚未配置：回到内置默认内核
+            engine_index = self.engine_combo.findData(
+                (load_default_settings() or {}).get("script_engine", ""))
         if engine_index >= 0:
             self.engine_combo.setCurrentIndex(engine_index)
         saved = self.opt.get("script_file", "")
@@ -1528,8 +1538,6 @@ class MainWindow(QMainWindowLog):
                 "start_game_on_task": self.start_game_checkbox.isChecked(),
                 "game_executable_path": self.game_path_input.text().strip(),
                 "game_focus_reclaim_wait_seconds": int(self.focus_reclaim_wait_input.text()),
-                "recording_iron_blood": self.recording_checkBox2.isChecked(),
-                "del_record_time": int(self.recording_time_input.text()),
                 "record_event_map": self.record_event_map_checkbox.isChecked(),
                 "record_abnormal_first_plane_weight": self.record_abnormal_first_plane_weight.isChecked(),
                 "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),
