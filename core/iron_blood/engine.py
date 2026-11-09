@@ -36,6 +36,8 @@ class IronBloodUniverse(AnyFateUniverse):
         self.first_plane_min_weight = self.opt.get("first_plane_min_weight", 6)
         self.third_plane_pause_count = self.opt.get("third_plane_pause_count", 0)
         self.boss_before_pause_count = self.opt.get("boss_before_pause_count", 0)
+        # 击杀数达到该阈值时保留本局录像；0 表示所有录像都保留
+        self.del_record_time = int(self.opt.get("del_record_time", 14))
         self.fate = "毁灭"
         self.my_fate = FATES.index(self.fate)
         self.tk = text_keys(self.my_fate)
@@ -56,14 +58,18 @@ class IronBloodUniverse(AnyFateUniverse):
         self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
         self.plane_records = {}
 
-    def keep_video_reasons(self, manual_stop=False):
-        """铁血的录像保留条件：异常、同图反复暂离、击杀数达阈值、调试开关。"""
-        reasons = super().keep_video_reasons(manual_stop)
-        if manual_stop:
-            if self.kill_count > 0:
-                reasons.append(f"手动停止时已有击杀 {self.kill_count}")
-            return reasons
-        if self.del_record_time and self.kill_count >= self.del_record_time:
+    def save_threshold(self):
+        return self.del_record_time
+
+    def manual_stop_reason(self):
+        if self.kill_count > 0:
+            return f"手动停止时已有击杀 {self.kill_count}"
+        return None
+
+    def round_keep_reasons(self):
+        """铁血的录像保留条件：击杀数达阈值、演算时间过长、开局期望异常。"""
+        reasons = super().round_keep_reasons()
+        if self.kill_count >= self.del_record_time:
             reasons.append(f"击杀数 {self.kill_count} 达到保存阈值 {self.del_record_time}")
         if self.debug and self.opt.get("recording_keep_long_run", False):
             minutes_divide_kill = (self.elapsed_time / 60 / self.kill_count
@@ -76,21 +82,15 @@ class IronBloodUniverse(AnyFateUniverse):
             reasons.append(f"开局期望异常（{self.first_plane_weight}）")
         return reasons
 
-    def stop_round_recording(self):
-        """按本局指标决定本轮录像是否删除；保留原因见 keep_video_reasons。"""
-        reasons = self.keep_video_reasons()
-        keep_video = bool(reasons)
-        CUS_LOGGER.debug(
-            f"本局录像保留{keep_video}"
-            + (f"，原因：{'、'.join(reasons)}"
-               if reasons else f"，击杀数 {self.kill_count} 未达保存阈值 {self.del_record_time}")
-        )
-        self.recorder.stop_recording(
-            not keep_video,
-            battle_count=self.kill_count,
-            elapsed_time=self.elapsed_time,
-            first_plane_weight=self.first_plane_weight,
-        )
+    def delete_reason(self):
+        return f"击杀数 {self.kill_count} 未达保存阈值 {self.del_record_time}"
+
+    def recording_metadata(self):
+        return {
+            "battle_count": self.kill_count,
+            "elapsed_time": self.elapsed_time,
+            "first_plane_weight": self.first_plane_weight,
+        }
 
     def end_of_university(self):
         # 本局的开始时间与用时必须在父类之前取：父类会把 run_start_time 重置为下一局的开始时间
@@ -130,20 +130,9 @@ class IronBloodUniverse(AnyFateUniverse):
         key_mouse_manager.click_point(1292, 798)
 
     def initing_map(self):
-        key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=2
-        elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=3
-            # 达到第三面暂停需求数时停止程序
-            if self.third_plane_pause_count > 0 and self.third_plane_pause_count <= (self.kill_count+1):
-                CUS_LOGGER.info(f"当前击杀数：{self.kill_count+1}，已达到第三面暂停需求数：{self.third_plane_pause_count}，停止程序")
-                self.stop()
-                return
-        else:
-            CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
+        if not self.detect_plane([10, 0, 220, 112]):
+            return
+        if not self.on_plane_detected():
             return
         self.fail_count = 0
         self.record_plane_start(self.plane_floor)
@@ -154,12 +143,7 @@ class IronBloodUniverse(AnyFateUniverse):
         # 让游戏开始播入场动画，最后才用稳定帧做一次完整识别，不占开局时间。
         # 若一次点击未能生效，按钮还留在屏幕上，主循环会再点一次，至多间隔三秒，不会卡死。
         analysis_status, stable_frame = self.wait_map_rendered(1)
-        self.click_text(text="进入位面", box=[907, 857, 1009, 891])
-        self.node_count = 0
-        self.new_node = True
-        # 切换位面时没有重投界面出现，需清空区域名缓存
-        self.area = ""
-        key_mouse_manager.wait()
+        self.enter_plane(clicks=1)
         if analysis_status == self.MAP_ANALYSIS_OK:
             analysis_status = self.analyze_map_until_stable(1, 1, captured=stable_frame)
         if self.plane_floor==1:
@@ -178,25 +162,26 @@ class IronBloodUniverse(AnyFateUniverse):
                     and self.expectation_weight < self.first_plane_min_weight:
                 CUS_LOGGER.warning("如果不能将此世从「毁灭」中拯救它，那就让寰宇在愤怒中燃烧吧......")
                 self.need_end=True
-        return
+
+    def on_plane_detected(self):
+        # 达到第三面暂停需求数时停止程序
+        if (self.plane_floor == 3 and self.third_plane_pause_count > 0
+                and self.third_plane_pause_count <= (self.kill_count + 1)):
+            CUS_LOGGER.info(f"当前击杀数：{self.kill_count+1}，已达到第三面暂停需求数：{self.third_plane_pause_count}，停止程序")
+            self.stop()
+            return False
+        return True
+
     def initing_map2(self):
-        key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[385, 548, 449, 583],click=False,warning=False):
-            self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[385, 548, 449, 583],click=False,warning=False):
-            self.plane_floor=2
-        elif self.click_text(text="消褪",box=[385, 548, 449, 583],click=False,warning=False):
-            self.plane_floor=3
-        else:
+        if not self.detect_plane([385, 548, 449, 583]):
             CUS_LOGGER.warning("以神礼观众之名，我见到————「毁灭」，于斯合题！")
             return
         self.record_plane_start(self.plane_floor)
-
         CUS_LOGGER.debug(f"当前地图位面{self.plane_floor}")
         self.try_analysis_map(3,1)
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
-        return
+
     def record_plane_start(self, plane):
         """记录进入位面的时刻与当时的累计击杀快照。
 
@@ -319,6 +304,27 @@ class IronBloodUniverse(AnyFateUniverse):
             #其它节点一律放弃
             self.abandon_confirm(confirm=True)
 
+    def before_move_to_next_node(self, node):
+        # 进入最终首领格前暂停
+        if (node["name"] == "boss" and self.boss_before_pause_count > 0
+                and self.boss_before_pause_count <= self.kill_count):
+            CUS_LOGGER.debug(f"当前击杀数：{self.kill_count}，即将进入最终首领格，停止程序")
+            if self.kill_count >= 39:
+                CUS_LOGGER.info("恭喜，您即将获得铁血战士！")
+            self.stop()
+            return False
+        return True
+
+    def after_move_to_next_node(self, node):
+        if not (self.early_stop and self.gwypzmgzcndqlp):
+            return
+        if self.plane_floor == 1 and self.kill_count + self.max_limited < self.first_plane_count:
+            self.need_end = True
+            CUS_LOGGER.debug(f"当前极限值{self.kill_count+self.max_limited}无法达到第一位面推荐值{self.first_plane_count},终止本次演算")
+        elif self.plane_floor == 2 and self.kill_count + self.max_limited < self.second_plane_count:
+            self.need_end = True
+            CUS_LOGGER.debug(f"当前极限值{self.kill_count + self.max_limited}无法达到第二位面推荐值{self.second_plane_count},终止本次演算")
+
     def select_go(self):
         num = extract_number(match_numbers_in_region(self.screen))
         if num is not None:
@@ -342,46 +348,7 @@ class IronBloodUniverse(AnyFateUniverse):
                 return
         CUS_LOGGER.debug(f"当前击杀数{self.kill_count}")
         self.set_kill_num(str(self.kill_count))
-        key_mouse_manager.clean()
-        key_mouse_manager.keyUp("move_w")
-        key_mouse_manager.wait()
-        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996],click=False,allow_fail=True):
-            if self.click_text(text="点击空白处关闭", box=[876, 1008, 1047, 1035],click=False,allow_fail=True):
-                CUS_LOGGER.info("「下一世，真理定会解明，死生……将有序流转。」")
-                key_mouse_manager.wait()
-                return
-            self.try_analysis_map(mode=2,path_mode=1)
-            if self.next_node is not None:
-                # 进入最终首领格前暂停
-                if self.next_node["name"] == "boss" and self.boss_before_pause_count > 0 and self.boss_before_pause_count <= self.kill_count:
-                    CUS_LOGGER.debug(f"当前击杀数：{self.kill_count}，即将进入最终首领格，停止程序")
-                    if self.kill_count >= 39:
-                        CUS_LOGGER.info("恭喜，您即将获得铁血战士！")
-                    self.stop()
-                    return
-                self.start_nodes=self.next_node
-                x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
-                key_mouse_manager.click_point(x,y)
-                key_mouse_manager.wait()
-                self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
-                if self.area != "" and self.now_map!=-1:
-                    visit_count = self.record_map_visit(self.now_map)
-                    CUS_LOGGER.debug(f"上次地图编号{self.now_map}, 累计访问次数: {visit_count}")
-            else:
-                CUS_LOGGER.error("未找到下一步路径点")
-            if self.early_stop and self.gwypzmgzcndqlp:
-                if self.plane_floor==1 and self.kill_count+self.max_limited<self.first_plane_count:
-                    self.need_end=True
-                    CUS_LOGGER.debug(f"当前极限值{self.kill_count+self.max_limited}无法达到第一位面推荐值{self.first_plane_count},终止本次演算")
-                elif self.plane_floor==2 and self.kill_count+self.max_limited<self.second_plane_count:
-                    self.need_end=True
-                    CUS_LOGGER.debug(f"当前极限值{self.kill_count + self.max_limited}无法达到第二位面推荐值{self.second_plane_count},终止本次演算")
-        else:
-            self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
-        # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
-        # 而它通常已被上一节点消费掉，这里必须自己清
-        self.area = ""
-        self.new_node=True
+        self.move_to_next_node(path_mode=1)
 
     def calculated_roll(self):
         # 点过「作弊」按钮后窗口约 0.3 s 才弹出来，这期间「重投界面」还会反复触发，
