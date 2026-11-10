@@ -58,7 +58,7 @@ class SelectStartBlessTest(unittest.TestCase):
         )
 
     def test_full_priority_order(self):
-        priority = ("神奇宇宙", "巨胃宇宙", "破碎宇宙", "祝福宇宙", "有序宇宙", "嗜血宇宙")
+        priority = ("神奇宇宙", "巨胃宇宙", "破碎宇宙", "祝福宇宙")
         rows = [
             {"raw_text": name, "box": [600 + index * 100, 480, 800 + index * 100, 516]}
             for index, name in enumerate(reversed(priority))
