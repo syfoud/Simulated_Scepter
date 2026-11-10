@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -19,6 +20,21 @@ from logger_printer import QMainWindowLog
 from route import PATHS
 from tool import GLOBAL
 from tool.gui.settings_dialog import SettingsDialog
+
+
+def wait_hover_finished(button, target, timeout_ms=5000):
+    """等 hover 动画真正结束再断言。
+
+    QPropertyAnimation 由 Qt 事件循环驱动，整机负载高时 130ms 的动画可能明显延后；
+    固定 qWait(170) 在满载下会偶发读到中间值。这里改成轮询动画状态，直到停止且
+    数值到位，超时才失败（失败信息里带实际值，便于定位）。
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        if (button.hover_animation.state() == QAbstractAnimation.Stopped
+                and abs(button.hover - target) < 1e-3):
+            return
+        QTest.qWait(10)
 
 
 class AppearanceTests(unittest.TestCase):
@@ -218,11 +234,11 @@ class AppearanceTests(unittest.TestCase):
     def test_hover_finishes_and_disabled_controls_do_not_emit_clicks(self):
         button = self.window.calibrate_btn
         self.app.sendEvent(button, QEvent(QEvent.Enter))
-        QTest.qWait(170)
+        wait_hover_finished(button, 1.0)
         self.assertAlmostEqual(button.hover, 1.0)
         self.assertEqual(button.hover_animation.state(), QAbstractAnimation.Stopped)
         self.app.sendEvent(button, QEvent(QEvent.Leave))
-        QTest.qWait(170)
+        wait_hover_finished(button, 0.0)
         self.assertAlmostEqual(button.hover, 0.0)
         clicked = Mock()
         button.clicked.connect(clicked)

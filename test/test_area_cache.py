@@ -97,6 +97,9 @@ class IronBloodSelectGoTest(unittest.TestCase):
         self.key_mouse_manager = make_key_mouse_manager()
         self.enterContext(
             patch("core.iron_blood.engine.key_mouse_manager", self.key_mouse_manager))
+        # select_go 的公共实现位于 AnyFateUniverse，点击原语也走该模块的键鼠管理器
+        self.enterContext(
+            patch("core.any_fate.engine.key_mouse_manager", self.key_mouse_manager))
         self.enterContext(patch("core.iron_blood.engine.CUS_LOGGER", Mock()))
         self.enterContext(patch(
             "core.iron_blood.engine.time", SimpleNamespace(sleep=Mock())))
@@ -143,6 +146,9 @@ class FingerSnapSelectGoTest(unittest.TestCase):
         self.key_mouse_manager = make_key_mouse_manager()
         self.enterContext(
             patch("core.finger_snap.engine.key_mouse_manager", self.key_mouse_manager))
+        # 公共实现（select_go/initing_map）位于 AnyFateUniverse，点击原语也走该模块
+        self.enterContext(
+            patch("core.any_fate.engine.key_mouse_manager", self.key_mouse_manager))
         self.enterContext(patch("core.finger_snap.engine.CUS_LOGGER", Mock()))
         self.enterContext(patch(
             "core.finger_snap.engine.time", SimpleNamespace(sleep=Mock())))
@@ -190,6 +196,9 @@ class FingerSnapInitingMapTest(unittest.TestCase):
         self.key_mouse_manager = make_key_mouse_manager()
         self.enterContext(
             patch("core.finger_snap.engine.key_mouse_manager", self.key_mouse_manager))
+        # 公共实现（select_go/initing_map）位于 AnyFateUniverse，点击原语也走该模块
+        self.enterContext(
+            patch("core.any_fate.engine.key_mouse_manager", self.key_mouse_manager))
 
     def make_engine(self):
         engine = FingerSnap.__new__(FingerSnap)

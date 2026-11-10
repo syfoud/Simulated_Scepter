@@ -79,6 +79,11 @@ def make_engine(last_interact_time=1000.0, need_end=False):
     engine.attack_time = last_interact_time
     engine.max_interact_time = MAX_INTERACT_TIME
     engine.fail_count = 0
+    engine.keep_round_video = False
+    engine.need_away = False
+    engine.away_keep_status = False
+    engine.plane_floor = 1
+    engine.node_count = 0
     engine.now_map = 1
     engine.now_map_sim = 0.5
     engine.debug = 0
@@ -130,27 +135,25 @@ class AwayBeforeMovementTest(unittest.TestCase):
         return [c.args[0] for c in self.manager.press.call_args_list]
 
     def test_timeout_away_presses_esc_without_walking_or_casting_first(self):
-        """超时暂离：这一轮只按 esc 找「暂离」，不寻路、不空打一拳、不施放秘技。"""
+        """超时暂离：菜单没打开时先按 esc 等「暂离」，不寻路、不空打一拳、不施放秘技。"""
         engine = make_engine(last_interact_time=0.0)
+        engine.click_text = Mock(side_effect=[False, True])
 
         self.assertEqual(engine.normal(), 1)
 
         self.assertEqual(self._pressed_keys(), ["esc"])
         self.manager.keyUp.assert_called_once_with("move_w")
-        # 空打一拳（旧实现是 click(0.5, 0.5)，现为 click_point(960, 540)）不能发生。
-        self.manager.click_point.assert_not_called()
+        # 找到「暂离」后点的是暂停菜单里的暂离按钮，不会空打一拳
         engine.navigate_battle.assert_not_called()
         engine.switch_current_role.assert_not_called()
         engine.ts.find_with_box.assert_not_called()  # 区域名 OCR 属于走图逻辑
-        engine.click_text.assert_called_once_with(
-            text="暂离", box=AWAY_BOX, click=False, allow_fail=True
-        )
+        self.assertEqual(engine.click_text.call_count, 2)
 
-    def test_away_clears_area_without_switching_state(self):
-        """识别到「暂离」后只清空区域名、累计失败次数，不切状态也不重建地图。
+    def test_away_marks_ui_state_and_rebuilds_the_map(self):
+        """识别到「暂离」后切到 ui 状态、清空区域名并重建地图。
 
         暂离会回到「黑塔的办公室」，区域名必须清空，否则下一轮仍按旧区域名寻路；
-        状态与地图的复位交给后续流程按需处理，暂离流程本身不再越权改动。
+        状态和地图都要复位，主循环下一轮才不会继续按旧地图寻找目标。
         """
         engine = make_engine(last_interact_time=0.0)
 
@@ -158,11 +161,16 @@ class AwayBeforeMovementTest(unittest.TestCase):
 
         self.assertEqual(engine.area, "")
         self.assertEqual(engine.fail_count, 1)
-        engine.update_state.assert_not_called()
-        engine.init_map.assert_not_called()
+        self.assertFalse(engine.keep_round_video)
+        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("ui",)])
+        engine.init_map.assert_called_once_with()
+        messages = [c.args[0] for c in self.logger.error.call_args_list]
+        self.assertTrue(any(
+            "当前第1位面，区域战斗，地图1，第1次长时间无有效交互" in m
+            for m in messages))
 
     def test_esc_miss_returns_to_the_main_loop_without_walking(self):
-        """3 秒没唤出暂离界面：直接回主循环，不补按 esc、不走动、不施放秘技。"""
+        """3 秒没唤出暂离界面：直接回主循环，暂离请求保留到下一轮重试。"""
         engine = make_engine(last_interact_time=0.0)
         engine.click_text = Mock(return_value=False)
         start = engine.last_interact_time
@@ -177,21 +185,79 @@ class AwayBeforeMovementTest(unittest.TestCase):
         engine.update_state.assert_not_called()
         engine.init_map.assert_not_called()
         self.assertEqual(engine.area, AREA)
-        # last_interact_time 不动：下一轮依旧判定需要暂离，暂离请求不会被丢掉
         self.assertEqual(engine.last_interact_time, start)
+        # 退出请求没有丢：need_away 保留，下一轮继续尝试打开暂停菜单
+        self.assertTrue(engine.need_away)
         self.assertTrue(any("未识别到暂离文本" in c.args[0] for c in self.logger.debug.call_args_list))
 
+    def test_retry_after_miss_uses_the_persisted_away_request(self):
+        """菜单没打开过一次后，主循环下一轮仍会重试，成功后清掉请求。"""
+        engine = make_engine(last_interact_time=0.0)
+        engine.click_text = Mock(return_value=False)
+        engine.normal()
+        self.assertTrue(engine.need_away)
+
+        engine.click_text = Mock(return_value=True)
+        self.assertEqual(engine.normal(), 1)
+
+        self.assertFalse(engine.need_away)
+        self.assertEqual(engine.fail_count, 1)
+        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("ui",)])
+
     def test_need_end_leaves_for_settlement_even_if_recently_interacted(self):
-        """need_end（本局提前结束并结算）优先于交互计时：刚交互过也要立刻走暂离流程。"""
+        """need_end（本局提前结束并结算）优先于交互计时：刚交互过也直接切结算。"""
         engine = make_engine(last_interact_time=1000.5, need_end=True)
 
         self.assertEqual(engine.normal(), 1)
 
-        # need_end 直接进结算：只有 exit 一次状态切换，不再先挂 ui 再 exit
+        # need_end 直接连点结算按钮与确认框；由代码发起时仍需先按 esc 打开暂停菜单
         self.assertEqual([c.args for c in engine.update_state.call_args_list], [("exit",)])
         self.assertEqual(self._pressed_keys(), ["esc"])
+        engine.init_map.assert_not_called()
         engine.navigate_battle.assert_not_called()
-        self.assertEqual(engine.area, "")
+        self.assertEqual(engine.area, AREA)
+        # need_end 是提前结束，不是超时暂离，不累计也不保留录像
+        self.assertEqual(engine.fail_count, 0)
+        self.assertFalse(engine.keep_round_video)
+
+    def test_leave_universe_settlement_clicks_button_and_confirmation(self):
+        """need_end 时连点结算按钮与确认框，不点暂离、不累计暂离次数。"""
+        engine = make_engine(need_end=True)
+
+        self.assertTrue(engine.leave_universe(need_press_esc=True))
+
+        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("exit",)])
+        self.assertEqual(
+            [c.args for c in self.manager.click_point.call_args_list],
+            [(1393, 948), (1147, 676)],
+        )
+        engine.init_map.assert_not_called()
+        self.assertEqual(engine.fail_count, 0)
+
+    def test_normal_leave_keeps_status_and_does_not_count(self):
+        """冒险节点交互后的正常离开保留状态与地图，不算异常暂离。"""
+        engine = make_engine()
+        engine.away_keep_status = True
+
+        self.assertTrue(engine.leave_universe(need_press_esc=True))
+
+        self.assertEqual(engine.fail_count, 0)
+        self.assertFalse(engine.need_away)
+        self.assertEqual(engine.area, AREA)
+        # 状态切到 ui（用户审查后从 keep_status 分支提出来了），但地图不重建
+        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("ui",)])
+        engine.init_map.assert_not_called()
+
+    def test_manual_leave_from_open_menu_initializes_without_counting(self):
+        """用户手动暂停时菜单已打开：直接暂离并重置状态，但不算异常暂离。"""
+        engine = make_engine()
+
+        self.assertTrue(engine.leave_universe())
+
+        self.assertEqual(self._pressed_keys(), [])
+        self.assertEqual([c.args for c in engine.update_state.call_args_list], [("ui",)])
+        engine.init_map.assert_called_once_with()
+        self.assertEqual(engine.fail_count, 0)
 
     def test_run_path_still_walks_when_away_is_not_needed(self):
         """不需要离开时不按 esc，照原样寻路（防止把 need_away 写成一直接通）。"""
@@ -203,6 +269,15 @@ class AwayBeforeMovementTest(unittest.TestCase):
         self.assertEqual(self._pressed_keys(), [])
         engine.update_state.assert_not_called()
         self.assertEqual(engine.area, AREA)
+
+
+class AwayActionJsonTest(unittest.TestCase):
+    def test_leaving_event_calls_leave_universe(self):
+        events = load_insect()
+        event = events[event_index(events, "离开模拟宇宙")]
+
+        self.assertEqual(event["actions"], ["leave_universe"])
+        self.assertEqual(event["trigger"]["text"], "暂离")
 
 
 class BattlePauseJsonTest(unittest.TestCase):

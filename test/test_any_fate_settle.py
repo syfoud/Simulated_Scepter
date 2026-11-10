@@ -9,7 +9,7 @@ settle_university 一个动作：认不出标题就不点，界面留在屏幕�
 
 这里锁定 insect.json 的接线：结算界面识别的文字与识别框、结算只用一个内核动作、不再有
 独立的「点击空白结算」和兜底的「点击空白」事件（避免漏检时有另一条点击路径把界面点掉）、
-「结束并结算」连点结算按钮与确认框、以及脚本动作都能在内核上找到同名方法。
+暂离与结算合并为一个动作、以及脚本动作都能在内核上找到同名方法。
 """
 
 import json
@@ -29,8 +29,6 @@ INSECT_JSON = ROOT / "core" / "any_fate" / "actions" / "insect.json"
 REPORT_TITLE = "来自黑塔的分析报告"
 # 结算界面标题的识别框（与 insect.json「结算界面」同值：改实现时这里要跟着改）
 TITLE_BOX = [716, 217, 1013, 252]
-# 「结束并结算」后连点的两处：结算按钮、随后弹出的确认框
-CONFIRM_CLICKS = [{"position": [1393, 948]}, {"position": [1147, 676]}]
 
 
 def load_insect():
@@ -61,14 +59,14 @@ class SettlementJsonTest(unittest.TestCase):
         self.assertEqual(trigger["text"], REPORT_TITLE)
         self.assertEqual(trigger["box"], TITLE_BOX)
 
-    def test_settings_screen_clicks_button_and_confirmation(self):
-        """「结束并结算」要连点结算按钮与确认框，只点第一处会停在确认框上。"""
+    def test_leaving_event_is_handled_by_leave_universe(self):
+        """暂停菜单的暂离与结算合并为一个事件，由内核按 need_end 决定动作。"""
         events = load_insect()
 
-        event = events[event_index(events, "设置界面进行结算")]
+        event = events[event_index(events, "离开模拟宇宙")]
 
-        self.assertEqual(event["actions"], CONFIRM_CLICKS)
-        self.assertEqual(event["trigger"]["condition"], "exit")
+        self.assertEqual(event["actions"], ["leave_universe"])
+        self.assertEqual(event["trigger"]["text"], "暂离")
 
     def test_the_separate_settlement_blank_event_is_gone(self):
         """「点击空白结算」已删除：结算界面的点击由「结算界面」自己完成，避免漏检时两套点击并存。"""
