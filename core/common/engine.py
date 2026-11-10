@@ -22,6 +22,10 @@ class StateKernel:
         self.latched_events = set()
         # 最近一次图片匹配的落框 [x1, y1, x2, y2]，点击时写进日志便于核对落点
         self.tb = None
+        # 最近一次匹配成功的模板名：只在匹配结果变化时打一次日志，避免每帧刷屏
+        self.last_info = ""
+        # 匹配阈值缺省值：调用方不传 threshold 时 check() 用这个值
+        self.threshold = 0.97
 
     def update_state(self, state):
         log_emitter.find_path_state_signal.emit(state if state is not None else "未识别")

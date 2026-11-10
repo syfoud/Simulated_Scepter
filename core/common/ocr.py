@@ -40,14 +40,7 @@ def get_global_my_ts(father=None):
     global _global_my_ts_instance
     if _global_my_ts_instance is None:
         CUS_LOGGER.info("欢呼「毁灭」的英雄，初次点燃生命的微光。原本晦暗的前路仿佛也变得有迹可循。")
-        _global_my_ts_instance = object.__new__(My_TS)
-        _global_my_ts_instance.lang = 'ch'
-        _global_my_ts_instance.father = father
-        _global_my_ts_instance.forward_img = None
-        _global_my_ts_instance.res = []
-        _global_my_ts_instance.nothing = 1
-        _global_my_ts_instance.text = ''
-        _global_my_ts_instance._ts = None
+        _global_my_ts_instance = My_TS(father=father)
     else:
         _global_my_ts_instance.father = father
     return _global_my_ts_instance
@@ -56,7 +49,7 @@ class My_TS:
     # 类变量，用于共享底层 OCR 引擎
     _ts_shared = None
 
-    def __init__(self, lang='ch', father=None):
+    def __init__(self, lang='ch', father=None, det_limit_side_len=None):
         self.lang = lang
         self.father = father
         self.forward_img = None
@@ -64,11 +57,18 @@ class My_TS:
         self.nothing = 1
         self.text = ''
         self._ts = None
+        # 非空时单独创建识别器（不同内核的识别精度不同，不能共用同一个实例）
+        self.det_limit_side_len = det_limit_side_len
 
     @property
     def ts(self):
         """懒加载 OCR 实例"""
         if self._ts is None:
+            if self.det_limit_side_len is not None:
+                self._ts = ONNXPaddleOcr(
+                    use_angle_cls=False, cpu=False, det_limit_side_len=self.det_limit_side_len
+                )
+                return self._ts
             if My_TS._ts_shared is None:
                 CUS_LOGGER.info("焚身作薪……为来世破晓…引火吧。")
                 CUS_LOGGER.info("其时已至……再度…开启一切……")
@@ -180,6 +180,7 @@ class My_TS:
         if black and find==1:
             find=3
         return (rcx-img.shape[1]//2,rcy-img.shape[0]//2),find+black
+
     def split_strange(self,img):
         yellow=[126,162,180]
         binary_image = np.zeros_like(img[:, :, 0])
@@ -207,10 +208,18 @@ class My_TS:
             res.append(self.text)
         CUS_LOGGER.debug(f'识别奇物结果：{res}')
         return point_list,res
+
     def find_text(self, img, text,find_all=False):
+        """
+        在图像中查找文本并返回匹配框
+
+        text 为列表时按列表顺序表示优先级：扫描完所有结果后再取优先级最高的一条，
+        避免先扫描到的低优先文本压过后面出现的高优先文本。
+        """
         self.nothing = 1
         results = self.ts.ocr(img)
         find_all_return = None
+        list_matches = []  # 列表模式下收集所有命中 (优先级下标, box, 命中文本)
         for res in results:
             res = {'raw_text': res[1][0], 'box': np.array(res[0]), 'score': res[1][1]}
             self.text = res['raw_text']
@@ -220,8 +229,9 @@ class My_TS:
             found = False
             matched_text = text
             if isinstance(text, list):
-                for t in text:
+                for idx, t in enumerate(text):
                     if t in self.text:
+                        list_matches.append((idx, res['box'], t))
                         found = True
                         matched_text = t
                         break
@@ -230,14 +240,24 @@ class My_TS:
 
             if found:
                 CUS_LOGGER.debug(f"识别到文本：{matched_text}匹配文本：{self.text},位置：{[int(res['box'][0][0]), int(res['box'][1][0]), int(res['box'][0][1]), int(res['box'][2][1])]}")
+                if isinstance(text, list):
+                    continue  # 列表模式：收集完再按优先级选
                 if not find_all:
                     return res['box']
                 else:
                     find_all_return = res['box']
                     continue
+        if isinstance(text, list) and list_matches:
+            list_matches.sort(key=lambda item: item[0])
+            best_idx, best_box, best_text = list_matches[0]
+            CUS_LOGGER.debug(
+                f"列表匹配：共{len(list_matches)}个命中，按优先级选择「{best_text}」(优先级#{best_idx})"
+            )
+            return best_box
         if find_all_return is not None:
             return find_all_return
         return None
+
     def forward(self, img):
         """
         识别传入图像的文本并保存在self.res中
@@ -255,6 +275,7 @@ class My_TS:
         if len(self.res):
             self.nothing = 0
         self.res = merge(self.res)
+
     def find_with_box(self, box=None, redundancy=10, forward=0, mode=0,re_screen=False):
         """
         在指定文本框内
