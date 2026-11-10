@@ -9,18 +9,6 @@ from dataclasses import dataclass
 import win32con
 import win32gui
 
-LOCAL_GAME_TITLE = "崩坏：星穹铁道"
-CLOUD_GAME_TITLE = "云·星穹铁道"
-LOCAL_GAME_CLASS = "UnityWndClass"
-CLOUD_GAME_CLASS = "Chrome_WidgetWin_1"
-
-LOCAL_WINDOW_KIND = "local"
-CLOUD_WINDOW_KIND = "cloud"
-
-BASE_WIDTH = 1920
-BASE_HEIGHT = 1080
-CLOUD_SIZE_TOLERANCE = 8
-
 
 @contextmanager
 def _physical_pixel_context():
@@ -71,10 +59,10 @@ def get_window_kind(hwnd: int) -> str | None:
         return None
     title = win32gui.GetWindowText(hwnd)
     class_name = win32gui.GetClassName(hwnd)
-    if class_name == LOCAL_GAME_CLASS and title == LOCAL_GAME_TITLE:
-        return LOCAL_WINDOW_KIND
-    if class_name == CLOUD_GAME_CLASS and title.startswith(CLOUD_GAME_TITLE):
-        return CLOUD_WINDOW_KIND
+    if class_name == "UnityWndClass" and title == "崩坏：星穹铁道":
+        return "local"
+    if class_name == "Chrome_WidgetWin_1" and title.startswith("云·星穹铁道"):
+        return "cloud"
     return None
 
 
@@ -104,12 +92,12 @@ def inspect_game_window(hwnd: int) -> GameWindow | None:
 
 def is_supported_resolution(kind: str, width: int, height: int) -> bool:
     """Validate local strictly and cloud with a small browser-frame tolerance."""
-    if kind == LOCAL_WINDOW_KIND:
-        return width == BASE_WIDTH and height == BASE_HEIGHT
-    if kind == CLOUD_WINDOW_KIND:
+    if kind == "local":
+        return width == 1920 and height == 1080
+    if kind == "cloud":
         return (
-            abs(width - BASE_WIDTH) <= CLOUD_SIZE_TOLERANCE
-            and abs(height - BASE_HEIGHT) <= CLOUD_SIZE_TOLERANCE
+            abs(width - 1920) <= 8
+            and abs(height - 1080) <= 8
         )
     return False
 
@@ -184,8 +172,8 @@ def get_foreground_game_window() -> GameWindow | None:
 
 def canonical_game_title(hwnd: int) -> str | None:
     kind = get_window_kind(hwnd)
-    if kind == LOCAL_WINDOW_KIND:
-        return LOCAL_GAME_TITLE
-    if kind == CLOUD_WINDOW_KIND:
-        return CLOUD_GAME_TITLE
+    if kind == "local":
+        return "崩坏：星穹铁道"
+    if kind == "cloud":
+        return "云·星穹铁道"
     return None
