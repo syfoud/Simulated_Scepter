@@ -2,7 +2,7 @@
 
 from core.common import config as runtime_config
 from core.common.config import load_runtime_settings
-from core.common.runtime_ui import RuntimeSettings
+from core.common.runtime_ui import RuntimeSettings, advanced_user_file_exists
 from core.finger_snap.config import (
     CONFIG_KEY,
     DECISION_MODES,
@@ -23,6 +23,9 @@ class SettingsDialog(BaseDialog):
         data = load_runtime_settings() | load_module_settings(__file__)
         self.runtime = RuntimeSettings(data, self)
         self.content_layout.addWidget(self.runtime)
+        self.record_checkbox = self.runtime.add_record_checkbox("录制弹指一挥视频")
+        self.record_checkbox.setChecked(bool(data.get("record", False)))
+        self.record_checkbox.setEnabled(advanced_user_file_exists())
         self.section = ui = self.add_section(resource_path(__file__, "ui/settings.ui"))
         model = normalize_finger_snap_settings(data.get(CONFIG_KEY, {}))
         for field in MC_SETTING_FIELDS:
@@ -61,4 +64,7 @@ class SettingsDialog(BaseDialog):
         values["record_keep_count"] = int(ui.Finger_snap_record_keep_count_input.text())
         # 两部分先一起校验，再合并写入同一文件，避免模型参数非法时只保存一半。
         save_json_configs([(runtime_config.__file__, self.runtime.collect()),
-                           (__file__, {CONFIG_KEY: normalize_finger_snap_settings(values)})])
+                           (__file__, {
+                               "record": self.record_checkbox.isChecked(),
+                               CONFIG_KEY: normalize_finger_snap_settings(values),
+                           })])

@@ -1265,7 +1265,7 @@
                      <item>
                       <widget class="QLabel" name="recording_panel_note">
                        <property name="text">
-                        <string>保留探索过程，并按需要转换异常录像。</string>
+                        <string>各内核是否录制在对应内核的配置窗口中设置；录像转换与标签选项仍在这里。</string>
                        </property>
                        <property name="role" stdset="0">
                         <string>muted</string>
@@ -1274,81 +1274,6 @@
                         <bool>true</bool>
                        </property>
                       </widget>
-                     </item>
-                     <item>
-                      <widget class="QCheckBox" name="recording_checkBox">
-                       <property name="text">
-                        <string>模拟宇宙视频录制</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <widget class="QCheckBox" name="recording_checkBox2">
-                       <property name="text">
-                        <string>寰宇内核视频录制（铁血 / 命途 / 弹指）</string>
-                       </property>
-                      </widget>
-                     </item>
-                     <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_24">
-                       <item>
-                        <widget class="QLabel" name="label_23">
-                         <property name="FixedWidth">
-                          <number>112</number>
-                         </property>
-                         <property name="text">
-                          <string>视频保存需求数</string>
-                         </property>
-                         <property name="minimumSize">
-                          <size>
-                           <width>140</width>
-                           <height>0</height>
-                          </size>
-                         </property>
-                         <property name="maximumSize">
-                          <size>
-                           <width>140</width>
-                           <height>16777215</height>
-                          </size>
-                         </property>
-                         <property name="alignment">
-                          <set>Qt::AlignLeft|Qt::AlignVCenter</set>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <widget class="QLineEdit" name="recording_time_input">
-                         <property name="maximumSize">
-                          <size>
-                           <width>100</width>
-                           <height>16777215</height>
-                          </size>
-                         </property>
-                         <property name="minimumSize">
-                          <size>
-                           <width>0</width>
-                           <height>0</height>
-                          </size>
-                         </property>
-                        </widget>
-                       </item>
-                       <property name="spacing">
-                        <number>10</number>
-                       </property>
-                       <item>
-                        <spacer name="horizontalLayout_24_space">
-                         <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
-                         </property>
-                         <property name="sizeHint">
-                          <size>
-                           <width>0</width>
-                           <height>0</height>
-                          </size>
-                         </property>
-                        </spacer>
-                       </item>
-                      </layout>
                      </item>
                      <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_video_convert">

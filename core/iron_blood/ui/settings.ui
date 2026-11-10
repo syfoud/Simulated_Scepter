@@ -5,6 +5,20 @@
   <layout class="QVBoxLayout" name="IronBloodSettings_layout">
 
    <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_del_record_time">
+     <item>
+      <widget class="QLabel" name="label_del_record_time">
+       <property name="text">
+        <string>视频保存需求数（击杀数，默认14；0 保留全部）</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="Iron_blood_del_record_time_input" />
+     </item>
+    </layout>
+   </item>
+   <item>
     <layout class="QHBoxLayout" name="horizontalLayout_16">
      <item>
       <widget class="QLabel" name="label_19">

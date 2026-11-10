@@ -280,9 +280,7 @@ class QMainWindowLog(QMainWindowLoadUI):
         self.Aboutupdatelock.setVisible(not model_exists)
 
         if not model_exists:
-            self.recording_checkBox2.setEnabled(False)
             self.recording_label_checkbox.setEnabled(False)
-            self.recording_time_input.setEnabled(False)
             self.recording_keep_long_run_checkbox.setEnabled(False)
             return False
         return True
