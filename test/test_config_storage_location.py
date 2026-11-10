@@ -11,8 +11,8 @@ from unittest.mock import Mock, patch
 from PyQt5.QtWidgets import QApplication
 
 import tool.settings as tool_settings
-from core.simulated.config import config as simulated_config
 from route import PATHS
+from tool.calibration import get_multi
 
 
 class AgreementMarkerTests(unittest.TestCase):
@@ -59,7 +59,7 @@ class AgreementMarkerTests(unittest.TestCase):
 
 
 class CalibrationAngleTests(unittest.TestCase):
-    """校准角度保存在全局 gui_settings，模拟宇宙内核按本机校准值转向。"""
+    """校准角度保存在全局 gui_settings，各内核按本机校准值转向。"""
 
     def setUp(self):
         self.folder = tempfile.TemporaryDirectory()
@@ -80,16 +80,17 @@ class CalibrationAngleTests(unittest.TestCase):
             (Path(PATHS["root"]) / "resource" / "gui_settings_default.json").read_text(encoding="utf-8")
         )
         self.assertEqual(default["calibration_angle"], 1.0)
+        self.assertNotIn("simulated", json.dumps(default))
 
-    def test_multi_reads_calibrated_value_from_gui_settings(self):
+    def test_calibrated_value_is_used_as_turn_multiplier(self):
         self.write_angle(0.73)
-        self.assertAlmostEqual(simulated_config.multi, 0.73)
+        self.assertAlmostEqual(get_multi(), 0.73)
 
     def test_out_of_range_value_is_treated_as_uncalibrated(self):
         for angle in (0, -1, 5.5, 7):
             with self.subTest(angle=angle):
                 self.write_angle(angle)
-                self.assertEqual(simulated_config.multi, 1.0)
+                self.assertEqual(get_multi(), 1.0)
 
 
 if __name__ == "__main__":

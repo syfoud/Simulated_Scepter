@@ -13,6 +13,7 @@ from route import PATHS
 from tool.gui.script_editor import ScriptEditor, new_event
 from tool.script_files import (
     discover_scripts,
+    match_script,
     parse_script,
     read_script,
     save_script,
@@ -77,6 +78,24 @@ class ScriptFileTests(unittest.TestCase):
         self.assertEqual(script_path(script_key(self.path)), self.path)
         external = self.root.parent / "external.json"
         self.assertEqual(script_path(script_key(external)), external.resolve())
+
+    def test_match_script_accepts_saved_key_path_and_bare_name(self):
+        """配置里可能存项目相对键、绝对路径或裸文件名，三种写法都要能定位到同一个脚本。"""
+        save_script(self.path, self.data)
+        scripts = [self.path]
+
+        for saved in (script_key(self.path), str(self.path), "脚本.json", "脚本"):
+            with self.subTest(saved=saved):
+                self.assertEqual(match_script(scripts, saved), [self.path])
+
+    def test_match_script_is_case_insensitive(self):
+        save_script(self.path, self.data)
+        self.assertEqual(match_script([self.path], "ACTIONS/脚本.JSON"), [self.path])
+
+    def test_match_script_returns_empty_when_saved_name_is_unknown(self):
+        save_script(self.path, self.data)
+        self.assertEqual(match_script([self.path], "missing"), [])
+        self.assertEqual(match_script([self.path], ""), [])
 
 
 class ScriptEditorTests(unittest.TestCase):

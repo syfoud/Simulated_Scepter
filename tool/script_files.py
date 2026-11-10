@@ -21,6 +21,37 @@ def script_path(key):
     return (Path(PATHS["root"]) / key).resolve()
 
 
+def match_script(scripts, name):
+    """按保存值查找脚本候选，兼容稳定键、路径与裸文件名（大小写不敏感）。
+
+    保存值可能来自旧版本或手改配置：既有 `core/any_fate/actions/insect.json`
+    这样的项目相对键，也有 `insect` 这种只有文件名的写法。逐个候选依次尝试，
+    返回所有命中的路径，由调用方判断唯一性。
+
+    Args:
+        scripts: discover_scripts() 发现到的脚本路径列表。
+        name: 配置里保存的脚本标识。
+
+    Returns:
+        list[Path]: 命中的脚本路径；没有命中返回空列表。
+    """
+    if not isinstance(name, str) or not name.strip():
+        return []
+    wanted = name.strip().replace("\\", "/").casefold()
+    exact = [path for path in scripts if script_key(path).casefold() == wanted]
+    if exact:
+        return exact
+    if Path(name).is_absolute() or "/" in wanted:
+        path = script_path(name)
+        return [path] if path.is_file() else []
+    file_name = Path(wanted).name
+    stem = Path(file_name).stem
+    return [
+        path for path in scripts
+        if path.name.casefold() == file_name or path.stem.casefold() == stem
+    ]
+
+
 def validate_script(data):
     """校验公共动作结构，保留模块专用方法和扩展字段。
 

@@ -1,12 +1,12 @@
-"""结算动作脚本的接线测试：普通模拟宇宙与全仓动作脚本。
+"""结算动作脚本的接线测试：寰宇命途与全仓动作脚本。
 
 结算界面由标题「来自黑塔的分析报告」识别，命中后只调用内核的 settle_university：认不出标题
-就不点，界面留在屏幕上下一轮重试，不再有第二条兜底点击路径把界面点掉。普通模拟宇宙的记账
-也从「结束并结算」推迟到结算界面出现时，这样四个内核的结算都由同一处完成。
+就不点，界面留在屏幕上下一轮重试，不再有第二条兜底点击路径把界面点掉。记账也从
+「结束并结算」推迟到结算界面出现时，这样各内核的结算都由同一处完成。
 
 这里锁定：结算界面事件的识别文字与识别框、结算只用一个内核动作、结算界面排在点击空白类
-事件之前（run_static 每轮只执行第一个命中事件）、「设置界面进行结算」只负责点按钮且不再
-写状态（改用 interval 抑制连续命中）、以及全仓动作脚本里没有等已删除 end 状态的事件、
+事件之前（run_static 每轮只执行第一个命中事件）、「离开模拟宇宙」负责暂离与结算
+（改用 interval 抑制连续命中）、以及全仓动作脚本里没有等已删除 end 状态的事件、
 也没有 do_action 不认识的字典键。
 """
 import json
@@ -18,10 +18,10 @@ from importing import load_img
 # 内核在导入期就会读图像记忆切片，必须先预热图片缓存
 load_img()
 
-from core.simulated.engine import SimulatedUniverse  # noqa: E402
+from core.any_fate.engine import AnyFateUniverse  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_JSON = ROOT / "core" / "simulated" / "actions" / "universe.json"
+BASE_JSON = ROOT / "core" / "any_fate" / "actions" / "insect.json"
 
 
 # do_action 支持的字典动作（见 core/common/engine.py:114-143）：主键决定走哪个分支，
@@ -37,7 +37,7 @@ ACTION_KEYS = {
     "scroll": {"scroll"},
     "set_state": {"set_state"},
 }
-# 普通模拟宇宙里「点击空白处继续」的六类界面
+# 动作脚本里「点击空白处继续」的六类界面
 BLANK_CLICK_EVENTS = (
     "获得祝福",
     "获得奇物",
@@ -61,7 +61,7 @@ def core_action_files():
 
 
 class BaseModeSettlementWiringTest(unittest.TestCase):
-    """普通模拟宇宙的动作脚本：结算与「点击空白」细化事件共用一套界面识别。"""
+    """寰宇命途的动作脚本：结算与「点击空白」细化事件共用一套界面识别。"""
 
     def setUp(self):
         self.events = load_events(BASE_JSON)
@@ -83,13 +83,20 @@ class BaseModeSettlementWiringTest(unittest.TestCase):
 
         self.assertLess(settle, min(blank))
 
-    def test_settings_screen_only_clicks_the_confirm_button(self):
-        """「结束并结算」只负责关界面，本局的记账推迟到结算界面出现时。"""
-        event = self.events[event_index(self.events, "设置界面进行结算")]
+    def test_leaving_event_delegates_to_leave_universe(self):
+        """暂停菜单的暂离与结算合并成一个事件，具体动作由 leave_universe 判断。"""
+        event = self.events[event_index(self.events, "离开模拟宇宙")]
 
-        self.assertEqual(event["actions"], [{"position": [1393, 948]}])
-        # 动作不再改变状态，靠 interval 抑制连续命中
+        self.assertEqual(event["actions"], ["leave_universe"])
+        self.assertEqual(event["trigger"]["text"], "暂离")
         self.assertEqual(event["trigger"]["interval"], 1)
+        self.assertNotIn("condition", event["trigger"])
+
+    def test_ready_action_is_a_fixed_position_click(self):
+        """「备战开始」不再经过已删除的 pre_start 方法，直接点固定坐标。"""
+        event = self.events[event_index(self.events, "备战开始")]
+
+        self.assertEqual(event["actions"], [{"position": [1606, 966]}])
 
     def test_settlement_blank_event_is_gone(self):
         names = [event["name"] for event in self.events]
@@ -101,7 +108,7 @@ class BaseModeSettlementWiringTest(unittest.TestCase):
             action
             for event in self.events
             for action in event["actions"]
-            if isinstance(action, str) and not callable(getattr(SimulatedUniverse, action, None))
+            if isinstance(action, str) and not callable(getattr(AnyFateUniverse, action, None))
         }
 
         self.assertEqual(missing, set())

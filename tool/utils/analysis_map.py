@@ -467,8 +467,7 @@ def evaluate_best_single_replacement(nodes, edges, start_idx, t=0.2):
 
     return best_path, best_weight, best_end_idx, best_replace_idx, float(best_delta), float(best_discounted_delta)
 
-def compute_start_point_from_crop(image, mode=2, th=0.85, return_details=False,
-                                   preferred_slot=None):
+def compute_start_point_from_crop(image, mode=2, th=0.85, return_details=False, preferred_slot=None):
     """通过队伍栏头像匹配定位角色当前所在节点。
 
     mode=2（选路/选目标界面）：从队伍栏 4 个固定位置裁出 42x42 头像，
@@ -481,8 +480,8 @@ def compute_start_point_from_crop(image, mode=2, th=0.85, return_details=False,
         mode: 2=选路/选目标界面；3=中途打开地图界面。
         th: 匹配阈值，低于该值视为未识别到角色。
         return_details: 为 True 时额外返回匹配细节，供 GUI 复用原图裁片。
-        preferred_slot: 优先尝试的槽位（1~4）。由调用方传入当前操控角色位，
-            可用时优先尝试该槽位，未命中再按 1~4 顺序扫描其余槽位。
+        preferred_slot: 优先尝试的槽位（1 ~ 4）。由调用方传入当前操控角色位，
+            可用时优先尝试该槽位，未命中再按 1 ~ 4 顺序扫描其余槽位。
 
     Returns:
         默认返回匹配位置中心 (cx, cy)；失败返回 None。

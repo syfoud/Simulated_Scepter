@@ -37,7 +37,6 @@ ROOT = Path(__file__).resolve().parents[1]
 load_all_images_from_directory(str(ROOT / "resource" / "imgs"))
 
 from core.any_fate.engine import AnyFateUniverse
-from core.simulated.engine import SimulatedUniverse
 
 # 进入函数时 self.tx/self.ty 的残留值（旧实现会照这个坐标盲点）；坐标单位是 1920x1080 像素
 STALE_POINT = (960, 540)
@@ -64,7 +63,7 @@ OPTION_POINT = ((OPTION_BOX[0] + OPTION_BOX[2]) / 2, (OPTION_BOX[1] + OPTION_BOX
 # click_event_option 用 find_text 拿到的选项文本框（四角顺序与真实现一致）
 OPTION_OCR_BOX = [[1330, 640], [1690, 640], [1690, 680], [1330, 680]]
 # 兜底/优选项点中选项后，「确定」按钮的固定偏移落点：x 恒为 1702（按钮中心），
-# y = 选项文字行底边 + 76 px。这两个数现在直接写在 SimulatedUniverse.confirm_point 里，
+# y = 选项文字行底边 + 76 px。这两个数现在直接写在 AnyFateUniverse.confirm_point 里，
 # 测试里留一份同值常量，改 real 代码时这里要跟着改。
 CONFIRM_FIXED_X = 1702
 CONFIRM_TEXT_GAP = 76
@@ -143,6 +142,14 @@ class _StubEngine:
         self.fate = "存护"
         # 真实现里 self.event 一开始并不存在（getattr 取空串），只有写日志时才读一次
         self.event = ""
+        # 节点日志：select_event 在确认选项后会写 node_log.db，替身默认「不是新节点」避免落库
+        self.new_node = False
+        self.area = ""
+        self.now_area = []
+        self.node_count = 0
+        self.plane_floor = -1
+        self.ruanmei2 = False
+        self.chaoyan_seen = False
         # select_event 记下「面板第一次认到选项」的时刻，用来等面板淡入（测淡入把它设成 None）。
         # 远早于当前时刻（替身时钟从 1000 s 起）表示「早就等满淡入窗口」，多数用例据此直接走兜底。
         self._option_shown_at = 0.0
@@ -169,20 +176,19 @@ class _StubEngine:
             return icons
 
         self.event_option_icons = Mock(side_effect=_option_icons)
-        self.get_local = SimulatedUniverse.get_local.__get__(self)
-        self.event_option_rows = SimulatedUniverse.event_option_rows.__get__(self)
+        self.get_local = AnyFateUniverse.get_local.__get__(self)
+        self.event_option_rows = AnyFateUniverse.event_option_rows.__get__(self)
         # 置灰（不可用）选项的过滤用真实现：亮度从 self.screen 上量
-        self.option_brightness = SimulatedUniverse.option_brightness.__get__(self)
-        self.drop_disabled_options = SimulatedUniverse.drop_disabled_options.__get__(self)
-        self.pick_fallback_option = SimulatedUniverse.pick_fallback_option.__get__(self)
+        self.drop_disabled_options = AnyFateUniverse.drop_disabled_options.__get__(self)
+        self.pick_fallback_option = AnyFateUniverse.pick_fallback_option.__get__(self)
         # 优选项匹配用真实现（在识别到的选项行里匹配 event_prior），OCR 由 ts 打桩
-        self.click_event_prior = SimulatedUniverse.click_event_prior.__get__(self)
+        self.click_event_prior = AnyFateUniverse.click_event_prior.__get__(self)
         # 「确定」按钮的固定偏移用真实现：选项文字折行时要按整块底边算，不能只看被点那一行
-        self.confirm_point = SimulatedUniverse.confirm_point.__get__(self)
+        self.confirm_point = AnyFateUniverse.confirm_point.__get__(self)
         # 「确定」按钮的复核/补点用真实现：OCR 右侧竖条里的「确定」文字，按文字框中心点
-        self.confirm_text_box = SimulatedUniverse.confirm_text_box.__get__(self)
-        self.click_confirm_text = SimulatedUniverse.click_confirm_text.__get__(self)
-        # 「确定」按钮的点击默认打桩（要测它时用 SimulatedUniverse 的真实现显式换回来）
+        self.confirm_text_box = AnyFateUniverse.confirm_text_box.__get__(self)
+        self.click_confirm_text = AnyFateUniverse.click_confirm_text.__get__(self)
+        # 「确定」按钮的点击默认打桩（要测它时用 AnyFateUniverse 的真实现显式换回来）
         self.confirm_event = Mock(return_value=False)
         self.ts = Mock()
         self.ts.find_with_box = Mock(side_effect=self._ocr_in_box)
@@ -203,7 +209,7 @@ class _StubEngine:
         return [{"x": STAR_X, "y": top + 16, "score": 0.99}]
 
     # 替身代表 any_fate 一系的内核：先只认星号，没命中优选项再补认八个命途图标。
-    # 真实现里 option_icon_names 在 SimulatedUniverse、extra_option_icon_names 在 AnyFateUniverse。
+    # 真实现里 option_icon_names 在 AnyFateUniverse、extra_option_icon_names 在 AnyFateUniverse。
     def option_icon_names(self):
         return ("star",)
 
@@ -266,19 +272,15 @@ class _StubEngine:
 
     def click_event_option(self, event_name, row, from_prior=False):
         """兜底真正落点用真实现，只有 key_mouse_manager 被打桩。"""
-        return SimulatedUniverse.click_event_option(self, event_name, row, from_prior=from_prior)
-
-    def read_event_name(self, img=None):
-        """事件名读取用真实现，OCR 由 ts.ocr_one_row 打桩。"""
-        return SimulatedUniverse.read_event_name(self, img)
+        return AnyFateUniverse.click_event_option(self, event_name, row, from_prior=from_prior)
 
     def event_ui_label(self, img=None):
         """左上角界面标题读取用真实现，OCR 由 ts.ocr_one_row 打桩。"""
-        return SimulatedUniverse.event_ui_label(self, img)
+        return AnyFateUniverse.event_ui_label(self, img)
 
     def event_name_for_log(self, screen=None):
-        """事件名惰性读取用真实现：没读过才走 read_event_name。"""
-        return SimulatedUniverse.event_name_for_log(self, screen)
+        """事件名读取用真实现（读一次后缓存进 self.event），OCR 由 ts.ocr_one_row 打桩。"""
+        return AnyFateUniverse.event_name_for_log(self, screen)
 
 
 class SelectSecretTest(unittest.TestCase):
@@ -286,18 +288,18 @@ class SelectSecretTest(unittest.TestCase):
         self.manager = Mock()
         self.enterContext(patch("core.any_fate.engine.key_mouse_manager", self.manager))
         self.enterContext(patch("core.any_fate.engine.CUS_LOGGER"))
-        # 命途路径的「确定」点击已合并到 SimulatedUniverse.confirm_event，它用的是那个模块的
+        # 命途路径的「确定」点击已合并到 AnyFateUniverse.confirm_event，它用的是那个模块的
         # 键鼠管理器与 logger——一并打桩，免得单测真的去点鼠标
-        self.enterContext(patch("core.simulated.engine.key_mouse_manager", self.manager))
-        self.enterContext(patch("core.simulated.engine.CUS_LOGGER"))
+        self.enterContext(patch("core.any_fate.engine.key_mouse_manager", self.manager))
+        self.enterContext(patch("core.any_fate.engine.CUS_LOGGER"))
         self.clock = _FakeClock()
         self.enterContext(
             patch("core.any_fate.engine.time", types.SimpleNamespace(time=self.clock.time))
         )
-        # 命途路径的「确定」点击也走 SimulatedUniverse.confirm_event，用的是它那个模块的 time
+        # 命途路径的「确定」点击也走 AnyFateUniverse.confirm_event，用的是它那个模块的 time
         self.enterContext(
             patch(
-                "core.simulated.engine.time",
+                "core.any_fate.engine.time",
                 types.SimpleNamespace(time=self.clock.time, sleep=Mock()),
             )
         )
@@ -307,7 +309,7 @@ class SelectSecretTest(unittest.TestCase):
         # 选项区没有文本；右侧竖条按需要返回「确定」文字
         engine.stub_ocr(confirm_box=confirm_box)
         # 「确定」按钮的点击在 confirm_event 里（固定偏移 + OCR 文字复核），用真实现
-        engine.confirm_event = SimulatedUniverse.confirm_event.__get__(engine)
+        engine.confirm_event = AnyFateUniverse.confirm_event.__get__(engine)
         AnyFateUniverse.select_secret(engine)
         return engine
 
@@ -376,16 +378,16 @@ class SelectEventTest(unittest.TestCase):
 
     def setUp(self):
         self.manager = Mock()
-        self.enterContext(patch("core.simulated.engine.key_mouse_manager", self.manager))
+        self.enterContext(patch("core.any_fate.engine.key_mouse_manager", self.manager))
         self.logger = Mock()
-        self.enterContext(patch("core.simulated.engine.CUS_LOGGER", self.logger))
+        self.enterContext(patch("core.any_fate.engine.CUS_LOGGER", self.logger))
         self.clock = _FakeClock()
         self.engine_time = types.SimpleNamespace(time=self.clock.time, sleep=Mock())
-        self.enterContext(patch("core.simulated.engine.time", self.engine_time))
+        self.enterContext(patch("core.any_fate.engine.time", self.engine_time))
 
     def _run(self, matched, text_results, event_name=""):
         engine = _StubEngine(matched, text_results, event_name=event_name)
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
         return engine
 
     def _error_messages(self):
@@ -408,15 +410,15 @@ class SelectEventTest(unittest.TestCase):
             event_name=event_name,
             options=[{"raw_text": OPTION_TEXT, "box": OPTION_BOX}],
         )
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
         return engine
 
     def test_prior_option_matched_inside_option_area_is_clicked(self):
         """优选项在识别到的选项行里命中时按 OCR 文本框中心点击（不再整屏找优选项文字）。"""
         engine = _StubEngine({}, {"休息区": False}, options=[{"raw_text": OPTION_TEXT, "box": OPTION_BOX}])
         engine.event_prior = [OPTION_TEXT]
-        engine.click_event_prior = SimulatedUniverse.click_event_prior.__get__(engine)
-        SimulatedUniverse.select_event(engine)
+        engine.click_event_prior = AnyFateUniverse.click_event_prior.__get__(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual(
             [call.args for call in self.manager.click_point.call_args_list],
@@ -426,10 +428,8 @@ class SelectEventTest(unittest.TestCase):
         self.assertEqual(engine.confirm_event.call_args.kwargs["point"], CONFIRM_FIXED_POINT)
         # 优选项命中了，不该落进「没有匹配到优选项」的兜底分支
         self.assertEqual(self._error_messages(), [])
-        # click_text 只用来找「休息区」，没有拿它去点选项文字
-        self.assertEqual(
-            [call.kwargs["text"] for call in engine.click_text.call_args_list], ["休息区"]
-        )
+        # 选项匹配完全走 OCR 文本框，不再用 click_text 点选项文字
+        engine.click_text.assert_not_called()
 
     def test_prior_option_picks_its_own_row_among_several(self):
         """一帧里有多条选项时，点的是命中优选项的那一条的中心（不是第一条、也不是最后一条）。"""
@@ -447,7 +447,7 @@ class SelectEventTest(unittest.TestCase):
                 ],
             },
         )
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual(
             [call.args for call in self.manager.click_point.call_args_list],
@@ -489,7 +489,7 @@ class SelectEventTest(unittest.TestCase):
         engine = _StubEngine(
             {}, {"休息区": False}, stars=[{"x": STAR_X, "y": 424, "score": 0.99}]
         )
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         # 两遍匹配：先只认 ※（names=("star",)），没命中优选项才补认命途图标（见 select_event）
         engine.event_option_icons.assert_called_once_with(("star",))
@@ -503,7 +503,7 @@ class SelectEventTest(unittest.TestCase):
         """整个 select_event 什么都没识别到（连星号都没有）时补一条 info，且同一状态不刷屏。"""
         engine = self._run({}, {})
         # 同一个引擎再跑一帧：状态没变，不该再打第二条
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.manager.click_point.assert_not_called()
         infos = [msg for msg in self._info_messages() if "救世主" in msg]
@@ -542,19 +542,19 @@ class SelectEventTest(unittest.TestCase):
         self.assertEqual([call.args for call in self.manager.click_point.call_args_list], [OPTION_POINT])
         self.assertTrue(engine.confirm_event.called)
 
-    def test_rest_area_still_clicks_its_own_hit_point(self):
-        """「休息区」命中时按老行为点它自己的固定位置，不落入兜底。"""
+    def test_rest_area_is_no_longer_clicked_from_the_event_panel(self):
+        """事件面板不再额外点「休息区」固定点：休整区域由寻路流程负责。"""
         engine = _StubEngine(
             {}, {"休息区": True}, options=[{"raw_text": "选择事件", "box": OPTION_BOX}]
         )
         engine.ts.find_text = Mock(return_value=OPTION_OCR_BOX)
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual(
             [call.args for call in self.manager.click_point.call_args_list],
-            # 第一下是选项中心，第二下是「休息区」命中后写死在 select_event 里的像素点
-            [OPTION_POINT, (1600, 800)],
+            [OPTION_POINT],
         )
+        self.assertEqual(engine.click_text.call_count, 0)
         # 没有落进「连续 3 次没匹配到优选项」的兜底分支
         self.assertEqual(self._error_messages(), [])
 
@@ -567,7 +567,7 @@ class SelectEventTest(unittest.TestCase):
                 ui_label=label,
                 options=[{"raw_text": OPTION_TEXT, "box": OPTION_BOX}],
             )
-            SimulatedUniverse.select_event(engine)
+            AnyFateUniverse.select_event(engine)
 
             self.manager.click_point.assert_not_called()
             self.assertTrue(any(label[:2] in msg for msg in self._debug_messages()))
@@ -580,12 +580,12 @@ class SelectEventTest(unittest.TestCase):
             side_effect=lambda _img, box: labels.pop(0) if box == engine.EVENT_LABEL_BOX else ""
         )
 
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
         self.manager.click_point.assert_not_called()
         self.assertTrue(any("奇物商店" in msg for msg in self._debug_messages()))
 
         self.logger.debug.reset_mock()
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
         # 第二帧标题读到「事件」：不再让路，继续走到选项阶段
         self.assertTrue(
             any("选项列表区域没有识别到任何文本" in msg for msg in self._debug_messages()),
@@ -603,7 +603,7 @@ class SelectEventTest(unittest.TestCase):
         engine = _StubEngine(
             {"arrow_dialog": DIALOG_POINT}, {"休息区": False}, event_name="超验之镜"
         )
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual(engine.ts.ocr_one_row.call_args_list, [])
         self.assertEqual(engine.event, "")
@@ -630,7 +630,7 @@ class SelectEventTest(unittest.TestCase):
             event_name="超验之镜",
             options=[{"raw_text": "选择事件", "box": OPTION_BOX}],
         )
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual(self._name_reads(engine), [])
         self.assertEqual(engine.event, "")
@@ -648,11 +648,11 @@ class SelectEventTest(unittest.TestCase):
             ("事件 超验之镜", "超验之镜"),
             ("秘闻·兽群·贪赞灾厄", "兽群·贪赞灾厄"),
             ("，超验之", "超验之"),
-            ("事件", ""),
-            ("", ""),
+            ("事件", "未知事件"),
+            ("", "未知事件"),
         ]:
             engine = _StubEngine({}, {}, event_name=raw)
-            self.assertEqual(SimulatedUniverse.read_event_name(engine), expected, raw)
+            self.assertEqual(AnyFateUniverse.event_name_for_log(engine), expected, raw)
 
     def test_warning_log_carries_real_event_name(self):
         """兜底点击那条 warning 要带上真实事件名，而不是「未知事件」，而且不是 error。"""
@@ -676,7 +676,7 @@ class SelectEventTest(unittest.TestCase):
                 {"raw_text": OPTION_TEXT, "box": [200, 60, 460, 100], "lines": [], "icon": {}}
             ]
         )
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.manager.click_point.assert_not_called()
         self.assertTrue(
@@ -706,7 +706,7 @@ class SelectEventTest(unittest.TestCase):
                 }
             ]
         )
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual(
             [call.args for call in self.manager.click_point.call_args_list],
@@ -734,7 +734,7 @@ class SelectEventTest(unittest.TestCase):
             options=[{"raw_text": OPTION_TEXT, "box": OPTION_BOX}],
         )
         engine._option_shown_at = None  # 面板这一帧刚认到选项
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.manager.click_point.assert_not_called()
         self.assertTrue(
@@ -745,12 +745,12 @@ class SelectEventTest(unittest.TestCase):
         # 面板出现后 1.0 s（已过旧的 0.8 s、还没到 1.5 s）：继续等，不兜底。
         # self.clock 每被 time() 读一次前进 0.1 s，故把起点往前挪 0.9 s，到判定时正好过了 1.0 s。
         engine._option_shown_at = self.clock.now - 0.9
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
         self.manager.click_point.assert_not_called()
 
         # 已经等满 1.5 s：照旧走兜底
         engine._option_shown_at = self.clock.now - 2.0
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual([call.args for call in self.manager.click_point.call_args_list], [OPTION_POINT])
 
@@ -781,7 +781,7 @@ class SelectEventTest(unittest.TestCase):
         )
         engine.confirm_event = Mock(return_value=True)
 
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         # 先只认 ※（两条，没命中优选项），再补认命途图标（第三条进来，命中「绞杀它们」）
         self.assertEqual(
@@ -813,7 +813,7 @@ class SelectEventTest(unittest.TestCase):
         )
         engine.confirm_event = Mock(return_value=True)
 
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         self.assertEqual(len(engine.event_option_icons.call_args_list), 1)
         self.assertEqual(
@@ -828,12 +828,12 @@ class ConfirmEventClickTest(unittest.TestCase):
 
     def setUp(self):
         self.manager = Mock()
-        self.enterContext(patch("core.simulated.engine.key_mouse_manager", self.manager))
-        self.enterContext(patch("core.simulated.engine.CUS_LOGGER"))
+        self.enterContext(patch("core.any_fate.engine.key_mouse_manager", self.manager))
+        self.enterContext(patch("core.any_fate.engine.CUS_LOGGER"))
         self.clock = _FakeClock()
         self.enterContext(
             patch(
-                "core.simulated.engine.time",
+                "core.any_fate.engine.time",
                 types.SimpleNamespace(time=self.clock.time, sleep=Mock()),
             )
         )
@@ -844,8 +844,8 @@ class ConfirmEventClickTest(unittest.TestCase):
         engine.stub_ocr(
             options=[{"raw_text": OPTION_TEXT, "box": OPTION_BOX}], confirm_box=confirm_box
         )
-        engine.confirm_event = SimulatedUniverse.confirm_event.__get__(engine)
-        SimulatedUniverse.select_event(engine)
+        engine.confirm_event = AnyFateUniverse.confirm_event.__get__(engine)
+        AnyFateUniverse.select_event(engine)
         return engine
 
     def test_fixed_offset_clicked_after_fallback_option(self):
@@ -894,8 +894,8 @@ class ConfirmEventClickTest(unittest.TestCase):
             "icon": {"x": STAR_X, "y": 585, "score": 0.99},
         }
 
-        point = SimulatedUniverse.confirm_point(engine, row)
-        point2 = SimulatedUniverse.confirm_point(engine, row2)
+        point = AnyFateUniverse.confirm_point(engine, row)
+        point2 = AnyFateUniverse.confirm_point(engine, row2)
 
         # x 恒为按钮中心的 1702；y = 选项文字行底边 + 76（421、599 是两行文字的底边）
         self.assertEqual(point[0], CONFIRM_FIXED_X)
@@ -918,13 +918,13 @@ class ConfirmEventClickTest(unittest.TestCase):
         ]
         engine.stub_ocr(stars=[star], bands={tuple(engine._star_band(star)): lines})
 
-        rows = SimulatedUniverse.event_option_rows(engine)
+        rows = AnyFateUniverse.event_option_rows(engine)
 
         self.assertEqual(
             [line["raw_text"] for line in rows[0]["lines"]],
             [WRAPPED_OPTION_LINES[0]["raw_text"], "花费40宇宙碎片。"],
         )
-        point = SimulatedUniverse.confirm_point(engine, rows[0])
+        point = AnyFateUniverse.confirm_point(engine, rows[0])
         # 「确定」那一行被剔掉：底边取两行里更靠下的 460，+76 → 536；若把它算进来（底边 512）
         # 就会落到 588，比按钮中心低 91 px，点不到
         self.assertAlmostEqual(point[1], 460 + CONFIRM_TEXT_GAP, delta=1)
@@ -950,14 +950,14 @@ class ConfirmEventClickTest(unittest.TestCase):
             },
         )
 
-        rows = SimulatedUniverse.event_option_rows(engine)
+        rows = AnyFateUniverse.event_option_rows(engine)
 
         self.assertEqual(
             [row["raw_text"] for row in rows], ["购买1个1星祝福。", "强化2个随机祝福。"]
         )
         self.assertEqual([row["lines"] for row in rows], [lines_a, lines_b])
         # 「确定」的偏移按整条（选项行 + 说明行）的底边算：474 + 76
-        point = SimulatedUniverse.confirm_point(engine, rows[0])
+        point = AnyFateUniverse.confirm_point(engine, rows[0])
         self.assertAlmostEqual(point[1], 474 + CONFIRM_TEXT_GAP, delta=1)
 
     def test_all_option_icons_are_found_not_only_the_best_one(self):
@@ -974,10 +974,10 @@ class ConfirmEventClickTest(unittest.TestCase):
         engine.screen = frame
         engine.get_screen = Mock(return_value=frame)
 
-        stars = SimulatedUniverse.event_option_icons(engine)
+        stars = AnyFateUniverse.event_option_icons(engine)
         self.assertEqual([icon["icon"] for icon in stars], ["star", "star"])
 
-        icons = SimulatedUniverse.event_option_icons(engine, ("star",) + FATE_ICON_NAMES)
+        icons = AnyFateUniverse.event_option_icons(engine, ("star",) + FATE_ICON_NAMES)
 
         self.assertEqual([icon["icon"] for icon in icons], ["star", "star", "fate6"])
         for found, (top, template) in zip(icons, ((212, star), (391, star), (570, fate))):
@@ -1003,13 +1003,13 @@ class DisabledOptionTest(unittest.TestCase):
 
     def setUp(self):
         self.manager = Mock()
-        self.enterContext(patch("core.simulated.engine.key_mouse_manager", self.manager))
+        self.enterContext(patch("core.any_fate.engine.key_mouse_manager", self.manager))
         self.logger = Mock()
-        self.enterContext(patch("core.simulated.engine.CUS_LOGGER", self.logger))
+        self.enterContext(patch("core.any_fate.engine.CUS_LOGGER", self.logger))
         self.clock = _FakeClock()
         self.enterContext(
             patch(
-                "core.simulated.engine.time",
+                "core.any_fate.engine.time",
                 types.SimpleNamespace(time=self.clock.time, sleep=Mock()),
             )
         )
@@ -1035,7 +1035,7 @@ class DisabledOptionTest(unittest.TestCase):
 
     def test_option_rows_keep_only_the_clickable_option(self):
         """event_option_rows 只返回可点的选项行：置灰的三条全部丢掉，可用的那条原样留下。"""
-        rows = SimulatedUniverse.event_option_rows(self._engine())
+        rows = AnyFateUniverse.event_option_rows(self._engine())
 
         self.assertEqual([row["raw_text"] for row in rows], ["米离开。"])
 
@@ -1045,7 +1045,7 @@ class DisabledOptionTest(unittest.TestCase):
         engine.screen = np.full((1080, 1920, 3), 40, dtype=np.uint8)
         engine.get_screen = Mock(return_value=engine.screen)
 
-        rows = SimulatedUniverse.event_option_rows(engine)
+        rows = AnyFateUniverse.event_option_rows(engine)
 
         self.assertEqual([row["raw_text"] for row in rows], [text for text, *_ in self.REST_AREA_OPTIONS])
 
@@ -1056,7 +1056,7 @@ class DisabledOptionTest(unittest.TestCase):
         """
         engine = self._engine()
         engine.event_prior = ["1个1星祝福"]
-        SimulatedUniverse.select_event(engine)
+        AnyFateUniverse.select_event(engine)
 
         # 点击接口收 1920x1080 像素坐标：选项文本框 [1357, 746, 1435, 777] 的中心即 (1396, 761.5)；
         # box 一并传入，日志里能看出这一下点的是哪个框。

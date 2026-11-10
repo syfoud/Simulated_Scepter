@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QMessageBox
 
 from core.common import config as runtime_config
 from core.common.config import load_runtime_settings
-from core.common.runtime_ui import RuntimeSettings
+from core.common.runtime_ui import RuntimeSettings, advanced_user_file_exists
 from tool.gui.settings_dialog import SettingsDialog as BaseDialog
 from tool.log import CUS_LOGGER
 from tool.storage import (
@@ -23,7 +23,11 @@ class SettingsDialog(BaseDialog):
         data = load_runtime_settings() | load_module_settings(__file__)
         self.runtime = RuntimeSettings(data, self)
         self.content_layout.addWidget(self.runtime)
+        self.record_checkbox = self.runtime.add_record_checkbox("录制铁血战士视频")
+        self.record_checkbox.setChecked(bool(data.get("record", False)))
+        self.record_checkbox.setEnabled(advanced_user_file_exists())
         self.section = ui = self.add_section(resource_path(__file__, "ui/settings.ui"))
+        ui.Iron_blood_del_record_time_input.setText(str(data.get("del_record_time", 14)))
         for key, default, field in (
             ("first_plane", 14, "first_plane"), ("second_plane", 31, "second_plane"),
             ("battle_weight", 1.2, "battle_weight"), ("first_plane_min_weight", 8.0, "first_plane_min_weight"),
@@ -42,7 +46,10 @@ class SettingsDialog(BaseDialog):
 
     def persist(self):
         ui = self.section
-        values = {}
+        values = {
+            "record": self.record_checkbox.isChecked(),
+            "del_record_time": int(ui.Iron_blood_del_record_time_input.text()),
+        }
         for key, field, convert in (
             ("first_plane", "first_plane", int), ("second_plane", "second_plane", int),
             ("battle_weight", "battle_weight", float), ("first_plane_min_weight", "first_plane_min_weight", float),

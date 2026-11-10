@@ -1,15 +1,11 @@
 {
-    "script_engine": "Simulated",
-    "script_file": "",
+    "script_engine": "IronBlood",
+    "script_file": "core/any_fate/actions/insect.json",
     "calibration_angle": 1.0,
     "start_game_on_task": false,
     "game_executable_path": "",
     "game_focus_reclaim_wait_seconds": 600,
     "ocr_device": "auto",
-    "recording_state": false,
-    "record_map": false,
-    "recording_iron_blood": false,
-    "del_record_time": 14,
     "hotkeys": {
         "stop": "end",
         "test": "f6",

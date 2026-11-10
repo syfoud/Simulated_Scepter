@@ -12,6 +12,11 @@ def get_hwnd_and_text():
     return hwnd,Text
 
 
+def get_dis(x, y):
+    """返回两点间的直线距离。x、y 为 (x, y) 形式的坐标。"""
+    return ((x[0] - y[0]) ** 2 + (x[1] - y[1]) ** 2) ** 0.5
+
+
 def get_center(img, i, j):
     """
     计算图像中指定位置(i,j)附近区域的加权中心坐标

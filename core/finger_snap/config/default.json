@@ -1,4 +1,5 @@
 {
+    "record": false,
     "finger_snap_model": {
         "control_rollouts": 200000,
         "evaluation_rollouts": 1000000,

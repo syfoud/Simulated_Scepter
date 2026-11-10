@@ -53,6 +53,16 @@ class KernelRegistryTests(unittest.TestCase):
         self.assertNotIn("core.probe_base.engine", sys.modules)
         self.assertNotIn("core.probe_other.engine", sys.modules)
 
+    def test_removed_calibration_flag_is_ignored(self):
+        """校准改由通用内核实现后，module.ini 里遗留的 calibration 键不再进入描述对象。"""
+        directory = self.module("probe_extra")
+        path = directory / "module.ini"
+        path.write_text(path.read_text(encoding="utf-8") + "calibration=true\n", encoding="utf-8")
+
+        spec = KernelRegistry(self.root).specs["probe_extra"]
+
+        self.assertFalse(hasattr(spec, "calibration"))
+
     def test_removing_leaf_does_not_affect_sibling_loading(self):
         self.module("probe_base", runnable=False)
         leaf = self.module("probe_leaf", "probe_base")

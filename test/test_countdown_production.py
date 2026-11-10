@@ -94,7 +94,11 @@ class CountdownProductionTests(unittest.TestCase):
         self.assertIn("self._pending_target = None", select_doing[confirm_click:])
         self.assertIn("self._target_decided = False", select_doing[confirm_click:])
         self.assertNotIn("countdown_agent.apply_target", select_go)
-        self.assertIn("感染结果已由当前截图同步", select_go)
+        after_map_analyzed = source[source.index("    def after_map_analyzed"):
+                                   source.index("    def after_move_to_next_node")]
+        self.assertIn("感染结果已由当前截图同步", after_map_analyzed)
+        self.assertIn("self._pending_target = None", after_map_analyzed)
+        self.assertIn("self._target_decided = False", after_map_analyzed)
         candidate = select_go.index("candidate_countdown = num // 5")
         confirmation = select_go.index("confirmed_num = extract_number")
         commit = select_go.index("self.countdown = candidate_countdown")
