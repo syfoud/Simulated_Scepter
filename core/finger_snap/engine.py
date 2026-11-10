@@ -4,7 +4,7 @@ import shutil
 import time
 
 from route import PATHS
-from tool.storage import resource_path
+from tool.storage import load_module_settings, resource_path
 from core.any_fate.engine import AnyFateUniverse
 from core.finger_snap.config import (
     EARLY_STOP_FIELDS, MC_SETTING_FIELDS, load_finger_snap_settings,
@@ -26,8 +26,7 @@ from tool.countdown_evaluator import (
 from tool.GLOBAL import key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
-from core.simulated.config import config
-from core.simulated.text_key import text_keys
+from core.any_fate.text_key import FATES, text_keys
 from tool.utils.analysis_map import (
     build_rightward_graph2,
     compute_start_point_from_crop,
@@ -47,10 +46,14 @@ from tool.utils.ocr_num import (
 class FingerSnap(AnyFateUniverse):
     """弹指一挥：丰饶命途专属，累计80倒计时以达成成就。"""
 
+    # 弹指用 count.txt 的第 2 行计数
+    count_line = 1
+
     def __init__(self):
         super().__init__()
+        self.opt.update(load_module_settings(__file__))
         self.fate = "丰饶"
-        self.my_fate = config.fates.index(self.fate)
+        self.my_fate = FATES.index(self.fate)
         self.tk = text_keys(self.my_fate)
         self.countdown=15
         model_settings = load_finger_snap_settings()
@@ -87,48 +90,28 @@ class FingerSnap(AnyFateUniverse):
         self._target_decided = False
         self.cheat_target = None  # 新轮回清掉上一轮留下的作弊目标
 
-    def stop_round_recording(self):
-        """按倒计时决定本轮录像是否删除"""
-        need_del=(self.del_record_time and self.del_record_time>self.countdown) and not self.ruanmei2
-        CUS_LOGGER.debug(f"是否可删除{need_del},限制数目{self.del_record_time}，当前数目{self.countdown}，本轮是否遇到阮梅其二{self.ruanmei2}")
-        self.recorder.stop_recording(need_del)
+    def save_threshold(self):
+        return self.del_record_time
+
+    def manual_stop_reason(self):
+        if self.countdown > 0:
+            return f"手动停止时倒计时 {self.countdown}"
+        return None
+
+    def round_keep_reasons(self):
+        """弹指的录像保留条件：倒计时达阈值、遇到阮·梅（其二）。"""
+        reasons = super().round_keep_reasons()
+        if self.countdown >= self.del_record_time:
+            reasons.append(f"倒计时 {self.countdown} 达到保存阈值 {self.del_record_time}")
+        if self.ruanmei2:
+            reasons.append("本轮遇到阮·梅（其二）")
+        return reasons
+
+    def delete_reason(self):
+        return f"倒计时 {self.countdown} 未达保存阈值 {self.del_record_time}"
+
     def select_fate(self):
         key_mouse_manager.click_point(850, 798)
-    def update_count(self, read=True):
-        """
-        更新或读取弹指模块的计数器值（使用 count.txt 的第二行）
-        """
-        file_name = os.path.join(PATHS["backup"], "count.txt")
-        if read:
-            new_cnt = 0
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                    if len(lines) >= 2:
-                        try:
-                            new_cnt = int(lines[1].strip())
-                        except Exception:
-                            pass
-            else:
-                os.makedirs(PATHS["backup"], exist_ok=True)
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.write("0\n0\n")
-            self.count = new_cnt
-        else:
-            new_cnt = self.count + 1
-            lines = ["0\n", "0\n"]
-            if os.path.exists(file_name):
-                with open(file_name, encoding="utf-8", errors="ignore") as fh:
-                    lines = fh.readlines()
-                    if len(lines) < 2:
-                        lines += ["0\n"] * (2 - len(lines))
-            lines[1] = str(new_cnt) + "\n"
-            try:
-                with open(file_name, "w", encoding="utf-8") as file:
-                    file.writelines(lines)
-                self.count = new_cnt
-            except Exception as e:
-                CUS_LOGGER.error(f"写入弹指计数失败 {e}")
     def end_of_university(self):
         # 本局的开始时间与用时必须在父类之前取：父类会把 run_start_time 重置为下一局的开始时间
         elapsed = int(time.time() - self.run_start_time)
@@ -209,6 +192,16 @@ class FingerSnap(AnyFateUniverse):
         # 仍然存在，select_doing 下次被调用时必须重新截图、建图和决策。
         self._pending_target = None
         self._target_decided = False
+
+    def after_map_analyzed(self):
+        if self._pending_target is not None:
+            CUS_LOGGER.debug("已进入路径界面，感染结果已由当前截图同步")
+        self._pending_target = None
+        self._target_decided = False
+
+    def after_move_to_next_node(self, node):
+        self.countdown = self.countdown_agent.apply_path(int(node["idx"])).countdown
+
     def select_go(self):
         num = extract_number(match_numbers_in_region(self.screen))
         if num is None:
@@ -230,62 +223,18 @@ class FingerSnap(AnyFateUniverse):
         self.countdown = candidate_countdown
         CUS_LOGGER.debug(f"当前倒计时{self.countdown}")
         self.set_kill_num(str(self.countdown))
-        key_mouse_manager.clean()
-        key_mouse_manager.keyUp("move_w")
-        key_mouse_manager.wait()
-        if self.click_text(text="选择移动目标", box=[1609, 965, 1759, 996],click=False,allow_fail=True):
-            if self.click_text(text="点击空白处关闭", box=[876, 1008, 1047, 1035],click=False,allow_fail=True):
-                key_mouse_manager.wait()
-                return
-            if not self.try_analysis_map(mode=2):
-                return
-            if self._pending_target is not None:
-                CUS_LOGGER.debug("已进入路径界面，感染结果已由当前截图同步")
-            self._pending_target = None
-            self._target_decided = False
-            if self.next_node is not None:
-                selected_idx = int(self.next_node["idx"])
-                self.start_nodes=self.next_node
-                x,y=int(self.next_node["cx"]),int(self.next_node["cy"])
-                key_mouse_manager.click_point(x,y)
-                key_mouse_manager.wait()
-                self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
-                self.countdown = self.countdown_agent.apply_path(selected_idx).countdown
-                if self.area and self.now_map != -1:
-                    visit_count = self.record_map_visit(self.now_map)
-                    CUS_LOGGER.debug(f"上次地图编号{self.now_map}, 累计访问次数: {visit_count}")
-            else:
-                CUS_LOGGER.error("未找到下一步路径点")
-        else:
-            self.click_text(text="确认移动", box=[1611, 964, 1759, 998])
-        # 移动后原节点的区域名已失效：init_map 只在 new_node 为真时清 area，
-        # 而它通常已被上一节点消费掉，这里必须自己清
-        self.area = ""
-        self.new_node=True
+        self.move_to_next_node()
+
     def initing_map(self):
         if not self.debug:
             CUS_LOGGER.error("本功能为实验性功能，当前仅供开发人员测试，现已终止程序")
             return self.stop()
-        key_mouse_manager.keyUp("move_w")
-        if self.click_text(text="振翅",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=1
-        elif self.click_text(text="浪潮",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=2
-        elif self.click_text(text="消褪",box=[10, 0, 220, 112],click=False,warning=False):
-            self.plane_floor=3
-        else:
-            CUS_LOGGER.warning("多么绝妙的巧合。你我都心知肚明。")
-            return
-        self.try_analysis_map(1)
+        super().initing_map()
+
+    def after_plane_analysis(self):
         self.save_screen(save_path=os.path.join(PATHS["temp"], "map"))
-        for _ in range(5):
-            self.click_text(text="进入位面", box=[907, 857, 1009, 891])
-            self.node_count = 0
-            self.new_node = True
-            # 切换位面时没有重投界面出现，需清空区域名缓存
-            self.area = ""
-        key_mouse_manager.wait()
-    def try_analysis_map(self, mode=1, target_selection=False):
+
+    def try_analysis_map(self, mode=1, path_mode=2, target_selection=False):
         """识别地图，必要时刷新截图复核，补偿慈怀闪光造成的瞬时漏检。
 
         慈怀状态节点在被识别到时正处于高亮闪光动画中（约 2 帧），闪光峰值期间
@@ -296,6 +245,7 @@ class FingerSnap(AnyFateUniverse):
 
         Args:
             mode: 地图识别模式，1/2/3 分别对应不同位面的图标集合。
+            path_mode: 为与父类签名一致而保留；弹指的构图方式由 mode 决定。
             target_selection: 是否处于慈怀选目标阶段。
 
         Returns:
