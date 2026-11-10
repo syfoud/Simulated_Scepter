@@ -12,6 +12,7 @@ import keyboard
 from PyQt5.QtGui import QFont
 
 from route import PATHS
+from logger_printer import QMainWindowLog
 from tool.action_script import run_script as run_action_script
 from tool.cleanup import (
     CATEGORIES,
@@ -40,7 +41,13 @@ from tool.gui.schedule_dialog import ScheduleDialog, ScheduleTimer
 from tool.gui.script_editor import ScriptEditor
 from tool.log import CUS_LOGGER, log_emitter
 from tool.registry import KernelRegistry
-from tool.script_files import discover_scripts, read_script, script_key, script_path
+from tool.script_files import (
+    discover_scripts,
+    match_script,
+    read_script,
+    script_key,
+    script_path,
+)
 from tool.script_tools import capture_sample, debug_events
 from tool.settings import load_default_settings, load_settings, update_settings
 from tool.thread import ThreadWithException
@@ -77,10 +84,8 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from align_angle import main as align_angle_main
-from logger_printer import QMainWindowLog
-
-HOTKEY_DEBOUNCE_SECONDS = 1.0
+from tool.calibration import create_kernel as create_calibration_kernel
+from tool.calibration import main as align_angle_main
 
 # 程序热键在 keyboard 库里的键名与 pyautogui 不同：修饰键必须写成 "left shift"
 # 这类带左右的形式，否则 keyboard 解析不到扫描码，热键注册会静默失败。
@@ -192,53 +197,43 @@ def resolve_startup_task(args):
         return None
 
     settings = load_settings()
+    defaults = load_default_settings() or {}
     registry = KernelRegistry()
     configured_script = settings.get("script_file", "")
-    has_configured_script = isinstance(configured_script, str) and bool(configured_script)
     if args.file is not None:
         script_name = args.file
-    elif configured_script in (None, ""):
-        script_name = "insect.json"
-    elif has_configured_script:
-        script_name = configured_script
     else:
-        raise ValueError("gui_settings.json 中的 script_file|检查 gui_settings.json 必须是脚本路径或名称")
+        script_name = configured_script or defaults.get("script_file", "")
 
-    default_engine = settings.get("script_engine", "") if has_configured_script else "IronBlood"
+    default_engine = settings.get("script_engine", "") or defaults.get("script_engine", "")
     engine_name = args.engine or default_engine
 
     if not isinstance(engine_name, str) or not engine_name:
         raise ValueError("未设置可用内核；请在界面选择内核，或使用 --engine:ID 指定内核")
     engine_key = engine_name.casefold()
+    runnable = registry.runnable()
     spec = next(
-        (item for item in registry.runnable() if item.id.casefold() == engine_key),
+        (item for item in runnable if item.id.casefold() == engine_key),
         None,
     )
     if spec is None:
-        available = ", ".join(item.id for item in registry.runnable())
-        raise ValueError(f"设置的内核不可用：{engine_name!r}；可用内核 ID：{available}")
-
-    if not isinstance(script_name, str) or not script_name:
-        raise ValueError("未设置可用脚本；请gui_settings.json 中的 script_file|检查 gui_settings.json 或使用 --file:SCRIPT 指定脚本")
+        # 设置里可能是非法内核名；只对设置值回退内置默认内核，
+        # 命令行显式指定的内核写错时继续报错，避免掩盖参数错误。
+        if args.engine is None:
+            default_key = str(defaults.get("script_engine", "")).casefold()
+            spec = next(
+                (item for item in runnable if item.id.casefold() == default_key),
+                None,
+            )
+        if spec is None:
+            available = ", ".join(item.id for item in runnable)
+            raise ValueError(f"设置的内核不可用：{engine_name!r}；可用内核 ID：{available}")
 
     scripts = discover_scripts(registry)
-    script_key_name = script_name.replace("\\", "/").casefold()
-    exact_matches = [path for path in scripts if script_key(path).casefold() == script_key_name]
-    if exact_matches:
-        matches = exact_matches
-    elif os.path.isabs(script_name) or "/" in script_name or "\\" in script_name:
-        path = script_path(script_name)
-        if not os.path.isfile(path):
-            raise ValueError(f"找不到脚本：{script_name}")
-        matches = [path]
-    else:
-        name = os.path.basename(script_name).casefold()
-        stem = os.path.splitext(name)[0]
-        matches = [
-            path for path in scripts
-            if path.name.casefold() == name or path.stem.casefold() == stem
-        ]
-
+    matches = match_script(scripts, script_name)
+    if not matches and args.file is None:
+        # 设置里的脚本可能属于已删除的内核；未显式指定脚本时回退内置默认脚本
+        matches = match_script(scripts, defaults.get("script_file", ""))
     if len(matches) > 1:
         raise ValueError(f"脚本名称不唯一，请使用相对路径指定：{script_name}")
     if matches:
@@ -733,14 +728,11 @@ class MainWindow(QMainWindowLog):
         self.start_game_checkbox.setChecked(data.get("start_game_on_task", False))
         self.game_path_input.setText(data.get("game_executable_path", ""))
         self.focus_reclaim_wait_input.setText(str(data.get("game_focus_reclaim_wait_seconds", 600)))
-        self.recording_checkBox.setChecked(data.get("recording_state", False))
-        self.recording_checkBox2.setChecked(data.get("recording_iron_blood", False))
-        self.recording_time_input.setText(str(data.get("del_record_time", 14)))
         self.record_event_map_checkbox.setChecked(data.get("record_event_map", False))
         self.record_abnormal_first_plane_weight.setChecked(data.get("record_abnormal_first_plane_weight", False))
         self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", False))
         self.recording_keep_long_run_threshold_input.setText(str(data.get("recording_keep_long_run_threshold", 1.2)))
-        self.recording_label_checkbox.setChecked(data.get("record_add_label", True))
+        self.recording_label_checkbox.setChecked(data.get("record_add_label", False))
         self.check_model_file()
 
         self.cleanup_section = CleanupSettingsSection(self.advanced_settings_main_page)
@@ -908,7 +900,7 @@ class MainWindow(QMainWindowLog):
 
         # 防重复触发
         last_time = self._last_key_time.get(key, 0)
-        if current_time - last_time > HOTKEY_DEBOUNCE_SECONDS:
+        if current_time - last_time > 1.0:
             self._last_key_time[key] = current_time
 
             if action in {"stop", "test", "print"}:
@@ -985,8 +977,6 @@ class MainWindow(QMainWindowLog):
     def update_dependent_controls_state(self):
         self.game_path_input.setEnabled(self.start_game_checkbox.isChecked())
         debug_enabled = bool(self.opt.get("debug", False))
-        recording_enabled = self.recording_checkBox2.isEnabled() and self.recording_checkBox2.isChecked()
-        self.recording_time_input.setEnabled(recording_enabled)
         self.kernel_buttons.setVisible(not debug_enabled)
         for widget in (
             self.engine_label, self.engine_combo, self.engine_settings_btn,
@@ -999,12 +989,11 @@ class MainWindow(QMainWindowLog):
         for widget in (self.recording_keep_long_run_checkbox,
                        self.recording_keep_long_run_threshold_input,
                        self.recording_label_checkbox):
-            widget.setEnabled(debug_enabled and recording_enabled)
+            widget.setEnabled(debug_enabled)
 
 
     def connect_dependency_signals(self):
         self.start_game_checkbox.toggled.connect(self.update_dependent_controls_state)
-        self.recording_checkBox2.toggled.connect(self.update_dependent_controls_state)
         self.game_path_input.editingFinished.connect(self.save_game_path_config)
 
 
@@ -1135,10 +1124,23 @@ class MainWindow(QMainWindowLog):
         available = self.engine_combo.count() > 0
         for widget in (self.engine_combo, self.engine_settings_btn, self.test_btn, self.print_btn):
             widget.setEnabled(available)
-        self.calibrate_btn.setEnabled(any(spec.calibration for spec in self.registry.runnable()))
+        # 没有可用内核时说明程序安装不完整，此时各入口统一禁用。
+        self.calibrate_btn.setEnabled(available)
         self.run_script_btn.clicked.connect(self.run_script)
         self.refresh_scripts()
         engine_index = self.engine_combo.findData(self.opt.get("script_engine", ""))
+        if engine_index < 0:
+            # 旧配置里存的是小写 ID（如 ironblood），按大小写不敏感补一次匹配
+            wanted = str(self.opt.get("script_engine", "")).casefold()
+            engine_index = next(
+                (index for index in range(self.engine_combo.count())
+                 if str(self.engine_combo.itemData(index)).casefold() == wanted),
+                -1,
+            )
+        if engine_index < 0:
+            # 设置里仍是旧内核或尚未配置：回到内置默认内核
+            engine_index = self.engine_combo.findData(
+                (load_default_settings() or {}).get("script_engine", ""))
         if engine_index >= 0:
             self.engine_combo.setCurrentIndex(engine_index)
         saved = self.opt.get("script_file", "")
@@ -1167,19 +1169,34 @@ class MainWindow(QMainWindowLog):
         chosen = selected or self.script_combo.currentData()
         paths = discover_scripts(self.registry)
         saved = self.opt.get("script_file", "")
-        candidate = script_path(chosen or saved) if chosen or saved else None
-        if candidate is not None and candidate not in paths:
+        # 保存值可能是裸文件名或旧版本写法：按大小写不敏感匹配，选不中才回退到项目相对路径
+        resolved = None
+        for name in (chosen, saved):
+            matches = match_script(paths, str(name)) if name else []
+            if matches:
+                resolved = matches[0]
+                break
+        if resolved is not None and resolved not in paths:
+            # 绝对路径脚本不在发现列表里：校验后补进下拉框，否则选中项会丢失
+            try:
+                read_script(resolved)
+                paths.append(resolved)
+            except (OSError, ValueError):
+                resolved = None
+        if resolved is None and (chosen or saved):
+            candidate = script_path(chosen or saved)
             try:
                 read_script(candidate)
                 paths.append(candidate)
+                resolved = candidate
             except (OSError, ValueError):
-                candidate = None
+                resolved = None
         with QSignalBlocker(self.script_combo):
             self.script_combo.clear()
             for path in paths:
                 self.script_combo.addItem(path.stem, str(path))
                 self.script_combo.setItemData(self.script_combo.count() - 1, script_key(path), Qt.ToolTipRole)
-            index = self.script_combo.findData(str(candidate)) if candidate else -1
+            index = self.script_combo.findData(str(resolved)) if resolved else -1
             if index >= 0:
                 self.script_combo.setCurrentIndex(index)
             available = bool(paths)
@@ -1323,17 +1340,23 @@ class MainWindow(QMainWindowLog):
 
 
     def calibrate(self):
-        spec = next((spec for spec in self.registry.runnable() if spec.calibration), None)
-        if spec is None:
-            return
+        """执行角度校准。
+
+        校准只依赖前台截图与小地图朝向识别，与具体内核无关，因此使用通用内核执行。
+        """
 
         def task():
+            kernel = None
             try:
-                self.current_task = self.create_task_engine(spec.id)
-                res = align_angle_main(su=self.current_task)
+                kernel = self.current_task = create_calibration_kernel()
+                res = align_angle_main(su=kernel)
                 self.calibration_finished.emit(res)
             except Exception as e:
                 self.calibration_finished.emit(e)
+            finally:
+                # 校准用的通用内核持有截图对象，用完立即释放
+                if kernel is not None:
+                    kernel.stop()
 
         try:
             self.start_task(task)
@@ -1515,9 +1538,6 @@ class MainWindow(QMainWindowLog):
                 "start_game_on_task": self.start_game_checkbox.isChecked(),
                 "game_executable_path": self.game_path_input.text().strip(),
                 "game_focus_reclaim_wait_seconds": int(self.focus_reclaim_wait_input.text()),
-                "recording_state": self.recording_checkBox.isChecked(),
-                "recording_iron_blood": self.recording_checkBox2.isChecked(),
-                "del_record_time": int(self.recording_time_input.text()),
                 "record_event_map": self.record_event_map_checkbox.isChecked(),
                 "record_abnormal_first_plane_weight": self.record_abnormal_first_plane_weight.isChecked(),
                 "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),
