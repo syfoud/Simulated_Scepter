@@ -87,12 +87,61 @@ def _remux(source_path, target_path, cutoff=None):
     return packets
 
 
+def _has_incomplete_box(path):
+    """检查 MP4 的顶层盒是否有越界/残缺。
+
+    解码器对尾部残缺的容忍度不一致：分片 MP4 被强制结束时，最后一个 mdat 的
+    声明长度常大于文件实际剩余字节，但解复用器可能只是提前结束而不报错。
+    因此先按盒结构判定完整性，避免把带残片的录像当成「可解码」而转封装出去。
+
+    Args:
+        path: 待检查的 MP4 文件。
+
+    Returns:
+        顶层盒结构完整返回 False；存在越界/残缺盒或无法读取文件时返回 True（视为损坏）。
+    """
+    try:
+        total = os.path.getsize(path)
+        with open(path, "rb") as file:
+            offset = 0
+            while offset + 8 <= total:
+                file.seek(offset)
+                header = file.read(8)
+                if len(header) < 8:
+                    return True
+                size = int.from_bytes(header[:4], "big")
+                header_size = 8
+                if size == 1:
+                    # ISO-BMFF 的 64 位长度扩展：真实长度在接下来的 8 字节
+                    extra = file.read(8)
+                    if len(extra) < 8:
+                        return True
+                    size = int.from_bytes(extra, "big")
+                    header_size = 16
+                if size == 0:
+                    # 声明到文件末尾的最后一个盒
+                    return False
+                if size < header_size:
+                    return True
+                if offset + size > total:
+                    return True
+                offset += size
+            # 末尾不足一个盒头，说明文件在盒边界处被截断
+            return offset < total
+    except OSError:
+        return True
+
+
 def _decode_ok(path):
     """验证文件能否完整解码，返回 (是否无错, 解出的帧数)。
 
     转封装是流复制，尾部残片会被带进产物。与其猜测截断点，不如解码一遍确认：
-    只有解得干净才允许替换原文件。
+    只有解得干净才允许替换原文件。解码前先检查顶层盒结构，因为解码器对残缺尾部
+    不一定报错，只看解码结果会漏掉被强制结束的录像。
     """
+    if _has_incomplete_box(path):
+        CUS_LOGGER.debug(f"文件尾部存在残缺的顶层盒：{path}")
+        return False, 0
     frames = 0
     try:
         container = av.open(path)
@@ -156,6 +205,12 @@ def needs_conversion(path):
             size = int.from_bytes(header[:4], "big")
             if header[4:8] == b"moof":
                 return True
+            if size == 1:
+                # 64 位长度扩展：跳过后续 8 字节的真实长度再继续遍历
+                extra = file.read(8)
+                if len(extra) < 8:
+                    break
+                size = int.from_bytes(extra, "big")
             if size < 8 or offset + size > remaining:
                 # 结构不完整（例如被强制结束的录像），已扫描的部分没有分片盒
                 break
