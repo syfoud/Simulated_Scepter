@@ -82,6 +82,8 @@ def split_count_line(patch):
         (左段, 右段)；找不到斜杠时返回 None。
     """
     mask = count_mask(patch)
+    if mask.size == 0:
+        return None
     groups = []
     start = None
     for index, column in enumerate(mask.any(axis=0)):
@@ -93,6 +95,9 @@ def split_count_line(patch):
     if start is not None:
         groups.append((start, mask.shape[1]))
     for left, right in groups:
+        # 斜杠贴着裁片边缘时另一侧会是空片，不能当成有效斜杠
+        if left <= 0 or right >= mask.shape[1]:
+            continue
         rows = [np.flatnonzero(row) for row in mask[:, left:right]]
         rows = [row for row in rows if row.size]
         if not rows:
@@ -108,12 +113,17 @@ def split_count_line(patch):
             and np.median(widths) <= width * 0.35
             and abs(centers[-1] - centers[0]) >= width * 0.5
         ):
-            return patch[:, :left], patch[:, right:]
+            left_patch, right_patch = patch[:, :left], patch[:, right:]
+            if left_patch.size and right_patch.size:
+                return left_patch, right_patch
     return None
 
 
 def read_count_number(recognizer, patch):
     """识别人数裁片一侧的数字；识别结果不是一个数字时返回 None。"""
+    if patch is None or patch.size == 0 or patch.shape[0] == 0 or patch.shape[1] == 0:
+        # 斜杠切分可能得到空裁片，交给调用方回退整行识别
+        return None
     digits = re.findall(r"\d+", recognizer.ocr_one_row(patch))
     if len(digits) != 1:
         return None
