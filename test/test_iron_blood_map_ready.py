@@ -424,6 +424,34 @@ class RecordLineTest(unittest.TestCase):
         self.assertIn("开局期望:-5", line)
 
 
+class RecordingMetadataTest(unittest.TestCase):
+    """录像文件名用的元数据：内部的「本局尚未开局」占位值与 kill_record 一样按 -5 记录。"""
+
+    def make_engine(self, first_plane_weight):
+        engine = IronBloodUniverse.__new__(IronBloodUniverse)
+        engine.kill_count = 3
+        engine.elapsed_time = 23
+        engine.first_plane_weight = first_plane_weight
+        return engine
+
+    def test_unstarted_placeholder_is_recorded_as_no_init(self):
+        engine = self.make_engine(IronBloodUniverse.MAP_ANALYSIS_NOT_STARTED)
+
+        self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NO_INIT,
+                         engine.recording_metadata()["first_plane_weight"])
+
+    def test_real_reading_is_kept(self):
+        engine = self.make_engine(9.8)
+
+        self.assertEqual(9.8, engine.recording_metadata()["first_plane_weight"])
+
+    def test_failure_reason_is_kept(self):
+        engine = self.make_engine(IronBloodUniverse.MAP_ANALYSIS_NO_MATCH)
+
+        self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NO_MATCH,
+                         engine.recording_metadata()["first_plane_weight"])
+
+
 class UniverseEnteredTest(unittest.TestCase):
     """命中主页标志（big_world）即确认在模拟宇宙大世界里：此时「本局尚未开局」收束为 -5。"""
 

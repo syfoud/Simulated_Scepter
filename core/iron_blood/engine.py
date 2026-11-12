@@ -96,11 +96,18 @@ class IronBloodUniverse(AnyFateUniverse):
     def delete_reason(self):
         return f"击杀数 {self.kill_count} 未达保存阈值 {self.del_record_time}"
 
+    def recorded_first_plane_weight(self):
+        """写记录用的开局期望：内部的「本局尚未开局」占位值按「未进行开局节点图识别」处理。"""
+        if self.first_plane_weight == self.MAP_ANALYSIS_NOT_STARTED:
+            return self.MAP_ANALYSIS_NO_INIT
+        return self.first_plane_weight
+
     def recording_metadata(self):
         return {
             "battle_count": self.kill_count,
             "elapsed_time": self.elapsed_time,
-            "first_plane_weight": self.first_plane_weight,
+            # 录像文件名与 kill_record 保持一致，不写内部占位值
+            "first_plane_weight": self.recorded_first_plane_weight(),
         }
 
     def end_of_university(self):
@@ -116,8 +123,7 @@ class IronBloodUniverse(AnyFateUniverse):
         record_file = os.path.join(PATHS["backup"], "kill_record.txt")
         # 走到结算就说明本局确实发生过：即使整局都没检测到模拟宇宙大世界，也按
         # 「未进行开局节点图识别」写 -5，内部的「本局尚未开局」占位值不进记录
-        if self.first_plane_weight == self.MAP_ANALYSIS_NOT_STARTED:
-            self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
+        self.first_plane_weight = self.recorded_first_plane_weight()
         try:
             os.makedirs(PATHS["backup"], exist_ok=True)
             total_min = self.elapsed_time // 60
