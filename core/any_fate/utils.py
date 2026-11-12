@@ -722,6 +722,9 @@ class FateUtils(ScriptKernel):
             if not self.check("big_world",1801,941, threshold=0.98, fresh=True):
                 self.update_state("no_run")
                 return False
+            # 主页标志命中即确认在模拟宇宙大世界里：动作脚本里「大世界」（smartphone）排在
+            # 「可能处于模拟宇宙中」（big_world）之前，普通大世界不会走到这里
+            self.on_universe_entered()
         # loc_scr = get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True)
         # hsv = cv.cvtColor(loc_scr, cv.COLOR_BGR2HSV)  # 转HSV
         # lower = np.array([93, 120, 60])  # 90 改成120只剩箭头，但是角色移动过的印记会消失
@@ -739,6 +742,10 @@ class FateUtils(ScriptKernel):
         #     self.f_time = 0
         self.update_state("run")
         return True
+
+    def on_universe_entered(self):
+        """已确认站在模拟宇宙大世界中（is_run 每次命中主页标志都会调用），供子类登记本局状态。"""
+
     def update_debug_map(self):
         self.debug_map = deepcopy(get_minimap(self.get_screen(), radius=MINIMAP_RADIUS))
         if self.pos_map is not None:

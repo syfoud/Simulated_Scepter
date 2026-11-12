@@ -19,7 +19,7 @@ import time
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from importing import load_img
 
@@ -394,12 +394,12 @@ class RecordLineTest(unittest.TestCase):
         self.assertIn("开局期望:-2", line)
 
     def test_expectation_is_cleared_when_next_round_starts(self):
-        """本局记录写完后读数仍然保留，等下一轮开始时才重置为「还没做开局识别」。"""
+        """本局记录写完后读数仍然保留，等下一轮开始时才重置为「本局尚未开局」。"""
         self.write_record(3.5)
 
         self.assertEqual(3.5, self.last_engine.first_plane_weight)
         self.last_engine.restart_recording()
-        self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NO_INIT,
+        self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NOT_STARTED,
                          self.last_engine.first_plane_weight)
 
     def test_settlement_leaves_the_run_ready_for_the_next_round(self):
@@ -416,6 +416,47 @@ class RecordLineTest(unittest.TestCase):
 
         self.assertIn("开局期望:-5", line)
         self.assertIn("用时:0分23秒", line)
+
+    def test_unstarted_placeholder_is_recorded_as_no_init(self):
+        """结算时还停在「本局尚未开局」的极少数局，记录里仍写 -5，内部占位值不进记录。"""
+        line = self.write_record(IronBloodUniverse.MAP_ANALYSIS_NOT_STARTED)
+
+        self.assertIn("开局期望:-5", line)
+
+
+class UniverseEnteredTest(unittest.TestCase):
+    """命中主页标志（big_world）即确认在模拟宇宙大世界里：此时「本局尚未开局」收束为 -5。"""
+
+    def make_engine(self, big_world):
+        engine = IronBloodUniverse.__new__(IronBloodUniverse)
+        engine.first_plane_weight = IronBloodUniverse.MAP_ANALYSIS_NOT_STARTED
+        engine.check = Mock(return_value=big_world)
+        engine.update_state = Mock()
+        return engine
+
+    def test_big_world_turns_not_started_into_no_init(self):
+        engine = self.make_engine(big_world=True)
+
+        self.assertTrue(engine.is_run())
+
+        self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NO_INIT, engine.first_plane_weight)
+        engine.check.assert_called_once_with("big_world", 1801, 941, threshold=0.98, fresh=True)
+
+    def test_staying_outside_the_universe_keeps_not_started(self):
+        engine = self.make_engine(big_world=False)
+
+        self.assertFalse(engine.is_run())
+
+        self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NOT_STARTED, engine.first_plane_weight)
+
+    def test_known_result_is_not_overwritten(self):
+        """已经有识别结论（例如识别失败 -2）时，进入大世界不会再改它。"""
+        engine = self.make_engine(big_world=True)
+        engine.first_plane_weight = IronBloodUniverse.MAP_ANALYSIS_NO_MATCH
+
+        engine.is_run()
+
+        self.assertEqual(IronBloodUniverse.MAP_ANALYSIS_NO_MATCH, engine.first_plane_weight)
 
 
 if __name__ == "__main__":

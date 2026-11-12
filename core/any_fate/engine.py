@@ -732,7 +732,8 @@ class AnyFateUniverse(FateUtils):
     MAP_ANALYSIS_NO_MATCH = -2  # 始终匹配不到地图图标
     MAP_ANALYSIS_NO_BOSS = -3  # 匹配到图标但没有首领/头目节点
     MAP_ANALYSIS_NO_PATH = -4  # 匹配到图标但构建不出有效路径
-    MAP_ANALYSIS_NO_INIT = -5  # 本局没走到开局节点图识别（例如在模拟宇宙里直接开启权杖）
+    MAP_ANALYSIS_NO_INIT = -5  # 本局确实开始了但没有开局节点图识别（例如在模拟宇宙里直接开启权杖）
+    MAP_ANALYSIS_NOT_STARTED = -6  # 本局尚未开局：还没进入模拟宇宙大世界，也没有可判断的期望值
     MAP_ANALYSIS_STATUS = {
         MAP_ANALYSIS_OK: "识别成功",
         MAP_ANALYSIS_TIMEOUT: "等待节点图渲染稳定超时",
@@ -740,6 +741,7 @@ class AnyFateUniverse(FateUtils):
         MAP_ANALYSIS_NO_BOSS: "未匹配到首领/头目节点",
         MAP_ANALYSIS_NO_PATH: "未找到有效路径",
         MAP_ANALYSIS_NO_INIT: "本局未进行开局节点图识别",
+        MAP_ANALYSIS_NOT_STARTED: "本局尚未开局",
     }
 
     def map_match_signature(self, matches):
