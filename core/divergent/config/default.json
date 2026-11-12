@@ -1,6 +1,5 @@
 {
     "config": {
-        "angle": 1.0,
         "difficulty": 5,
         "team": "终结技",
         "speed_mode": 0,

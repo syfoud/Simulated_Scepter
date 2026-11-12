@@ -29,7 +29,8 @@ load_img()
 from core.any_fate import engine as any_fate_engine
 from core.iron_blood import engine as iron_blood_engine
 from core.iron_blood.engine import IronBloodUniverse
-from core.simulated.engine import SimulatedUniverse
+from core.any_fate.engine import AnyFateUniverse
+from core.any_fate.utils import FateUtils
 
 EMPTY = "empty"      # 节点图还没出现
 PARTIAL = "partial"  # 节点图正在逐个生成节点
@@ -104,6 +105,7 @@ def make_engine(frames):
     engine.debug = False
     engine.fail_match_count = 0
     engine.expectation_weight = 0
+    engine.plane_records = {}
     engine.nodes = None
     engine.edges = None
     engine.path = None
@@ -258,6 +260,7 @@ class InitingMapTest(unittest.TestCase):
         engine.first_plane_weight = 0
         engine.need_end = False
         engine.expectation_weight = 0
+        engine.plane_records = {}
         engine.third_plane_pause_count = 0
         engine.kill_count = 0
         engine.node_count = 3
@@ -350,6 +353,7 @@ class RecordLineTest(unittest.TestCase):
         engine.count = 447
         engine.run_start_time = 1700000000.0
         engine.first_plane_weight = weight
+        engine.plane_records = {}
         engine.need_end = True
         engine.record = False  # 关掉录像分支，只验证每局计数的重置
         engine.stop = lambda: None
@@ -363,7 +367,7 @@ class RecordLineTest(unittest.TestCase):
         with TemporaryDirectory() as backup:
             with patch.object(iron_blood_engine, "PATHS", {"backup": backup}), \
                     patch.object(iron_blood_engine, "time", clock), \
-                    patch.object(SimulatedUniverse, "end_of_university", lambda self: None), \
+                    patch.object(FateUtils, "end_of_university", lambda self: None), \
                     patch.object(any_fate_engine.AnyFateUniverse, "init_map", lambda self: None), \
                     patch.object(iron_blood_engine, "CUS_LOGGER") as logger:
                 engine.end_of_university()

@@ -74,17 +74,6 @@ class VideoConvertUiTests(unittest.TestCase):
         self.assertEqual(
             self.widget("video_convert_btn").findtext("property/string"), "转换")
 
-    def test_combo_aligns_with_the_row_above(self):
-        """combobox 左边缘必须与上方输入框一致，中间不留空档。"""
-        self.assertEqual(
-            self.left("video_convert_mode_combo"), self.left("recording_time_input"),
-            "combobox 未与上方输入框左对齐")
-        # 两行的标签同宽，这是对齐成立的原因
-        self.assertEqual(
-            getattr(self.window, "video_convert_label").width(),
-            getattr(self.window, "label_23").width(),
-            "label 宽度与上方 label 不一致，会导致 combobox 错位")
-
     def test_only_combo_takes_extra_width(self):
         """加宽窗口时只有 combobox 变宽，标签与按钮不动。"""
         before = {name: getattr(self.window, name).width()

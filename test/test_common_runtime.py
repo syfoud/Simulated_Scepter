@@ -48,7 +48,8 @@ class CommonRuntimeTests(unittest.TestCase):
             self.addCleanup(engine.stop)
             self.assertIsInstance(engine, registry.load_class("Common"))
             self.assertIs(engine.get_screen(), self.frame)
-            self.manager.set_config.assert_called_once_with(None)
+            self.manager.set_config.assert_called_once_with(engine)
+            self.assertEqual(engine.scale, 1.0)  # DPI 只记录，不参与转身距离
             self.manager.set_screen_params.assert_called_once_with(1940, 1110, 1920, 1080)
 
     def test_real_action_loop_recognizes_text_and_executes_coordinates_then_stops(self):

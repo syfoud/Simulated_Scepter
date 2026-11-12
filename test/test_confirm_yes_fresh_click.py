@@ -29,10 +29,10 @@ from unittest.mock import Mock, patch
 
 from importing import load_img
 
-# core.simulated.engine 在导入期会读图像记忆切片，需要先装载图像缓存（同其它内核测试）。
+# core.any_fate.engine 在导入期会读图像记忆切片，需要先装载图像缓存（同其它内核测试）。
 load_img()
 
-from core.simulated.engine import SimulatedUniverse
+from core.any_fate.engine import AnyFateUniverse
 
 
 def center(box):
@@ -56,7 +56,7 @@ CHEAT_TITLE_BOX = [923, 230, 996, 270]
 STALE_X, STALE_Y = 758, 824
 
 
-class _StubConfirmEngine(SimulatedUniverse):
+class _StubConfirmEngine(AnyFateUniverse):
     """只保留 confirm_yes / click_confirm_text 的真实实现，截图、OCR 与键鼠全部打桩。"""
 
     def __init__(self, rows, cached_rows=None, cheat_window=False):
@@ -80,7 +80,7 @@ class _StubConfirmEngine(SimulatedUniverse):
 
     def _ocr(self, box=None, redundancy=10, forward=0, mode=0, re_screen=False):
         """
-        按 core/simulated/ocr.py:284-300 的取帧规则返回落在这个框里的文字行：真实实现只有
+        按 core/any_fate/ocr.py:284-300 的取帧规则返回落在这个框里的文字行：真实实现只有
         ``re_screen and forward`` 才在这一刻重新截图，否则 ``forward`` 读的是缓存帧 self.screen；
         桩按 re_screen 取帧（被测调用点固定 forward=True）。
         """
@@ -97,8 +97,8 @@ class _StubConfirmEngine(SimulatedUniverse):
 class ConfirmYesTest(unittest.TestCase):
     def setUp(self):
         self.manager = Mock()
-        self.enterContext(patch("core.simulated.engine.key_mouse_manager", self.manager))
-        self.logger = self.enterContext(patch("core.simulated.engine.CUS_LOGGER", Mock()))
+        self.enterContext(patch("core.any_fate.engine.key_mouse_manager", self.manager))
+        self.logger = self.enterContext(patch("core.any_fate.engine.CUS_LOGGER", Mock()))
 
     def make_engine(self, rows, **kwargs):
         self.engine = _StubConfirmEngine(rows, **kwargs)
