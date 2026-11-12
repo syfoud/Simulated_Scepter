@@ -1,5 +1,6 @@
 """同一张地图的连续暂离计数：累计方式、复位时机与录像保留。"""
 
+import time
 import unittest
 from pathlib import Path
 from threading import Lock
@@ -238,6 +239,8 @@ class ProgramStopVideoTest(unittest.TestCase):
         engine.opt = {}
         engine.elapsed_time = 0
         engine.first_plane_weight = -5
+        engine.state = "run"
+        engine.run_start_time = time.time()
         engine.recorder = Mock()
         engine.save_screen = Mock()
         engine.map_thread = object()
@@ -264,6 +267,29 @@ class ProgramStopVideoTest(unittest.TestCase):
         self.run_stop(engine)
 
         self.assertTrue(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
+
+    def test_program_stop_computes_elapsed_time_for_an_unsettled_round(self):
+        """本局没结算就停止（手动停止、异常退出等）：用时按本局开始时间补算，不写 0 分 0 秒。"""
+        engine = self.stop_engine(keep_round_video=False)
+        engine.run_start_time = time.time() - 3925
+
+        self.run_stop(engine)
+
+        self.assertAlmostEqual(3925, engine.elapsed_time, delta=2)
+        self.assertAlmostEqual(
+            3925, engine.recorder.stop_recording.call_args.kwargs["elapsed_time"], delta=2)
+
+    def test_program_stop_keeps_the_elapsed_time_of_a_settled_round(self):
+        """已结算时用时已算好，此时 run_start_time 已指向下一局，停止不能把它覆盖成 0。"""
+        engine = self.stop_engine(keep_round_video=False)
+        engine.state = "restart"
+        engine.elapsed_time = 600
+        engine.run_start_time = time.time()
+
+        self.run_stop(engine)
+
+        self.assertEqual(600, engine.elapsed_time)
+        self.assertEqual(600, engine.recorder.stop_recording.call_args.kwargs["elapsed_time"])
 
 
 if __name__ == "__main__":

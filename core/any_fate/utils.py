@@ -2058,6 +2058,11 @@ class FateUtils(ScriptKernel):
         self._stop = 1
         key_mouse_manager.stop()
         if self.record and self.bveerelbcpgyqan:
+            # 本局没走到结算就停止时，elapsed_time 还是 restart_recording 留下的 0；
+            # 按本局开始时间补算，否则录像文件名与「演算时间过长」判断都会拿 0 去算。
+            # 结算后 run_start_time 已指向下一局、用时也已由结算算出，此时不能覆盖。
+            if self.state != "restart":
+                self.elapsed_time = int(time.time() - self.run_start_time)
             CUS_LOGGER.info("以「爱」的名义，她将逝去的一切尽数珍藏……直到世间的尽头……")
             try:
                 self.stop_round_recording(manual_stop=True)
