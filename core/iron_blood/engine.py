@@ -42,8 +42,9 @@ class IronBloodUniverse(AnyFateUniverse):
         self.my_fate = FATES.index(self.fate)
         self.tk = text_keys(self.my_fate)
         self.expectation_weight = 0 # 地图路径期望
-        # 保存开局期望。-5 表示本局还没走到开局节点图识别，直接开局的局会以这个值写入记录
-        self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
+        # 保存开局期望。-6 表示本局还没开局（上一局结算后到开局节点图出现之前都是这个值）；
+        # 进入模拟宇宙大世界后改为 -5，表示这一局确实开始了、但没有开局节点图可识别（例如在模拟宇宙里直接开局）
+        self.first_plane_weight = self.MAP_ANALYSIS_NOT_STARTED
         # 记录进入位面的时间和纯快照击杀数（不含前置 boss 补正，靠计算时统一推导）
         self.plane_records = {}   # {1/2/3: {"start_time": 时刻, "base_kills": 快照击杀}}
         # 铁血战士使用毁灭专属事件优先级
@@ -55,8 +56,15 @@ class IronBloodUniverse(AnyFateUniverse):
         super().restart_recording()
         self.elapsed_time = 0  # 重置演算持续时间
         self.kill_count = 0
-        self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
+        # 上一局记录已写完，回到「本局尚未进入过模拟宇宙大世界」：此刻录像已切到下一局，而结算界面到
+        # 开局节点图之间还剩十几秒，这段空录像不该被当成开局期望异常
+        self.first_plane_weight = self.MAP_ANALYSIS_NOT_STARTED
         self.plane_records = {}
+
+    def on_universe_entered(self):
+        """已进入模拟宇宙大世界：本局确实开始了，把「尚未开局」收束为「未进行开局节点图识别」。"""
+        if self.first_plane_weight == self.MAP_ANALYSIS_NOT_STARTED:
+            self.first_plane_weight = self.MAP_ANALYSIS_NO_INIT
 
     def save_threshold(self):
         return self.del_record_time
@@ -77,19 +85,29 @@ class IronBloodUniverse(AnyFateUniverse):
             threshold = self.opt.get("recording_keep_long_run_threshold", 1.2)
             if minutes_divide_kill >= threshold:
                 reasons.append(f"演算时间过长（{minutes_divide_kill:.2f} 分钟/杀，阈值 {threshold}）")
+        # 「尚未开局」（-6）只是占位值，不是异常结论：上一局结算后到开局节点图出现之间
+        # 手动暂停会命中它，此时并没有需要复盘的开局
         if (self.debug and self.opt.get("record_abnormal_first_plane_weight", False)
-                and self.first_plane_weight <= 0):
+                and self.first_plane_weight <= 0
+                and self.first_plane_weight != self.MAP_ANALYSIS_NOT_STARTED):
             reasons.append(f"开局期望异常（{self.first_plane_weight}）")
         return reasons
 
     def delete_reason(self):
         return f"击杀数 {self.kill_count} 未达保存阈值 {self.del_record_time}"
 
+    def recorded_first_plane_weight(self):
+        """写记录用的开局期望：内部的「本局尚未开局」占位值按「未进行开局节点图识别」处理。"""
+        if self.first_plane_weight == self.MAP_ANALYSIS_NOT_STARTED:
+            return self.MAP_ANALYSIS_NO_INIT
+        return self.first_plane_weight
+
     def recording_metadata(self):
         return {
             "battle_count": self.kill_count,
             "elapsed_time": self.elapsed_time,
-            "first_plane_weight": self.first_plane_weight,
+            # 录像文件名与 kill_record 保持一致，不写内部占位值
+            "first_plane_weight": self.recorded_first_plane_weight(),
         }
 
     def end_of_university(self):
@@ -103,6 +121,9 @@ class IronBloodUniverse(AnyFateUniverse):
         plane_str = self.format_plane_detail(now)
         super().end_of_university()
         record_file = os.path.join(PATHS["backup"], "kill_record.txt")
+        # 走到结算就说明本局确实发生过：即使整局都没检测到模拟宇宙大世界，也按
+        # 「未进行开局节点图识别」写 -5，内部的「本局尚未开局」占位值不进记录
+        self.first_plane_weight = self.recorded_first_plane_weight()
         try:
             os.makedirs(PATHS["backup"], exist_ok=True)
             total_min = self.elapsed_time // 60

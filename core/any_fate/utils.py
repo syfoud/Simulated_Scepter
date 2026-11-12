@@ -722,6 +722,9 @@ class FateUtils(ScriptKernel):
             if not self.check("big_world",1801,941, threshold=0.98, fresh=True):
                 self.update_state("no_run")
                 return False
+            # 主页标志命中即确认在模拟宇宙大世界里：动作脚本里「大世界」（smartphone）排在
+            # 「可能处于模拟宇宙中」（big_world）之前，普通大世界不会走到这里
+            self.on_universe_entered()
         # loc_scr = get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True)
         # hsv = cv.cvtColor(loc_scr, cv.COLOR_BGR2HSV)  # 转HSV
         # lower = np.array([93, 120, 60])  # 90 改成120只剩箭头，但是角色移动过的印记会消失
@@ -739,6 +742,10 @@ class FateUtils(ScriptKernel):
         #     self.f_time = 0
         self.update_state("run")
         return True
+
+    def on_universe_entered(self):
+        """已确认站在模拟宇宙大世界中（is_run 每次命中主页标志都会调用），供子类登记本局状态。"""
+
     def update_debug_map(self):
         self.debug_map = deepcopy(get_minimap(self.get_screen(), radius=MINIMAP_RADIUS))
         if self.pos_map is not None:
@@ -2051,6 +2058,11 @@ class FateUtils(ScriptKernel):
         self._stop = 1
         key_mouse_manager.stop()
         if self.record and self.bveerelbcpgyqan:
+            # 本局没走到结算就停止时，elapsed_time 还是 restart_recording 留下的 0；
+            # 按本局开始时间补算，否则录像文件名与「演算时间过长」判断都会拿 0 去算。
+            # 结算后 run_start_time 已指向下一局、用时也已由结算算出，此时不能覆盖。
+            if self.state != "restart":
+                self.elapsed_time = int(time.time() - self.run_start_time)
             CUS_LOGGER.info("以「爱」的名义，她将逝去的一切尽数珍藏……直到世间的尽头……")
             try:
                 self.stop_round_recording(manual_stop=True)

@@ -33,7 +33,7 @@ def script_fixture(kernel_id, path):
                  "load_settings": Mock(return_value={}), "set_forground": Mock(),
                  "get_window_kind": lambda hwnd: "local"}
     definitions = [
-        ("any_fate/utils.py", "FateUtils", {"is_run", "start", "route"}),
+        ("any_fate/utils.py", "FateUtils", {"is_run", "on_universe_entered", "start", "route"}),
         ("any_fate/engine.py", "AnyFateUniverse", {"normal", "auto_battle"}),
         ("iron_blood/engine.py", "IronBloodUniverse", set()),
         ("finger_snap/engine.py", "FingerSnap", set()),

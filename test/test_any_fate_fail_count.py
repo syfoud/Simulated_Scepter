@@ -1,5 +1,6 @@
 """同一张地图的连续暂离计数：累计方式、复位时机与录像保留。"""
 
+import time
 import unittest
 from pathlib import Path
 from threading import Lock
@@ -197,6 +198,30 @@ class VideoRetentionTest(unittest.TestCase):
             ["手动停止时已有击杀 3"],
         )
 
+    def make_abnormal_opening_engine(self, first_plane_weight):
+        engine = self.make_iron_blood(keep_round_video=False)
+        engine.debug = 1
+        engine.opt = {"record_abnormal_first_plane_weight": True}
+        engine.first_plane_weight = first_plane_weight
+        return engine
+
+    def test_unstarted_round_is_not_an_abnormal_opening(self):
+        """上一局结算后、新一局开局节点图出现前手动暂停：-6 不是保留理由，空录像照常删除。"""
+        engine = self.make_abnormal_opening_engine(IronBloodUniverse.MAP_ANALYSIS_NOT_STARTED)
+
+        engine.stop_round_recording(manual_stop=True)
+
+        self.assertEqual([], engine.keep_video_reasons(manual_stop=True))
+        self.assertTrue(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
+
+    def test_started_round_without_opening_analysis_still_keeps_the_video(self):
+        """已在模拟宇宙大世界里却没有开局节点图（-5）：仍按开局期望异常保留录像。"""
+        engine = self.make_abnormal_opening_engine(IronBloodUniverse.MAP_ANALYSIS_NO_INIT)
+
+        engine.stop_round_recording(manual_stop=True)
+
+        self.assertFalse(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
+
 
 class ProgramStopVideoTest(unittest.TestCase):
     """程序结束时停止录像也遵守保留标记（铁血在本局击杀数为 0 时默认会删视频）。"""
@@ -214,6 +239,8 @@ class ProgramStopVideoTest(unittest.TestCase):
         engine.opt = {}
         engine.elapsed_time = 0
         engine.first_plane_weight = -5
+        engine.state = "run"
+        engine.run_start_time = time.time()
         engine.recorder = Mock()
         engine.save_screen = Mock()
         engine.map_thread = object()
@@ -240,6 +267,29 @@ class ProgramStopVideoTest(unittest.TestCase):
         self.run_stop(engine)
 
         self.assertTrue(engine.recorder.stop_recording.call_args.kwargs["delete_video"])
+
+    def test_program_stop_computes_elapsed_time_for_an_unsettled_round(self):
+        """本局没结算就停止（手动停止、异常退出等）：用时按本局开始时间补算，不写 0 分 0 秒。"""
+        engine = self.stop_engine(keep_round_video=False)
+        engine.run_start_time = time.time() - 3925
+
+        self.run_stop(engine)
+
+        self.assertAlmostEqual(3925, engine.elapsed_time, delta=2)
+        self.assertAlmostEqual(
+            3925, engine.recorder.stop_recording.call_args.kwargs["elapsed_time"], delta=2)
+
+    def test_program_stop_keeps_the_elapsed_time_of_a_settled_round(self):
+        """已结算时用时已算好，此时 run_start_time 已指向下一局，停止不能把它覆盖成 0。"""
+        engine = self.stop_engine(keep_round_video=False)
+        engine.state = "restart"
+        engine.elapsed_time = 600
+        engine.run_start_time = time.time()
+
+        self.run_stop(engine)
+
+        self.assertEqual(600, engine.elapsed_time)
+        self.assertEqual(600, engine.recorder.stop_recording.call_args.kwargs["elapsed_time"])
 
 
 if __name__ == "__main__":
