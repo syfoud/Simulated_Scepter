@@ -111,6 +111,14 @@ _KEYBOARD_KEY_NAMES = {
 # 程序热键在提示文案里的动作名
 HOTKEY_LABELS = {"stop": "停止任务", "test": "截图测试", "print": "打印坐标"}
 
+# 通用设置里可选的截图方式：界面文案与配置文件里的 capture_backend 取值一一对应
+CAPTURE_BACKEND_CHOICES = (
+    ("自动（前台整屏 / 后台 PrintWindow）", "auto"),
+    ("前台整屏截屏（BitBlt）", "screen"),
+    ("后台窗口截屏（PrintWindow）", "printwindow"),
+    ("后台窗口截屏（WGC，复用录屏）", "wgc"),
+)
+
 
 def to_keyboard_key_name(name):
     """把界面上的键名转成 keyboard 库认识的键名；空字符串表示该热键不使用。"""
@@ -737,6 +745,11 @@ class MainWindow(QMainWindowLog):
         self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", False))
         self.recording_keep_long_run_threshold_input.setText(str(data.get("recording_keep_long_run_threshold", 1.2)))
         self.recording_label_checkbox.setChecked(data.get("record_add_label", False))
+        for label, value in CAPTURE_BACKEND_CHOICES:
+            self.capture_backend_combo.addItem(label, value)
+        capture_index = self.capture_backend_combo.findData(data.get("capture_backend", "auto"))
+        self.capture_backend_combo.setCurrentIndex(max(0, capture_index))
+        self.background_mode_checkbox.setChecked(data.get("background_mode", False))
         self.check_model_file()
 
         self.cleanup_section = CleanupSettingsSection(self.advanced_settings_main_page)
@@ -1544,6 +1557,8 @@ class MainWindow(QMainWindowLog):
                 "start_game_on_task": self.start_game_checkbox.isChecked(),
                 "game_executable_path": self.game_path_input.text().strip(),
                 "game_focus_reclaim_wait_seconds": int(self.focus_reclaim_wait_input.text()),
+                "background_mode": self.background_mode_checkbox.isChecked(),
+                "capture_backend": self.capture_backend_combo.currentData() or "auto",
                 "record_event_map": self.record_event_map_checkbox.isChecked(),
                 "record_abnormal_first_plane_weight": self.record_abnormal_first_plane_weight.isChecked(),
                 "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),

@@ -67,6 +67,8 @@
         }
     },
     "debug": false,
+    "background_mode": false,
+    "capture_backend": "auto",
     "record_event_map": false,
     "record_abnormal_first_plane_weight": false,
     "recording_keep_long_run": false,

@@ -52,6 +52,26 @@ class CommonRuntimeTests(unittest.TestCase):
             self.assertEqual(engine.scale, 1.0)  # DPI 只记录，不参与转身距离
             self.manager.set_screen_params.assert_called_once_with(1940, 1110, 1920, 1080)
 
+    def test_background_mode_skips_foreground_and_uses_window_capture(self):
+        """后台模式不抢前台、按窗口找游戏，并用窗口捕获替代整屏截屏。"""
+        window = GameWindow(1, "local", "game", "UnityWndClass", 1920, 1080)
+        capture = Mock()
+        with patch.object(runtime, "load_settings", return_value={"background_mode": True}), \
+                patch.object(runtime, "find_game_window", return_value=window), \
+                patch.object(runtime, "set_forground") as set_forground, \
+                patch.object(runtime, "get_foreground_game_window") as foreground_window, \
+                patch.object(runtime, "create_window_capture", return_value=capture) as factory:
+            engine = runtime.ScriptKernel()
+            self.addCleanup(engine.stop)
+
+        self.assertTrue(engine.background_mode)
+        self.assertEqual(engine.capture_backend, "printwindow")
+        set_forground.assert_not_called()
+        foreground_window.assert_not_called()
+        factory.assert_called_once_with("printwindow", 1, 1920, 1080)
+        self.assertIs(engine.sct, capture)
+        self.manager.set_background_keyboard.assert_called_once_with(1)
+
     def test_real_action_loop_recognizes_text_and_executes_coordinates_then_stops(self):
         engine = self.kernel()
         engine.ts.find_with_box.return_value = [{"raw_text": "确认", "box": [10, 10, 20, 20]}]

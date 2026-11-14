@@ -1231,6 +1231,34 @@
                        </item>
                       </layout>
                      </item>
+                     <item>
+                      <widget class="QCheckBox" name="background_mode_checkbox">
+                       <property name="text">
+                        <string>后台模式（截图与按键不抢前台，允许窗口被遮挡）</string>
+                       </property>
+                       <property name="toolTip">
+                        <string>开启后任务启动不再抢前台，截图改走窗口捕获、按键改投窗口消息。鼠标点击、拖动和滚轮仍需游戏在前台，暂不支持后台；窗口不能最小化。</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <layout class="QHBoxLayout" name="capture_backend_row">
+                       <item>
+                        <widget class="QLabel" name="capture_backend_label">
+                         <property name="text">
+                          <string>截图方式</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item stretch="1">
+                        <widget class="QComboBox" name="capture_backend_combo">
+                         <property name="toolTip">
+                          <string>前台整屏 BitBlt 兼容性最好；“自动”在前台用整屏截屏、后台模式用 PrintWindow；PrintWindow 与 WGC 都能在窗口被遮挡时取画面。</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </item>
                     </layout>
                    </widget>
                   </item>

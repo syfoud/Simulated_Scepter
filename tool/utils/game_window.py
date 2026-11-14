@@ -111,6 +111,13 @@ def get_client_screen_rect(hwnd: int) -> tuple[int, int, int, int]:
     return screen_left, screen_top, screen_right, screen_bottom
 
 
+def get_client_size(hwnd: int) -> tuple[int, int]:
+    """Return the client size in physical pixels."""
+    with _physical_pixel_context():
+        left, top, right, bottom = win32gui.GetClientRect(hwnd)
+    return right - left, bottom - top
+
+
 def _candidate_score(window: GameWindow, z_order: int) -> tuple[int, int, int]:
     supported = int(
         is_supported_resolution(

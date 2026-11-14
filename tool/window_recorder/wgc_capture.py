@@ -63,6 +63,8 @@ class WgcCapture:
         self._interval = interval
         self._lock = threading.Lock()
         self._latest = None
+        # 最近一次已被读走的画面；取帧方需要“没有新画面时沿用上一帧”时读它
+        self._last_frame = None
         self._copied_at = 0.0
         self._closed = False
         self._control = None
@@ -112,6 +114,26 @@ class WgcCapture:
         with self._lock:
             latest = self._latest
             self._latest = None
+        if latest is None:
+            raise ValueError("尚未收到窗口画面")
+        return latest
+
+    def read_latest(self):
+        """取最近一帧画面；没有新画面时返回上一次读到的画面。
+
+        录制要判重，读不到新帧算异常；识别只需要“当前画面”，可以沿用上一帧。
+
+        Returns:
+            height x width x 3 的 BGR 数组。
+
+        Raises:
+            ValueError: 尚未收到任何画面（捕获会话已关闭或从未开始）。
+        """
+        with self._lock:
+            if self._latest is not None:
+                self._last_frame = self._latest
+                self._latest = None
+            latest = self._last_frame
         if latest is None:
             raise ValueError("尚未收到窗口画面")
         return latest
