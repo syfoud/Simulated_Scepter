@@ -27,7 +27,7 @@ def show_unlock_dialog(parent):
     # 标题
     title_label = QLabel("🔓 高级用户功能解锁")
     title_font = QFont()
-    title_font.setPointSize(16)
+    title_font.setPixelSize(21)
     title_font.setBold(True)
     title_label.setFont(title_font)
     title_label.setAlignment(Qt.AlignCenter)
