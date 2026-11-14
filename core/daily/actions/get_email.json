@@ -2,14 +2,12 @@
     {
         "name": "打开邮件",
         "trigger": {
-            "threshold": 0.96,
-            "text": "委托",
-            "box": [
-                1709,
-                396,
-                1755,
-                421
-            ]
+            "threshold": 0.9,
+            "photo": "red_flag",
+            "pos": {
+                "x": 1888,
+                "y": 253
+            }
         },
         "actions": [
             {
