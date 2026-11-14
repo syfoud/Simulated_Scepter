@@ -1833,9 +1833,13 @@ class MainWindow(QMainWindowLog):
 **使用本软件即表示您已阅读并同意以上条款。**
 """
 
-def main(show, startup_args=None):
-    if startup_args is None:
-        startup_args = parse_startup_args([])
+def main(show):
+    # 打包版不支持启动参数，避免双击或外部启动参数触发误导性提示。
+    startup_args = (
+        parse_startup_args([])
+        if getattr(sys, "frozen", False)
+        else parse_startup_args()
+    )
     root_path = os.path.normcase(os.path.realpath(PATHS["root"]))
     mutex_name = f"Local\\Simulated_Scepter_{hashlib.sha256(root_path.encode('utf-8')).hexdigest()}"
     mutex_handle = ctypes.windll.kernel32.OpenMutexW(0x00100000, False, mutex_name)
@@ -1851,19 +1855,22 @@ def main(show, startup_args=None):
             return False
 
 
-    # 以管理员权限重新运行程序，使用pythonw避免命令行窗口
+    # 以管理员权限重新运行程序
     def run_as_admin():
+        script = os.path.abspath(__file__)
+        base_executable = getattr(sys, "_base_executable", "")
+        if (not getattr(sys, "frozen", False) and base_executable
+                and os.path.normcase(base_executable) != os.path.normcase(sys.executable)):
+            # uv 生成的 venv python.exe 是无签名、无版本信息的转发器，直接提权它会触发
+            # Windows 的发布者校验，UAC 框要等十秒左右才出现；改用微软签名的 cmd.exe
+            # 代启动同一个解释器和脚本，命令行参数原样透传。
+            host = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe")
+            arguments = f'/d /s /c "{subprocess.list2cmdline([sys.executable, script, *sys.argv[1:]])}"'
+        else:
+            host = sys.executable
+            arguments = subprocess.list2cmdline([script, *sys.argv[1:]])
         try:
-            result = ctypes.windll.shell32.ShellExecuteW(
-                None,
-                "runas",
-                sys.executable,
-                subprocess.list2cmdline(
-                    [os.path.abspath(__file__), *sys.argv[1:]]
-                ),
-                None,
-                show
-            )
+            result = ctypes.windll.shell32.ShellExecuteW(None, "runas", host, arguments, None, show)
             if result <= 32:
                 CUS_LOGGER.error("请求管理员权限启动程序失败，ShellExecuteW 返回值：%s", result)
             return result > 32
@@ -1920,12 +1927,6 @@ def main(show, startup_args=None):
             print(f"异常退出，进程已结束,退出代码:{e.code}")
             input("按Enter键退出...")
 if __name__ == "__main__":
-    # 打包版不支持启动参数，避免双击或外部启动参数触发误导性提示。
-    startup_args = (
-        parse_startup_args([])
-        if getattr(sys, "frozen", False)
-        else parse_startup_args()
-    )
     fault_log_file = open("logs/crash_dump.txt", "w", encoding="utf-8")
     faulthandler.enable(file=fault_log_file)
-    main(1, startup_args)
+    main(1)
