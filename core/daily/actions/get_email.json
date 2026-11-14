@@ -19,6 +19,22 @@
         ]
     },
     {
+        "name": "没有邮件奖励",
+        "trigger": {
+            "threshold": 0.9,
+            "text": "委托",
+            "box": [
+                1709,
+                396,
+                1753,
+                421
+            ]
+        },
+        "actions": [
+            "esc_end"
+        ]
+    },
+    {
         "name": "点击空白",
         "trigger": {
             "threshold": 0.96,
