@@ -619,6 +619,77 @@ class FateUtils(ScriptKernel):
         self.ang = ang
         ds=get_dis(rel_loc, target_loc)
         return ds
+
+    def _nearest_enemy(self):
+        """返回小地图上离玩家最近的敌人红点坐标。
+
+        坐标取正北朝上的旋转小地图（rotation=True），与 update_direction_data(mode=2)
+        使用的目标坐标口径一致；该小地图会遮掉中心以外的区域，只能找到一定距离内的红点。
+
+        Returns:
+            (x, y) 小地图像素坐标；小地图上没有红点时返回 None。
+        """
+        red = [47, 47, 232]
+        minimap = get_minimap(self.screen, radius=MINIMAP_RADIUS, copy=True, rotation=True)
+        rd = np.where(np.sum((minimap - red) ** 2, axis=-1) <= self.red_threshold)
+        if not rd[0].shape[0]:
+            return None
+        points = list(zip(rd[1], rd[0]))
+        return min(points, key=lambda point: get_dis(point, (93, 93)))
+
+    def face_enemy(self):
+        """转向最近的敌人并靠近到攻击距离内，让秘技和普攻真正朝向敌人。
+
+        转视角只改变镜头方向，角色朝向要按下移动键后才会跟随；不轻点 w 直接出手会打向
+        角色原本的朝向。敌人已离开地图记录点位、红点距小地图中心超过 28 像素时，先按住 w
+        接近到 22 像素以内，再重新识别一次红点并二次转向。
+
+        返回 True 时角色已面向敌人，可以直接释放秘技或普攻；返回 False 表示本次没有完成
+        转向（小地图上没有红点、方向识别失败，或接近途中收到停止请求），调用方沿用原来的
+        出手逻辑。
+
+        Returns:
+            True 表示已找到敌人红点并完成转向；否则返回 False。
+        """
+        self.get_screen()
+        target = self._nearest_enemy()
+        if target is None:
+            return False
+        ds = self.update_direction_data(mode=2, target=(target, 3))
+        if ds is False:
+            return False
+        if ds > 28:
+            # 冲刺约 12、步行约 8 小地图像素/秒；22 像素以内视为进入攻击距离
+            hold = (ds - 22.0) / (12 if self.is_sprinting else 8)
+            CUS_LOGGER.debug(f"敌人距小地图中心{ds}像素，按住 w 接近{hold}秒")
+            key_mouse_manager.keyDown("move_w")
+            try:
+                # keyDown 只是入队：先等前面的转向执行完、角色真正开始移动再开始计时
+                key_mouse_manager.wait()
+                now = time.time()
+                while time.time() - now < hold and not self._stop:
+                    self.get_screen()
+                    # 瞄准红叉出现说明已经贴近敌人，不必再按距离走满
+                    if predict(self.screen, enemy=True, item=False)["enemy"] is not None:
+                        CUS_LOGGER.info(f"或者，兑现命运的不止他们。只是{factor}已记不清了。")
+                        if self.debug:
+                            self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "kill"))
+                        break
+            finally:
+                # 异常时也要松开 w，避免角色一直向前跑（外部停止时队列会被键鼠管理器清空）
+                key_mouse_manager.keyUp("move_w")
+                key_mouse_manager.wait()
+            if self._stop:
+                return False
+            self.get_screen()
+            target = self._nearest_enemy()
+            if target is not None:
+                self.update_direction_data(mode=2, target=(target, 3))
+        # 轻点 w，角色朝向才会跟随镜头；此后释放秘技/普攻才会打向敌人
+        key_mouse_manager.press("move_w")
+        key_mouse_manager.wait()
+        return True
+
     # 寻路函数
 
 
@@ -1348,33 +1419,8 @@ class FateUtils(ScriptKernel):
                     rd = np.where(
                         np.sum((mask_minimap_outside(get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True), center_radius=80) - red) ** 2, axis=-1) <= self.red_threshold)
                     if not rd[0].shape[0]:
-                        rd = np.where(np.sum((get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True,rotation=True) - red) ** 2, axis=-1) <= self.red_threshold)
-                        if rd[0].shape[0] > 0:
-                            # 仅检测存在性，不需要排序，使用第一个检测到的点
-                            target = ((rd[1][0], rd[0][0]), 3)
-                            self.get_screen()
-                            ds=self.update_direction_data(mode=2,target=target)
-                            if not ds:
-                                break
-                        else:
-                            #没扫到红点，却有z的怪物标识，那红点可能被蓝色箭头挡住了，说明很近了
-                            ds=0
-                        if ds>28:
-                            key_mouse_manager.keyDown("move_w")
-                            if self.is_sprinting:
-                                wait_time = (ds - 22.0) / 12
-                                CUS_LOGGER.debug(f"距离目标{ds},太远，等待{(ds - 22.0) / 12}秒(冲刺)")
-                            else:
-                                wait_time = (ds - 22.0) / 8
-                                CUS_LOGGER.debug(f"距离目标{ds},太远，等待{(ds - 22.0) / 8}秒")
-                            now=time.time()
-                            while time.time()-now<wait_time:
-                                self.get_screen()
-                                if predict(self.screen, enemy=True, item=False)['enemy'] is not None:
-                                    CUS_LOGGER.info(f"或者，兑现命运的不止他们。只是{factor}已记不清了。")
-                                    if self.debug:
-                                        self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "kill"))
-                                    break
+                        # 看不到遇敌红圈：敌人不在旁边，转向小地图红点并靠近后出手
+                        self.face_enemy()
 
                     if self.quan:
                         key_mouse_manager.keyUp("move_w")
@@ -1731,18 +1777,7 @@ class FateUtils(ScriptKernel):
                 self.target_type = 0
                 CUS_LOGGER.info(f"为了不让最黑暗的命运降临，{factor}必须如此。")
             CUS_LOGGER.info(f"{factor}将以这数亿颗火种点燃的烈阳，与「毁灭」的神明和祂的走卒，一同燃烧殆尽……")
-            local_screen = get_minimap(self.screen, radius=MINIMAP_RADIUS, copy=True, rotation=True)
-            red = [47, 47, 232]
-            rd = np.where(np.sum((local_screen - red) ** 2, axis=-1) <= self.red_threshold)
-            if rd[0].shape[0] > 0:
-                enemy_coords = []
-                for i in range(len(rd[0])):
-                    enemy_coords.append((rd[1][i], rd[0][i]))
-                # 按距离self.now_loc排序，最近的在前面
-                enemy_coords.sort(key=lambda coord: get_dis(coord, (93, 93)))
-                # 选择最近的敌人作为目标
-                target = (tuple(enemy_coords[0]), 3)
-                self.update_direction_data(mode=2, target=target)
+            self.face_enemy()
             if self.quan:
                 key_mouse_manager.keyUp("move_w")
                 skill_num = match_skill_numbers_in_region(self.get_screen())
