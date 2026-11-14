@@ -1855,19 +1855,22 @@ def main(show):
             return False
 
 
-    # 以管理员权限重新运行程序，使用pythonw避免命令行窗口
+    # 以管理员权限重新运行程序
     def run_as_admin():
+        script = os.path.abspath(__file__)
+        base_executable = getattr(sys, "_base_executable", "")
+        if (not getattr(sys, "frozen", False) and base_executable
+                and os.path.normcase(base_executable) != os.path.normcase(sys.executable)):
+            # uv 生成的 venv python.exe 是无签名、无版本信息的转发器，直接提权它会触发
+            # Windows 的发布者校验，UAC 框要等十秒左右才出现；改用微软签名的 cmd.exe
+            # 代启动同一个解释器和脚本，命令行参数原样透传。
+            host = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "cmd.exe")
+            arguments = f'/d /s /c "{subprocess.list2cmdline([sys.executable, script, *sys.argv[1:]])}"'
+        else:
+            host = sys.executable
+            arguments = subprocess.list2cmdline([script, *sys.argv[1:]])
         try:
-            result = ctypes.windll.shell32.ShellExecuteW(
-                None,
-                "runas",
-                sys.executable,
-                subprocess.list2cmdline(
-                    [os.path.abspath(__file__), *sys.argv[1:]]
-                ),
-                None,
-                show
-            )
+            result = ctypes.windll.shell32.ShellExecuteW(None, "runas", host, arguments, None, show)
             if result <= 32:
                 CUS_LOGGER.error("请求管理员权限启动程序失败，ShellExecuteW 返回值：%s", result)
             return result > 32
