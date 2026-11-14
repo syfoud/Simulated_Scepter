@@ -15,12 +15,14 @@ import win32com.client
 from core.common.engine import StateKernel
 from core.common.ocr import get_global_my_ts
 from route import PATHS
+from tool import GLOBAL
 from tool.calibration import get_multi
 from tool.GLOBAL import factor, get_global_stop_flag, key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.mask import crop_region, quad_box, region_center_point
 from tool.public_ocr import merge_text
 from tool.screenshot import Screen
+from tool.settings import load_settings
 from tool.utils.game_window import (
     get_client_screen_rect,
     get_foreground_game_window,
@@ -56,6 +58,9 @@ class ScriptKernel(StateKernel):
 
     def __init__(self):
         super().__init__()
+        # 全局调试模式来自用户配置（gui_settings.json 的 debug）：日志过滤与调试遮罩都按它开关。
+        # 必须在这里就设置，等待游戏窗口期间也该按正确的调试模式运行。
+        GLOBAL.DEBUG_MODE = bool(load_settings().get("debug", False))
         self._stop = False
         self.sct = None
         self._screen_lock = Lock()
