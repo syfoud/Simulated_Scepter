@@ -5,9 +5,10 @@ import time
 import cv2 as cv
 import numpy as np
 
+from tool.debug_overlay import publish_match
 from tool.GLOBAL import factor, key_mouse_manager
 from tool.log import CUS_LOGGER, log_emitter
-from tool.mask import MASK, crop_region, region_center_point
+from tool.mask import MASK, crop_region, region_center_point, union_boxes
 from tool.public_ocr import load_actions, merge_text
 from tool.utils.image_tool import find_image_by_name
 
@@ -59,12 +60,17 @@ class StateKernel:
                 trigger = action["trigger"]
                 condition = trigger.get("condition")
                 text_trigger = bool(trigger.get("text"))
+                # 本次命中的位置：文本触发取识别框，图片触发取 check/click_target 记下的匹配框，
+                # 纯状态触发没有位置
+                box = None
                 if text_trigger:
                     text = self.ts.find_with_box(trigger["box"], redundancy=trigger.get("redundancy", 30))
                     matched = skip_check or (
                         (condition is None or condition == self.state)
                         and text and trigger["text"] in merge_text(text)
                     )
+                    if text:
+                        box = union_boxes([item["box"] for item in text])
                 elif trigger.get("photo"):
                     if condition is not None and condition != self.state:
                         continue
@@ -86,6 +92,7 @@ class StateKernel:
                             find_image_by_name(trigger["photo"]),
                             threshold=trigger.get("threshold", 0.9), flag=False, click=False,
                         )
+                    box = self.tb
                 elif trigger.get("state_only"):
                     matched = condition is None or condition == self.state
                 else:
@@ -94,6 +101,8 @@ class StateKernel:
                     self.latched_events.discard(action["name"])
                     continue
                 name = action["name"]
+                # 调试遮罩：识别到什么状态就画在游戏画面上，即使这次被 once/interval 挡下也画
+                publish_match(name, box)
                 if trigger.get("once"):
                     if name in self.latched_events:
                         continue
@@ -184,13 +193,14 @@ class StateKernel:
             if result["max_val"] > threshold:
                 CUS_LOGGER.debug(f"全局图像匹配度{result['max_val']}")
                 points = self.calculated(result, target.shape)
-                if click:
-                    # 全屏匹配的 max_loc 已是绝对坐标，配上模板尺寸就是匹配框
-                    box = [int(result["max_loc"][0]),
+                # 全屏匹配的 max_loc 已是绝对坐标，配上模板尺寸就是匹配框；
+                # 点击日志和调试遮罩都读这个落框
+                self.tb = [int(result["max_loc"][0]),
                            int(result["max_loc"][1]),
                            int(result["max_loc"][0] + target.shape[1]),
                            int(result["max_loc"][1] + target.shape[0])]
-                    key_mouse_manager.click_point(*points, box=box)
+                if click:
+                    key_mouse_manager.click_point(*points, box=self.tb)
                 return True
             if not flag:
                 return False

@@ -34,6 +34,7 @@ from tool.cleanup import (
     validate_config,
     write_config,
 )
+from tool.debug_overlay import DebugOverlay, overlay_signal
 from tool.GLOBAL import get_global_stop_flag, set_global_stop_flag
 from tool.gui.advanced_features import show_unlock_dialog
 from tool.gui.appearance import AnimatedButton
@@ -492,6 +493,8 @@ class MainWindow(QMainWindowLog):
         # 否则用户想把停止键录成热键时会直接停止任务
         self._hotkey_captures = {}
         self._hotkey_capture_active = False
+        # 调试识别遮罩：状态机命中状态后才创建，始终置顶覆盖在游戏画面上
+        self.debug_overlay = None
 
         # 加载快捷键配置并注册监听器
         self.hotkey_config = self.load_hotkey_config()
@@ -507,6 +510,7 @@ class MainWindow(QMainWindowLog):
         log_emitter.kill_num_signal.connect(self.set_kill_num)
         log_emitter.fps_update_signal.connect(self.set_FPS)
         log_emitter.cleanup_finished_signal.connect(self.refresh_cleanup_state)
+        overlay_signal.match_signal.connect(self.show_debug_match)
         log_emitter.video_convert_finished_signal.connect(self.on_video_convert_finished)
 
         # 检查是否首次启动并显示用户协议
@@ -1018,6 +1022,8 @@ class MainWindow(QMainWindowLog):
         """
         self.scheduler.timer.stop()
         keyboard.unhook_all()
+        if self.debug_overlay is not None:
+            self.debug_overlay.close()
         super().closeEvent(event)
 
     def test(self):
@@ -1637,6 +1643,15 @@ class MainWindow(QMainWindowLog):
         Fps = 1.0 / float(TimePerFrame)
         Fps = round(Fps, 2)
         self.FPS_Input.setText(str(Fps))
+
+    def show_debug_match(self, name, box):
+        """把状态机命中的状态与位置画到游戏窗口上方的调试遮罩。
+
+        只有全局调试模式打开时状态机才会发出这个信号，遮罩窗口在首次命中时才创建。
+        """
+        if self.debug_overlay is None:
+            self.debug_overlay = DebugOverlay()
+        self.debug_overlay.add_mark(name, box)
 
     def set_find_path_state(self, text:str):
         self.state_text.setText(text)

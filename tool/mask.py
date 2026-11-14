@@ -60,3 +60,9 @@ def quad_box(points):
     xs = [int(point[0]) for point in points]
     ys = [int(point[1]) for point in points]
     return [min(xs), min(ys), max(xs), max(ys)]
+
+
+def union_boxes(boxes):
+    """把多个 [左, 上, 右, 下] 框合成一个外接框。"""
+    return [min(box[0] for box in boxes), min(box[1] for box in boxes),
+            max(box[2] for box in boxes), max(box[3] for box in boxes)]

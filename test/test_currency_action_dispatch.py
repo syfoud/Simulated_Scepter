@@ -15,6 +15,8 @@ class CurrencyActionDispatchTests(unittest.TestCase):
     def make_currency(trigger):
         currency = object.__new__(SimulatedCurrency)
         currency.state = "ready"
+        # 跳过了 StateKernel.__init__，图片触发要读的最近匹配框需要自己补上
+        currency.tb = None
         currency.get_screen = Mock(return_value=255)
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
