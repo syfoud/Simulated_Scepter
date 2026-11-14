@@ -6,6 +6,7 @@ import pyautogui
 import win32api
 import win32con
 
+from tool.background_input import BackgroundKeyboard
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
@@ -182,6 +183,8 @@ class KeyMouseManager:
         self.ending = True
         # 最近一次因越界被跳过的操作，用于避免同一偏离反复刷屏
         self.skipped_pointer = None
+        # 后台键盘通道；为 None 时按键走 pyautogui 前台注入
+        self.background = None
 
     def set_config(self, config):
         """应用内核的转身倍率与 DPI 缩放。
@@ -214,6 +217,16 @@ class KeyMouseManager:
         self.x0 = x1-xx
         self.y0 = y1-yy
 
+    def set_background_keyboard(self, hwnd=None):
+        """切换后台键盘通道。
+
+        Args:
+            hwnd: 游戏窗口句柄；传入后按键改投窗口消息，None 表示恢复前台按键。
+        """
+        if self.background is not None:
+            self.background.release_all()
+        self.background = BackgroundKeyboard(hwnd) if hwnd else None
+
     def start(self):
         """
         启动键鼠管理器线程
@@ -239,6 +252,9 @@ class KeyMouseManager:
                 self.operation_queue.clear()  # 清空队列中的所有操作
                 self.operation_queue.append("stop")
             self.worker_thread.join()
+        # 后台键盘不会随线程自动释放：停止时补发抬起消息，避免游戏里按键一直按着
+        if self.background is not None:
+            self.background.release_all()
 
     def clean(self):
         """
@@ -248,6 +264,8 @@ class KeyMouseManager:
         if self.worker_thread and self.worker_thread.is_alive():
             with self.queue_lock:
                 self.operation_queue.clear()  # 清空队列中的所有操作
+        if self.background is not None:
+            self.background.release_all()
 
     def _worker(self):
         """
@@ -310,27 +328,13 @@ class KeyMouseManager:
         """
         op_type = operation['type']
         CUS_LOGGER.debug(f"执行操作{operation}，当前队列长度{len(self.operation_queue)}")
-        if op_type == 'keyDown':
-            pyautogui.keyDown(resolve_key(operation['key']))
-
-        elif op_type == 'keyUp':
-            pyautogui.keyUp(resolve_key(operation['key']))
-
-        elif op_type == 'press':
-            key = resolve_key(operation['key'])
-            duration = operation.get('duration', 0)
-
-            # 检查是否需要跳过该按键
-            if operation.get('allow_e', 1) == 0 and operation['key'] == 'technique':
-                return
-
-            pyautogui.keyDown(key)
-            if duration > 0:
-                self._sleep(duration)
-            pyautogui.keyUp(key)
+        if op_type in ('keyDown', 'keyUp', 'press'):
+            self._key_operation(op_type, operation)
 
         elif op_type == 'click':
             x, y = operation['x'], operation['y']
+            if self._background_mouse_blocked("点击"):
+                return
             # 转换坐标，并确认落点在游戏窗口内
             point = self._game_point("点击", x, y)
             if point is None:
@@ -341,11 +345,15 @@ class KeyMouseManager:
         elif op_type == 'turn':
             degrees = operation['degrees']
             fine = operation.get('fine', 1)
+            if self._background_mouse_blocked("转视角"):
+                return
             self._direct_turn(degrees, fine)
 
         elif op_type == 'scroll':
             x, y = operation['x'], operation['y']
             direct = operation['direct']
+            if self._background_mouse_blocked("滚轮"):
+                return
             # 转换坐标，并确认落点在游戏窗口内
             point = self._game_point("滚轮", x, y)
             if point is None:
@@ -362,6 +370,8 @@ class KeyMouseManager:
             start_x, start_y = operation['start_x'], operation['start_y']
             end_x, end_y = operation['end_x'], operation['end_y']
             duration = operation.get('duration', 0.4)
+            if self._background_mouse_blocked("拖动"):
+                return
             # 转换坐标，并确认起止点都在游戏窗口内
             start = self._game_point("拖拽起点", start_x, start_y)
             end = self._game_point("拖拽终点", end_x, end_y)
@@ -375,6 +385,41 @@ class KeyMouseManager:
         elif op_type == 'sleep':
             duration = operation.get('duration', 0)
             self._sleep(duration)
+
+    def _key_operation(self, op_type, operation):
+        """执行按键操作：后台模式把消息投给游戏窗口，前台模式用 pyautogui 注入。"""
+        # 检查是否需要跳过该按键
+        if op_type == 'press' and operation.get('allow_e', 1) == 0 and operation['key'] == 'technique':
+            return
+        key = resolve_key(operation['key'])
+        if self.background is not None:
+            if not self.background.supports(key):
+                _warn_once(f"后台按键:{key}", f"后台模式暂不支持按键 {key!r}，本次按键已跳过")
+                return
+            if op_type == 'keyDown':
+                self.background.key_down(key)
+            elif op_type == 'keyUp':
+                self.background.key_up(key)
+            else:
+                self.background.press(key, operation.get('duration', 0), self._sleep)
+            return
+        if op_type == 'keyDown':
+            pyautogui.keyDown(key)
+        elif op_type == 'keyUp':
+            pyautogui.keyUp(key)
+        else:
+            pyautogui.keyDown(key)
+            duration = operation.get('duration', 0)
+            if duration > 0:
+                self._sleep(duration)
+            pyautogui.keyUp(key)
+
+    def _background_mouse_blocked(self, action):
+        """后台模式下鼠标仍走前台通道：游戏不在前台时操作会落到别的窗口，直接跳过。"""
+        if self.background is None or self.background.game_is_foreground():
+            return False
+        _warn_once(f"后台鼠标:{action}", f"后台模式暂不支持鼠标{action}，游戏不在前台，本次操作已跳过")
+        return True
 
     def _direct_turn(self, degrees, fine=1):
         """

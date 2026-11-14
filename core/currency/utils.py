@@ -21,7 +21,9 @@ from tool.GLOBAL import (
 )
 from tool.log import CUS_LOGGER
 from tool.public_ocr import merge_text
-from tool.screenshot import Screen
+from tool.screenshot import Screen, resolve_capture_backend
+from tool.screenshot import create_capture as create_window_capture
+from tool.settings import load_settings
 from tool.utils.game_window import (
     find_game_window,
     get_client_screen_rect,
@@ -54,6 +56,10 @@ class CurrencyUtils(StateKernel):
 
     def __init__(self):
         super().__init__()
+        settings = load_settings()
+        # 后台模式：截图与键盘走窗口消息，允许游戏窗口被遮挡（不能最小化）；鼠标仍为前台
+        self.background_mode = bool(settings.get("background_mode", False))
+        self.capture_backend = resolve_capture_backend(settings, self.background_mode)
         self._stop = False
         self.fps_list = []
         self.last_get_screen_time = None
@@ -63,8 +69,19 @@ class CurrencyUtils(StateKernel):
         self.xx, self.yy = 1920, 1080
         self.x0 = self.y0 = self.x1 = self.y1 = 0
         self.scx = self.scy = 1.0
+        self.hwnd = None
         self.wait_game_window()
-        self.sct = Screen()
+        # 等待窗口期间被用户中断时不再创建截图器：后台捕获没有窗口句柄可用
+        if self._stop:
+            return
+        self.sct = self.create_screen()
+        key_mouse_manager.set_background_keyboard(self.hwnd if self.background_mode else None)
+
+    def create_screen(self):
+        """按配置创建截图器：前台整屏截屏，后台模式换窗口捕获。"""
+        if self.capture_backend == "screen":
+            return Screen()
+        return create_window_capture(self.capture_backend, self.hwnd, self.xx, self.yy)
 
     def get_screen(self):
         """停止后返回最后一帧，避免 GUI 线程关闭截图器后任务线程再访问空句柄。"""
@@ -102,6 +119,7 @@ class CurrencyUtils(StateKernel):
             time.sleep(0.3)
             return 0
         hwnd = game_window.hwnd
+        self.hwnd = hwnd
         self.xx = game_window.client_width
         self.yy = game_window.client_height
         if game_window.kind == "cloud":

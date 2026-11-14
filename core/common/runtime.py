@@ -21,9 +21,11 @@ from tool.GLOBAL import factor, get_global_stop_flag, key_mouse_manager
 from tool.log import CUS_LOGGER
 from tool.mask import crop_region, quad_box, region_center_point
 from tool.public_ocr import merge_text
-from tool.screenshot import Screen
+from tool.screenshot import Screen, resolve_capture_backend
+from tool.screenshot import create_capture as create_window_capture
 from tool.settings import load_settings
 from tool.utils.game_window import (
+    find_game_window,
     get_client_screen_rect,
     get_foreground_game_window,
     is_supported_resolution,
@@ -60,7 +62,11 @@ class ScriptKernel(StateKernel):
         super().__init__()
         # 全局调试模式来自用户配置（gui_settings.json 的 debug）：日志过滤与调试遮罩都按它开关。
         # 必须在这里就设置，等待游戏窗口期间也该按正确的调试模式运行。
-        GLOBAL.DEBUG_MODE = bool(load_settings().get("debug", False))
+        settings = load_settings()
+        GLOBAL.DEBUG_MODE = bool(settings.get("debug", False))
+        # 后台模式：截图与键盘走窗口消息，允许游戏窗口被遮挡（不能最小化）；鼠标仍为前台
+        self.background_mode = bool(settings.get("background_mode", False))
+        self.capture_backend = resolve_capture_backend(settings, self.background_mode)
         self._stop = False
         self.sct = None
         self._screen_lock = Lock()
@@ -77,11 +83,15 @@ class ScriptKernel(StateKernel):
         self.scale = 1.0
         self.dpi_scale = 1.0
         self.ts = self.create_ts()
-        # 先发一次空按键绕开 Windows 的后台抢焦点限制，再等窗口出现
-        set_forground()
+        # 前台模式先发一次空按键绕开 Windows 的后台抢焦点限制；后台模式不抢焦点
+        if not self.background_mode:
+            set_forground()
         deadline = time.monotonic() + self.window_timeout
         while not get_global_stop_flag():
-            window = get_foreground_game_window()
+            if self.background_mode:
+                window = find_game_window()
+            else:
+                window = get_foreground_game_window()
             if window is not None:
                 if not is_supported_resolution(window.kind, window.client_width, window.client_height):
                     raise ValueError(
@@ -92,18 +102,30 @@ class ScriptKernel(StateKernel):
                 self.hwnd = window.hwnd
                 self.x1, self.y1 = self.x0 + self.xx, self.y0 + self.yy
                 self.full = self.x0 == 0 and self.y0 == 0
-                self.sct = Screen(self.xx, self.yy)
+                self.sct = self.create_screen(window)
                 self.multi = get_multi()
                 self.dpi_scale = self._dpi_scale()
                 key_mouse_manager.set_config(self)
                 key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
+                # 后台模式按键改投窗口消息；前台模式恢复 pyautogui 注入
+                key_mouse_manager.set_background_keyboard(
+                    window.hwnd if self.background_mode else None)
                 # 转身速度异常时据此判断是 DPI 还是校准值的问题
                 CUS_LOGGER.debug(f"DPI: {self.dpi_scale} A: {int(self.multi * 100) / 100}")
                 return
             if time.monotonic() >= deadline:
+                if self.background_mode:
+                    raise TimeoutError(
+                        "等待游戏窗口超过 300 秒，请启动游戏并保持窗口可见、不要最小化。")
                 raise TimeoutError("等待游戏窗口超过 300 秒，请启动游戏并将游戏窗口置于前台。")
             time.sleep(0.3)
         self._stop = True
+
+    def create_screen(self, window):
+        """按配置创建截图器：前台整屏截屏，后台模式换窗口捕获。"""
+        if self.capture_backend == "screen":
+            return Screen(self.xx, self.yy)
+        return create_window_capture(self.capture_backend, window.hwnd, self.xx, self.yy)
 
     def _dpi_scale(self):
         """当前窗口的 DPI 缩放比（96 DPI 为 1.0），仅用于诊断日志。"""
