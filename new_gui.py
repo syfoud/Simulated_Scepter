@@ -1672,7 +1672,7 @@ class MainWindow(QMainWindowLog):
         # 标题
         title_label = QLabel("欢迎使用模拟权杖系统")
         title_font = QFont()
-        title_font.setPointSize(14)
+        title_font.setPixelSize(19)
         title_font.setBold(True)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)

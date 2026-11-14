@@ -497,7 +497,7 @@
                    <enum>QFrame::NoFrame</enum>
                   </property>
                   <property name="horizontalScrollBarPolicy">
-                   <enum>Qt::ScrollBarAlwaysOff</enum>
+                   <enum>Qt::ScrollBarAsNeeded</enum>
                   </property>
                   <widget class="QWidget" name="sidebar_contents">
                    <layout class="QVBoxLayout" name="Lay_Tab1_Right">

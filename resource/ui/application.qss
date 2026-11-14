@@ -7,12 +7,12 @@ QWidget#advanced_settings_main_page, QWidget#advanced_settings_scroll_contents {
 }
 QDialog, QMessageBox { background: #131c2b; }
 QLabel { background: transparent; border: none; }
-QLabel[role="muted"] { color: #93a5be; font-size: 9pt; }
-QLabel[role="heading"] { color: #eef4ff; font-size: 12pt; font-weight: 600; }
-QLabel[role="resource_value"] { color: #e4efff; font-size: 9pt; font-weight: 600; }
-QLabel#Title_Text_2 { font-size: 13pt; font-weight: 600; }
-QLabel#Title_Version { color: #a6bddb; background: rgba(93, 120, 163, 40); border-radius: 6px; padding: 3px 7px; font-size: 8pt; }
-QLabel#Label_RunningState { color: #afc9ed; background: rgba(100, 145, 202, 28); border: 1px solid rgba(125, 170, 226, 36); border-radius: 7px; padding: 6px; font-size: 9pt; }
+QLabel[role="muted"] { color: #93a5be; font-size: 12px; }
+QLabel[role="heading"] { color: #eef4ff; font-size: 16px; font-weight: 600; }
+QLabel[role="resource_value"] { color: #e4efff; font-size: 12px; font-weight: 600; }
+QLabel#Title_Text_2 { font-size: 17px; font-weight: 600; }
+QLabel#Title_Version { color: #a6bddb; background: rgba(93, 120, 163, 40); border-radius: 6px; padding: 3px 7px; font-size: 11px; }
+QLabel#Label_RunningState { color: #afc9ed; background: rgba(100, 145, 202, 28); border: 1px solid rgba(125, 170, 226, 36); border-radius: 7px; padding: 6px; font-size: 12px; }
 QTabWidget::pane { border: none; }
 QTabWidget::tab-bar { left: 0px; }
 QTabBar::tab { background: transparent; color: #93a5be; border: none; border-radius: 8px; padding: 9px 22px; margin: 0px 6px 10px 0px; }

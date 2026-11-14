@@ -77,7 +77,11 @@ def apply_appearance(theme="dark"):
         families = QFontDatabase.applicationFontFamilies(font_id)
         family = families[0] if families else "Microsoft YaHei UI"
         app.setProperty("scepter_font", family)
-    app.setFont(QFont(family, 10))
+    # 界面按固定像素设计（UI.ui 的栏宽和 qss 的 padding 都是 px），字号同样用 px，
+    # 否则 pt 会随屏幕真实 DPI 放大，固定宽度的侧栏文字会被裁切。
+    font = QFont(family)
+    font.setPixelSize(13)
+    app.setFont(font)
     ui_path = Path(PATHS["ui"])
     stylesheet = "application.qss" if theme == "dark" else "native.qss"
     app.setStyleSheet((ui_path / stylesheet).read_text(encoding="utf-8").replace("@ui", ui_path.as_posix()))

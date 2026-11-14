@@ -146,7 +146,7 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
             self.window.set_appearance(theme)
             for scale in (1, 1.25):
                 font = self.app.font()
-                font.setPointSizeF(font.pointSizeF() * scale)
+                font.setPixelSize(round(font.pixelSize() * scale))
                 self.window.side_panel.setFont(font)
                 self.show_window()
                 for button, _gear in self.window.kernel_rows.values():
