@@ -1,0 +1,98 @@
+[
+    {
+        "name": "委托",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "委托",
+            "box": [
+                1709,
+                396,
+                1755,
+                421
+            ]
+        },
+        "actions": [
+            {
+                "position": [
+                    1732,
+                    309
+                ]
+            }
+        ]
+    },
+    {
+        "name": "委托派遣中",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "委托派遣中",
+            "box": [
+                1216,
+                911,
+                1759,
+                942
+            ]
+        },
+        "actions": [
+            "esc_end"
+        ]
+    },
+    {
+        "name": "点击空白",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "点击空白处关闭",
+            "box": [
+                875,
+                776,
+                1047,
+                807
+            ]
+        },
+        "actions": [
+            {
+                "position": [
+                    1732,
+                    309
+                ]
+            }
+        ]
+    },
+    {
+        "name": "领取奖励",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "领取奖励",
+            "box": [
+                1457,
+                911,
+                1577,
+                944
+            ]
+        },
+        "actions": [
+            {
+                "position": [
+                    1517,
+                    928
+                ]
+            }
+        ]
+    },
+    {
+        "name": "大世界",
+        "trigger": {
+            "photo": "smartphone",
+            "pos": {
+                "x": 32,
+                "y": 67
+            },
+            "threshold": 0.96
+        },
+        "actions": [
+            {
+                "press": "esc",
+                "time": 0
+            }
+        ]
+    }
+]
