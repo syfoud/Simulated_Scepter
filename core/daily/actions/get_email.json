@@ -1,0 +1,102 @@
+[
+    {
+        "name": "打开邮件",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "委托",
+            "box": [
+                1709,
+                396,
+                1755,
+                421
+            ]
+        },
+        "actions": [
+            {
+                "position": [
+                    1869,
+                    268
+                ]
+            }
+        ]
+    },
+    {
+        "name": "点击空白",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "点击空白处关闭",
+            "box": [
+                875,
+                776,
+                1047,
+                807
+            ]
+        },
+        "actions": [
+            {
+                "position": [
+                    1732,
+                    309
+                ]
+            }
+        ]
+    },
+    {
+        "name": "已领取奖励",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "全部领取",
+            "box": [
+                408,
+                971,
+                497,
+                999
+            ],
+            "condition": "get_email"
+        },
+        "actions": [
+            "esc_end"
+        ]
+    },
+    {
+        "name": "领取奖励",
+        "trigger": {
+            "threshold": 0.96,
+            "text": "全部领取",
+            "box": [
+                408,
+                971,
+                497,
+                999
+            ]
+        },
+        "actions": [
+            {
+                "position": [
+                    447,
+                    984
+                ]
+            },
+            {
+                "set_state": "get_email"
+            }
+        ]
+    },
+    {
+        "name": "大世界",
+        "trigger": {
+            "photo": "smartphone",
+            "pos": {
+                "x": 32,
+                "y": 67
+            },
+            "threshold": 0.96
+        },
+        "actions": [
+            {
+                "press": "esc",
+                "time": 0
+            }
+        ]
+    }
+]
