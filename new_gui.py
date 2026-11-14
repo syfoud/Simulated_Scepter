@@ -1833,9 +1833,13 @@ class MainWindow(QMainWindowLog):
 **使用本软件即表示您已阅读并同意以上条款。**
 """
 
-def main(show, startup_args=None):
-    if startup_args is None:
-        startup_args = parse_startup_args([])
+def main(show):
+    # 打包版不支持启动参数，避免双击或外部启动参数触发误导性提示。
+    startup_args = (
+        parse_startup_args([])
+        if getattr(sys, "frozen", False)
+        else parse_startup_args()
+    )
     root_path = os.path.normcase(os.path.realpath(PATHS["root"]))
     mutex_name = f"Local\\Simulated_Scepter_{hashlib.sha256(root_path.encode('utf-8')).hexdigest()}"
     mutex_handle = ctypes.windll.kernel32.OpenMutexW(0x00100000, False, mutex_name)
@@ -1920,12 +1924,6 @@ def main(show, startup_args=None):
             print(f"异常退出，进程已结束,退出代码:{e.code}")
             input("按Enter键退出...")
 if __name__ == "__main__":
-    # 打包版不支持启动参数，避免双击或外部启动参数触发误导性提示。
-    startup_args = (
-        parse_startup_args([])
-        if getattr(sys, "frozen", False)
-        else parse_startup_args()
-    )
     fault_log_file = open("logs/crash_dump.txt", "w", encoding="utf-8")
     faulthandler.enable(file=fault_log_file)
-    main(1, startup_args)
+    main(1)
