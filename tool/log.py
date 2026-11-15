@@ -121,14 +121,23 @@ class PrintToFileLogger:
                     self._write_to_logfiles(stripped_line)
 
                 # 总是输出到原始stdout（控制台）
-                self.original_stdout.write(line)
+                self._write_console(line)
             else:
                 self.linebuf = line
+
+    def _write_console(self, text):
+        """写控制台时容忍编码差异：GBK 控制台遇到「银•金•彩」这类字符不能把进程带崩。"""
+        try:
+            self.original_stdout.write(text)
+        except UnicodeEncodeError:
+            encoding = getattr(self.original_stdout, "encoding", None) or "utf-8"
+            self.original_stdout.write(
+                text.encode(encoding, "replace").decode(encoding, "replace"))
 
     def flush(self):
         if self.linebuf != '':
             # 写入剩余内容到原始输出
-            self.original_stdout.write(self.linebuf)
+            self._write_console(self.linebuf)
 
             # 检查是否为logger输出
             is_logger_output = self._is_logger_output(self.linebuf)

@@ -173,6 +173,43 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_curiosity_blank_only_requests_exit_in_gather_mode(self, manager):
+        for gather, expect_exit in ((True, True), (False, False)):
+            with self.subTest(gather=gather):
+                currency = object.__new__(SimulatedCurrency)
+                currency.state = "currency_main"
+                currency.exit_requested = False
+                currency.gather_mode = gather
+                currency.update_state = Mock(
+                    side_effect=lambda state: setattr(currency, "state", state))
+                manager.reset_mock()
+
+                self.assertEqual(currency.click_curiosity_blank(), 1)
+
+                manager.click_point.assert_called_once_with(
+                    959, 703, box=[872, 689, 1046, 718])
+                self.assertEqual(currency.exit_requested, expect_exit)
+                self.assertEqual(currency.state, "exit" if expect_exit else "currency_main")
+
+    def test_silver_gold_spark_keeps_three_refresh_after_rename(self):
+        """4.7 把「银金彩」写成「银•金•彩」，匹配时要去掉分隔符。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.prior_envir = []
+        currency.prior_environment_found = False
+        currency.max_refresh = 1
+
+        currency._apply_environment_effects(["银•金•彩"])
+        self.assertEqual(currency.max_refresh, 3)
+
+        currency.max_refresh = 1
+        currency._apply_environment_effects(["银金彩"])
+        self.assertEqual(currency.max_refresh, 3)
+
+        currency.max_refresh = 1
+        currency._apply_environment_effects(["蓝海"])
+        self.assertEqual(currency.max_refresh, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

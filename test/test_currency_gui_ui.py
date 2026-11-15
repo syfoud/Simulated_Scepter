@@ -24,6 +24,19 @@ class CurrencyGuiUiTests(unittest.TestCase):
         self.assertIsNotNone(tab.find(".//widget[@name='Currency_priority_settings_btn']"))
         self.assertIsNotNone(tab.find(".//widget[@name='Currency_deployment_settings_btn']"))
 
+    def test_affix_collection_controls_exist(self):
+        tab = self.currency
+
+        for widget in (
+            "Currency_gamemode_combo",
+            "Currency_difficulty_mode_combo",
+            "Currency_affix_targets_edit",
+            "Currency_affix_targets_btn",
+            "Currency_max_runs_spin",
+            "Currency_gather_mode_checkbox",
+        ):
+            self.assertIsNotNone(tab.find(f".//widget[@name='{widget}']"), widget)
+
 
 if __name__ == "__main__":
     unittest.main()

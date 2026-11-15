@@ -6,6 +6,9 @@ import cv2
 import numpy as np
 import pyautogui
 
+from core.currency.affix_stats import AffixSampler
+from core.currency.envirs import ENVIR_NAMES
+from core.currency.textmatch import best_match
 from core.currency.investment_selection import choose_fallback_investment
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
@@ -128,6 +131,7 @@ class SimulatedCurrency(CurrencyUtils):
 
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
+    GOLDEN_ERA_NAMES = ("银•金•彩",)
     DIFFICULTY_MAX_STEPS = 120
     DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
     DIFFICULTY_DOWN_POSITION = (960, 844)
@@ -136,6 +140,22 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 右下角「进入标准博弈 / 进入超频博弈」按钮：两种博弈是同一个位置
+    MODE_ENTER_POSITION = (1637, 960)
+    # 该按钮的文字框（日志里带上落点来源，便于核对）
+    BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
+    # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
+    OVERCLOCK_TAB_POSITION = (153, 418)
+    # 只有低难度才会出现的「返回最高职级」；没它说明已经在 A8-20
+    TOP_RANK_BUTTON_BOX = [1325, 952, 1457, 979]
+    # 词缀界面：标题、左下词缀条、右下「下一步」
+    AFFIX_TITLE_BOX = [485, 185, 679, 217]
+    AFFIX_STRIP_BOX = [300, 938, 1160, 1020]
+    AFFIX_NEXT_POSITION = (1397, 981)
+    # 本局奇遇界面：「本局奇遇」标签（仅日志/核对用）与「点击空白处继续」
+    # 三个空白提示的 y 区间互不重叠（689~718 / 778~807 / 948~975），靠位置就能区分是哪一屏
+    CURIOSITY_LABEL_BOX = [740, 468, 845, 497]
+    CURIOSITY_BLANK_BOX = [872, 689, 1046, 718]
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -207,6 +227,23 @@ class SimulatedCurrency(CurrencyUtils):
         # 记录本局是否刷出了必选（prior）投资环境
         self.prior_environment_found = False
         self.has_fresh = False
+
+        # 新模式相关配置：对局类型（标准/超频）、难度选择方式、开局词缀收集
+        self.gamemode = currency_settings["gamemode"]
+        self.difficulty_mode = currency_settings["difficulty_mode"]
+        self.gather_mode = currency_settings["gather_mode"]
+        self.max_runs = currency_settings["max_runs"]
+        self.affix_targets = currency_settings["affix_targets"]
+        self.affix_sampler = AffixSampler()
+        CUS_LOGGER.info(
+            "对局类型: %s，难度选择: %s%s",
+            "标准博弈" if self.gamemode == "standard" else "超频博弈",
+            "最高职级(A8-20)" if self.difficulty_mode == "top" else "最低难度",
+            "，已开启开局词缀收集模式" if self.gather_mode else "",
+        )
+        if self.affix_targets:
+            CUS_LOGGER.info("目标词缀: %s", "、".join(self.affix_targets))
+
         exit_plane_text = "不退出" if self.set_exit_plane is None else f"第{self.set_exit_plane}面"
         CUS_LOGGER.info(f"货币战争退出位面设置为: {exit_plane_text}")
 
@@ -221,6 +258,15 @@ class SimulatedCurrency(CurrencyUtils):
             except Exception:
                 texts.append ("")
         return texts
+
+    @staticmethod
+    def canonical_environments (texts):
+        """把 OCR 结果对齐到已知的 72 条环境名。
+
+        OCR 会把「银•金•彩」的间隔点吃掉、偶尔认错形近字；先用已知名字表纠回来，
+        后面的优先级匹配、蓝海/银金彩判定都只看规范名。
+        """
+        return [best_match(text, ENVIR_NAMES) or text for text in texts]
 
     def route (self):
         set_forground ()
@@ -335,12 +381,42 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
 
+    def enter_battle_mode (self):
+        """点右下角「进入…博弈」按钮：标准博弈直接进，超频博弈先切左上标签。"""
+        if self.gamemode == "standard":
+            key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
+            key_mouse_manager.wait()
+            self.update_state("difficulty_select")
+            CUS_LOGGER.info("已点击「进入标准博弈」")
+            return 1
+
+        CUS_LOGGER.info("切换到超频博弈标签")
+        key_mouse_manager.click_point(*self.OVERCLOCK_TAB_POSITION)
+        key_mouse_manager.wait()
+        return 1
+
+    def select_top_difficulty (self):
+        """最高职级（A8-20）：有「返回最高职级」就点它切过去，没有说明已经是。"""
+        box = self.TOP_RANK_BUTTON_BOX
+        if self.click_text(text="返回最高职级", box=box, click=False, allow_fail=True):
+            CUS_LOGGER.info("当前不是 A8-20，点击「返回最高职级」切换难度")
+            key_mouse_manager.click_point(
+                (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+            key_mouse_manager.wait()
+            self.get_screen()
+        else:
+            CUS_LOGGER.info("未出现「返回最高职级」，判定当前已是 A8-20")
+        return self.complete_difficulty_selection()
+
     def handle_difficulty_selection(self):
         if self.state not in (None, "difficulty_select"):
             return 0
 
         self.update_state("difficulty_select")
         self.get_screen()
+
+        if self.difficulty_mode == "top":
+            return self.select_top_difficulty()
 
         if self.is_one():
             CUS_LOGGER.info("已处于目标难度，直接开始对局")
@@ -384,7 +460,7 @@ class SimulatedCurrency(CurrencyUtils):
                         CUS_LOGGER.info (f"检测到必选环境: {pri}，选择选项{idx+1}")
                         return True, idx
             return False, -1
-        texts = self.recognize_options (self.ENVIR_BOXES)
+        texts = self.canonical_environments(self.recognize_options (self.ENVIR_BOXES))
         CUS_LOGGER.info (f"OCR 识别结果: {texts}")
         matched, selected_idx = match_prior (texts)
 
@@ -466,7 +542,7 @@ class SimulatedCurrency(CurrencyUtils):
                         "检测到必选环境，但退出位面设置为不调整"
                     )
 
-        if any("银金彩" in text for text in texts):
+        if any(best_match(text, self.GOLDEN_ERA_NAMES) for text in texts):
             self.max_refresh = 3
             CUS_LOGGER.info(
                 "检测到银金彩，已将投资策略刷新次数调整至3次"
@@ -495,7 +571,7 @@ class SimulatedCurrency(CurrencyUtils):
                 continue
 
             self.ts.forward(self.get_screen())
-            texts = self.recognize_options(self.ENVIR_BOXES)
+            texts = self.canonical_environments(self.recognize_options(self.ENVIR_BOXES))
             available = [idx for idx, text in enumerate(texts) if text.strip()]
             if len(available) != 1:
                 CUS_LOGGER.info(
@@ -709,6 +785,56 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def read_affixes (self):
+        """识别左下词缀条上的词缀名。
+
+        词缀长度不一，四条的框在画面上宽度不同，所以整条一起 OCR、按识别结果收集，
+        不按固定四格切。这里用底层识别器取「未合并」的结果：`forward()` 会把同行
+        相距很近的文字并成一条（实测把前两枚词缀粘成「侵蚀·第一位面强化战个痛快」）。
+        """
+        box = self.AFFIX_STRIP_BOX
+        patch = self.screen[box[1]:box[3], box[0]:box[2]]
+        texts = []
+        try:
+            for _rect, (raw_text, score) in self.ts.ts.ocr(patch):
+                text = re.sub(r"\s+", "", raw_text)
+                if not text or score < 0.6 or text.isdigit():
+                    continue
+                if "敌人难度" in text or text in texts:
+                    continue
+                texts.append(text)
+        except Exception:
+            CUS_LOGGER.warning("词缀条 OCR 失败", exc_info=True)
+        return texts
+
+    def read_affixes_and_continue (self):
+        """词缀界面：读词缀 → 采样落盘 → 点右下角「下一步」。"""
+        self.get_screen()
+        affixes = self.read_affixes()
+        CUS_LOGGER.info("本局词缀：%s", "、".join(affixes) if affixes else "（未识别到）")
+        hits = self.affix_sampler.record(affixes, self.affix_targets)
+        if hits:
+            CUS_LOGGER.info("命中目标词缀：%s", "、".join(hits))
+        if self.max_runs and self.affix_sampler.run_index >= self.max_runs:
+            CUS_LOGGER.info("已达到设定的最大把数(%s)，停止采集", self.max_runs)
+            self._stop = True
+            return 1
+        key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
+        key_mouse_manager.wait()
+        return 1
+
+    def click_curiosity_blank (self):
+        """本局奇遇界面：点「点击空白处继续」；采集模式下点完就请求退出，不等后续投资策略。"""
+        box = self.CURIOSITY_BLANK_BOX
+        key_mouse_manager.click_point(
+            (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+        key_mouse_manager.wait()
+        if self.gather_mode:
+            CUS_LOGGER.info("开局词缀收集模式：本局采样结束，请求退出并重开")
+            self.exit_requested = True
+            self.update_state("exit")
+        return 1
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。

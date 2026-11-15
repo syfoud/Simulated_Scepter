@@ -144,12 +144,12 @@
     {
         "name": "开始货币战争",
         "trigger": {
-            "text": "数据银行",
+            "text": "货币战争",
             "box": [
-                1489,
-                549,
-                1592,
-                585
+                53,
+                85,
+                155,
+                117
             ],
             "interval": 1,
             "redundancy": 30
@@ -180,15 +180,7 @@
             "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    153,
-                    418
-                ]
-            },
-            {
-                "sleep": 1
-            }
+            "enter_battle_mode"
         ]
     },
     {
@@ -238,21 +230,16 @@
         "trigger": {
             "text": "本场对局首领",
             "box": [
-                1440,
-                741,
-                1591,
-                772
+                485,
+                185,
+                679,
+                217
             ],
             "interval": 1,
             "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    1512,
-                    984
-                ]
-            }
+            "read_affixes_and_continue"
         ]
     },
     {
@@ -275,6 +262,23 @@
                     962
                 ]
             }
+        ]
+    },
+    {
+        "name": "点击空白（奇遇）",
+        "trigger": {
+            "text": "点击空白处继续",
+            "box": [
+                872,
+                689,
+                1046,
+                718
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "click_curiosity_blank"
         ]
     },
     {
