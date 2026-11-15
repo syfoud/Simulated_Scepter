@@ -165,8 +165,9 @@ class SimulatedCurrency(CurrencyUtils):
     AFFIX_READ_INTERVAL = 0.3
     # 认不满四条时，最多再等这么多轮（每轮一次触发）才按现有结果继续
     AFFIX_PARTIAL_RETRY_ROUNDS = 3
-    # 采集模式下，1-1 奖励屏会比奇遇界面先出来：就地轮询等它加载（24×0.5s ≈ 12 秒）
-    CURIOSITY_WAIT_ATTEMPTS = 24
+    # 采集模式下，1-1 奖励屏会比奇遇界面先出来：就地轮询等它加载（12×0.5s ≈ 6 秒）。
+    # 等不到就直接退出——奇遇那屏没有我们要的数据，真晚到了也会被「点击空白继续」接住
+    CURIOSITY_WAIT_ATTEMPTS = 12
     CURIOSITY_WAIT_INTERVAL = 0.5
     ENVIR_WAIT_ATTEMPTS = 8
     ENVIR_WAIT_INTERVAL = 0.3
