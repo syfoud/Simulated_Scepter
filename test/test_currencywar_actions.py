@@ -91,26 +91,17 @@ class CurrencyWarActionsTest(unittest.TestCase):
 
         self.assertIn(RUN_END_ACTION, action_names)
 
-    def test_curiosity_blank_is_the_one_that_starts_collection_exit(self):
-        action = next(
-            action for action in self.actions if action.get("name") == "点击空白（奇遇）"
-        )
-
+    def test_blank_prompt_is_one_action_covering_all_screens(self):
+        """三处「点击空白处继续」合成一条，靠宽条带罩住，点的是识别到的那块文字。"""
+        actions = [a for a in self.actions if a.get("name") == "点击空白继续"]
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
         self.assertEqual(action["trigger"]["text"], "点击空白处继续")
-        self.assertEqual(action["trigger"]["box"], [872, 689, 1046, 718])
-        self.assertEqual(action["actions"], ["click_curiosity_blank"])
-
-    def test_blank_click_boxes_are_disjoint(self):
-        """三处「点击空白处继续」靠 y 区间区分，不能互相覆盖。"""
-        boxes = {
-            action["name"]: action["trigger"]["box"]
-            for action in self.actions
-            if action.get("name", "").startswith("点击空白")
-        }
-        self.assertEqual(len(boxes), 3)
-        spans = sorted((box[1], box[3], name) for name, box in boxes.items())
-        for (top, bottom, name), (next_top, _next_bottom, next_name) in zip(spans, spans[1:]):
-            self.assertLess(bottom, next_top, f"{name} 与 {next_name} 的 y 区间重叠")
+        self.assertEqual(action["actions"], ["click_blank_prompt"])
+        left, top, right, bottom = action["trigger"]["box"]
+        for band in ((689, 718), (778, 807), (948, 975)):   # 奇遇 / 首领 / 初始
+            self.assertLessEqual(top, band[0])
+            self.assertGreaterEqual(bottom, band[1])
 
     def test_start_button_checks_difficulty_before_starting_run(self):
         matches = [

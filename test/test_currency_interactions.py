@@ -177,82 +177,49 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertEqual(manager.wait.call_count, 4)
 
     @patch("core.currency.automation.key_mouse_manager")
-    def test_curiosity_blank_only_requests_exit_in_gather_mode(self, manager):
-        for gather, expect_exit in ((True, True), (False, False)):
-            with self.subTest(gather=gather):
-                currency = object.__new__(SimulatedCurrency)
-                currency.state = "currency_main"
-                currency.exit_requested = False
-                currency.gather_mode = gather
-                currency.update_state = Mock(
-                    side_effect=lambda state: setattr(currency, "state", state))
-                manager.reset_mock()
-
-                self.assertEqual(currency.click_curiosity_blank(), 1)
-
-                manager.click_point.assert_called_once_with(
-                    959, 703, box=[872, 689, 1046, 718])
-                self.assertEqual(currency.exit_requested, expect_exit)
-                self.assertEqual(currency.state, "exit" if expect_exit else "currency_main")
-
-    def test_silver_gold_spark_keeps_three_refresh_after_rename(self):
-        """4.7 把「银金彩」写成「银•金•彩」，匹配时要去掉分隔符。"""
+    def test_blank_prompt_clicks_detected_text_and_exits_after_envir(self, manager):
         currency = object.__new__(SimulatedCurrency)
-        currency.prior_envir = []
-        currency.prior_environment_found = False
-        currency.max_refresh = 1
-
-        currency._apply_environment_effects(["银•金•彩"])
-        self.assertEqual(currency.max_refresh, 3)
-
-        currency.max_refresh = 1
-        currency._apply_environment_effects(["银金彩"])
-        self.assertEqual(currency.max_refresh, 3)
-
-        currency.max_refresh = 1
-        currency._apply_environment_effects(["蓝海"])
-        self.assertEqual(currency.max_refresh, 1)
-
-    def _gather_currency(self, targets, priors):
-        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "点击空白处继续", "box": [930, 690, 990, 718]}
+        ]
+        currency.click_box = Mock()
+        currency.update_state = Mock()
+        currency.state = "1-1"
         currency.gather_mode = True
-        currency.affix_targets = list(targets)
-        currency.prior_envir = list(priors)
-        currency.envir_seen = set()
-        currency.affix_sampler = Mock()
-        currency.affix_sampler.counter = Counter()
-        currency.affix_sampler.run_index = 3
-        currency._stop = False
-        return currency
+        currency.envir_selected = False
+        currency.exit_requested = False
+        manager.reset_mock()
 
-    def test_gather_goal_needs_both_affix_and_envir(self):
-        currency = self._gather_currency(["复仇心切"], ["蓝海"])
-        currency.affix_sampler.counter["复仇心切"] = 1
+        # 环境还没选完（词缀后面那一次）：只点空白，不退出
+        self.assertEqual(currency.click_blank_prompt(), 1)
+        currency.click_box.assert_called_once_with([930, 690, 990, 718])
+        self.assertFalse(currency.exit_requested)
 
-        self.assertFalse(currency.gather_goal_reached())   # 环境还没刷到
-        self.assertFalse(currency.stop_if_gather_goal_reached())
-        self.assertFalse(currency._stop)
+        # 选完环境之后（奇遇这一次）：点完就请求退出
+        currency.click_box.reset_mock()
+        currency.envir_selected = True
+        self.assertEqual(currency.click_blank_prompt(), 1)
+        currency.click_box.assert_called_once_with([930, 690, 990, 718])
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
 
-        currency.envir_seen.add("蓝海")
-        self.assertTrue(currency.gather_goal_reached())
-        self.assertTrue(currency.stop_if_gather_goal_reached())
-        self.assertTrue(currency._stop)
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_blank_prompt_does_nothing_when_text_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_box = Mock()
+        currency.gather_mode = True
+        currency.envir_selected = True
+        currency.exit_requested = False
+        manager.reset_mock()
 
-    def test_gather_goal_ignores_off_mode_and_empty_goal(self):
-        off = self._gather_currency(["复仇心切"], [])
-        off.gather_mode = False
-        off.affix_sampler.counter["复仇心切"] = 1
-        self.assertFalse(off.gather_goal_reached())
-
-        empty = self._gather_currency([], [])
-        self.assertFalse(empty.gather_goal_reached())
-
-    def test_gather_goal_tolerates_ocr_typos(self):
-        currency = self._gather_currency(["复仇心切"], ["银•金•彩"])
-        currency.affix_sampler.counter["复仇心切"] = 1
-        currency.envir_seen.add("银金彩")          # OCR 吃掉间隔点
-
-        self.assertTrue(currency.gather_goal_reached())
+        self.assertEqual(currency.click_blank_prompt(), 1)
+        currency.click_box.assert_not_called()
+        self.assertFalse(currency.exit_requested)
 
     @patch("core.currency.automation.time.sleep")
     @patch("core.currency.automation.key_mouse_manager")
@@ -315,6 +282,23 @@ class CurrencyInteractionTests(unittest.TestCase):
             currency.recognize_options.call_count,
             SimulatedCurrency.ENVIR_WAIT_ATTEMPTS,
         )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_gather_mode_never_starts_a_battle(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.gather_mode = True
+        currency.prior_environment_found = False
+        currency.exit_if_no_prior = False
+        currency.exit_requested = False
+        currency.update_state = Mock()
+        currency.preparation = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.handle_1_1_reward(), 1)
+
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
+        currency.preparation.reset_members.assert_not_called()
 
 
 if __name__ == "__main__":

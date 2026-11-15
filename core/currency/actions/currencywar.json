@@ -243,64 +243,20 @@
         ]
     },
     {
-        "name": "点击空白（初始）",
+        "name": "点击空白继续",
         "trigger": {
             "text": "点击空白处继续",
             "box": [
-                875,
-                948,
-                1047,
-                975
+                800,
+                640,
+                1140,
+                1010
             ],
-            "interval": 2,
+            "interval": 1,
             "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    961,
-                    962
-                ]
-            }
-        ]
-    },
-    {
-        "name": "点击空白（奇遇）",
-        "trigger": {
-            "text": "点击空白处继续",
-            "box": [
-                872,
-                689,
-                1046,
-                718
-            ],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions": [
-            "click_curiosity_blank"
-        ]
-    },
-    {
-        "name": "点击空白（首领）",
-        "trigger": {
-            "text": "点击空白处继续",
-            "box": [
-                870,
-                778,
-                1048,
-                807
-            ],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions": [
-            {
-                "position": [
-                    959,
-                    793
-                ]
-            }
+            "click_blank_prompt"
         ]
     },
     {
@@ -681,7 +637,10 @@
         "name": "自动战斗检测",
         "trigger": {
             "photo": "auto_battle",
-            "pos": {"x": 21,"y": 919},
+            "pos": {
+                "x": 21,
+                "y": 919
+            },
             "threshold": 0.9,
             "condition": "startbattle"
         },
@@ -911,7 +870,10 @@
         "name": "大世界",
         "trigger": {
             "photo": "smartphone",
-            "pos": {"x": 32,"y": 67},
+            "pos": {
+                "x": 32,
+                "y": 67
+            },
             "threshold": 0.96
         },
         "actions": [

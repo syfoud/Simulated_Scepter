@@ -152,10 +152,10 @@ class SimulatedCurrency(CurrencyUtils):
     AFFIX_TITLE_BOX = [485, 185, 679, 217]
     AFFIX_STRIP_BOX = [300, 938, 1160, 1020]
     AFFIX_NEXT_POSITION = (1397, 981)
-    # 本局奇遇界面：「本局奇遇」标签（仅日志/核对用）与「点击空白处继续」
-    # 三个空白提示的 y 区间互不重叠（689~718 / 778~807 / 948~975），靠位置就能区分是哪一屏
-    CURIOSITY_LABEL_BOX = [740, 468, 845, 497]
-    CURIOSITY_BLANK_BOX = [872, 689, 1046, 718]
+    # 「点击空白处继续」：初始/首领/奇遇三处提示的 y 分别在 948~975 / 778~807 / 689~718，
+    # 一条宽条带全罩住；点的时候点识别到的那块文字本身，不靠固定坐标猜
+    BLANK_PROMPT_TEXT = "点击空白处继续"
+    BLANK_PROMPT_BOX = [800, 640, 1140, 1010]
     # 界面刚切进来时常见「只渲染出一部分」：词缀条/环境卡片都要轮询等它出字，
     # 拿半帧结果去点下一步或点刷新会漏采、甚至会洗掉必选环境
     AFFIX_READ_ATTEMPTS = 8
@@ -200,6 +200,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.envir = [[] for _ in range(4)]
         # 采集模式用：这一轮下来已经刷到过的投资环境（跨局累计，用来判断目标是否收齐）
         self.envir_seen = set()
+        # 本局是否已经选完投资环境（采集模式用它区分「词缀后的空白」和「奇遇的空白」）
+        self.envir_selected = False
 
         for index in range(1, 5):
             self.envir[index - 1] = priority[f"envir_{index}"][:]
@@ -472,6 +474,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        self.envir_selected = False
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -551,6 +554,7 @@ class SimulatedCurrency(CurrencyUtils):
             return 0
 
         self.investment_tracker.reset()
+        self.envir_selected = True
         self.update_state("1-1")
         CUS_LOGGER.info ("投资环境选择完成")
         self.stop_if_gather_goal_reached()
@@ -922,13 +926,26 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.wait()
         return 1
 
-    def click_curiosity_blank (self):
-        """本局奇遇界面：点「点击空白处继续」；采集模式下点完就请求退出，不等后续投资策略。"""
-        box = self.CURIOSITY_BLANK_BOX
-        key_mouse_manager.click_point(
-            (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+    def click_blank_prompt (self):
+        """点「点击空白处继续」：按识别到的文字位置点，不假设它在哪一屏。
+
+        采集模式下，只有在**投资环境已经选完**之后点这一下才算本局采样结束——
+        词缀界面之后就有一个空白提示，那一步还不能退。
+        """
+        self.ts.forward(self.get_screen())
+        target = None
+        for item in self.ts.find_with_box(self.BLANK_PROMPT_BOX):
+            if self.BLANK_PROMPT_TEXT in item["raw_text"]:
+                target = item["box"]
+                break
+        if target is None:
+            CUS_LOGGER.debug("这一帧没找到「点击空白处继续」，等下一帧")
+            return 1
+
+        CUS_LOGGER.debug("点击空白提示：%s", target)
+        self.click_box(target)
         key_mouse_manager.wait()
-        if self.gather_mode:
+        if self.gather_mode and self.envir_selected:
             CUS_LOGGER.info("开局词缀收集模式：本局采样结束，请求退出并重开")
             self.exit_requested = True
             self.update_state("exit")
@@ -1051,6 +1068,13 @@ class SimulatedCurrency(CurrencyUtils):
 
     def handle_1_1_reward(self):
         """处理1-1投资环境选择后的奖励界面。"""
+
+        if self.gather_mode:
+            # 采集只要词缀和环境名额，绝不进战斗：奇遇那屏没认到也不要打起来
+            CUS_LOGGER.info("开局词缀收集模式：本局不进入战斗，直接退出重开")
+            self.exit_requested = True
+            self.update_state("exit")
+            return 1
 
         if self.prior_environment_found or not self.exit_if_no_prior:
             self.preparation.reset_members()
