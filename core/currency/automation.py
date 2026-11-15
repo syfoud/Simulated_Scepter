@@ -164,8 +164,9 @@ class SimulatedCurrency(CurrencyUtils):
     AFFIX_READ_INTERVAL = 0.3
     # 认不满四条时，最多再等这么多轮（每轮一次触发）才按现有结果继续
     AFFIX_PARTIAL_RETRY_ROUNDS = 3
-    # 采集模式下，1-1 奖励屏会比奇遇界面先出来：先等这段时间让它加载，等不到再直接退出
-    CURIOSITY_WAIT_SECONDS = 12.0
+    # 采集模式下，1-1 奖励屏会比奇遇界面先出来：就地轮询等它加载（24×0.5s ≈ 12 秒）
+    CURIOSITY_WAIT_ATTEMPTS = 24
+    CURIOSITY_WAIT_INTERVAL = 0.5
     ENVIR_WAIT_ATTEMPTS = 8
     ENVIR_WAIT_INTERVAL = 0.3
     ENVIR_MIN_FILLED = 3
@@ -212,8 +213,6 @@ class SimulatedCurrency(CurrencyUtils):
         self.affix_incomplete_rounds = 0
         # 本局词缀是否已经记录过（词缀一局只出现一次）
         self.affixes_recorded = False
-        # 采集模式等奇遇界面的截止时刻（None 表示还没开始等）
-        self.curiosity_deadline = None
 
         for index in range(1, 5):
             self.envir[index - 1] = priority[f"envir_{index}"][:]
@@ -489,7 +488,6 @@ class SimulatedCurrency(CurrencyUtils):
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
-        self.curiosity_deadline = None
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -982,24 +980,26 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.wait()
         return 1
 
+    def find_blank_prompt (self):
+        """在当前帧找「点击空白处继续」，返回它的框；没有就返回 None。"""
+        self.ts.forward(self.get_screen())
+        for item in self.ts.find_with_box(self.BLANK_PROMPT_BOX):
+            if self.BLANK_PROMPT_TEXT in item["raw_text"]:
+                return item["box"]
+        return None
+
     def click_blank_prompt (self):
         """点「点击空白处继续」：按识别到的文字位置点，不假设它在哪一屏。
 
         采集模式下，只有在**投资环境已经选完**之后点这一下才算本局采样结束——
         词缀界面之后就有一个空白提示，那一步还不能退。
         """
-        self.ts.forward(self.get_screen())
-        target = None
-        for item in self.ts.find_with_box(self.BLANK_PROMPT_BOX):
-            if self.BLANK_PROMPT_TEXT in item["raw_text"]:
-                target = item["box"]
-                break
+        target = self.find_blank_prompt()
         if target is None:
             CUS_LOGGER.debug("这一帧没找到「点击空白处继续」，等下一帧")
             return 1
 
         CUS_LOGGER.debug("点击空白提示：%s", target)
-        self.curiosity_deadline = None
         self.click_box(target)
         key_mouse_manager.wait()
         if self.gather_mode and self.envir_selected:
@@ -1128,17 +1128,31 @@ class SimulatedCurrency(CurrencyUtils):
 
         if self.gather_mode:
             # 采集只要词缀和环境名额，绝不进战斗。
-            # 但奇遇界面要加载几秒才会出来，这期间先别急着按 ESC（会白按十几次、日志也很难看），
-            # 先让 click_blank_prompt 去接它；等过头了再直接退出。
-            if self.curiosity_deadline is None:
-                self.curiosity_deadline = time.monotonic() + self.CURIOSITY_WAIT_SECONDS
-                CUS_LOGGER.info(
-                    "开局词缀收集模式：等奇遇界面加载（最多 %.0f 秒）后再退出",
-                    self.CURIOSITY_WAIT_SECONDS,
+            # 奇遇界面要加载几秒才出来，这段时间**必须就地等**：只返回 0 的话主循环会继续
+            # 匹配别的动作，「出战前准备」靠屏幕上的「出战」文字触发（不带状态门槛），
+            # 一下就绕过等待把仗打起来了。
+            CUS_LOGGER.info(
+                "开局词缀收集模式：等奇遇界面加载（最多 %.0f 秒）后再退出",
+                self.CURIOSITY_WAIT_ATTEMPTS * self.CURIOSITY_WAIT_INTERVAL,
+            )
+            target = None
+            for attempt in range(self.CURIOSITY_WAIT_ATTEMPTS):
+                if self._stop:      # 用户按了停止就别再傻等
+                    return 0
+                target = self.find_blank_prompt()
+                if target is not None:
+                    CUS_LOGGER.debug("点击空白提示：%s", target)
+                    self.click_box(target)
+                    key_mouse_manager.wait()
+                    break
+                CUS_LOGGER.debug(
+                    "奇遇界面还没出来（第 %d/%d 次等待）",
+                    attempt + 1, self.CURIOSITY_WAIT_ATTEMPTS,
                 )
-            if time.monotonic() < self.curiosity_deadline:
-                return 0
-            CUS_LOGGER.warning("等奇遇界面超时，直接退出重开")
+                time.sleep(self.CURIOSITY_WAIT_INTERVAL)
+            else:
+                CUS_LOGGER.warning("等奇遇界面超时，直接退出重开")
+
             self.exit_requested = True
             self.update_state("exit")
             return 1

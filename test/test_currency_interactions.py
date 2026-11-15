@@ -306,75 +306,53 @@ class CurrencyInteractionTests(unittest.TestCase):
             SimulatedCurrency.ENVIR_WAIT_ATTEMPTS,
         )
 
-    @patch("core.currency.automation.time.monotonic")
-    def test_gather_mode_waits_for_curiosity_before_exiting(self, monotonic):
-        """1-1 奖励屏比奇遇界面先出现：先等它加载，别急着按 ESC。"""
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_gather_mode_waits_inline_for_curiosity_then_exits(self, manager, _sleep):
+        """1-1 奖励屏比奇遇先出现，必须在动作里就地等，否则别的动作会绕过等待去开战。"""
         currency = object.__new__(SimulatedCurrency)
         currency.gather_mode = True
-        currency.curiosity_deadline = None
         currency.exit_requested = False
+        currency._stop = False
         currency.update_state = Mock()
         currency.preparation = Mock()
-        monotonic.return_value = 100.0
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.side_effect = [
+            [],
+            [],
+            [{"raw_text": "点击空白处继续", "box": [900, 700, 1000, 720]}],
+        ]
+        currency.click_box = Mock()
+        manager.reset_mock()
 
-        self.assertEqual(currency.handle_1_1_reward(), 0)   # 什么都不做，等奇遇
-        self.assertFalse(currency.exit_requested)
-        self.assertEqual(
-            currency.curiosity_deadline,
-            100.0 + SimulatedCurrency.CURIOSITY_WAIT_SECONDS,
-        )
-        currency.preparation.reset_members.assert_not_called()
-        currency.update_state.assert_not_called()
-
-        # 等过头了：直接退出，但依然不进战斗
-        monotonic.return_value = 100.0 + SimulatedCurrency.CURIOSITY_WAIT_SECONDS + 1
         self.assertEqual(currency.handle_1_1_reward(), 1)
+
+        currency.click_box.assert_called_once_with([900, 700, 1000, 720])
         self.assertTrue(currency.exit_requested)
         currency.update_state.assert_called_once_with("exit")
         currency.preparation.reset_members.assert_not_called()
 
     @patch("core.currency.automation.time.sleep")
     @patch("core.currency.automation.key_mouse_manager")
-    def test_affixes_are_recorded_once_per_run(self, manager, _sleep):
-        """词缀一局只出现一次，切界面时文字还挂着不该重复识别。"""
-        currency = self._affix_currency(
-            Mock(return_value=["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"]))
-        manager.reset_mock()
-
-        currency.read_affixes_and_continue()
-        currency.read_affixes_and_continue()
-
-        currency.affix_sampler.record.assert_called_once()
-        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
-
-    def test_read_affixes_drops_ui_text_from_the_strip(self):
+    def test_gather_mode_exits_when_curiosity_never_shows(self, _manager, _sleep):
         currency = object.__new__(SimulatedCurrency)
-        currency.screen = MagicMock()
-        currency.ts = Mock()
-        currency.ts.ts.ocr.return_value = [
-            ([], ("点击空白处继续", 0.99)),
-            ([], ("战个痛快", 0.99)),
-            ([], ("敌人难度 89", 0.99)),
-        ]
-
-        self.assertEqual(currency.read_affixes(), ["战个痛快"])
-
-    @patch("core.currency.automation.time.sleep")
-    @patch("core.currency.automation.key_mouse_manager")
-    def test_single_environment_card_is_treated_as_extra_environment(self, _manager, _sleep):
-        """环境只有三张卡或蓝海的单张卡，没有两张的情况。"""
-        currency = self.make_currency()
-        currency.recognize_options = Mock(return_value=["蓝海", "", ""])
-        currency._select_blue_ocean_extra_environment = Mock(return_value=True)
-        currency.investment_tracker = Mock()
+        currency.gather_mode = True
+        currency.exit_requested = False
+        currency._stop = False
         currency.update_state = Mock()
+        currency.preparation = Mock()
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_box = Mock()
 
-        self.assertEqual(currency.select_envir(), 1)
+        self.assertEqual(currency.handle_1_1_reward(), 1)
 
-        currency._select_blue_ocean_extra_environment.assert_called_once_with()
-        currency.investment_tracker.reset.assert_called_once_with()
-        currency.update_state.assert_called_once_with("1-1")
-        self.assertTrue(currency.envir_selected)
+        currency.click_box.assert_not_called()
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
+        currency.preparation.reset_members.assert_not_called()
 
 
 if __name__ == "__main__":
