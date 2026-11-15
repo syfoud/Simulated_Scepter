@@ -1,6 +1,6 @@
 import unittest
 from collections import Counter
-from unittest.mock import Mock, call, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 from core.currency.automation import SimulatedCurrency
 
@@ -233,6 +233,7 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.gather_mode = False
         currency.max_runs = 0
         currency.affix_incomplete_rounds = 0
+        currency.affixes_recorded = False
         return currency
 
     @patch("core.currency.automation.time.sleep")
@@ -331,6 +332,49 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertTrue(currency.exit_requested)
         currency.update_state.assert_called_once_with("exit")
         currency.preparation.reset_members.assert_not_called()
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affixes_are_recorded_once_per_run(self, manager, _sleep):
+        """词缀一局只出现一次，切界面时文字还挂着不该重复识别。"""
+        currency = self._affix_currency(
+            Mock(return_value=["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"]))
+        manager.reset_mock()
+
+        currency.read_affixes_and_continue()
+        currency.read_affixes_and_continue()
+
+        currency.affix_sampler.record.assert_called_once()
+        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
+
+    def test_read_affixes_drops_ui_text_from_the_strip(self):
+        currency = object.__new__(SimulatedCurrency)
+        currency.screen = MagicMock()
+        currency.ts = Mock()
+        currency.ts.ts.ocr.return_value = [
+            ([], ("点击空白处继续", 0.99)),
+            ([], ("战个痛快", 0.99)),
+            ([], ("敌人难度 89", 0.99)),
+        ]
+
+        self.assertEqual(currency.read_affixes(), ["战个痛快"])
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_single_environment_card_is_treated_as_extra_environment(self, _manager, _sleep):
+        """环境只有三张卡或蓝海的单张卡，没有两张的情况。"""
+        currency = self.make_currency()
+        currency.recognize_options = Mock(return_value=["蓝海", "", ""])
+        currency._select_blue_ocean_extra_environment = Mock(return_value=True)
+        currency.investment_tracker = Mock()
+        currency.update_state = Mock()
+
+        self.assertEqual(currency.select_envir(), 1)
+
+        currency._select_blue_ocean_extra_environment.assert_called_once_with()
+        currency.investment_tracker.reset.assert_called_once_with()
+        currency.update_state.assert_called_once_with("1-1")
+        self.assertTrue(currency.envir_selected)
 
 
 if __name__ == "__main__":

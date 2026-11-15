@@ -168,7 +168,7 @@ class SimulatedCurrency(CurrencyUtils):
     CURIOSITY_WAIT_SECONDS = 12.0
     ENVIR_WAIT_ATTEMPTS = 8
     ENVIR_WAIT_INTERVAL = 0.3
-    ENVIR_MIN_FILLED = 2
+    ENVIR_MIN_FILLED = 3
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -210,6 +210,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.envir_selected = False
         # 本局词缀没认满四条的重试次数
         self.affix_incomplete_rounds = 0
+        # 本局词缀是否已经记录过（词缀一局只出现一次）
+        self.affixes_recorded = False
         # 采集模式等奇遇界面的截止时刻（None 表示还没开始等）
         self.curiosity_deadline = None
 
@@ -486,6 +488,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_started = False
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
+        self.affixes_recorded = False
         self.curiosity_deadline = None
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
@@ -513,6 +516,20 @@ class SimulatedCurrency(CurrencyUtils):
         texts = self.wait_environments ()
         CUS_LOGGER.info (f"OCR 识别结果: {texts}")
         self.envir_seen.update(text for text in texts if text)
+
+        if sum(1 for text in texts if text.strip()) == 1:
+            # 环境只会出现三种卡或一张卡（蓝海的额外环境），没有两张的情况：
+            # 一张卡就按额外环境处理，不要拿半帧结果去点刷新
+            CUS_LOGGER.info("投资环境只出现一张卡（蓝海的额外环境），直接选它")
+            if self._select_blue_ocean_extra_environment():
+                self.investment_tracker.reset()
+                self.envir_selected = True
+                self.update_state("1-1")
+                CUS_LOGGER.info("投资环境选择完成")
+                self.stop_if_gather_goal_reached()
+                return 1
+            CUS_LOGGER.warning("单卡投资环境处理失败，等下一轮")
+            return 0
         matched, selected_idx = match_prior (texts)
 
         if not matched and not self.has_fresh:
@@ -859,7 +876,7 @@ class SimulatedCurrency(CurrencyUtils):
                 text = re.sub(r"\s+", "", raw_text)
                 if not text or score < 0.6 or text.isdigit():
                     continue
-                if "敌人难度" in text or text in texts:
+                if "敌人难度" in text or self.BLANK_PROMPT_TEXT in text or text in texts:
                     continue
                 texts.append(text)
         except Exception:
@@ -920,7 +937,15 @@ class SimulatedCurrency(CurrencyUtils):
         return affixes
 
     def read_affixes_and_continue (self):
-        """词缀界面：读词缀 → 采样落盘 → 点右下角「下一步」。"""
+        """词缀界面：读词缀 → 采样落盘 → 点右下角「下一步」。
+
+        词缀一局只出现一次，点完下一步就没了；但切界面那一两帧文字可能还挂着，
+        不挡住的话会对同一局重复识别（还会把下一屏的「点击空白处继续」当成词缀）。
+        """
+        if self.affixes_recorded:
+            CUS_LOGGER.debug("本局词缀已记录，跳过重复识别")
+            return 1
+
         affixes = self.wait_affixes()
         if not affixes:
             CUS_LOGGER.warning(
@@ -943,6 +968,7 @@ class SimulatedCurrency(CurrencyUtils):
                 len(affixes), "、".join(affixes),
             )
         CUS_LOGGER.info("本局词缀：%s", "、".join(affixes))
+        self.affixes_recorded = True
         hits = self.affix_sampler.record(affixes, self.affix_targets)
         if hits:
             CUS_LOGGER.info("命中目标词缀：%s", "、".join(hits))
