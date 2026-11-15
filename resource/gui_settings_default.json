@@ -74,6 +74,7 @@
     "recording_keep_long_run": false,
     "recording_keep_long_run_threshold": 1.2,
     "record_add_label": false,
+    "debug_overlay": false,
     "appearance": "dark",
     "resources_visible": true
 }
