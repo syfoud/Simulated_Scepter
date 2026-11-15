@@ -1385,8 +1385,6 @@ class FateUtils(ScriptKernel):
                             fixed=True
                         self.use_e(fixed=fixed)
                         if self.floor not in [4, 8, 13]:
-                            for _ in range(2):
-                                self.use_e(fixed=fixed)
                             self.stop_move=1
                             self.mini_state+=2
                             self.should_update_map = False
@@ -1496,7 +1494,10 @@ class FateUtils(ScriptKernel):
     def use_e(self,face=False,fixed=False):
         if not fixed:
             if self.quan:
-                key_mouse_manager.press("technique",force= True)
+                key_mouse_manager.press("technique")
+                key_mouse_manager.wait()
+                key_mouse_manager.sleep(0.2)
+                key_mouse_manager.press("technique")
                 key_mouse_manager.wait()
             elif self.bai_e:
                 CUS_LOGGER.info(f"「{factor}」施放【莫因舍弃而哭泣】")
@@ -1750,8 +1751,7 @@ class FateUtils(ScriptKernel):
                     self.skill_num = skill_num
                 if self.skill_num == 0:
                     fixed = True
-                for _ in range(2):
-                    self.use_e(fixed=fixed)
+                self.use_e(fixed=fixed)
                 if not self.get_loc():
                     CUS_LOGGER.info("这是神明计算中的时刻。此后的旅途，与您熟知的一切并无区别。有人到来，有人离去，逐火者们身负微光，在长夜中艰难向前。")
                     return
