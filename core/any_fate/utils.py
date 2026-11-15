@@ -620,6 +620,16 @@ class FateUtils(ScriptKernel):
         ds=get_dis(rel_loc, target_loc)
         return ds
 
+    def _enemy_ring_nearby(self):
+        """小地图外侧 80~88 像素圆环上是否有遇敌红圈。
+
+        红圈出现说明自己已被锁定：此时不需要转向找红点，直接按当前朝向出手。
+        """
+        red = [47, 47, 232]
+        ring = mask_minimap_outside(get_minimap(self.screen, radius=MINIMAP_RADIUS, copy=True), center_radius=80)
+        rd = np.where(np.sum((ring - red) ** 2, axis=-1) <= self.red_threshold)
+        return bool(rd[0].shape[0])
+
     def _nearest_enemy(self):
         """返回小地图上离玩家最近的敌人红点坐标。
 
@@ -648,10 +658,11 @@ class FateUtils(ScriptKernel):
         转向（小地图上没有红点、方向识别失败，或接近途中收到停止请求），调用方沿用原来的
         出手逻辑。
 
+        调用方需保证 self.screen 是当前帧的新截图。
+
         Returns:
             True 表示已找到敌人红点并完成转向；否则返回 False。
         """
-        self.get_screen()
         target = self._nearest_enemy()
         if target is None:
             return False
@@ -670,10 +681,13 @@ class FateUtils(ScriptKernel):
                 while time.time() - now < hold and not self._stop:
                     self.get_screen()
                     # 瞄准红叉出现说明已经贴近敌人，不必再按距离走满
-                    if predict(self.screen, enemy=True, item=False)["enemy"] is not None:
+                    aim = predict(self.screen, enemy=True, item=False)["enemy"]
+                    if aim is not None:
                         CUS_LOGGER.info(f"或者，兑现命运的不止他们。只是{factor}已记不清了。")
                         if self.debug:
-                            self.save_screen(not_now=True, save_path=os.path.join(PATHS["temp"], "kill"))
+                            self.save_screen(
+                                not_now=True, save_path=os.path.join(PATHS["temp"], "kill")
+                            )
                         break
             finally:
                 # 异常时也要松开 w，避免角色一直向前跑（外部停止时队列会被键鼠管理器清空）
@@ -1415,10 +1429,7 @@ class FateUtils(ScriptKernel):
                     iters+=1
                     if iters>4:
                         break
-                    red = [47, 47, 232]
-                    rd = np.where(
-                        np.sum((mask_minimap_outside(get_minimap(self.screen, radius=MINIMAP_RADIUS,copy=True), center_radius=80) - red) ** 2, axis=-1) <= self.red_threshold)
-                    if not rd[0].shape[0]:
+                    if not self._enemy_ring_nearby():
                         # 看不到遇敌红圈：敌人不在旁边，转向小地图红点并靠近后出手
                         self.face_enemy()
 
@@ -1777,7 +1788,10 @@ class FateUtils(ScriptKernel):
                 self.target_type = 0
                 CUS_LOGGER.info(f"为了不让最黑暗的命运降临，{factor}必须如此。")
             CUS_LOGGER.info(f"{factor}将以这数亿颗火种点燃的烈阳，与「毁灭」的神明和祂的走卒，一同燃烧殆尽……")
-            self.face_enemy()
+            if not self._enemy_ring_nearby():
+                # 看不到遇敌红圈：敌人不在旁边，转向小地图红点并靠近后出手；
+                # 红圈已出现说明敌人贴在身边，直接按当前朝向出手
+                self.face_enemy()
             if self.quan:
                 key_mouse_manager.keyUp("move_w")
                 skill_num = match_skill_numbers_in_region(self.get_screen())
