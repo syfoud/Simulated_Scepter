@@ -164,6 +164,8 @@ class SimulatedCurrency(CurrencyUtils):
     AFFIX_READ_INTERVAL = 0.3
     # 认不满四条时，最多再等这么多轮（每轮一次触发）才按现有结果继续
     AFFIX_PARTIAL_RETRY_ROUNDS = 3
+    # 采集模式下，1-1 奖励屏会比奇遇界面先出来：先等这段时间让它加载，等不到再直接退出
+    CURIOSITY_WAIT_SECONDS = 12.0
     ENVIR_WAIT_ATTEMPTS = 8
     ENVIR_WAIT_INTERVAL = 0.3
     ENVIR_MIN_FILLED = 2
@@ -208,6 +210,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.envir_selected = False
         # 本局词缀没认满四条的重试次数
         self.affix_incomplete_rounds = 0
+        # 采集模式等奇遇界面的截止时刻（None 表示还没开始等）
+        self.curiosity_deadline = None
 
         for index in range(1, 5):
             self.envir[index - 1] = priority[f"envir_{index}"][:]
@@ -482,6 +486,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_started = False
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
+        self.curiosity_deadline = None
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -968,6 +973,7 @@ class SimulatedCurrency(CurrencyUtils):
             return 1
 
         CUS_LOGGER.debug("点击空白提示：%s", target)
+        self.curiosity_deadline = None
         self.click_box(target)
         key_mouse_manager.wait()
         if self.gather_mode and self.envir_selected:
@@ -1095,8 +1101,18 @@ class SimulatedCurrency(CurrencyUtils):
         """处理1-1投资环境选择后的奖励界面。"""
 
         if self.gather_mode:
-            # 采集只要词缀和环境名额，绝不进战斗：奇遇那屏没认到也不要打起来
-            CUS_LOGGER.info("开局词缀收集模式：本局不进入战斗，直接退出重开")
+            # 采集只要词缀和环境名额，绝不进战斗。
+            # 但奇遇界面要加载几秒才会出来，这期间先别急着按 ESC（会白按十几次、日志也很难看），
+            # 先让 click_blank_prompt 去接它；等过头了再直接退出。
+            if self.curiosity_deadline is None:
+                self.curiosity_deadline = time.monotonic() + self.CURIOSITY_WAIT_SECONDS
+                CUS_LOGGER.info(
+                    "开局词缀收集模式：等奇遇界面加载（最多 %.0f 秒）后再退出",
+                    self.CURIOSITY_WAIT_SECONDS,
+                )
+            if time.monotonic() < self.curiosity_deadline:
+                return 0
+            CUS_LOGGER.warning("等奇遇界面超时，直接退出重开")
             self.exit_requested = True
             self.update_state("exit")
             return 1

@@ -305,19 +305,29 @@ class CurrencyInteractionTests(unittest.TestCase):
             SimulatedCurrency.ENVIR_WAIT_ATTEMPTS,
         )
 
-    @patch("core.currency.automation.key_mouse_manager")
-    def test_gather_mode_never_starts_a_battle(self, manager):
+    @patch("core.currency.automation.time.monotonic")
+    def test_gather_mode_waits_for_curiosity_before_exiting(self, monotonic):
+        """1-1 奖励屏比奇遇界面先出现：先等它加载，别急着按 ESC。"""
         currency = object.__new__(SimulatedCurrency)
         currency.gather_mode = True
-        currency.prior_environment_found = False
-        currency.exit_if_no_prior = False
+        currency.curiosity_deadline = None
         currency.exit_requested = False
         currency.update_state = Mock()
         currency.preparation = Mock()
-        manager.reset_mock()
+        monotonic.return_value = 100.0
 
+        self.assertEqual(currency.handle_1_1_reward(), 0)   # 什么都不做，等奇遇
+        self.assertFalse(currency.exit_requested)
+        self.assertEqual(
+            currency.curiosity_deadline,
+            100.0 + SimulatedCurrency.CURIOSITY_WAIT_SECONDS,
+        )
+        currency.preparation.reset_members.assert_not_called()
+        currency.update_state.assert_not_called()
+
+        # 等过头了：直接退出，但依然不进战斗
+        monotonic.return_value = 100.0 + SimulatedCurrency.CURIOSITY_WAIT_SECONDS + 1
         self.assertEqual(currency.handle_1_1_reward(), 1)
-
         self.assertTrue(currency.exit_requested)
         currency.update_state.assert_called_once_with("exit")
         currency.preparation.reset_members.assert_not_called()
