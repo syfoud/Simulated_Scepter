@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pyautogui
 
+from core.currency.affixes import AFFIX_NAMES
 from core.currency.affix_stats import AffixSampler
 from core.currency.envirs import ENVIR_NAMES
 from core.currency.textmatch import best_match, similar
@@ -874,9 +875,16 @@ class SimulatedCurrency(CurrencyUtils):
                 text = re.sub(r"\s+", "", raw_text)
                 if not text or score < 0.6 or text.isdigit():
                     continue
-                if "敌人难度" in text or self.BLANK_PROMPT_TEXT in text or text in texts:
+                if "敌人难度" in text or self.BLANK_PROMPT_TEXT in text:
                     continue
-                texts.append(text)
+                # 对齐到 53 条已知词缀：OCR 常把首字吃掉或多认一笔（实测「山榜样激励」「首强化」），
+                # 不纠回来的话采样统计会被这些碎片条目污染
+                canonical = best_match(text, AFFIX_NAMES)
+                if canonical is None:
+                    CUS_LOGGER.debug("词缀条读到对不上的文字，丢弃：%s", text)
+                    continue
+                if canonical not in texts:
+                    texts.append(canonical)
         except Exception:
             CUS_LOGGER.warning("词缀条 OCR 失败", exc_info=True)
         return texts

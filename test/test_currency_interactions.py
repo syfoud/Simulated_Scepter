@@ -354,6 +354,65 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.update_state.assert_called_once_with("exit")
         currency.preparation.reset_members.assert_not_called()
 
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affixes_are_recorded_once_per_run(self, manager, _sleep):
+        """词缀一局只出现一次，切界面时文字还挂着不该重复识别。"""
+        currency = self._affix_currency(
+            Mock(return_value=["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"]))
+        manager.reset_mock()
+
+        currency.read_affixes_and_continue()
+        currency.read_affixes_and_continue()
+
+        currency.affix_sampler.record.assert_called_once()
+        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
+
+    def test_read_affixes_keeps_only_known_names(self):
+        """词缀条只保留能对齐到 53 条已知名的结果：UI 文案、数字、乱码统统丢掉。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.screen = MagicMock()
+        currency.ts = Mock()
+        currency.ts.ts.ocr.return_value = [
+            ([], ("点击空白处继续", 0.99)),
+            ([], ("战个痛快", 0.99)),
+            ([], ("敌人难度 89", 0.99)),
+            ([], ("随便乱码", 0.99)),
+        ]
+
+        self.assertEqual(currency.read_affixes(), ["战个痛快"])
+
+    def test_read_affixes_repairs_ocr_variants(self):
+        """实测常把首字吃掉或多认一笔（「山榜样激励」「首强化」），要纠回规范名。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.screen = MagicMock()
+        currency.ts = Mock()
+        currency.ts.ts.ocr.return_value = [
+            ([], ("山榜样激励", 0.95)),
+            ([], ("首强化", 0.95)),
+            ([], ("战个痛快", 0.95)),
+        ]
+
+        self.assertEqual(
+            currency.read_affixes(), ["榜样激励", "首领强化", "战个痛快"])
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_single_environment_card_is_treated_as_extra_environment(self, _manager, _sleep):
+        """环境只有三张卡或蓝海的单张卡，没有两张的情况。"""
+        currency = self.make_currency()
+        currency.recognize_options = Mock(return_value=["蓝海", "", ""])
+        currency._select_blue_ocean_extra_environment = Mock(return_value=True)
+        currency.investment_tracker = Mock()
+        currency.update_state = Mock()
+
+        self.assertEqual(currency.select_envir(), 1)
+
+        currency._select_blue_ocean_extra_environment.assert_called_once_with()
+        currency.investment_tracker.reset.assert_called_once_with()
+        currency.update_state.assert_called_once_with("1-1")
+        self.assertTrue(currency.envir_selected)
+
 
 if __name__ == "__main__":
     unittest.main()
