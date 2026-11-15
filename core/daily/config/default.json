@@ -1,1 +1,18 @@
-{}
+{
+    "daily_relic": {
+        "module": "inner",
+        "inner": "虫虫来袭",
+        "outer": "密伶之径-生研院",
+        "inner_auto": false,
+        "inner_runs": 1,
+        "outer_auto": false,
+        "outer_runs": 1,
+        "inner_skill_order": "",
+        "inner_skill_delay": 1.5,
+        "inner_skill_switch_delay": 0.3,
+        "inner_support": false,
+        "outer_support": false,
+        "inner_support_slot": 1,
+        "outer_support_slot": 1
+    }
+}
