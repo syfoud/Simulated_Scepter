@@ -221,37 +221,59 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.click_box.assert_not_called()
         self.assertFalse(currency.exit_requested)
 
-    @patch("core.currency.automation.time.sleep")
-    @patch("core.currency.automation.key_mouse_manager")
-    def test_affix_click_waits_until_something_is_recognised(self, manager, _sleep):
+    @staticmethod
+    def _affix_currency(read_affixes):
         currency = object.__new__(SimulatedCurrency)
         currency.get_screen = Mock(return_value="frame")
-        # 刚切进界面那两帧是空的，第三帧才出字
-        currency.read_affixes = Mock(side_effect=[[], [], ["首领强化", "决战在即"]])
+        currency.read_affixes = read_affixes
         currency.affix_sampler = Mock()
         currency.affix_sampler.record.return_value = []
         currency.affix_sampler.run_index = 1
         currency.affix_targets = []
         currency.gather_mode = False
         currency.max_runs = 0
+        currency.affix_incomplete_rounds = 0
+        return currency
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_waits_until_four_are_visible(self, manager, _sleep):
+        """词缀从左往右渐显，认到一两条就点下一步会漏采。"""
+        currency = self._affix_currency(Mock(side_effect=[
+            ["侵蚀·第一位面强化"],
+            ["侵蚀·第一位面强化", "冷冻冬眠"],
+            ["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血"],
+            ["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"],
+        ]))
         manager.reset_mock()
 
         self.assertEqual(currency.read_affixes_and_continue(), 1)
 
         currency.affix_sampler.record.assert_called_once_with(
-            ["首领强化", "决战在即"], [])
+            ["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"], [])
+        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_partial_result_is_retried_before_accepting(self, manager, _sleep):
+        currency = self._affix_currency(Mock(return_value=["侵蚀·第一位面强化"]))
+        manager.reset_mock()
+
+        rounds = SimulatedCurrency.AFFIX_PARTIAL_RETRY_ROUNDS
+        for _ in range(rounds - 1):
+            self.assertEqual(currency.read_affixes_and_continue(), 1)
+            manager.click_point.assert_not_called()
+            currency.affix_sampler.record.assert_not_called()
+
+        # 最后一轮放弃等待，按现有结果记一笔并继续
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+        currency.affix_sampler.record.assert_called_once_with(["侵蚀·第一位面强化"], [])
         manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
 
     @patch("core.currency.automation.time.sleep")
     @patch("core.currency.automation.key_mouse_manager")
     def test_affix_click_is_skipped_when_nothing_is_recognised(self, manager, _sleep):
-        currency = object.__new__(SimulatedCurrency)
-        currency.get_screen = Mock(return_value="frame")
-        currency.read_affixes = Mock(return_value=[])
-        currency.affix_sampler = Mock()
-        currency.affix_targets = []
-        currency.gather_mode = False
-        currency.max_runs = 0
+        currency = self._affix_currency(Mock(return_value=[]))
         manager.reset_mock()
 
         self.assertEqual(currency.read_affixes_and_continue(), 1)

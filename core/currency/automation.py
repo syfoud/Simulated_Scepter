@@ -158,8 +158,12 @@ class SimulatedCurrency(CurrencyUtils):
     BLANK_PROMPT_BOX = [800, 640, 1140, 1010]
     # 界面刚切进来时常见「只渲染出一部分」：词缀条/环境卡片都要轮询等它出字，
     # 拿半帧结果去点下一步或点刷新会漏采、甚至会洗掉必选环境
-    AFFIX_READ_ATTEMPTS = 8
-    AFFIX_READ_INTERVAL = 0.35
+    # A8-20 固定给四条词缀，而且是从左往右依次刷出来的：认到一条就跑会漏后面的
+    AFFIX_EXPECTED = 4
+    AFFIX_READ_ATTEMPTS = 10
+    AFFIX_READ_INTERVAL = 0.3
+    # 认不满四条时，最多再等这么多轮（每轮一次触发）才按现有结果继续
+    AFFIX_PARTIAL_RETRY_ROUNDS = 3
     ENVIR_WAIT_ATTEMPTS = 8
     ENVIR_WAIT_INTERVAL = 0.3
     ENVIR_MIN_FILLED = 2
@@ -202,6 +206,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.envir_seen = set()
         # 本局是否已经选完投资环境（采集模式用它区分「词缀后的空白」和「奇遇的空白」）
         self.envir_selected = False
+        # 本局词缀没认满四条的重试次数
+        self.affix_incomplete_rounds = 0
 
         for index in range(1, 5):
             self.envir[index - 1] = priority[f"envir_{index}"][:]
@@ -475,6 +481,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         self.exit_started = False
         self.envir_selected = False
+        self.affix_incomplete_rounds = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -887,18 +894,25 @@ class SimulatedCurrency(CurrencyUtils):
         return True
 
     def wait_affixes (self):
-        """轮询等词缀条出字；一帧都没认出来就返回空列表，调用方别急着点下一步。"""
+        """轮询等词缀条刷满 AFFIX_EXPECTED 条。
+
+        词缀是一条一条从左往右显出来的，认到一条就点下一步会漏采后面的；
+        等满四条（或等够次数）再返回。
+        """
+        affixes = []
         for attempt in range(self.AFFIX_READ_ATTEMPTS):
             self.get_screen()
             affixes = self.read_affixes()
-            if affixes:
+            if len(affixes) >= self.AFFIX_EXPECTED:
                 return affixes
             CUS_LOGGER.debug(
-                "词缀条还没出字（第 %d/%d 次识别），等下一帧",
+                "词缀条现有 %d/%d 条（第 %d/%d 次识别）：%s",
+                len(affixes), self.AFFIX_EXPECTED,
                 attempt + 1, self.AFFIX_READ_ATTEMPTS,
+                "、".join(affixes) if affixes else "（空）",
             )
             time.sleep(self.AFFIX_READ_INTERVAL)
-        return []
+        return affixes
 
     def read_affixes_and_continue (self):
         """词缀界面：读词缀 → 采样落盘 → 点右下角「下一步」。"""
@@ -909,9 +923,20 @@ class SimulatedCurrency(CurrencyUtils):
                 self.AFFIX_READ_ATTEMPTS,
             )
             return 1
-        if len(affixes) < 4:
+        if len(affixes) < self.AFFIX_EXPECTED:
+            self.affix_incomplete_rounds += 1
+            if self.affix_incomplete_rounds < self.AFFIX_PARTIAL_RETRY_ROUNDS:
+                CUS_LOGGER.warning(
+                    "词缀只识别到 %d/%d 条（%s），再等一轮（第 %d 次重试）",
+                    len(affixes), self.AFFIX_EXPECTED, "、".join(affixes),
+                    self.affix_incomplete_rounds,
+                )
+                return 1
             CUS_LOGGER.warning(
-                "词缀只识别到 %d 条：%s", len(affixes), "、".join(affixes))
+                "重试 %d 轮仍不足 %d 条，按现有 %d 条继续：%s",
+                self.affix_incomplete_rounds, self.AFFIX_EXPECTED,
+                len(affixes), "、".join(affixes),
+            )
         CUS_LOGGER.info("本局词缀：%s", "、".join(affixes))
         hits = self.affix_sampler.record(affixes, self.affix_targets)
         if hits:
