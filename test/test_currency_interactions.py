@@ -1,4 +1,5 @@
 import unittest
+from collections import Counter
 from unittest.mock import Mock, call, patch
 
 from core.currency.automation import SimulatedCurrency
@@ -11,6 +12,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.prior_envir = []
         currency.envir = [[], [], [], []]
         currency.has_fresh = False
+        currency.envir_seen = set()
+        currency.gather_mode = False
         currency.ts = Mock()
         currency.get_screen = Mock(return_value=object())
         currency.ENVIR_BOXES = [
@@ -209,6 +212,47 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.max_refresh = 1
         currency._apply_environment_effects(["蓝海"])
         self.assertEqual(currency.max_refresh, 1)
+
+    def _gather_currency(self, targets, priors):
+        currency = object.__new__(SimulatedCurrency)
+        currency.gather_mode = True
+        currency.affix_targets = list(targets)
+        currency.prior_envir = list(priors)
+        currency.envir_seen = set()
+        currency.affix_sampler = Mock()
+        currency.affix_sampler.counter = Counter()
+        currency.affix_sampler.run_index = 3
+        currency._stop = False
+        return currency
+
+    def test_gather_goal_needs_both_affix_and_envir(self):
+        currency = self._gather_currency(["复仇心切"], ["蓝海"])
+        currency.affix_sampler.counter["复仇心切"] = 1
+
+        self.assertFalse(currency.gather_goal_reached())   # 环境还没刷到
+        self.assertFalse(currency.stop_if_gather_goal_reached())
+        self.assertFalse(currency._stop)
+
+        currency.envir_seen.add("蓝海")
+        self.assertTrue(currency.gather_goal_reached())
+        self.assertTrue(currency.stop_if_gather_goal_reached())
+        self.assertTrue(currency._stop)
+
+    def test_gather_goal_ignores_off_mode_and_empty_goal(self):
+        off = self._gather_currency(["复仇心切"], [])
+        off.gather_mode = False
+        off.affix_sampler.counter["复仇心切"] = 1
+        self.assertFalse(off.gather_goal_reached())
+
+        empty = self._gather_currency([], [])
+        self.assertFalse(empty.gather_goal_reached())
+
+    def test_gather_goal_tolerates_ocr_typos(self):
+        currency = self._gather_currency(["复仇心切"], ["银•金•彩"])
+        currency.affix_sampler.counter["复仇心切"] = 1
+        currency.envir_seen.add("银金彩")          # OCR 吃掉间隔点
+
+        self.assertTrue(currency.gather_goal_reached())
 
 
 if __name__ == "__main__":

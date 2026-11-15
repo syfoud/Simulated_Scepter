@@ -8,7 +8,7 @@ import pyautogui
 
 from core.currency.affix_stats import AffixSampler
 from core.currency.envirs import ENVIR_NAMES
-from core.currency.textmatch import best_match
+from core.currency.textmatch import best_match, similar
 from core.currency.investment_selection import choose_fallback_investment
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
@@ -191,6 +191,8 @@ class SimulatedCurrency(CurrencyUtils):
 
         self.prior_envir = priority["prior_envir"][:]
         self.envir = [[] for _ in range(4)]
+        # 采集模式用：这一轮下来已经刷到过的投资环境（跨局累计，用来判断目标是否收齐）
+        self.envir_seen = set()
 
         for index in range(1, 5):
             self.envir[index - 1] = priority[f"envir_{index}"][:]
@@ -462,6 +464,7 @@ class SimulatedCurrency(CurrencyUtils):
             return False, -1
         texts = self.canonical_environments(self.recognize_options (self.ENVIR_BOXES))
         CUS_LOGGER.info (f"OCR 识别结果: {texts}")
+        self.envir_seen.update(text for text in texts if text)
         matched, selected_idx = match_prior (texts)
 
         if not matched and not self.has_fresh:
@@ -517,6 +520,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.investment_tracker.reset()
         self.update_state("1-1")
         CUS_LOGGER.info ("投资环境选择完成")
+        self.stop_if_gather_goal_reached()
         return 1
 
     def _apply_environment_effects(self, texts):
@@ -572,6 +576,7 @@ class SimulatedCurrency(CurrencyUtils):
 
             self.ts.forward(self.get_screen())
             texts = self.canonical_environments(self.recognize_options(self.ENVIR_BOXES))
+            self.envir_seen.update(text for text in texts if text)
             available = [idx for idx, text in enumerate(texts) if text.strip()]
             if len(available) != 1:
                 CUS_LOGGER.info(
@@ -808,6 +813,38 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.warning("词缀条 OCR 失败", exc_info=True)
         return texts
 
+    def gather_goal_reached (self):
+        """采集模式下，目标词缀与必选环境是否都刷到了。
+
+        两边都没配置时不算达成（否则开局就停）。词缀看采样计数器，环境看跨局累计的
+        `envir_seen`；都用形近字匹配，OCR 错一个字不至于漏判。
+        """
+        if not self.gather_mode:
+            return False
+        if not self.affix_targets and not self.prior_envir:
+            return False
+        affixes_done = all(
+            any(similar(target, seen) for seen in self.affix_sampler.counter)
+            for target in self.affix_targets
+        )
+        envir_done = all(
+            any(similar(prior, seen) for seen in self.envir_seen)
+            for prior in self.prior_envir
+        )
+        return affixes_done and envir_done
+
+    def stop_if_gather_goal_reached (self):
+        """目标全部刷到就停下，别让它一直空转。返回是否已停止。"""
+        if not self.gather_goal_reached():
+            return False
+        CUS_LOGGER.info(
+            "采集目标已全部刷到（目标词缀 %d 条 / 必选环境 %d 条，共 %d 把），停止运行；"
+            "游戏会停在当前界面，需要的话手动退出这一局",
+            len(self.affix_targets), len(self.prior_envir), self.affix_sampler.run_index,
+        )
+        self._stop = True
+        return True
+
     def read_affixes_and_continue (self):
         """词缀界面：读词缀 → 采样落盘 → 点右下角「下一步」。"""
         self.get_screen()
@@ -819,6 +856,8 @@ class SimulatedCurrency(CurrencyUtils):
         if self.max_runs and self.affix_sampler.run_index >= self.max_runs:
             CUS_LOGGER.info("已达到设定的最大把数(%s)，停止采集", self.max_runs)
             self._stop = True
+            return 1
+        if self.stop_if_gather_goal_reached():
             return 1
         key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
         key_mouse_manager.wait()
