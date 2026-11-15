@@ -1,0 +1,230 @@
+[
+    {
+        "name": "进入生存索引",
+        "trigger": {
+            "text": "每日实训",
+            "box": [
+                103,
+                65,
+                203,
+                93
+            ]
+        },
+        "actions": [
+            {
+                "position": [
+                    482,
+                    215
+                ]
+            }
+        ]
+    },
+    {
+        "name": "进入目标内圈副本",
+        "trigger": {
+            "text": "位面饰品快速提取",
+            "box": [
+                900,
+                317,
+                1189,
+                354
+            ]
+        },
+        "actions": [
+            "enter_relic_dungeon"
+        ]
+    },
+    {
+        "name": "进入目标外圈副本",
+        "trigger": {
+            "photo": "relic",
+            "pos": {
+                "x": 324,
+                "y": 828
+            },
+            "threshold": 0.99,
+            "box": [
+                260,
+                675,
+                282,
+                878
+            ]
+        },
+        "actions": [
+            "enter_relic_dungeon"
+        ]
+    },
+    {
+        "name": "选择副本分类",
+        "trigger": {
+            "text": "生存索引",
+            "box": [
+                101,
+                63,
+                203,
+                99
+            ]
+        },
+        "actions": [
+            "select_relic_category"
+        ]
+    },
+    {
+        "name": "开始内圈挑战",
+        "trigger": {
+            "text": "开始挑战",
+            "box": [
+                1656,
+                968,
+                1759,
+                1000
+            ]
+        },
+        "actions": [
+            "apply_support",
+            {
+                "box": [
+                    1656,
+                    968,
+                    1759,
+                    1000
+                ],
+                "text": "开始挑战"
+            }
+        ]
+    },
+    {
+        "name": "开始外圈挑战",
+        "trigger": {
+            "text": "挑战",
+            "box": [
+                1616,
+                967,
+                1673,
+                1002
+            ]
+        },
+        "actions": [
+            {
+                "box": [
+                    1616,
+                    967,
+                    1673,
+                    1002
+                ],
+                "text": "挑战"
+            }
+        ]
+    },
+    {
+        "name": "备战支援界面",
+        "trigger": {
+            "text": "开始挑战",
+            "box": [
+                1623,
+                967,
+                1727,
+                999
+            ]
+        },
+        "actions": [
+            "apply_support",
+            {
+                "box": [
+                    1623,
+                    967,
+                    1727,
+                    999
+                ],
+                "text": "开始挑战"
+            }
+        ]
+    },
+    {
+        "name": "释放秘技并接敌",
+        "trigger": {
+            "once": true,
+            "text": "差分宇宙",
+            "box": [
+                57,
+                14,
+                148,
+                42
+            ]
+        },
+        "actions": [
+            "release_secret_skills",
+            "approach_enemy"
+        ]
+    },
+    {
+        "name": "开启自动战斗",
+        "trigger": {
+            "photo": "auto_battle",
+            "pos": {
+                "x": 23,
+                "y": 969
+            },
+            "threshold": 0.925
+        },
+        "actions": [
+            {
+                "press": "V",
+                "time": 0
+            }
+        ]
+    },
+    {
+        "name": "退出关卡",
+        "trigger": {
+            "text": "退出关卡",
+            "box": [
+                665,
+                960,
+                765,
+                988
+            ]
+        },
+        "actions": [
+            {
+                "box": [
+                    662,
+                    954,
+                    767,
+                    990
+                ],
+                "text": "退出关卡"
+            },
+            {
+                "set_state": "finish_relic"
+            }
+        ]
+    },
+    {
+        "name": "完成刷遗器",
+        "trigger": {
+            "condition": "finish_relic",
+            "state_only": true
+        },
+        "actions": [
+            "esc_end"
+        ]
+    },
+    {
+        "name": "大世界",
+        "trigger": {
+            "photo": "smartphone",
+            "pos": {
+                "x": 32,
+                "y": 67
+            },
+            "threshold": 0.96
+        },
+        "actions": [
+            {
+                "press": "f4",
+                "time": 0
+            }
+        ]
+    }
+]
