@@ -156,6 +156,13 @@ class SimulatedCurrency(CurrencyUtils):
     # 三个空白提示的 y 区间互不重叠（689~718 / 778~807 / 948~975），靠位置就能区分是哪一屏
     CURIOSITY_LABEL_BOX = [740, 468, 845, 497]
     CURIOSITY_BLANK_BOX = [872, 689, 1046, 718]
+    # 界面刚切进来时常见「只渲染出一部分」：词缀条/环境卡片都要轮询等它出字，
+    # 拿半帧结果去点下一步或点刷新会漏采、甚至会洗掉必选环境
+    AFFIX_READ_ATTEMPTS = 8
+    AFFIX_READ_INTERVAL = 0.35
+    ENVIR_WAIT_ATTEMPTS = 8
+    ENVIR_WAIT_INTERVAL = 0.3
+    ENVIR_MIN_FILLED = 2
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -269,6 +276,32 @@ class SimulatedCurrency(CurrencyUtils):
         后面的优先级匹配、蓝海/银金彩判定都只看规范名。
         """
         return [best_match(text, ENVIR_NAMES) or text for text in texts]
+
+    def wait_environments (self):
+        """等三张投资环境卡片渲染出来再判断。
+
+        刚切进界面时常见只出来第一张（日志里就是 `['二手市场', '', '']`），
+        这时判"没刷到必选环境"会立刻点刷新，直接把必选环境洗掉。
+        """
+        texts = []
+        for attempt in range(self.ENVIR_WAIT_ATTEMPTS):
+            self.get_screen()
+            texts = self.canonical_environments(self.recognize_options(self.ENVIR_BOXES))
+            filled = sum(1 for text in texts if text.strip())
+            if filled >= self.ENVIR_MIN_FILLED:
+                if attempt:
+                    CUS_LOGGER.debug("投资环境卡片已渲染（第 %d 次识别）", attempt + 1)
+                return texts
+            CUS_LOGGER.debug(
+                "投资环境只认出 %d 张卡（第 %d/%d 次识别），等渲染",
+                filled, attempt + 1, self.ENVIR_WAIT_ATTEMPTS,
+            )
+            time.sleep(self.ENVIR_WAIT_INTERVAL)
+        CUS_LOGGER.warning(
+            "投资环境只认出 %d 张卡，仍按当前结果继续",
+            sum(1 for text in texts if text.strip()),
+        )
+        return texts
 
     def route (self):
         set_forground ()
@@ -462,7 +495,7 @@ class SimulatedCurrency(CurrencyUtils):
                         CUS_LOGGER.info (f"检测到必选环境: {pri}，选择选项{idx+1}")
                         return True, idx
             return False, -1
-        texts = self.canonical_environments(self.recognize_options (self.ENVIR_BOXES))
+        texts = self.wait_environments ()
         CUS_LOGGER.info (f"OCR 识别结果: {texts}")
         self.envir_seen.update(text for text in texts if text)
         matched, selected_idx = match_prior (texts)
@@ -845,11 +878,33 @@ class SimulatedCurrency(CurrencyUtils):
         self._stop = True
         return True
 
+    def wait_affixes (self):
+        """轮询等词缀条出字；一帧都没认出来就返回空列表，调用方别急着点下一步。"""
+        for attempt in range(self.AFFIX_READ_ATTEMPTS):
+            self.get_screen()
+            affixes = self.read_affixes()
+            if affixes:
+                return affixes
+            CUS_LOGGER.debug(
+                "词缀条还没出字（第 %d/%d 次识别），等下一帧",
+                attempt + 1, self.AFFIX_READ_ATTEMPTS,
+            )
+            time.sleep(self.AFFIX_READ_INTERVAL)
+        return []
+
     def read_affixes_and_continue (self):
         """词缀界面：读词缀 → 采样落盘 → 点右下角「下一步」。"""
-        self.get_screen()
-        affixes = self.read_affixes()
-        CUS_LOGGER.info("本局词缀：%s", "、".join(affixes) if affixes else "（未识别到）")
+        affixes = self.wait_affixes()
+        if not affixes:
+            CUS_LOGGER.warning(
+                "等了 %d 帧仍没识别到词缀，先不点下一步，等下一轮重试",
+                self.AFFIX_READ_ATTEMPTS,
+            )
+            return 1
+        if len(affixes) < 4:
+            CUS_LOGGER.warning(
+                "词缀只识别到 %d 条：%s", len(affixes), "、".join(affixes))
+        CUS_LOGGER.info("本局词缀：%s", "、".join(affixes))
         hits = self.affix_sampler.record(affixes, self.affix_targets)
         if hits:
             CUS_LOGGER.info("命中目标词缀：%s", "、".join(hits))

@@ -254,6 +254,68 @@ class CurrencyInteractionTests(unittest.TestCase):
 
         self.assertTrue(currency.gather_goal_reached())
 
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_click_waits_until_something_is_recognised(self, manager, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        # 刚切进界面那两帧是空的，第三帧才出字
+        currency.read_affixes = Mock(side_effect=[[], [], ["首领强化", "决战在即"]])
+        currency.affix_sampler = Mock()
+        currency.affix_sampler.record.return_value = []
+        currency.affix_sampler.run_index = 1
+        currency.affix_targets = []
+        currency.gather_mode = False
+        currency.max_runs = 0
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        currency.affix_sampler.record.assert_called_once_with(
+            ["首领强化", "决战在即"], [])
+        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_click_is_skipped_when_nothing_is_recognised(self, manager, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.read_affixes = Mock(return_value=[])
+        currency.affix_sampler = Mock()
+        currency.affix_targets = []
+        currency.gather_mode = False
+        currency.max_runs = 0
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        currency.affix_sampler.record.assert_not_called()
+        manager.click_point.assert_not_called()
+
+    @patch("core.currency.automation.time.sleep")
+    def test_environment_wait_retries_until_cards_are_rendered(self, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.recognize_options = Mock(
+            side_effect=[["二手市场", "", ""], ["黄金时代", "尾彩", "轮岗"]])
+        currency.ENVIR_BOXES = [[0, 0, 10, 10]]
+
+        self.assertEqual(
+            currency.wait_environments(), ["黄金时代", "尾彩", "轮岗"])
+
+    @patch("core.currency.automation.time.sleep")
+    def test_environment_wait_gives_up_after_attempts(self, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.recognize_options = Mock(return_value=["二手市场", "", ""])
+        currency.ENVIR_BOXES = [[0, 0, 10, 10]]
+
+        self.assertEqual(currency.wait_environments(), ["二手市场", "", ""])
+        self.assertEqual(
+            currency.recognize_options.call_count,
+            SimulatedCurrency.ENVIR_WAIT_ATTEMPTS,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
