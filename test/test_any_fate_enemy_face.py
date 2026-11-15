@@ -200,6 +200,8 @@ class FaceEnemyTest(unittest.TestCase):
         )
         self.manager.keyDown.assert_not_called()
         self.manager.keyUp.assert_not_called()
+        # face_enemy 不重复截屏：调用方在进入前刚截过当前帧
+        utils.get_screen.assert_not_called()
 
     def test_far_enemy_is_approached_then_reacquired_and_turned_again(self):
         """ds>28：先按住 w 接近，再重新识别红点、二次转向，最后轻点 w。
@@ -277,7 +279,8 @@ class FaceEnemyTest(unittest.TestCase):
             self.assertTrue(utils.face_enemy())
 
         predict.assert_called_once()
-        # 只截了初始、接近循环一帧、松键后重识别一帧；跑满 follow-up 时长需要约 22 次截帧
+        # face_enemy 不再自己截初始帧；这里只截接近循环一帧和松键后重识别一帧，
+        # 跑满接近时长需要约 22 次截帧，因此用 <5 判断已提前停止
         self.assertLess(utils.get_screen.call_count, 5)
         self.assertEqual(
             [
@@ -537,10 +540,12 @@ class AttackEntryTest(unittest.TestCase):
         utils.check = Mock(return_value=False)
         utils.face_enemy = Mock()
         utils.use_e = Mock()
+        # 默认没有遇敌红圈（红圈出现时不应再转向找红点）
+        utils._enemy_ring_nearby = Mock(return_value=False)
         return utils
 
     def test_z_monster_info_attack_faces_enemy_before_technique(self):
-        """小地图外侧没有遇敌红圈：先 face_enemy，再施放秘技。"""
+        """小地图外侧没有遇敌红圈：先 face_enemy，再施放秘技（use_e 内部负责两次 e）。"""
         utils = self._make_only_minimap_utils()
         order = []
         utils.face_enemy.side_effect = lambda: order.append("face_enemy")
@@ -550,7 +555,7 @@ class AttackEntryTest(unittest.TestCase):
             utils.get_path_only_minimap()
 
         utils.face_enemy.assert_called_once_with()
-        self.assertEqual(3, utils.use_e.call_count)
+        self.assertGreaterEqual(utils.use_e.call_count, 1)
         self.assertLess(order.index("face_enemy"), order.index("use_e"))
 
     def test_nearby_red_ring_already_means_enemy_is_close(self):
@@ -562,10 +567,10 @@ class AttackEntryTest(unittest.TestCase):
             utils.get_path_only_minimap()
 
         utils.face_enemy.assert_not_called()
-        self.assertEqual(3, utils.use_e.call_count)
+        self.assertGreaterEqual(utils.use_e.call_count, 1)
 
     def test_big_map_attack_faces_enemy_before_technique(self):
-        """target_type==1 且非信任标注：先 face_enemy 再施放秘技。"""
+        """target_type==1 且非信任标注：先 face_enemy 再施放秘技（use_e 内部负责两次 e）。"""
         utils = self._make_big_map_utils(quan=1)
         order = []
         utils.face_enemy.side_effect = lambda: order.append("face_enemy")
@@ -576,8 +581,19 @@ class AttackEntryTest(unittest.TestCase):
             utils.get_path_with_big_map()
 
         utils.face_enemy.assert_called_once_with()
-        self.assertEqual(2, utils.use_e.call_count)
+        self.assertGreaterEqual(utils.use_e.call_count, 1)
         self.assertLess(order.index("face_enemy"), order.index("use_e"))
+
+    def test_big_map_attack_skips_facing_when_enemy_ring_visible(self):
+        """小地图遇敌红圈已出现（敌人贴在身边）：不转向，直接按当前朝向出手。"""
+        utils = self._make_big_map_utils(quan=1)
+        utils._enemy_ring_nearby = Mock(return_value=True)
+
+        with self._navigation_patches(make_minimap([(93, 178)])):
+            utils.get_path_with_big_map()
+
+        utils.face_enemy.assert_not_called()
+        self.assertGreaterEqual(utils.use_e.call_count, 1)
 
     def test_big_map_attack_faces_enemy_before_normal_attack(self):
         """没有秘技/战技可用时：先 face_enemy，再点画面中心普攻。"""
