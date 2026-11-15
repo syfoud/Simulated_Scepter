@@ -710,6 +710,10 @@ class SimulatedCurrency(CurrencyUtils):
             self.ts.forward (self.get_screen ())
             texts = self.recognize_options (boxes)
             CUS_LOGGER.info (f"OCR 识别结果: {texts}")
+            filled = sum(1 for text in texts if text.strip())
+            if filled < len(texts):
+                # 正常是三张卡；不满三张多半是某一格 OCR 没读出来，记一笔便于核对
+                CUS_LOGGER.info(f"投资策略只认出 {filled} 张卡（共 {len(texts)} 格）")
 
             icon_presence = [False] * len(roi_boxes)
             for idx, box in enumerate(roi_boxes):
