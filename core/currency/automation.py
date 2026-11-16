@@ -238,6 +238,20 @@ class SimulatedCurrency(CurrencyUtils):
         self.front_priority, self.back_priority = resolve_priority(
             currency_settings["deployment"]
         )
+
+        # 策略采样与「目标/负面策略」配置
+        self.strategy_sampler = StrategySampler()
+        self.strategy_targets = currency_settings["strategy_targets"]
+        self.strategy_avoid = currency_settings["strategy_avoid"]
+        self.auto_exit_plane = currency_settings["auto_exit_plane"]
+        # 配了目标策略就是在收集策略：这种跑法不该被"等词缀"卡住（低难度本来就没词缀）
+        self.collecting_strategies = bool(self.strategy_targets)
+        if self.strategy_targets:
+            CUS_LOGGER.info("目标投资策略：%s", "、".join(self.strategy_targets))
+        if self.strategy_avoid:
+            CUS_LOGGER.info("负面投资策略（绝不选）：%s", "、".join(self.strategy_avoid))
+        if self.auto_exit_plane:
+            CUS_LOGGER.info("退出位面：按目标策略自动推算")
         if not self.front_priority and not self.back_priority:
             CUS_LOGGER.warning(
                 "尚未配置前台或后台角色优先级，备战角色只会作为补位进入前台空位；"
@@ -260,8 +274,6 @@ class SimulatedCurrency(CurrencyUtils):
         self.gather_mode = currency_settings["gather_mode"]
         self.max_runs = currency_settings["max_runs"]
         self.affix_targets = currency_settings["affix_targets"]
-        # 配了目标策略就是在收集策略：这种跑法不该被"等词缀"卡住（低难度本来就没词缀）
-        self.collecting_strategies = bool(self.strategy_targets)
         self.affix_sampler = AffixSampler()
         CUS_LOGGER.info(
             "对局类型: %s，难度选择: %s%s",
