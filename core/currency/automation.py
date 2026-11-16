@@ -1062,8 +1062,9 @@ class SimulatedCurrency(CurrencyUtils):
         # 只有开了词缀收集（或配了目标词缀）才值得花时间读词缀；否则直接点下一步，
         # 在低难度刷策略时这一步会白等十几秒
         if not getattr(self, "gather_mode", False):
+            # 不置「已记录」：这一下没点掉时下一帧要能接着点，
+            # 置了标记就会永远跳过，卡在这个界面
             CUS_LOGGER.debug("未开启词缀收集模式，跳过词缀识别直接点下一步")
-            self.affixes_recorded = True
             key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
             key_mouse_manager.wait()
             return 1

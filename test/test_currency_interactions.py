@@ -1019,7 +1019,8 @@ class CurrencyInteractionTests(unittest.TestCase):
 
         self.assertEqual(currency.read_affixes_and_continue(), 1)
 
-        self.assertTrue(currency.affixes_recorded)
+        # 不置「已记录」：没点掉时下一帧还要能接着点
+        self.assertFalse(currency.affixes_recorded)
         self.assertIn(
             call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
             manager.mock_calls,
