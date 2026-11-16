@@ -18,6 +18,7 @@ DIFFICULTY_MODES = ("lowest", "top")
 DEFAULT_DIFFICULTY_MODE = "lowest"
 DEFAULT_GATHER_MODE = False
 DEFAULT_MAX_RUNS = 0
+DEFAULT_AUTO_EXIT_PLANE = False
 
 
 PRIORITY_KEYS = (
@@ -97,6 +98,22 @@ def normalize_currency_settings(values=None):
         if isinstance(template, str) and isinstance(name, str) and name.strip()
     }
 
+    strategy_targets = values.get("strategy_targets", [])
+    if not isinstance(strategy_targets, list):
+        strategy_targets = []
+    strategy_targets = [n.strip() for n in strategy_targets if isinstance(n, str) and n.strip()]
+    strategy_targets = list(dict.fromkeys(strategy_targets))
+
+    strategy_avoid = values.get("strategy_avoid", [])
+    if not isinstance(strategy_avoid, list):
+        strategy_avoid = []
+    strategy_avoid = [n.strip() for n in strategy_avoid if isinstance(n, str) and n.strip()]
+    strategy_avoid = list(dict.fromkeys(strategy_avoid))
+
+    auto_exit_plane = values.get("auto_exit_plane", DEFAULT_AUTO_EXIT_PLANE)
+    if not isinstance(auto_exit_plane, bool):
+        auto_exit_plane = DEFAULT_AUTO_EXIT_PLANE
+
     gamemode = str(values.get("gamemode", DEFAULT_GAMEMODE)).strip().lower()
     if gamemode not in GAMEMODES:
         gamemode = DEFAULT_GAMEMODE
@@ -121,6 +138,9 @@ def normalize_currency_settings(values=None):
         affix_targets = []
 
     return {
+        "strategy_targets": strategy_targets,
+        "strategy_avoid": strategy_avoid,
+        "auto_exit_plane": auto_exit_plane,
         "exit_after_plane": exit_plane,
         "exit_if_no_prior": exit_if_no_prior,
         "prior_exit_plane": prior_exit_plane,

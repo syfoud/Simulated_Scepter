@@ -73,3 +73,27 @@ class SettingsDialog(BaseDialog):
             "max_runs": ui.Currency_max_runs_spin.value(),
             "gather_mode": ui.Currency_gather_mode_checkbox.isChecked(),
         }, path=self.path)
+    def open_strategy_targets(self):
+        """目标策略：勾选后优先选它们，并据此推算退出位面。"""
+        dialog = StrategySelectDialog(
+            self.strategy_targets, self,
+            title="选择目标投资策略",
+            hint="勾选要优先选、并且希望收集的策略；退出位面会按「还没收到的目标里最晚出现的那一面」自动推算。",
+        )
+        if dialog.exec_() != dialog.Accepted:
+            return
+        self.strategy_targets = dialog.selected_strategies()
+        self.section.Currency_strategy_targets_edit.setText("、".join(self.strategy_targets))
+
+    def open_strategy_avoid(self):
+        """负面策略：脚本绝不选它们。"""
+        dialog = StrategySelectDialog(
+            self.strategy_avoid, self,
+            title="选择负面投资策略",
+            hint="勾选绝对不想选的策略（跨局继承资源、卖掉全场角色之类）。",
+        )
+        if dialog.exec_() != dialog.Accepted:
+            return
+        self.strategy_avoid = dialog.selected_strategies()
+        self.section.Currency_strategy_avoid_edit.setText("、".join(self.strategy_avoid))
+

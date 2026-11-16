@@ -1460,3 +1460,122 @@ class SimulatedCurrency(CurrencyUtils):
             )
         return 0
 
+    STAGE_BOXES = ([430, 48, 515, 100], [250, 85, 330, 135])
+    STAGE_UPSCALE = 3           # 原尺寸 OCR 会漏字，放大三倍才稳
+    # 各面终局节点：1 面到 1-6，2/3 面到 x-5（幕后茶歇会顶掉一个奖励节点，1-5 不算终局）
+    PLANE_LAST_NODE = {1: 6, 2: 5, 3: 5}
+    @staticmethod
+    def canonical_strategies (texts):
+        """把 OCR 出来的卡名对齐到 298 条已知策略名，对不上的保留原文（便于发现新策略）。"""
+        aligned = []
+        for text in texts:
+            name = match_name(text) if text else None
+            aligned.append(name or text)
+        return aligned
+
+    def _pick_strategy (self, texts, icon_presence):
+        """选卡优先级：目标策略 > 未解锁图标 > 兜底；负面策略一律不选。
+
+        返回 (下标, 理由)；理由为 fallback 表示"这屏没有值得优先选的"，调用方可以刷新再试。
+        """
+        avoid = set(self.strategy_avoid)
+        allowed = [
+            idx for idx, name in enumerate(texts)
+            if name and name not in avoid
+        ]
+        if not allowed:
+            CUS_LOGGER.warning("这一屏三张都是负面策略，只能跳过优先逻辑")
+            allowed = [idx for idx, name in enumerate(texts) if name]
+        if not allowed:
+            return None, "empty"
+
+        for target in self.strategy_targets:
+            for idx in allowed:
+                if texts[idx] == target:
+                    return idx, f"目标策略「{target}」"
+
+        for idx in allowed:
+            if icon_presence[idx]:
+                return idx, "未解锁图标"
+
+        fallback = choose_fallback_investment(texts, icon_presence)
+        if fallback not in allowed:
+            fallback = allowed[0]
+        return fallback, "fallback"
+
+    def _refresh_auto_exit_plane (self):
+        """按「还没收集到的目标策略」实时推算退出位面。"""
+        if not self.auto_exit_plane:
+            return
+        if not self.strategy_targets:
+            self.exit_plane = self.set_exit_plane
+            return
+        plane = exit_plane_for(self.strategy_targets, self.strategy_sampler.collected)
+        if plane != self.exit_plane:
+            CUS_LOGGER.info(
+                "退出位面自动调整：第 %s 面（目标策略还剩 %d 条未收集）",
+                plane, len(self.strategy_sampler.missing(self.strategy_targets)),
+            )
+        self.exit_plane = plane
+
+    def read_stage (self):
+        """读顶栏的「位面-节点」标记，返回 (位面, 节点)；认不出来返回 None。
+
+        原来的写法不读位面（只按"选了几次策略"数），4.7 里策略数量和位面不再一一对应，
+        必须真读一次。原尺寸 OCR 会漏字，放大三倍才稳。
+        """
+        self.get_screen()
+        for box in self.STAGE_BOXES:
+            patch = self.screen[box[1]:box[3], box[0]:box[2]]
+            if patch is None or patch.size == 0:
+                continue
+            upscaled = cv2.resize(
+                patch, None, fx=self.STAGE_UPSCALE, fy=self.STAGE_UPSCALE,
+                interpolation=cv2.INTER_CUBIC)
+            text = self.ts.ocr_one_row(upscaled)
+            match = re.search(r"(\d)\s*[-—~]\s*(\d+)", text or "")
+            if match:
+                return int(match.group(1)), int(match.group(2))
+        return None
+
+    def _maybe_exit_by_stage (self):
+        """在备战界面判断能不能退。
+
+        条件：到达设定退出位面、且这一面已经选过策略。
+        另外两种情况直接退：已经走过设定面数；或者设定面的终局节点到了却一次策略都没出现
+        （周天鸽会把某一面的策略提前，那个面的选择就没了）。
+        """
+        if self.exit_plane is None:
+            return False
+
+        stage = self.read_stage()
+        if stage is None:
+            CUS_LOGGER.debug("没读到位面标记，本轮不判断退出")
+            return False
+
+        plane, node = stage
+        self.current_plane = plane
+        selected = self.plane_strategy_count.get(plane, 0)
+        last_node = self.PLANE_LAST_NODE.get(plane, 5)
+
+        if plane > self.exit_plane:
+            CUS_LOGGER.info(
+                "已越过退出位面（当前 %d-%d，设定第 %d 面），直接退出", plane, node, self.exit_plane)
+            reason = "越过退出位面"
+        elif plane == self.exit_plane and selected:
+            CUS_LOGGER.info(
+                "第 %d 面已选过 %d 次策略（当前 %d-%d），退出", plane, selected, plane, node)
+            reason = "到达退出位面且已选过策略"
+        elif plane == self.exit_plane and node >= last_node and not selected:
+            CUS_LOGGER.info(
+                "第 %d 面已到终局节点 %d-%d 却没出现策略（被提前到前面了），直接退出",
+                plane, plane, node)
+            reason = "设定面无策略"
+        else:
+            return False
+
+        CUS_LOGGER.info("退出条件满足：%s", reason)
+        self.exit_requested = True
+        self.update_state("exit")
+        return True
+
