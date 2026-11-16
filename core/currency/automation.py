@@ -136,6 +136,11 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 龙丹专属「双龙吟」面板：固定四张卡（召唤/治疗/连击/反击），拿每张卡下面的「详情」当锚点
+    DRAGON_DETAIL_BOX = [620, 380, 1520, 425]
+    DRAGON_CARD_OFFSET = 60
+    DRAGON_FALLBACK_POSITION = (697, 332)
+    DRAGON_CONFIRM_BOX = [1430, 575, 1560, 620]
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -709,6 +714,37 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def choose_dragon_enhance (self):
+        """龙丹的「双龙吟」面板：任选一个羁绊，再点「确认选择」。
+
+        四张卡位置固定，但仍拿「详情」按钮当锚点（点它正上方 60px），
+        这样即使以后卡片重排也不会点空。
+        """
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(self.DRAGON_DETAIL_BOX)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.DRAGON_CARD_OFFSET))
+            CUS_LOGGER.info("双龙吟面板按「详情」锚点选卡：%s", position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("双龙吟面板没认出「详情」，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.DRAGON_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.DRAGON_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("双龙吟面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("羁绊效果已选择")
+        return 1
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。

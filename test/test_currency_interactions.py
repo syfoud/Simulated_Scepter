@@ -173,6 +173,52 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dragon_bond_clicks_above_leftmost_detail(self, manager):
+        """四张卡位置固定，但仍用「详情」锚点，避免以后重排点空。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1393, 392, 1442, 417]},
+            {"raw_text": "详情", "box": [673, 392, 721, 417]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_dragon_enhance(), 1)
+
+        # 最左详情中心 x=(673+721)//2=697，y=392-60=332
+        self.assertIn(call.click_point(697, 332), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.DRAGON_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dragon_bond_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_dragon_enhance(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.DRAGON_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dragon_bond_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_dragon_enhance(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
