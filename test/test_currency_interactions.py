@@ -248,7 +248,9 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.affix_sampler.record.return_value = []
         currency.affix_sampler.run_index = 1
         currency.affix_targets = []
-        currency.gather_mode = False
+        currency.gather_mode = True    # 这些用例验证的是「词缀收集」路径
+        currency.prior_envir = []
+        currency.envir_seen = set()
         currency.max_runs = 0
         currency.affix_incomplete_rounds = 0
         currency.affixes_recorded = False
@@ -1029,6 +1031,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency = object.__new__(SimulatedCurrency)
         currency.affixes_recorded = False
         currency.collecting_strategies = False
+        currency.gather_mode = True      # 开了词缀收集才会去读词缀
+        currency.affix_targets = ["复仇心切"]
         currency.wait_affixes = Mock(return_value=[])
         manager.reset_mock()
 
@@ -1039,6 +1043,22 @@ class CurrencyInteractionTests(unittest.TestCase):
             call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
             manager.mock_calls,
         )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_is_not_read_when_collection_is_off(self, manager):
+        """没开词缀收集时不该花十几秒读词缀，直接点下一步。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.affixes_recorded = False
+        currency.gather_mode = False
+        currency.affix_targets = []
+        currency.wait_affixes = Mock(return_value=[])
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        currency.wait_affixes.assert_not_called()
+        self.assertIn(call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
+                      manager.mock_calls)
 
 
 if __name__ == "__main__":

@@ -482,7 +482,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         # 右下角按钮文字就是"当前选中的模式"，比右侧标题稳定（标题切换时有动画）
         want_button = "进入" + want
-        for attempt in range(2):
+        for attempt in range(3):
             self.get_screen()
             if self.click_text(text=want_button, box=self.BATTLE_MODE_BUTTON_BOX,
                                click=False, allow_fail=True):
@@ -491,8 +491,9 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.info("切换到「%s」（第 %d 次）", want, attempt + 1)
             key_mouse_manager.click_point(*card)
             key_mouse_manager.wait()
+            time.sleep(0.6)  # 等右侧面板和按钮文字切换完
         else:
-            CUS_LOGGER.warning("两次都没切到「%s」，先不动，等下一轮", want)
+            CUS_LOGGER.warning("三次都没切到「%s」，先不动，等下一轮", want)
             return 0
 
         key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
@@ -1020,6 +1021,15 @@ class SimulatedCurrency(CurrencyUtils):
         """
         if self.affixes_recorded:
             CUS_LOGGER.debug("本局词缀已记录，跳过重复识别")
+            return 1
+
+        # 只有开了词缀收集（或配了目标词缀）才值得花时间读词缀；否则直接点下一步，
+        # 在低难度刷策略时这一步会白等十几秒
+        if not getattr(self, "gather_mode", False) and not getattr(self, "affix_targets", []):
+            CUS_LOGGER.debug("未开启词缀收集，跳过词缀识别直接点下一步")
+            self.affixes_recorded = True
+            key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
+            key_mouse_manager.wait()
             return 1
 
         affixes = self.wait_affixes()
