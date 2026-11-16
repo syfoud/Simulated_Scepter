@@ -818,5 +818,52 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertEqual(currency.close_black_market(), 0)
 
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_ranger_hero_clicks_above_leftmost_detail(self, manager):
+        """巡海游侠四张卡位置固定，仍用「详情」锚点，避免重排点空。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1389, 394, 1439, 424]},
+            {"raw_text": "详情", "box": [675, 394, 725, 424]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_ranger_hero(), 1)
+
+        # 最左详情中心 x=(675+725)//2=700，y=394-60=334
+        self.assertIn(call.click_point(700, 334), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.RANGER_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_ranger_hero_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_ranger_hero(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.RANGER_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_ranger_hero_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_ranger_hero(), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

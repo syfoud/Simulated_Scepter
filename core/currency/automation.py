@@ -1700,3 +1700,38 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("「黑市主理人」面板已关闭")
         return 1
 
+    RANGER_DETAIL_BOX = [620, 380, 1520, 430]
+    RANGER_CARD_OFFSET = 60
+    RANGER_FALLBACK_POSITION = (700, 334)
+    RANGER_CONFIRM_BOX = [1430, 575, 1560, 620]
+
+    def choose_ranger_hero (self):
+        """「巡海游侠」任命面板：任选一名角色，再点「确认选择」。
+
+        四张卡位置固定，但仍拿「详情」按钮当锚点（点它正上方 60px），卡片重排也不会点空。
+        """
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(self.RANGER_DETAIL_BOX)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.RANGER_CARD_OFFSET))
+            CUS_LOGGER.info("巡海游侠面板按「详情」锚点选角色：%s", position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("巡海游侠面板没认出「详情」，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.RANGER_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.RANGER_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("巡海游侠面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("巡海游侠任命完成")
+        return 1
+

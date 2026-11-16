@@ -1175,5 +1175,39 @@
         "actions": [
             "close_black_market"
         ]
+    },
+    {
+        "name": "巡海游侠-副标题",
+        "trigger": {
+            "text": "任命1名角色",
+            "box": [
+                880,
+                115,
+                1215,
+                155
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_ranger_hero"
+        ]
+    },
+    {
+        "name": "巡海游侠-红字提示",
+        "trigger": {
+            "text": "请选择一名角色",
+            "box": [
+                1400,
+                520,
+                1580,
+                565
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_ranger_hero"
+        ]
     }
 ]
