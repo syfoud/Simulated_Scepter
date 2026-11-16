@@ -171,10 +171,10 @@
         "trigger": {
             "text": "进入标准博弈",
             "box": [
-                1563,
-                946,
-                1711,
-                973
+                1540,
+                930,
+                1740,
+                995
             ],
             "interval": 1,
             "redundancy": 30
@@ -197,15 +197,7 @@
             "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    1637,
-                    960
-                ]
-            },
-            {
-                "set_state": "difficulty_select"
-            }
+            "enter_battle_mode"
         ]
     },
     {

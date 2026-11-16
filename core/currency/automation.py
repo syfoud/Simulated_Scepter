@@ -149,9 +149,9 @@ class SimulatedCurrency(CurrencyUtils):
     # 该按钮的文字框（日志里带上落点来源，便于核对）
     BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
-    # 4.7：模式标签挪到了左下角（以前在左上），标签文字就是当前模式
-    MODE_CHIP_BOX = [88, 848, 242, 918]
-    OVERCLOCK_TAB_POSITION = (160, 882)
+    # 4.7 的模式选择界面：左侧上下两张卡（标准 / 超频），右侧大标题显示当前选中的模式
+    MODE_TITLE_BOX = [560, 125, 780, 185]
+    MODE_CARD_POSITIONS = {"standard": (155, 226), "overclock": (155, 418)}
     # 只有低难度才会出现的「返回最高职级」；没它说明已经在 A8-20
     TOP_RANK_BUTTON_BOX = [1325, 952, 1457, 979]
     # 词缀界面：标题、左下词缀条、右下「下一步」
@@ -459,26 +459,34 @@ class SimulatedCurrency(CurrencyUtils):
         return False
 
     def enter_battle_mode (self):
-        """点右下角「进入…博弈」按钮：标准博弈直接进，超频博弈先切左上标签。"""
-        if self.gamemode == "standard":
-            key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
-            key_mouse_manager.wait()
-            self.update_state("difficulty_select")
-            CUS_LOGGER.info("已点击「进入标准博弈」")
-            return 1
+        """选择对局类型再进难度界面。
 
-        # 先看左下角标签：已经是超频就别再点（再点可能又切回标准）
-        if self.click_text(text="超频博弈", box=self.MODE_CHIP_BOX, click=False, allow_fail=True):
-            CUS_LOGGER.info("左下角标签已是「超频博弈」，不需要切换")
-        else:
-            CUS_LOGGER.info("切换到超频博弈标签")
-            key_mouse_manager.click_point(*self.OVERCLOCK_TAB_POSITION)
+        4.7 的界面：左侧上下两张卡（标准博弈 / 超频博弈），右侧大标题显示当前选中的模式，
+        右下角按钮的文字会跟着变（进入标准博弈 / 进入超频博弈）。所以先按标题判断选没选中，
+        没选中才点卡片，最后点右下角那个按钮。
+        """
+        want = "标准博弈" if self.gamemode == "standard" else "超频博弈"
+        card = self.MODE_CARD_POSITIONS[
+            "standard" if self.gamemode == "standard" else "overclock"]
+
+        self.get_screen()
+        if not self.click_text(text=want, box=self.MODE_TITLE_BOX, click=False, allow_fail=True):
+            CUS_LOGGER.info("切换到「%s」", want)
+            key_mouse_manager.click_point(*card)
             key_mouse_manager.wait()
             self.get_screen()
-            if self.click_text(text="超频博弈", box=self.MODE_CHIP_BOX, click=False, allow_fail=True):
-                CUS_LOGGER.info("已切换到超频博弈")
-            else:
-                CUS_LOGGER.warning("点了底下的模式标签，但没看到「超频博弈」，请确认界面")
+            if not self.click_text(text=want, box=self.MODE_TITLE_BOX,
+                                   click=False, allow_fail=True):
+                CUS_LOGGER.warning("点了「%s」卡片，但右侧标题没变，先不动", want)
+                return 0
+            CUS_LOGGER.info("已选中「%s」", want)
+        else:
+            CUS_LOGGER.info("当前已选中「%s」", want)
+
+        key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
+        key_mouse_manager.wait()
+        self.update_state("difficulty_select")
+        CUS_LOGGER.info("已点击「进入%s」", want)
         return 1
 
     def select_top_difficulty (self):
