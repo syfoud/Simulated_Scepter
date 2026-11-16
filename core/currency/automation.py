@@ -469,19 +469,20 @@ class SimulatedCurrency(CurrencyUtils):
         card = self.MODE_CARD_POSITIONS[
             "standard" if self.gamemode == "standard" else "overclock"]
 
-        self.get_screen()
-        if not self.click_text(text=want, box=self.MODE_TITLE_BOX, click=False, allow_fail=True):
-            CUS_LOGGER.info("切换到「%s」", want)
+        # 右下角按钮文字就是"当前选中的模式"，比右侧标题稳定（标题切换时有动画）
+        want_button = "进入" + want
+        for attempt in range(2):
+            self.get_screen()
+            if self.click_text(text=want_button, box=self.BATTLE_MODE_BUTTON_BOX,
+                               click=False, allow_fail=True):
+                CUS_LOGGER.info("已选中「%s」（按钮为%s）", want, want_button)
+                break
+            CUS_LOGGER.info("切换到「%s」（第 %d 次）", want, attempt + 1)
             key_mouse_manager.click_point(*card)
             key_mouse_manager.wait()
-            self.get_screen()
-            if not self.click_text(text=want, box=self.MODE_TITLE_BOX,
-                                   click=False, allow_fail=True):
-                CUS_LOGGER.warning("点了「%s」卡片，但右侧标题没变，先不动", want)
-                return 0
-            CUS_LOGGER.info("已选中「%s」", want)
         else:
-            CUS_LOGGER.info("当前已选中「%s」", want)
+            CUS_LOGGER.warning("两次都没切到「%s」，先不动，等下一轮", want)
+            return 0
 
         key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
         key_mouse_manager.wait()
@@ -504,7 +505,9 @@ class SimulatedCurrency(CurrencyUtils):
 
     def handle_difficulty_selection(self):
         if self.state not in (None, "difficulty_select"):
-            return 0
+            # 这个动作是靠「开始对局」触发的，能走到这儿说明人就在难度界面，
+            # 状态没跟上（比如刚点完进入按钮）就直接纠正，别空转
+            CUS_LOGGER.info("难度界面已出现，状态从 %s 纠正为 difficulty_select", self.state)
 
         self.update_state("difficulty_select")
         self.get_screen()
