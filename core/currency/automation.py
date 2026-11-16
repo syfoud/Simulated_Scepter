@@ -129,6 +129,11 @@ class SimulatedCurrency(CurrencyUtils):
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
     DIFFICULTY_MAX_STEPS = 120
+    # 顶栏「1-6」这种位面-节点标记：商店未开 / 已开是两个不同位置（实机截图量出来的）
+    STAGE_BOXES = ([430, 48, 515, 100], [250, 85, 330, 135])
+    STAGE_UPSCALE = 3           # 原尺寸 OCR 会漏字，放大三倍才稳
+    # 各面终局节点：1 面到 1-6，2/3 面到 x-5（幕后茶歇会顶掉一个奖励节点，1-5 不算终局）
+    PLANE_LAST_NODE = {1: 6, 2: 5, 3: 5}
     DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
     DIFFICULTY_DOWN_POSITION = (960, 844)
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
@@ -166,6 +171,9 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         # 是否已开始退出
         self.exit_started = False
+        # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
+        self.current_plane = None
+        self.plane_strategy_count = {}
 
         priority = load_currency_settings()["priority"]
 
@@ -361,6 +369,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        self.current_plane = None
+        self.plane_strategy_count = {}
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -665,10 +675,12 @@ class SimulatedCurrency(CurrencyUtils):
             f"延迟奖励={self.investment_tracker.delayed_count}"
         )
 
-        if self.investment_tracker.should_exit(self.exit_plane):
-            CUS_LOGGER.info(f"达到退出位面（{self.exit_plane}面），尝试重开")
-            self.exit_requested = True
-            self.update_state("exit")
+        # 4.7 起策略可能在同一面出现多次、也可能一次都不出现，
+        # 所以这里只记账；退不退出交给备战界面的位面判定（_maybe_exit_by_stage）
+        plane = self.current_plane if self.current_plane is not None else 0
+        self.plane_strategy_count[plane] = self.plane_strategy_count.get(plane, 0) + 1
+        CUS_LOGGER.info(
+            "第 %s 面已选过 %d 次策略", plane, self.plane_strategy_count[plane])
 
         return 1
 
@@ -710,6 +722,67 @@ class SimulatedCurrency(CurrencyUtils):
             return None
         return counts
 
+    def read_stage (self):
+        """读顶栏的「位面-节点」标记，返回 (位面, 节点)；认不出来返回 None。
+
+        原来的写法不读位面（只按"选了几次策略"数），4.7 里策略数量和位面不再一一对应，
+        必须真读一次。原尺寸 OCR 会漏字，放大三倍才稳。
+        """
+        self.get_screen()
+        for box in self.STAGE_BOXES:
+            patch = self.screen[box[1]:box[3], box[0]:box[2]]
+            if patch is None or patch.size == 0:
+                continue
+            upscaled = cv2.resize(
+                patch, None, fx=self.STAGE_UPSCALE, fy=self.STAGE_UPSCALE,
+                interpolation=cv2.INTER_CUBIC)
+            text = self.ts.ocr_one_row(upscaled)
+            match = re.search(r"(\d)\s*[-—~]\s*(\d+)", text or "")
+            if match:
+                return int(match.group(1)), int(match.group(2))
+        return None
+
+    def _maybe_exit_by_stage (self):
+        """在备战界面判断能不能退。
+
+        条件：到达设定退出位面、且这一面已经选过策略。
+        另外两种情况直接退：已经走过设定面数；或者设定面的终局节点到了却一次策略都没出现
+        （周天鸽会把某一面的策略提前，那个面的选择就没了）。
+        """
+        if self.exit_plane is None:
+            return False
+
+        stage = self.read_stage()
+        if stage is None:
+            CUS_LOGGER.debug("没读到位面标记，本轮不判断退出")
+            return False
+
+        plane, node = stage
+        self.current_plane = plane
+        selected = self.plane_strategy_count.get(plane, 0)
+        last_node = self.PLANE_LAST_NODE.get(plane, 5)
+
+        if plane > self.exit_plane:
+            CUS_LOGGER.info(
+                "已越过退出位面（当前 %d-%d，设定第 %d 面），直接退出", plane, node, self.exit_plane)
+            reason = "越过退出位面"
+        elif plane == self.exit_plane and selected:
+            CUS_LOGGER.info(
+                "第 %d 面已选过 %d 次策略（当前 %d-%d），退出", plane, selected, plane, node)
+            reason = "到达退出位面且已选过策略"
+        elif plane == self.exit_plane and node >= last_node and not selected:
+            CUS_LOGGER.info(
+                "第 %d 面已到终局节点 %d-%d 却没出现策略（被提前到前面了），直接退出",
+                plane, plane, node)
+            reason = "设定面无策略"
+        else:
+            return False
+
+        CUS_LOGGER.info("退出条件满足：%s", reason)
+        self.exit_requested = True
+        self.update_state("exit")
+        return True
+
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。
 
@@ -717,6 +790,10 @@ class SimulatedCurrency(CurrencyUtils):
         返回 1 表示已准备好，0 表示仍需准备；识别和落位失败均不放行。
         """
         if self._stop or self.exit_requested:
+            return 0
+        # 备战界面是唯一能稳定读到「位面-节点」的地方，退出判定就放这儿：
+        # 这样连续出现两个策略时，一定是把第二个点完、回到备战界面才按 ESC
+        if self._maybe_exit_by_stage():
             return 0
         if self.state == "battle_ready":
             self.update_state("currency_main")

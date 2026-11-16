@@ -1,4 +1,6 @@
 import unittest
+
+import numpy as np
 from unittest.mock import Mock, call, patch
 
 from core.currency.automation import SimulatedCurrency
@@ -172,6 +174,60 @@ class CurrencyInteractionTests(unittest.TestCase):
             ],
         )
         self.assertEqual(manager.wait.call_count, 4)
+
+    @staticmethod
+    def _stage_currency(stage_text, exit_plane=1, counts=None):
+        currency = object.__new__(SimulatedCurrency)
+        currency.screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        currency.get_screen = Mock(return_value=currency.screen)
+        currency.ts = Mock()
+        currency.ts.ocr_one_row = Mock(return_value=stage_text)
+        currency.exit_plane = exit_plane
+        currency.exit_requested = False
+        currency.current_plane = None
+        currency.plane_strategy_count = dict(counts or {})
+        currency.update_state = Mock()
+        return currency
+
+    def test_read_stage_parses_plane_and_node(self):
+        for text, expected in (("1-6", (1, 6)), ("2-5", (2, 5)), ("3-5 ", (3, 5))):
+            with self.subTest(text=text):
+                currency = self._stage_currency(text)
+                self.assertEqual(currency.read_stage(), expected)
+
+    def test_read_stage_returns_none_when_nothing_recognised(self):
+        currency = self._stage_currency("")
+        self.assertIsNone(currency.read_stage())
+
+    def test_exit_when_plane_reached_and_strategy_selected(self):
+        currency = self._stage_currency("2-3", exit_plane=2, counts={2: 1})
+
+        self.assertTrue(currency._maybe_exit_by_stage())
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
+
+    def test_no_exit_before_strategy_on_the_target_plane(self):
+        currency = self._stage_currency("2-3", exit_plane=2, counts={})
+
+        self.assertFalse(currency._maybe_exit_by_stage())
+        self.assertFalse(currency.exit_requested)
+
+    def test_exit_when_plane_passed_already(self):
+        currency = self._stage_currency("3-1", exit_plane=2, counts={})
+
+        self.assertTrue(currency._maybe_exit_by_stage())
+
+    def test_exit_when_target_plane_ends_without_any_strategy(self):
+        """周天鸽会把某面的策略提前，那一面的选择就没了。"""
+        currency = self._stage_currency("2-5", exit_plane=2, counts={})
+
+        self.assertTrue(currency._maybe_exit_by_stage())
+
+    def test_never_exit_when_plane_is_none(self):
+        currency = self._stage_currency("2-5", exit_plane=None, counts={2: 3})
+
+        self.assertFalse(currency._maybe_exit_by_stage())
+        self.assertFalse(currency.exit_requested)
 
 
 if __name__ == "__main__":
