@@ -1,4 +1,6 @@
 import unittest
+
+import numpy as np
 from collections import Counter
 from unittest.mock import MagicMock, Mock, call, patch
 

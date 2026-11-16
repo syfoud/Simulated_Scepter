@@ -11,6 +11,8 @@ from core.currency.affix_stats import AffixSampler
 from core.currency.envirs import ENVIR_NAMES
 from core.currency.textmatch import best_match, similar
 from core.currency.investment_selection import choose_fallback_investment
+from core.currency.strategies import STRATEGY_NAMES, exit_plane_for, match_name
+from core.currency.strategy_stats import StrategySampler
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
     AREA_BOXES,
@@ -741,7 +743,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         for attempt in range (self.max_refresh + 1):
             self.ts.forward (self.get_screen ())
-            texts = self.recognize_options (boxes)
+            texts = self.canonical_strategies (self.recognize_options (boxes))
             CUS_LOGGER.info (f"OCR 识别结果: {texts}")
 
             icon_presence = [False] * len(roi_boxes)
@@ -753,27 +755,22 @@ class SimulatedCurrency(CurrencyUtils):
                 CUS_LOGGER.info(
                     f"选项{idx+1} 是否有图标: {has_icon} (标准差: {std:.2f})"
                 )
-                if has_icon:
-                    selected_idx = idx
-                    CUS_LOGGER.info(
-                        f"第{attempt}次检测到未解锁图标，选中选项{idx+1}"
-                    )
-                    break
 
-            if selected_idx != -1:
+            pick, reason = self._pick_strategy(texts, icon_presence)
+            if pick is not None and reason != "fallback":
+                selected_idx = pick
+                CUS_LOGGER.info(f"第{attempt}次命中「{reason}」，选中选项{pick+1}")
                 break
 
             if attempt < self.max_refresh:
-                CUS_LOGGER.info(f"第 {attempt+1} 次未匹配，点击刷新")
+                CUS_LOGGER.info(f"第 {attempt+1} 次没命中目标/未解锁，点击刷新")
                 self._refresh_investment_options(texts)
             else:
-                selected_idx = choose_fallback_investment(texts, icon_presence)
-                if selected_idx == 1:
-                    CUS_LOGGER.warning("刷新后仍未找到未解锁图标，默认选中间")
-                else:
-                    CUS_LOGGER.warning(
-                        "中间选项为无图鉴图标的轮回不止，改选左侧以保留跨局资源"
-                    )
+                selected_idx = (
+                    pick if pick is not None
+                    else choose_fallback_investment(texts, icon_presence)
+                )
+                CUS_LOGGER.warning(f"刷新后仍未命中，按兜底选选项{selected_idx+1}")
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
         unlocked_investment = get_newly_unlocked_investment(
@@ -812,10 +809,18 @@ class SimulatedCurrency(CurrencyUtils):
             f"延迟奖励={self.investment_tracker.delayed_count}"
         )
 
-        if self.investment_tracker.should_exit(self.exit_plane):
-            CUS_LOGGER.info(f"达到退出位面（{self.exit_plane}面），尝试重开")
-            self.exit_requested = True
-            self.update_state("exit")
+        # 4.7 起策略可能在同一面出现多次、也可能一次都不出现，
+        # 所以这里只记账；退不退出交给备战界面的位面判定（_maybe_exit_by_stage）
+        plane = self.current_plane if self.current_plane is not None else 0
+        self.plane_strategy_count[plane] = self.plane_strategy_count.get(plane, 0) + 1
+        CUS_LOGGER.info(
+            "第 %s 面已选过 %d 次策略", plane, self.plane_strategy_count[plane])
+
+        hits = self.strategy_sampler.record(
+            plane, texts, selected_text, targets=self.strategy_targets)
+        if hits:
+            CUS_LOGGER.info("本屏命中目标策略：%s", "、".join(hits))
+        self._refresh_auto_exit_plane()
 
         return 1
 
@@ -892,7 +897,7 @@ class SimulatedCurrency(CurrencyUtils):
         两边都没配置时不算达成（否则开局就停）。词缀看采样计数器，环境看跨局累计的
         `envir_seen`；都用形近字匹配，OCR 错一个字不至于漏判。
         """
-        if not self.gather_mode:
+        if not getattr(self, "gather_mode", False):
             return False
         if not self.affix_targets and not self.prior_envir:
             return False
@@ -1007,7 +1012,7 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.debug("点击空白提示：%s", target)
         self.click_box(target)
         key_mouse_manager.wait()
-        if self.gather_mode and self.envir_selected:
+        if getattr(self, "gather_mode", False) and self.envir_selected:
             CUS_LOGGER.info("开局词缀收集模式：本局采样结束，请求退出并重开")
             self.exit_requested = True
             self.update_state("exit")
@@ -1020,6 +1025,10 @@ class SimulatedCurrency(CurrencyUtils):
         返回 1 表示已准备好，0 表示仍需准备；识别和落位失败均不放行。
         """
         if self._stop or self.exit_requested:
+            return 0
+        # 备战界面是唯一能稳定读到「位面-节点」的地方，退出判定放这儿：
+        # 连续出现两屏策略时，一定是第二屏点完、回到备战界面才按 ESC
+        if self._maybe_exit_by_stage():
             return 0
         if self.state == "battle_ready":
             self.update_state("currency_main")
@@ -1131,7 +1140,7 @@ class SimulatedCurrency(CurrencyUtils):
     def handle_1_1_reward(self):
         """处理1-1投资环境选择后的奖励界面。"""
 
-        if self.gather_mode:
+        if getattr(self, "gather_mode", False):
             # 采集只要词缀和环境名额，绝不进战斗。
             # 奇遇界面要加载几秒才出来，这段时间**必须就地等**：只返回 0 的话主循环会继续
             # 匹配别的动作，「出战前准备」靠屏幕上的「出战」文字触发（不带状态门槛），
@@ -1191,6 +1200,7 @@ class SimulatedCurrency(CurrencyUtils):
         """执行当前货币战争对局的统一退出流程。"""
 
         if self.exit_started:
+            self.exit_attempts = 0
             return 1
 
         CUS_LOGGER.info("执行货币战争退出流程")
@@ -1205,6 +1215,7 @@ class SimulatedCurrency(CurrencyUtils):
         ):
             CUS_LOGGER.debug("检测到退出页面")
             self.exit_started = True
+            self.exit_attempts = 0
             return 1
 
         # 虽然正常情况下exit的时候不会在战斗状态，但是万一呢
@@ -1224,10 +1235,9 @@ class SimulatedCurrency(CurrencyUtils):
             ):
                 CUS_LOGGER.debug("检测到退出页面")
                 self.exit_started = True
+                self.exit_attempts = 0
                 return 1
-            else:
-                CUS_LOGGER.debug("未检测到退出页面，将重试")
-                return 0
+            return self._exit_failed("战斗内没能进入放弃并结算页面")
 
         max_attempts = 15
         timeout = 6
@@ -1260,8 +1270,7 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.press("esc")
             key_mouse_manager.wait()
 
-        CUS_LOGGER.warning("未能确认进入“放弃并结算”页面，本次退出尝试失败，将在下一轮重试")
-        return 0
+        return self._exit_failed("按 ESC 后没能进入放弃并结算页面")
 
     def handle_battle_finished(self):
         if self.exit_requested:

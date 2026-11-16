@@ -1,6 +1,7 @@
 """货币战争策略配置界面。"""
 
 from core.currency.affix_select_ui import AffixSelectDialog
+from core.currency.strategy_select_ui import StrategySelectDialog
 from core.currency.deployment_ui import DeploymentDialog
 from core.currency.priority_ui import CurrencyPriorityDialog
 from core.currency.settings import (
