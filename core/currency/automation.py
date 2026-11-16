@@ -1290,6 +1290,18 @@ class SimulatedCurrency(CurrencyUtils):
 
     def start_battle(self):
         """仅在可出战状态点击出战，等待输入完成后进入战斗状态。"""
+        # 连续点了好几次还没进战斗，说明有东西挡着：把整屏文字打出来，免得到现场猜
+        self.battle_click_attempts = getattr(self, "battle_click_attempts", 0) + 1
+        if self.battle_click_attempts == 3:
+            try:
+                self.ts.forward(self.get_screen())
+                texts = [item["raw_text"].strip() for item in self.ts.res]
+                CUS_LOGGER.warning(
+                    "连点 3 次出战都没进战斗，当前屏幕文字：%s", " ".join(t for t in texts if t)
+                )
+            except Exception:
+                CUS_LOGGER.warning("连点 3 次出战都没进战斗，且整屏识别失败", exc_info=True)
+
         key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
         self.update_state("startbattle")
@@ -1430,7 +1442,11 @@ class SimulatedCurrency(CurrencyUtils):
 
         return self._exit_failed("按 ESC 后没能进入放弃并结算页面")
 
+    def reset_battle_click_attempts (self):
+        self.battle_click_attempts = 0
+
     def handle_battle_finished(self):
+        self.battle_click_attempts = 0
         if self.exit_requested:
             self.update_state("exit")
         else:
