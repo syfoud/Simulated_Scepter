@@ -364,22 +364,21 @@
     {
         "name": "啊哈大悦",
         "trigger": {
-            "text": "查看详情",
+            "text": "简易装备",
             "box": [
-                625,
-                329,
-                717,
-                356
+                860,
+                35,
+                1200,
+                85
             ],
-            "interval": 2,
-            "redundancy": 30,
-            "once": true
+            "interval": 1,
+            "redundancy": 30
         },
         "actions": [
             {
                 "position": [
-                    663,
-                    290
+                    602,
+                    315
                 ]
             }
         ]

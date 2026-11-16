@@ -51,7 +51,8 @@ class CurrencyWarActionsTest(unittest.TestCase):
 
         self.assertEqual(
             once_names,
-            {"盛会之星", "领航员", "啊哈大悦", "命运圣杯祈愿试炼", "独家代言", "开始退出"},
+            # 「啊哈大悦」不在这里：它去掉 once 了，点不掉时下一轮还要能重点
+            {"盛会之星", "领航员", "命运圣杯祈愿试炼", "独家代言", "开始退出"},
         )
 
     def test_item_detail_confirms_selection_before_escape(self):
