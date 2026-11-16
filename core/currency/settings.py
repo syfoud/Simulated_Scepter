@@ -10,6 +10,15 @@ DEFAULT_EXIT_PLANE = 1
 DEFAULT_EXIT_IF_NO_PRIOR = False
 DEFAULT_PRIOR_EXIT_PLANE = None
 
+# 对局类型：超频博弈节点更少，标准博弈少一次标签点击（刷开局词缀时用标准更快）
+GAMEMODES = ("overclock", "standard")
+DEFAULT_GAMEMODE = "overclock"
+# 难度选择方式：lowest=逐级向下找难度1（旧行为），top=直接切到最高职级（A8-20，开局带词缀）
+DIFFICULTY_MODES = ("lowest", "top")
+DEFAULT_DIFFICULTY_MODE = "lowest"
+DEFAULT_GATHER_MODE = False
+DEFAULT_MAX_RUNS = 0
+
 
 PRIORITY_KEYS = (
     "prior_envir",
@@ -101,12 +110,43 @@ def normalize_currency_settings(values=None):
         if isinstance(template, str) and isinstance(name, str) and name.strip()
     }
 
+    gamemode = str(values.get("gamemode", DEFAULT_GAMEMODE)).strip().lower()
+    if gamemode not in GAMEMODES:
+        gamemode = DEFAULT_GAMEMODE
+
+    difficulty_mode = str(values.get("difficulty_mode", DEFAULT_DIFFICULTY_MODE)).strip().lower()
+    if difficulty_mode not in DIFFICULTY_MODES:
+        difficulty_mode = DEFAULT_DIFFICULTY_MODE
+
+    gather_mode = values.get("gather_mode", DEFAULT_GATHER_MODE)
+    if not isinstance(gather_mode, bool):
+        gather_mode = DEFAULT_GATHER_MODE
+
+    try:
+        max_runs = int(values.get("max_runs", DEFAULT_MAX_RUNS))
+    except (TypeError, ValueError):
+        max_runs = DEFAULT_MAX_RUNS
+    if max_runs < 0:
+        max_runs = DEFAULT_MAX_RUNS
+
+    affix_targets = values.get("affix_targets", [])
+    if not isinstance(affix_targets, list):
+        affix_targets = []
+
     return {
         "exit_after_plane": exit_plane,
         "exit_if_no_prior": exit_if_no_prior,
         "prior_exit_plane": prior_exit_plane,
         "priority": priority,
         "deployment": clean_deployment,
+        "gamemode": gamemode,
+        "difficulty_mode": difficulty_mode,
+        "gather_mode": gather_mode,
+        "max_runs": max_runs,
+        "affix_targets": list(dict.fromkeys(
+            entry.strip() for entry in affix_targets
+            if isinstance(entry, str) and entry.strip()
+        )),
     }
 
 def resolve_priority(deployment):

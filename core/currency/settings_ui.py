@@ -1,5 +1,6 @@
 """货币战争策略配置界面。"""
 
+from core.currency.affix_select_ui import AffixSelectDialog
 from core.currency.deployment_ui import DeploymentDialog
 from core.currency.priority_ui import CurrencyPriorityDialog
 from core.currency.settings import (
@@ -28,8 +29,23 @@ class SettingsDialog(BaseDialog):
             ui.Currency_prior_exit_plane_combo.addItem(f"第 {plane} 位面", plane)
         ui.Currency_prior_exit_plane_combo.setCurrentIndex(
             ui.Currency_prior_exit_plane_combo.findData(settings["prior_exit_plane"]))
+
+        ui.Currency_gamemode_combo.addItem("超频博弈（节点更少）", "overclock")
+        ui.Currency_gamemode_combo.addItem("标准博弈（少一次标签点击）", "standard")
+        ui.Currency_gamemode_combo.setCurrentIndex(
+            ui.Currency_gamemode_combo.findData(settings["gamemode"]))
+        ui.Currency_difficulty_mode_combo.addItem("逐级向下找难度 1", "lowest")
+        ui.Currency_difficulty_mode_combo.addItem("最高职级（A8-20，开局带词缀）", "top")
+        ui.Currency_difficulty_mode_combo.setCurrentIndex(
+            ui.Currency_difficulty_mode_combo.findData(settings["difficulty_mode"]))
+        self.affix_targets = list(settings["affix_targets"])
+        ui.Currency_affix_targets_edit.setText("、".join(self.affix_targets))
+        ui.Currency_max_runs_spin.setValue(settings["max_runs"])
+        ui.Currency_gather_mode_checkbox.setChecked(settings["gather_mode"])
+
         ui.Currency_priority_settings_btn.clicked.connect(self.open_priority)
         ui.Currency_deployment_settings_btn.clicked.connect(self.open_deployment)
+        ui.Currency_affix_targets_btn.clicked.connect(self.open_affix_targets)
 
     def open_priority(self):
         CurrencyPriorityDialog(self).exec_()
@@ -37,10 +53,23 @@ class SettingsDialog(BaseDialog):
     def open_deployment(self):
         DeploymentDialog(self).exec_()
 
+    def open_affix_targets(self):
+        """三列勾选目标词缀；取消时保持原选择。"""
+        dialog = AffixSelectDialog(self.affix_targets, self)
+        if dialog.exec_() != dialog.Accepted:
+            return
+        self.affix_targets = dialog.selected_affixes()
+        self.section.Currency_affix_targets_edit.setText("、".join(self.affix_targets))
+
     def persist(self):
         ui = self.section
         save_currency_settings({
             "exit_after_plane": ui.Currency_exit_plane_combo.currentData(),
             "exit_if_no_prior": ui.Currency_exit_if_no_prior_checkbox.isChecked(),
             "prior_exit_plane": ui.Currency_prior_exit_plane_combo.currentData(),
+            "gamemode": ui.Currency_gamemode_combo.currentData(),
+            "difficulty_mode": ui.Currency_difficulty_mode_combo.currentData(),
+            "affix_targets": list(self.affix_targets),
+            "max_runs": ui.Currency_max_runs_spin.value(),
+            "gather_mode": ui.Currency_gather_mode_checkbox.isChecked(),
         }, path=self.path)
