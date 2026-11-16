@@ -129,6 +129,9 @@ class SimulatedCurrency(CurrencyUtils):
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
     DIFFICULTY_MAX_STEPS = 120
+    # 退出连续失败这么多次就停止重试（每次都会连按 ESC，失败太多次说明界面不对）
+    EXIT_MAX_ATTEMPTS = 3
+    EXIT_ACTION_NAME = "开始退出"
     DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
     DIFFICULTY_DOWN_POSITION = (960, 844)
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
@@ -166,6 +169,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         # 是否已开始退出
         self.exit_started = False
+        # 退出的重试次数（「开始退出」带 once 锁存，失败必须手动解锁才可能重试）
+        self.exit_attempts = 0
 
         priority = load_currency_settings()["priority"]
 
@@ -361,6 +366,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        self.exit_attempts = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -853,10 +859,32 @@ class SimulatedCurrency(CurrencyUtils):
         return False
 
 
+    def _exit_failed(self, reason):
+        """退出没成功：解开「开始退出」的 once 锁存，让下一帧还能再试。
+
+        引擎里命中即锁存，不主动解锁的话这条动作本轮再也不会被调用——
+        日志写着"下一轮重试"却永远不重试，玩家看到的就是卡死。
+        连续失败到上限后停手，避免在错误界面上反复连按 ESC。
+        """
+        self.exit_attempts += 1
+        if self.exit_attempts < self.EXIT_MAX_ATTEMPTS:
+            self.latched_events.discard(self.EXIT_ACTION_NAME)
+            CUS_LOGGER.warning(
+                "%s，第 %d/%d 次退出未完成，下一帧重试",
+                reason, self.exit_attempts, self.EXIT_MAX_ATTEMPTS,
+            )
+        else:
+            CUS_LOGGER.warning(
+                "%s，已连续 %d 次退出失败，本轮停止重试（游戏可能停在非预期界面）",
+                reason, self.exit_attempts,
+            )
+        return 0
+
     def exit(self):
         """执行当前货币战争对局的统一退出流程。"""
 
         if self.exit_started:
+            self.exit_attempts = 0
             return 1
 
         CUS_LOGGER.info("执行货币战争退出流程")
@@ -871,6 +899,7 @@ class SimulatedCurrency(CurrencyUtils):
         ):
             CUS_LOGGER.debug("检测到退出页面")
             self.exit_started = True
+            self.exit_attempts = 0
             return 1
 
         # 虽然正常情况下exit的时候不会在战斗状态，但是万一呢
@@ -892,8 +921,7 @@ class SimulatedCurrency(CurrencyUtils):
                 self.exit_started = True
                 return 1
             else:
-                CUS_LOGGER.debug("未检测到退出页面，将重试")
-                return 0
+                return self._exit_failed("战斗中按 ESC 后未进入放弃并结算")
 
         max_attempts = 15
         timeout = 6
@@ -926,8 +954,7 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.press("esc")
             key_mouse_manager.wait()
 
-        CUS_LOGGER.warning("未能确认进入“放弃并结算”页面，本次退出尝试失败，将在下一轮重试")
-        return 0
+        return self._exit_failed("按 ESC 后未进入放弃并结算")
 
     def handle_battle_finished(self):
         if self.exit_requested:
