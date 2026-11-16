@@ -637,7 +637,10 @@
         "name": "自动战斗检测",
         "trigger": {
             "photo": "auto_battle",
-            "pos": {"x": 21,"y": 919},
+            "pos": {
+                "x": 21,
+                "y": 919
+            },
             "threshold": 0.9,
             "condition": "startbattle"
         },
