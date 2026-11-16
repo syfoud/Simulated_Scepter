@@ -50,6 +50,22 @@ class CurrencyGuiUiTests(unittest.TestCase):
         ):
             self.assertIsNotNone(tab.find(f".//widget[@name='{widget}']"), widget)
 
+    def test_auto_exit_plane_disables_manual_plane_choices(self):
+        """勾了"按目标策略自动决定退出位面"，两个手选位面就不该还能改。"""
+        tab = self.currency
+        auto = tab.find(".//widget[@name='Currency_auto_exit_plane_checkbox']")
+        exit_combo = tab.find(".//widget[@name='Currency_exit_plane_combo']")
+        prior_combo = tab.find(".//widget[@name='Currency_prior_exit_plane_combo']")
+        self.assertIsNotNone(auto)
+
+        auto.setChecked(True)
+        self.assertFalse(exit_combo.isEnabled())
+        self.assertFalse(prior_combo.isEnabled())
+
+        auto.setChecked(False)
+        self.assertTrue(exit_combo.isEnabled())
+        self.assertTrue(prior_combo.isEnabled())
+
 
 if __name__ == "__main__":
     unittest.main()

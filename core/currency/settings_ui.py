@@ -49,12 +49,22 @@ class SettingsDialog(BaseDialog):
         ui.Currency_strategy_targets_edit.setText("、".join(self.strategy_targets))
         ui.Currency_strategy_avoid_edit.setText("、".join(self.strategy_avoid))
         ui.Currency_auto_exit_plane_checkbox.setChecked(settings["auto_exit_plane"])
+        ui.Currency_auto_exit_plane_checkbox.toggled.connect(self._sync_exit_plane_widgets)
+        self._sync_exit_plane_widgets(settings["auto_exit_plane"])
 
         ui.Currency_priority_settings_btn.clicked.connect(self.open_priority)
         ui.Currency_deployment_settings_btn.clicked.connect(self.open_deployment)
         ui.Currency_affix_targets_btn.clicked.connect(self.open_affix_targets)
         ui.Currency_strategy_targets_btn.clicked.connect(self.open_strategy_targets)
         ui.Currency_strategy_avoid_btn.clicked.connect(self.open_strategy_avoid)
+
+    def _sync_exit_plane_widgets(self, auto):
+        """勾了「按目标策略自动决定退出位面」后，上面两个手选退出位面就没意义了，直接禁用。"""
+        for combo in (
+            self.section.Currency_exit_plane_combo,
+            self.section.Currency_prior_exit_plane_combo,
+        ):
+            combo.setEnabled(not auto)
 
     def open_priority(self):
         CurrencyPriorityDialog(self).exec_()
