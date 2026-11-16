@@ -118,12 +118,17 @@ def split_count_line(patch):
             and np.median(widths) <= width * 0.35
             and abs(centers[-1] - centers[0]) >= width * 0.5
         ):
+            # 切分点贴边会切出空数组，后面 OCR 一裁片就 cv2 断言崩掉
+            if left < 6 or right > mask.shape[1] - 6:
+                continue
             return patch[:, :left], patch[:, right:]
     return None
 
 
 def read_count_number(recognizer, patch):
     """识别人数裁片一侧的数字；识别结果不是一个数字时返回 None。"""
+    if patch is None or not getattr(patch, "size", 0):
+        return None
     digits = re.findall(r"\d+", recognizer.ocr_one_row(patch))
     if len(digits) != 1:
         return None
@@ -960,6 +965,9 @@ class SimulatedCurrency(CurrencyUtils):
         """
         box = self.TEAM_COUNT_BOX
         patch = self.screen[box[1]:box[3], box[0]:box[2]]
+        if patch is None or not patch.size:
+            CUS_LOGGER.debug("人数裁片为空（窗口尺寸可能不对），等下一轮")
+            return None
         counts = None
         halves = split_count_line(patch)
         if halves is not None:

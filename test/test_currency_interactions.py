@@ -1202,6 +1202,14 @@ class CurrencyInteractionTests(unittest.TestCase):
                                      box=SimulatedCurrency.BATTLE_MODE_BUTTON_BOX),
                     manager.mock_calls)
 
+    def test_count_number_ignores_empty_patch(self):
+        """切分点贴边会切出空数组，此时不能拿去 OCR（会 cv2 断言崩掉）。"""
+        from core.currency.automation import read_count_number
+
+        recognizer = Mock()
+        self.assertIsNone(read_count_number(recognizer, np.zeros((0, 0, 3), np.uint8)))
+        recognizer.ocr_one_row.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
