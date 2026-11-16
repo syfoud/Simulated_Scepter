@@ -154,7 +154,8 @@ class SimulatedCurrency(CurrencyUtils):
     # 右下角「进入标准博弈 / 进入超频博弈」按钮：两种博弈是同一个位置
     MODE_ENTER_POSITION = (1637, 960)
     # 该按钮的文字框（日志里带上落点来源，便于核对）
-    BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
+    # 右下角按钮：入口页是「开始「货币战争」」，模式页是「进入超频/标准博弈」
+    BATTLE_MODE_BUTTON_BOX = [1400, 925, 1900, 1005]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
     # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
@@ -529,8 +530,8 @@ class SimulatedCurrency(CurrencyUtils):
         card = self.MODE_CARD_POSITIONS[
             "standard" if self.gamemode == "standard" else "overclock"]
 
-        # 第一层：还没进货币战争时，右下角是「进入货币战争」，先点它
-        if self.click_text(text="进入货币战争", box=self.BATTLE_MODE_BUTTON_BOX,
+        # 第一层：还没进货币战争时，右下角是「开始「货币战争」」，先点它
+        if self.click_text(text="货币战争", box=self.BATTLE_MODE_BUTTON_BOX,
                            click=True, allow_fail=True):
             key_mouse_manager.wait()
             CUS_LOGGER.info("已点击「进入货币战争」")

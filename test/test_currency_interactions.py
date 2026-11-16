@@ -1162,12 +1162,12 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.gamemode = "overclock"
         currency.update_state = Mock()
         currency.click_text = Mock(
-            side_effect=lambda text=None, **kwargs: text == "进入货币战争")
+            side_effect=lambda text=None, **kwargs: text == "货币战争")
         manager.reset_mock()
 
         self.assertEqual(currency.enter_battle_mode(), 1)
         currency.click_text.assert_any_call(
-            text="进入货币战争",
+            text="货币战争",
             box=SimulatedCurrency.BATTLE_MODE_BUTTON_BOX,
             click=True,
             allow_fail=True,
