@@ -887,6 +887,23 @@
         ]
     },
     {
+        "name": "银狼骇入效果",
+        "trigger": {
+            "text": "请选择骇入效果",
+            "box": [
+                1400,
+                520,
+                1580,
+                565
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_hack_effect"
+        ]
+    },
+    {
         "name": "出战前准备",
         "trigger": {
             "text": "出战",
