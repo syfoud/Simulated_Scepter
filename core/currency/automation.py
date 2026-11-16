@@ -1685,3 +1685,18 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("羁绊效果已选择")
         return 1
 
+    BLACK_MARKET_TITLE_BOX = [940, 50, 1120, 100]
+
+    def close_black_market (self):
+        """翡翠的「黑市主理人」面板：不买任何东西，按 ESC 关掉并确认真的关了。"""
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+
+        if self.click_text(
+            text="黑市主理人", box=self.BLACK_MARKET_TITLE_BOX, click=False, allow_fail=True
+        ):
+            CUS_LOGGER.warning("「黑市主理人」按了 ESC 还在，等下一轮再按")
+            return 0
+        CUS_LOGGER.info("「黑市主理人」面板已关闭")
+        return 1
+
