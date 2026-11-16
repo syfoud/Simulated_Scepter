@@ -136,6 +136,18 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 4.7 的「幕后茶歇」：备战界面右下角的按钮（和「出战」同一格），随机出现，一局最多一次
+    TEA_ENTRY_BOX = [1753, 732, 1879, 768]
+    TEA_ENTRY_POSITION = (1816, 752)
+    TEA_CHAT_BOX = [345, 815, 430, 860]        # 「聊一聊」
+    TEA_CHAT_POSITION = (387, 837)
+    TEA_BLANK_BOX = [1400, 895, 1585, 945]     # 对话里的「点击空白处继续」（右侧，和别处不同位）
+    TEA_BLANK_POSITION = (1491, 920)
+    TEA_BACK_BOX = [1140, 705, 1215, 750]      # 选项列表里的「返回」（用来判定"这是选项界面"）
+    TEA_OPTIONS_BOX = [980, 420, 1700, 700]    # 选项正文区域（在「返回」上方）
+    TEA_CONFIRM_BOX = [1725, 580, 1800, 630]   # 选项右侧的「确认」
+    TEA_REWARD_BOX = [860, 175, 1060, 220]     # 「领取茶歇奖励」
+    TEA_OPEN_POSITION = (961, 983)             # 「开启」
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -709,6 +721,27 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def choose_tea_break_option (self):
+        """茶歇对话的选项：点最上面那一项。
+
+        选项数量不固定、位置也会变，所以不写死坐标：按「返回」上方那块区域 OCR，
+        取最靠上的一个点掉（最下面的「返回」在选区之外，不会被选中）。
+        """
+        self.ts.forward(self.get_screen())
+        options = [
+            item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX)
+            if item["raw_text"].strip() and "返回" not in item["raw_text"]
+        ]
+        if not options:
+            CUS_LOGGER.warning("茶歇选项没识别到，等下一轮")
+            return 0
+
+        options.sort(key=lambda item: item["box"][1])
+        CUS_LOGGER.info("选择茶歇选项：%s", options[0]["raw_text"])
+        self.click_box(options[0]["box"])
+        key_mouse_manager.wait()
+        return 1
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。

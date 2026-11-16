@@ -163,6 +163,23 @@ class CurrencyWarActionsTest(unittest.TestCase):
         )
         currency.do_action.assert_called_once_with({"position": [1818, 750]})
 
+    def test_tea_break_actions_cover_the_whole_flow(self):
+        """幕后茶歇要走的六步：入口、聊一聊、推进对话、选项、确认、领奖。"""
+        by_name = {a["name"]: a for a in self.actions}
+        expected = {
+            "进入幕后茶歇": ("幕后茶歇", [{"position": [1816, 752]}]),
+            "茶歇-聊一聊": ("聊一聊", [{"position": [387, 837]}]),
+            "茶歇-推进对话": ("点击空白处继续", [{"position": [1491, 920]}]),
+            "茶歇-选择选项": ("返回", ["choose_tea_break_option"]),
+            "茶歇-确认奖励": ("确认", [{"text": "确认", "box": [1720, 575, 1805, 635]}]),
+            "茶歇-领取奖励": ("领取茶歇奖励", [{"position": [961, 983]}]),
+        }
+        for name, (text, actions) in expected.items():
+            with self.subTest(action=name):
+                self.assertIn(name, by_name)
+                self.assertEqual(by_name[name]["trigger"]["text"], text)
+                self.assertEqual(by_name[name]["actions"], actions)
+
 
 if __name__ == "__main__":
     unittest.main()

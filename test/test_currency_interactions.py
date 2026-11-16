@@ -173,6 +173,35 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_tea_option_picks_the_topmost_one(self, manager):
+        """茶歇选项数量/位置不固定：点最上面那一项，最下面的「返回」不能选。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "第二个选项", "box": [1151, 620, 1423, 650]},
+            {"raw_text": "第一个选项", "box": [1151, 460, 1423, 490]},
+        ]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_tea_break_option(), 1)
+
+        currency.click_box.assert_called_once_with([1151, 460, 1423, 490])
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_tea_option_gives_up_when_nothing_recognised(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [{"raw_text": "返回", "box": [1147, 713, 1203, 742]}]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_tea_break_option(), 0)
+        currency.click_box.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -887,6 +887,136 @@
         ]
     },
     {
+        "name": "进入幕后茶歇",
+        "trigger": {
+            "text": "幕后茶歇",
+            "box": [
+                1750,
+                730,
+                1885,
+                775
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    1816,
+                    752
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-聊一聊",
+        "trigger": {
+            "text": "聊一聊",
+            "box": [
+                340,
+                810,
+                435,
+                865
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    387,
+                    837
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-推进对话",
+        "trigger": {
+            "text": "点击空白处继续",
+            "box": [
+                1395,
+                890,
+                1590,
+                950
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    1491,
+                    920
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-选择选项",
+        "trigger": {
+            "text": "返回",
+            "box": [
+                1135,
+                700,
+                1220,
+                755
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_tea_break_option"
+        ]
+    },
+    {
+        "name": "茶歇-确认奖励",
+        "trigger": {
+            "text": "确认",
+            "box": [
+                1720,
+                575,
+                1805,
+                635
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "text": "确认",
+                "box": [
+                    1720,
+                    575,
+                    1805,
+                    635
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-领取奖励",
+        "trigger": {
+            "text": "领取茶歇奖励",
+            "box": [
+                855,
+                170,
+                1065,
+                225
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    961,
+                    983
+                ]
+            }
+        ]
+    },
+    {
         "name": "出战前准备",
         "trigger": {
             "text": "出战",
