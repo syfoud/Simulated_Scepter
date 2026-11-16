@@ -806,6 +806,23 @@
         ]
     },
     {
+        "name": "选择主角-面板标题",
+        "trigger": {
+            "text": "选择一个角色获得主角光环",
+            "box": [
+                760,
+                58,
+                1160,
+                122
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            "select_protagonist"
+        ]
+    },
+    {
         "name": "选择主角",
         "trigger": {
             "text": "选择主角",

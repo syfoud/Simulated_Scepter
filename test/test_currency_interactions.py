@@ -7,6 +7,22 @@ from unittest.mock import MagicMock, Mock, call, patch
 from core.currency.automation import SimulatedCurrency
 
 
+def _protagonist_click_text(panel_after=1):
+    """模拟「选择主角」面板：第 panel_after 次查询标题之后就认为面板开了。
+
+    面板标题同时用于"面板是否已打开"的预检和等待循环，所以要按调用次数递进。
+    """
+    state = {"seen": 0}
+
+    def fake(text=None, **_kwargs):
+        if text == "选择一个角色获得主角光环":
+            state["seen"] += 1
+            return state["seen"] > panel_after
+        return True
+
+    return fake
+
+
 class CurrencyInteractionTests(unittest.TestCase):
     @staticmethod
     def make_currency():
@@ -415,13 +431,12 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.update_state.assert_called_once_with("1-1")
         self.assertTrue(currency.envir_selected)
 
-
     @patch("core.currency.automation.time.sleep")
     @patch("core.currency.automation.key_mouse_manager")
     def test_select_protagonist_runs_full_panel_flow(self, manager, _sleep):
         """4.7 新 UI：点按钮 → 等面板 → 拖角色 → 选光环 → 确认。"""
         currency = object.__new__(SimulatedCurrency)
-        currency.click_text = Mock(return_value=True)
+        currency.click_text = _protagonist_click_text()
         manager.reset_mock()
 
         self.assertEqual(currency.select_protagonist(), 1)
@@ -460,8 +475,8 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_select_protagonist_confirms_aura_replacement(self, manager, _sleep):
         """一局两次主角面板，第二次角色已有光环会弹替换确认，直接点确认。"""
         currency = object.__new__(SimulatedCurrency)
-        # 面板标题一定命中；替换提示按第二次的实际情况给 True
-        currency.click_text = Mock(side_effect=[True, True])
+        # 面板标题恒命中（预检和等待循环都会问），替换提示也同样为真
+        currency.click_text = Mock(return_value=True)
         manager.reset_mock()
 
         self.assertEqual(currency.select_protagonist(), 1)
@@ -482,7 +497,9 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_select_protagonist_skips_replacement_when_no_dialog(self, manager, _sleep):
         """第一次选主角不会弹替换确认，别去点那个坐标。"""
         currency = object.__new__(SimulatedCurrency)
-        currency.click_text = Mock(side_effect=[True, False])
+        # 面板标题命中，但不是"替换光环"提示
+        currency.click_text = Mock(
+            side_effect=lambda text=None, **_kwargs: text != "是否替换该角色原有光环")
         manager.reset_mock()
 
         self.assertEqual(currency.select_protagonist(), 1)

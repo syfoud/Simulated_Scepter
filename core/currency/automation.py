@@ -1419,12 +1419,13 @@ class SimulatedCurrency(CurrencyUtils):
             self.sct = None
         self.map_thread = None
     PROTAGONIST_BUTTON_BOX = [1755, 732, 1877, 768]
-    PROTAGONIST_TITLE_BOX = [815, 76, 1104, 103]
+    # 贴着文字边界裁会读空，左右上下都留出余量
+    PROTAGONIST_TITLE_BOX = [760, 58, 1160, 122]
     PROTAGONIST_DRAG = ((805, 612), (960, 445))
     PROTAGONIST_AURA_POSITION = (1501, 502)
     PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
-    PROTAGONIST_WAIT_ATTEMPTS = 10
-    PROTAGONIST_WAIT_INTERVAL = 0.3
+    PROTAGONIST_WAIT_ATTEMPTS = 25
+    PROTAGONIST_WAIT_INTERVAL = 0.4
     # 第二次选主角时该角色已有光环，点光环会弹「是否替换该角色原有光环？」（实测 OCR 框）
     PROTAGONIST_REPLACE_TITLE_BOX = [800, 480, 1110, 530]
     PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
@@ -1435,10 +1436,16 @@ class SimulatedCurrency(CurrencyUtils):
         面板出现在第一位面和第二位面首领之前的备战界面，按钮就压在「出战」的位置上，
         不处理的话主循环等不到「出战」文字会一直空转。
         """
-        box = self.PROTAGONIST_BUTTON_BOX
-        key_mouse_manager.click_point(
-            (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
-        key_mouse_manager.wait()
+        # 主循环每帧都刷过截图，这里直接用当前帧（自己抓会依赖 _stop 等运行时状态）
+        if self.click_text(text="选择一个角色获得主角光环",
+                           box=self.PROTAGONIST_TITLE_BOX, click=False, allow_fail=True):
+            # 面板已经开着（可能是上一轮点的按钮生效了），直接往下走，别再点按钮
+            CUS_LOGGER.info("选择主角面板已打开，直接选角色")
+        else:
+            box = self.PROTAGONIST_BUTTON_BOX
+            key_mouse_manager.click_point(
+                (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+            key_mouse_manager.wait()
 
         for attempt in range(self.PROTAGONIST_WAIT_ATTEMPTS):
             if self.click_text(
