@@ -138,6 +138,7 @@ class SimulatedCurrency(CurrencyUtils):
     DIFFICULTY_MAX_STEPS = 120
     # 4.7 实测：这个框要比文字行宽一点，框太窄 OCR 会把「获得」认成「医得」
     DIFFICULTY_SELECTED_EFFECT_BOX = [660, 380, 1250, 450]
+    DIFFICULTY_ENTER_BOX = [1550, 930, 1800, 1000]
     DIFFICULTY_DOWN_POSITION = (960, 844)
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
     ENVIRONMENT_CONFIRM_BOX = [1053, 967, 1108, 998]
@@ -411,6 +412,11 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("前往货币战争")
         key_mouse_manager.press("interastral_peace_guide")
 
+    def on_difficulty_screen (self):
+        """现在还在不在难度界面：右下角应该能看到「开始对局」。"""
+        return bool(self.click_text(
+            text="开始对局", box=self.DIFFICULTY_ENTER_BOX, click=False, allow_fail=True))
+
     def is_one (self):
         try:
             text_list = self.ts.find_with_box(
@@ -441,6 +447,11 @@ class SimulatedCurrency(CurrencyUtils):
                 CUS_LOGGER.info(f"停止选择难度，当前状态：{self.state}")
                 return True
             self.get_screen()
+            if not self.on_difficulty_screen():
+                # 点完「开始对局」会先进黑屏，状态却还是 difficulty_select；
+                # 这时候再连点只会往空处点，直接收手
+                CUS_LOGGER.info("难度界面已消失（对局已开始或界面已切换），停止选择难度")
+                return True
             if self.is_one ():
                 CUS_LOGGER.info ("已识别到难度1")
                 return self.complete_difficulty_selection()
