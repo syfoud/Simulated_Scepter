@@ -136,6 +136,9 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 翡翠专属「黑市主理人」面板：什么都不用点，ESC 关掉即可。
+    # 注意左侧羁绊列表里也有「黑市主理人」四个字，所以只认标题那一处
+    BLACK_MARKET_TITLE_BOX = [940, 50, 1120, 100]
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -709,6 +712,19 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def close_black_market (self):
+        """翡翠的「黑市主理人」面板：不买任何东西，按 ESC 关掉并确认真的关了。"""
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+
+        if self.click_text(
+            text="黑市主理人", box=self.BLACK_MARKET_TITLE_BOX, click=False, allow_fail=True
+        ):
+            CUS_LOGGER.warning("「黑市主理人」按了 ESC 还在，等下一轮再按")
+            return 0
+        CUS_LOGGER.info("「黑市主理人」面板已关闭")
+        return 1
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。

@@ -173,6 +173,33 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_black_market_closes_with_escape(self, manager, _sleep):
+        """翡翠的黑市面板不用点任何东西，ESC 一下并确认它真的消失。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=False)   # 按完 ESC 已经看不到标题
+        manager.reset_mock()
+
+        self.assertEqual(currency.close_black_market(), 1)
+
+        manager.press.assert_called_once_with("esc")
+        currency.click_text.assert_called_once_with(
+            text="黑市主理人",
+            box=SimulatedCurrency.BLACK_MARKET_TITLE_BOX,
+            click=False,
+            allow_fail=True,
+        )
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_black_market_reports_failure_when_panel_remains(self, manager, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=True)    # ESC 之后标题还在
+        manager.reset_mock()
+
+        self.assertEqual(currency.close_black_market(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

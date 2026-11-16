@@ -887,6 +887,23 @@
         ]
     },
     {
+        "name": "关闭黑市主理人",
+        "trigger": {
+            "text": "黑市主理人",
+            "box": [
+                940,
+                50,
+                1120,
+                100
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "close_black_market"
+        ]
+    },
+    {
         "name": "出战前准备",
         "trigger": {
             "text": "出战",
