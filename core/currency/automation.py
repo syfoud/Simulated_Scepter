@@ -204,6 +204,11 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         # 是否已开始退出
         self.exit_started = False
+        # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
+        self.current_plane = None
+        self.plane_strategy_count = {}
+        # 退出失败重试计数（连续失败到上限就停手）
+        self.exit_attempts = 0
 
         priority = load_currency_settings()["priority"]
 
@@ -503,6 +508,11 @@ class SimulatedCurrency(CurrencyUtils):
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
+        self.current_plane = None
+        self.plane_strategy_count = {}
+        # 退出失败重试计数（连续失败到上限就停手）
+        self.exit_attempts = 0
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
