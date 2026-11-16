@@ -155,15 +155,7 @@
             "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    1585,
-                    972
-                ]
-            },
-            {
-                "set_state": "start_currencywar"
-            }
+            "enter_battle_mode"
         ]
     },
     {

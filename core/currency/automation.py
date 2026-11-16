@@ -517,6 +517,14 @@ class SimulatedCurrency(CurrencyUtils):
         右下角按钮的文字会跟着变（进入标准博弈 / 进入超频博弈）。所以先按标题判断选没选中，
         没选中才点卡片，最后点右下角那个按钮。
         """
+        # 已经在难度界面（右下角是「开始对局」）就不要再点了：
+        # 这时候按模式卡片的位置点下去，可能点到难度列表上
+        if self.click_text(text="开始对局", box=self.DIFFICULTY_ENTER_BOX,
+                           click=False, allow_fail=True):
+            CUS_LOGGER.debug("已在难度界面，跳过模式切换")
+            self.update_state("difficulty_select")
+            return 1
+
         want = "标准博弈" if self.gamemode == "standard" else "超频博弈"
         card = self.MODE_CARD_POSITIONS[
             "standard" if self.gamemode == "standard" else "overclock"]

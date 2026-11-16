@@ -1155,6 +1155,20 @@ class CurrencyInteractionTests(unittest.TestCase):
 
         save.assert_called_once_with({"strategy_targets": ["免费午餐"]})
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_enter_battle_mode_does_nothing_on_difficulty_screen(self, manager):
+        """已经在难度界面（右下角是「开始对局」）时，不能再按模式卡片的坐标乱点。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.gamemode = "overclock"
+        currency.update_state = Mock()
+        currency.click_text = Mock(return_value=True)   # 「开始对局」命中
+        manager.reset_mock()
+
+        self.assertEqual(currency.enter_battle_mode(), 1)
+
+        manager.click_point.assert_not_called()
+        currency.update_state.assert_called_once_with("difficulty_select")
+
 
 if __name__ == "__main__":
     unittest.main()
