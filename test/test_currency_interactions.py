@@ -173,6 +173,52 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_beast_panel_clicks_above_leftmost_detail(self, manager):
+        """三张宽卡，用「详情」锚点：点最左详情正上方 60px 再确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1549, 437, 1602, 470]},
+            {"raw_text": "详情", "box": [735, 437, 788, 470]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_beast_chimera(), 1)
+
+        # 最左详情中心 x=(735+788)//2=761，y=437-60=377
+        self.assertIn(call.click_point(761, 377), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.BEAST_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_beast_panel_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_beast_chimera(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.BEAST_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_beast_panel_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_beast_chimera(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

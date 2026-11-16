@@ -887,6 +887,40 @@
         ]
     },
     {
+        "name": "奇兽花园-副标题",
+        "trigger": {
+            "text": "选择奇美拉",
+            "box": [
+                980,
+                115,
+                1115,
+                155
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_beast_chimera"
+        ]
+    },
+    {
+        "name": "奇兽花园-红字提示",
+        "trigger": {
+            "text": "请选择奇美拉",
+            "box": [
+                1415,
+                520,
+                1570,
+                565
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_beast_chimera"
+        ]
+    },
+    {
         "name": "出战前准备",
         "trigger": {
             "text": "出战",
