@@ -1,5 +1,7 @@
+import os
 import unittest
 import xml.etree.ElementTree as ET
+from unittest.mock import Mock
 from pathlib import Path
 
 UI_PATH = Path(__file__).resolve().parents[1] / "resource" / "ui" / "UI.ui"
@@ -52,19 +54,26 @@ class CurrencyGuiUiTests(unittest.TestCase):
 
     def test_auto_exit_plane_disables_manual_plane_choices(self):
         """勾了"按目标策略自动决定退出位面"，两个手选位面就不该还能改。"""
-        tab = self.currency
-        auto = tab.find(".//widget[@name='Currency_auto_exit_plane_checkbox']")
-        exit_combo = tab.find(".//widget[@name='Currency_exit_plane_combo']")
-        prior_combo = tab.find(".//widget[@name='Currency_prior_exit_plane_combo']")
-        self.assertIsNotNone(auto)
+        from types import SimpleNamespace
 
-        auto.setChecked(True)
-        self.assertFalse(exit_combo.isEnabled())
-        self.assertFalse(prior_combo.isEnabled())
+        from core.currency.settings_ui import SettingsDialog
 
-        auto.setChecked(False)
-        self.assertTrue(exit_combo.isEnabled())
-        self.assertTrue(prior_combo.isEnabled())
+        exit_combo = SimpleNamespace(setEnabled=Mock())
+        prior_combo = SimpleNamespace(setEnabled=Mock())
+        stub = SimpleNamespace(section=SimpleNamespace(
+            Currency_exit_plane_combo=exit_combo,
+            Currency_prior_exit_plane_combo=prior_combo,
+        ))
+
+        SettingsDialog._sync_exit_plane_widgets(stub, True)
+        exit_combo.setEnabled.assert_called_once_with(False)
+        prior_combo.setEnabled.assert_called_once_with(False)
+
+        exit_combo.setEnabled.reset_mock()
+        prior_combo.setEnabled.reset_mock()
+        SettingsDialog._sync_exit_plane_widgets(stub, False)
+        exit_combo.setEnabled.assert_called_once_with(True)
+        prior_combo.setEnabled.assert_called_once_with(True)
 
 
 if __name__ == "__main__":
