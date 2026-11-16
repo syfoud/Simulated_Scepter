@@ -1060,6 +1060,31 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertIn(call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
                       manager.mock_calls)
 
+    def test_auto_clear_only_unchecks_the_chosen_target(self):
+        """本屏出现但没选的那条目标不能取消勾选。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐", "市场干预"]
+        currency.auto_clear_targets = True
+
+        self.assertTrue(currency.auto_clear_target("市场干预"))
+        self.assertEqual(currency.strategy_targets, ["免费午餐"])
+
+    def test_auto_clear_ignores_strategy_that_was_not_chosen(self):
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐"]
+        currency.auto_clear_targets = True
+
+        self.assertFalse(currency.auto_clear_target("特战资金"))
+        self.assertEqual(currency.strategy_targets, ["免费午餐"])
+
+    def test_auto_clear_is_off_by_default(self):
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐"]
+        currency.auto_clear_targets = False
+
+        self.assertFalse(currency.auto_clear_target("免费午餐"))
+        self.assertEqual(currency.strategy_targets, ["免费午餐"])
+
 
 if __name__ == "__main__":
     unittest.main()

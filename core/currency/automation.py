@@ -912,13 +912,7 @@ class SimulatedCurrency(CurrencyUtils):
             plane, texts, selected_text, targets=self.strategy_targets)
         if hits:
             CUS_LOGGER.info("本屏命中目标策略：%s", "、".join(hits))
-            if getattr(self, "auto_clear_targets", False):
-                # 刷到过就取消勾选：否则它下一屏还会压过未解锁图标，等于白占一个优先级
-                self.strategy_targets = [
-                    name for name in self.strategy_targets if name not in hits]
-                CUS_LOGGER.info(
-                    "已自动取消勾选：%s（剩余目标 %d 条）",
-                    "、".join(hits), len(self.strategy_targets))
+            self.auto_clear_target(selected_text)
         self._refresh_auto_exit_plane()
 
         return 1
@@ -1478,7 +1472,8 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_WAIT_ATTEMPTS = 25
     PROTAGONIST_WAIT_INTERVAL = 0.4
     # 第二次选主角时该角色已有光环，点光环会弹「是否替换该角色原有光环？」（实测 OCR 框）
-    PROTAGONIST_REPLACE_TITLE_BOX = [800, 480, 1110, 530]
+    # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
+    PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
     PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
 
     def select_protagonist (self):
@@ -1603,6 +1598,19 @@ class SimulatedCurrency(CurrencyUtils):
     STAGE_UPSCALE = 3           # 原尺寸 OCR 会漏字，放大三倍才稳
     # 各面终局节点：1 面到 1-6，2/3 面到 x-5（幕后茶歇会顶掉一个奖励节点，1-5 不算终局）
     PLANE_LAST_NODE = {1: 6, 2: 5, 3: 5}
+    def auto_clear_target (self, chosen):
+        """刷到并选中目标策略后取消它的勾选。
+
+        只取消"这次真的选了"的那条：本屏出现过但没选的不算，下一屏还得靠它压优先级。
+        """
+        if not getattr(self, "auto_clear_targets", False):
+            return False
+        if not chosen or chosen not in self.strategy_targets:
+            return False
+        self.strategy_targets = [name for name in self.strategy_targets if name != chosen]
+        CUS_LOGGER.info("已自动取消勾选：%s（剩余目标 %d 条）", chosen, len(self.strategy_targets))
+        return True
+
     @staticmethod
     def canonical_strategies (texts):
         """把 OCR 出来的卡名对齐到 298 条已知策略名，对不上的保留原文（便于发现新策略）。"""
