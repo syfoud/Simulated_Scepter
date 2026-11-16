@@ -901,50 +901,6 @@
         ]
     },
     {
-        "name": "点击空白（初始）",
-        "trigger": {
-            "text": "点击空白处继续",
-            "box": [
-                875,
-                948,
-                1047,
-                975
-            ],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions": [
-            {
-                "position": [
-                    961,
-                    962
-                ]
-            }
-        ]
-    },
-    {
-        "name": "点击空白（首领）",
-        "trigger": {
-            "text": "点击空白处继续",
-            "box": [
-                870,
-                778,
-                1048,
-                807
-            ],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions": [
-            {
-                "position": [
-                    959,
-                    793
-                ]
-            }
-        ]
-    },
-    {
         "name": "进入幕后茶歇",
         "trigger": {
             "text": "幕后茶歇",
