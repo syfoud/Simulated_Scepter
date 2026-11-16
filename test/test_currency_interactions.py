@@ -1089,20 +1089,40 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_master_panel_picks_first_card_then_confirms(self, manager):
         """「从师」面板没有详情行，直接点卡片本体再确认。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.es = None
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "波提欧", "box": [1007, 339, 1087, 371]},
+            {"raw_text": "绯英", "box": [739, 340, 793, 371]},
+        ]
         currency.click_text = Mock(return_value=True)
         manager.reset_mock()
 
         self.assertEqual(currency.choose_master(), 1)
 
-        self.assertIn(call.click_point(*SimulatedCurrency.MASTER_CARD_POSITION),
-                      manager.mock_calls)
+        # 最左卡名 绯英 中心 x=766，往上 90px 点卡身
+        self.assertIn(call.click_point(766, 250), manager.mock_calls)
         currency.click_text.assert_called_once_with(
             text="确认选择", box=SimulatedCurrency.MASTER_CONFIRM_BOX,
             click=True, allow_fail=True)
 
     @patch("core.currency.automation.key_mouse_manager")
+    def test_master_panel_falls_back_when_names_not_recognised(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_master(), 1)
+        self.assertIn(call.click_point(*SimulatedCurrency.MASTER_CARD_POSITION),
+                      manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
     def test_master_panel_reports_failure_when_confirm_missing(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
         currency.click_text = Mock(return_value=False)
         manager.reset_mock()
 

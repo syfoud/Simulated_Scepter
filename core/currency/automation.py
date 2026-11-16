@@ -152,8 +152,11 @@ class SimulatedCurrency(CurrencyUtils):
     # 该按钮的文字框（日志里带上落点来源，便于核对）
     BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
-    # 「从师」面板：四张角色卡（没有「详情」行），点卡片本体再确认
-    MASTER_CARD_POSITION = (625, 240)
+    # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
+    # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
+    MASTER_NAME_BAND = [560, 320, 1700, 385]
+    MASTER_CARD_LIFT = 90
+    MASTER_CARD_POSITION = (625, 240)   # 卡名都没认出来时的兜底
     MASTER_CONFIRM_BOX = [1400, 505, 1580, 570]
 
     # 4.7 的模式选择界面：左侧上下两张卡（标准 / 超频），右侧大标题显示当前选中的模式
@@ -1932,7 +1935,19 @@ class SimulatedCurrency(CurrencyUtils):
         这个面板的卡片没有「详情」按钮行，直接点卡片本体。
         注意红字提示和「巡海游侠」面板一样是「请选择一名角色」，靠副标题区分。
         """
-        key_mouse_manager.click_point(*self.MASTER_CARD_POSITION)
+        names = [
+            item for item in self.ts.find_with_box(self.MASTER_NAME_BAND, forward=1)
+            if item["raw_text"].strip()
+        ]
+        if names:
+            names.sort(key=lambda item: item["box"][0])
+            box = names[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.MASTER_CARD_LIFT))
+            CUS_LOGGER.info("从师面板按卡名「%s」选卡：%s", names[0]["raw_text"], position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("从师面板没认出卡名，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.MASTER_CARD_POSITION)
         key_mouse_manager.wait()
 
         if not self.click_text(text="确认选择", box=self.MASTER_CONFIRM_BOX,
