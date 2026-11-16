@@ -219,6 +219,24 @@ class CurrencyWarActionsTest(unittest.TestCase):
                 self.assertEqual(by_name[name]["trigger"]["text"], text)
                 self.assertEqual(by_name[name]["actions"], actions)
 
+    def test_popup_triggers_survive_dropped_digits(self):
+        """弹窗触发词不能带数字。
+
+        OCR 会把数字整个吞掉（「请选择2名共舞的角色」→「请选择名共舞的角色」），
+        触发词只要是不含数字的片段，带与不带数字两种识别结果都能命中。
+        """
+        popup_prefixes = ("银狼骇入效果", "克拉拉强化", "龙丹羁绊", "关闭黑市主理人",
+                          "巡海游侠", "奇兽花园", "梦境交织")
+        checked = 0
+        for action in self.actions:
+            if not action["name"].startswith(popup_prefixes):
+                continue
+            text = action["trigger"].get("text")
+            self.assertIsNotNone(text, action["name"])
+            self.assertNotRegex(text, r"\d", action["name"])
+            checked += 1
+        self.assertGreaterEqual(checked, 10)
+
 
 if __name__ == "__main__":
     unittest.main()
