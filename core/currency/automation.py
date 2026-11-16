@@ -27,7 +27,11 @@ from core.currency.run_history import (
     CurrencyRunHistory,
     get_newly_unlocked_investment,
 )
-from core.currency.settings import load_currency_settings, resolve_priority
+from core.currency.settings import (
+    load_currency_settings,
+    resolve_priority,
+    save_currency_settings,
+)
 from core.currency.utils import CurrencyUtils, set_forground
 from route import PATHS
 from tool import GLOBAL
@@ -591,6 +595,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
+        self.protagonist_picks = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -1056,8 +1061,8 @@ class SimulatedCurrency(CurrencyUtils):
 
         # 只有开了词缀收集（或配了目标词缀）才值得花时间读词缀；否则直接点下一步，
         # 在低难度刷策略时这一步会白等十几秒
-        if not getattr(self, "gather_mode", False) and not getattr(self, "affix_targets", []):
-            CUS_LOGGER.debug("未开启词缀收集，跳过词缀识别直接点下一步")
+        if not getattr(self, "gather_mode", False):
+            CUS_LOGGER.debug("未开启词缀收集模式，跳过词缀识别直接点下一步")
             self.affixes_recorded = True
             key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
             key_mouse_manager.wait()
@@ -1473,7 +1478,9 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_BUTTON_BOX = [1755, 732, 1877, 768]
     # 贴着文字边界裁会读空，左右上下都留出余量
     PROTAGONIST_TITLE_BOX = [760, 58, 1160, 122]
+    # 一局会过两次主角面板：第二次那个角色身上已经有光环，所以拖第二个角色
     PROTAGONIST_DRAG = ((805, 612), (960, 445))
+    PROTAGONIST_SECOND_DRAG = ((910, 609), (964, 441))
     PROTAGONIST_AURA_POSITION = (1501, 502)
     PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
     PROTAGONIST_WAIT_ATTEMPTS = 25
@@ -1517,8 +1524,10 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.warning("选择主角面板没等到，交给下一轮重试")
             return 0
 
-        # 把第一个角色拖到主角位
-        start, end = self.PROTAGONIST_DRAG
+        # 第一次拖第一个角色；第二次那个角色已经有光环了，改拖第二个
+        use_second = getattr(self, "protagonist_picks", 0) >= 1
+        start, end = self.PROTAGONIST_SECOND_DRAG if use_second else self.PROTAGONIST_DRAG
+        CUS_LOGGER.info("选择主角：拖第 %d 个角色", 2 if use_second else 1)
         key_mouse_manager.drag_point(start[0], start[1], end[0], end[1])
         key_mouse_manager.wait()
 
@@ -1542,7 +1551,8 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.click_point(
             (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
         key_mouse_manager.wait()
-        CUS_LOGGER.info("主角已选择")
+        self.protagonist_picks = getattr(self, "protagonist_picks", 0) + 1
+        CUS_LOGGER.info("主角已选择（本局第 %d 次）", self.protagonist_picks)
         return 1
 
     TEA_ENTRY_BOX = [1753, 732, 1879, 768]
@@ -1616,7 +1626,15 @@ class SimulatedCurrency(CurrencyUtils):
             return False
         self.strategy_targets = [name for name in self.strategy_targets if name != chosen]
         CUS_LOGGER.info("已自动取消勾选：%s（剩余目标 %d 条）", chosen, len(self.strategy_targets))
+        self.persist_strategy_targets()
         return True
+
+    def persist_strategy_targets (self):
+        """把取消后的目标列表写回配置文件——否则重开/下一把又会全勾回来。"""
+        try:
+            save_currency_settings({"strategy_targets": list(self.strategy_targets)})
+        except Exception:
+            CUS_LOGGER.warning("保存目标策略列表失败", exc_info=True)
 
     @staticmethod
     def canonical_strategies (texts):

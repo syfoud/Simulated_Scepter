@@ -1046,11 +1046,11 @@ class CurrencyInteractionTests(unittest.TestCase):
 
     @patch("core.currency.automation.key_mouse_manager")
     def test_affix_is_not_read_when_collection_is_off(self, manager):
-        """没开词缀收集时不该花十几秒读词缀，直接点下一步。"""
+        """没开词缀收集模式时不该花十几秒读词缀，直接点下一步（配了目标词缀也一样）。"""
         currency = object.__new__(SimulatedCurrency)
         currency.affixes_recorded = False
         currency.gather_mode = False
-        currency.affix_targets = []
+        currency.affix_targets = ["复仇心切"]   # 配了目标词缀也该跳过
         currency.wait_affixes = Mock(return_value=[])
         manager.reset_mock()
 
@@ -1127,6 +1127,32 @@ class CurrencyInteractionTests(unittest.TestCase):
         manager.reset_mock()
 
         self.assertEqual(currency.choose_master(), 0)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_second_protagonist_panel_drags_second_character(self, manager):
+        """一局两次主角面板：第二次那个角色已有光环，要拖第二个。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        currency.protagonist_picks = 1        # 已经选过一次
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        self.assertIn(call.drag_point(910, 609, 964, 441), manager.mock_calls)
+        self.assertEqual(currency.protagonist_picks, 2)
+
+    def test_auto_clear_writes_back_to_config(self):
+        """取消勾选要落盘，否则重开又全勾回来。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐", "市场干预"]
+        currency.auto_clear_targets = True
+
+        with patch("core.currency.automation.save_currency_settings") as save:
+            self.assertTrue(currency.auto_clear_target("市场干预"))
+
+        save.assert_called_once_with({"strategy_targets": ["免费午餐"]})
 
 
 if __name__ == "__main__":
