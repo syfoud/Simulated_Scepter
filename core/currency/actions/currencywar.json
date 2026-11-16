@@ -1094,6 +1094,23 @@
         ]
     },
     {
+        "name": "从师-副标题",
+        "trigger": {
+            "text": "作为师父",
+            "box": [
+                800,
+                85,
+                1290,
+                140
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_master"
+        ]
+    },
+    {
         "name": "巡海游侠-副标题",
         "trigger": {
             "text": "使其成为巡海游侠",

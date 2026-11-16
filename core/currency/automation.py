@@ -152,6 +152,10 @@ class SimulatedCurrency(CurrencyUtils):
     # 该按钮的文字框（日志里带上落点来源，便于核对）
     BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
+    # 「从师」面板：四张角色卡（没有「详情」行），点卡片本体再确认
+    MASTER_CARD_POSITION = (625, 240)
+    MASTER_CONFIRM_BOX = [1400, 505, 1580, 570]
+
     # 4.7 的模式选择界面：左侧上下两张卡（标准 / 超频），右侧大标题显示当前选中的模式
     MODE_TITLE_BOX = [560, 125, 780, 185]
     MODE_CARD_POSITIONS = {"standard": (155, 226), "overclock": (155, 418)}
@@ -1921,6 +1925,23 @@ class SimulatedCurrency(CurrencyUtils):
     DREAM_FALLBACK_POSITION = (938, 339)
     DREAM_CONFIRM_BOX = [1430, 552, 1560, 600]
     CARD_DETAIL_OFFSET = 60      # 「详情」上方这么多像素就是卡片本体
+
+    def choose_master (self):
+        """「从师」面板：任选一名角色作为师父，再点「确认选择」。
+
+        这个面板的卡片没有「详情」按钮行，直接点卡片本体。
+        注意红字提示和「巡海游侠」面板一样是「请选择一名角色」，靠副标题区分。
+        """
+        key_mouse_manager.click_point(*self.MASTER_CARD_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(text="确认选择", box=self.MASTER_CONFIRM_BOX,
+                               click=True, allow_fail=True):
+            CUS_LOGGER.warning("从师面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("已选择师父")
+        return 1
 
     def pick_card_above_detail (self, detail_box, confirm_box, fallback,
                                 count=1, offset=None, label="面板"):

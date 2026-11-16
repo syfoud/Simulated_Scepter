@@ -1085,6 +1085,29 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertFalse(currency.auto_clear_target("免费午餐"))
         self.assertEqual(currency.strategy_targets, ["免费午餐"])
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_master_panel_picks_first_card_then_confirms(self, manager):
+        """「从师」面板没有详情行，直接点卡片本体再确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_master(), 1)
+
+        self.assertIn(call.click_point(*SimulatedCurrency.MASTER_CARD_POSITION),
+                      manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.MASTER_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_master_panel_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_master(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
