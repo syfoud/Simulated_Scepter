@@ -173,6 +173,45 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_runs_full_panel_flow(self, manager, _sleep):
+        """4.7 新 UI：点按钮 → 等面板 → 拖角色 → 选光环 → 确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        calls = manager.mock_calls
+        # 第一次点击是「选择主角」按钮（中心 1816,750）
+        self.assertEqual(
+            calls[0],
+            call.click_point(1816, 750, box=SimulatedCurrency.PROTAGONIST_BUTTON_BOX),
+        )
+        # 拖拽第一个角色到主角位
+        self.assertIn(call.drag_point(805, 612, 960, 445), calls)
+        # 选右侧光环
+        self.assertIn(call.click_point(1501, 502), calls)
+        # 最后点确认（中心 968,953）
+        self.assertEqual(
+            calls[-2],
+            call.click_point(968, 953, box=SimulatedCurrency.PROTAGONIST_CONFIRM_BOX),
+        )
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_gives_up_when_panel_never_shows(self, manager, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 0)
+
+        manager.drag_point.assert_not_called()
+        # 只点了「选择主角」按钮，没有后续动作
+        self.assertEqual(manager.click_point.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

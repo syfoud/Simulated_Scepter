@@ -136,6 +136,14 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 4.7 新 UI「选择主角」：第一位面/第二位面首领前的备战界面会把「出战」换成它
+    PROTAGONIST_BUTTON_BOX = [1755, 732, 1877, 768]
+    PROTAGONIST_TITLE_BOX = [815, 76, 1104, 103]
+    PROTAGONIST_DRAG = ((805, 612), (960, 445))
+    PROTAGONIST_AURA_POSITION = (1501, 502)
+    PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
+    PROTAGONIST_WAIT_ATTEMPTS = 10
+    PROTAGONIST_WAIT_INTERVAL = 0.3
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -709,6 +717,50 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def select_protagonist (self):
+        """4.7 新 UI「选择主角」：点按钮 → 等面板 → 拖第一个角色 → 选右侧光环 → 确认。
+
+        面板出现在第一位面和第二位面首领之前的备战界面，按钮就压在「出战」的位置上，
+        不处理的话主循环等不到「出战」文字会一直空转。
+        """
+        box = self.PROTAGONIST_BUTTON_BOX
+        key_mouse_manager.click_point(
+            (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+        key_mouse_manager.wait()
+
+        for attempt in range(self.PROTAGONIST_WAIT_ATTEMPTS):
+            if self.click_text(
+                text="选择一个角色获得主角光环",
+                box=self.PROTAGONIST_TITLE_BOX,
+                click=False,
+                allow_fail=True,
+            ):
+                break
+            CUS_LOGGER.debug(
+                "选择主角面板还没出现（第 %d/%d 次等待）",
+                attempt + 1, self.PROTAGONIST_WAIT_ATTEMPTS,
+            )
+            time.sleep(self.PROTAGONIST_WAIT_INTERVAL)
+        else:
+            CUS_LOGGER.warning("选择主角面板没等到，交给下一轮重试")
+            return 0
+
+        # 把第一个角色拖到主角位
+        start, end = self.PROTAGONIST_DRAG
+        key_mouse_manager.drag_point(start[0], start[1], end[0], end[1])
+        key_mouse_manager.wait()
+
+        # 选右侧的主角光环（不刷新，省金币）
+        key_mouse_manager.click_point(*self.PROTAGONIST_AURA_POSITION)
+        key_mouse_manager.wait()
+
+        box = self.PROTAGONIST_CONFIRM_BOX
+        key_mouse_manager.click_point(
+            (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("主角已选择")
+        return 1
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。

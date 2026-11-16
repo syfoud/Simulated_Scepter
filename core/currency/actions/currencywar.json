@@ -887,6 +887,23 @@
         ]
     },
     {
+        "name": "选择主角",
+        "trigger": {
+            "text": "选择主角",
+            "box": [
+                1755,
+                732,
+                1877,
+                768
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "select_protagonist"
+        ]
+    },
+    {
         "name": "出战前准备",
         "trigger": {
             "text": "出战",
@@ -907,7 +924,10 @@
         "name": "大世界",
         "trigger": {
             "photo": "smartphone",
-            "pos": {"x": 32,"y": 67},
+            "pos": {
+                "x": 32,
+                "y": 67
+            },
             "threshold": 0.96
         },
         "actions": [
