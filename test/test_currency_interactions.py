@@ -640,5 +640,60 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertFalse(currency.exit_requested)
 
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_hack_effect_picks_rightmost_option_then_confirms(self, manager):
+        """银狼面板的选项名字会变，按位置取最右边那张，再点确认选择。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "数据拷贝仪LV.1", "box": [576, 372, 754, 407]},
+            {"raw_text": "病毒防火墙LV.1", "box": [1090, 377, 1264, 404]},
+        ]
+        currency.click_box = Mock()
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_hack_effect(), 1)
+
+        currency.click_box.assert_called_once_with([1090, 377, 1264, 404])
+        currency.click_text.assert_called_once_with(
+            text="确认选择",
+            box=SimulatedCurrency.HACK_CONFIRM_BOX,
+            click=True,
+            allow_fail=True,
+        )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_hack_effect_falls_back_to_fixed_position(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_box = Mock()
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_hack_effect(), 1)
+
+        currency.click_box.assert_not_called()
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.HACK_FALLBACK_POSITION), manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_hack_effect_reports_failure_when_confirm_not_found(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "病毒防火墙LV.1", "box": [1090, 377, 1264, 404]},
+        ]
+        currency.click_box = Mock()
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_hack_effect(), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

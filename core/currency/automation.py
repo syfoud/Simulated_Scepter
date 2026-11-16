@@ -1579,3 +1579,37 @@ class SimulatedCurrency(CurrencyUtils):
         self.update_state("exit")
         return True
 
+    HACK_OPTIONS_BOX = [480, 150, 1400, 430]   # 两张效果卡的文字区
+    HACK_FALLBACK_POSITION = (1288, 284)       # 认不出选项时兜底点右侧那张卡
+    HACK_CONFIRM_BOX = [1430, 575, 1560, 620]  # 「确认选择」
+
+    def choose_hack_effect (self):
+        """银狼的「骇入效果」面板：选右侧那张卡，再点确认选择。
+
+        选项名字会变（数据拷贝仪 / 病毒防火墙…），所以不写死文字：OCR 卡片区，
+        取最右边那张点掉；认不出来就按固定位置兜底，最后点「确认选择」。
+        """
+        self.ts.forward(self.get_screen())
+        options = [
+            item for item in self.ts.find_with_box(self.HACK_OPTIONS_BOX)
+            if item["raw_text"].strip()
+        ]
+        if options:
+            options.sort(key=lambda item: item["box"][0])
+            target = options[-1]["box"]
+            CUS_LOGGER.info("骇入效果选右侧：%s", options[-1]["raw_text"])
+            self.click_box(target)
+        else:
+            CUS_LOGGER.warning("骇入面板没认出选项文字，按固定位置点右侧")
+            key_mouse_manager.click_point(*self.HACK_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.HACK_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("骇入面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("骇入效果已选择")
+        return 1
+
