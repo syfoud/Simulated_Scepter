@@ -136,7 +136,8 @@ class SimulatedCurrency(CurrencyUtils):
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
     GOLDEN_ERA_NAMES = ("银•金•彩",)
     DIFFICULTY_MAX_STEPS = 120
-    DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
+    # 4.7 实测：这个框要比文字行宽一点，框太窄 OCR 会把「获得」认成「医得」
+    DIFFICULTY_SELECTED_EFFECT_BOX = [660, 380, 1250, 450]
     DIFFICULTY_DOWN_POSITION = (960, 844)
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
     ENVIRONMENT_CONFIRM_BOX = [1053, 967, 1108, 998]
@@ -415,7 +416,9 @@ class SimulatedCurrency(CurrencyUtils):
             )
             merged = merge_text (text_list)
             CUS_LOGGER.debug(f"OCR 识别结果: {merged}")
-            return "开局时获得" in merged
+            # 只认「开局时」：难度 1 的效果行开头就是它，OCR 后面的字容易错（获得→医得），
+            # 掐头两个字足够判别，又不至于把「敌人难度+1」那行误判成难度 1
+            return "开局时" in merged
         except Exception:
             CUS_LOGGER.info("正在选择难度1")
             return False
