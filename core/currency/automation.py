@@ -136,6 +136,12 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 「梦境交织」共舞面板：两张角色卡 + 每张下面的「详情」。
+    # 左侧羁绊栏也有「梦境交织」，触发用副标题「选择2个角色进行共舞」避开它
+    DREAM_DETAIL_BOX = [880, 390, 1250, 435]
+    DREAM_FALLBACK_POSITION = (938, 339)
+    DREAM_CONFIRM_BOX = [1430, 552, 1560, 600]
+    CARD_DETAIL_OFFSET = 60      # 「详情」上方这么多像素就是卡片本体
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -709,6 +715,45 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def pick_card_above_detail (self, detail_box, confirm_box, fallback,
+                                offset=None, label="面板"):
+        """通用弹窗处理：一排「详情」按钮 → 点最左边那个正上方（那张卡）→ 点「确认选择」。
+
+        克拉拉 / 龙丹 / 巡海游侠 / 奇兽花园 / 梦境交织 都是这个形状（若干卡 + 每张下面的详情
+        + 右下确认），所以统一走这里，各面板只提供四个坐标。
+        """
+        offset = self.CARD_DETAIL_OFFSET if offset is None else offset
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(detail_box)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - offset))
+            CUS_LOGGER.info("%s按「详情」锚点选卡：%s", label, position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("%s没认出「详情」，按固定位置点第一张卡", label)
+            key_mouse_manager.click_point(*fallback)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=confirm_box, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("%s没点掉「确认选择」，等下一轮", label)
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("%s选择完成", label)
+        return 1
+
+    def choose_dream_weave (self):
+        """「梦境交织」面板：挑一个角色共舞，再点「确认选择」。"""
+        return self.pick_card_above_detail(
+            self.DREAM_DETAIL_BOX, self.DREAM_CONFIRM_BOX,
+            self.DREAM_FALLBACK_POSITION, label="梦境交织")
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。
