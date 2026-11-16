@@ -717,11 +717,11 @@ class SimulatedCurrency(CurrencyUtils):
         return counts
 
     def pick_card_above_detail (self, detail_box, confirm_box, fallback,
-                                offset=None, label="面板"):
-        """通用弹窗处理：一排「详情」按钮 → 点最左边那个正上方（那张卡）→ 点「确认选择」。
+                                count=1, offset=None, label="面板"):
+        """通用弹窗处理：一排「详情」按钮 → 点最左边 count 个正上方（= 那几张卡）→ 点「确认选择」。
 
-        克拉拉 / 龙丹 / 巡海游侠 / 奇兽花园 / 梦境交织 都是这个形状（若干卡 + 每张下面的详情
-        + 右下确认），所以统一走这里，各面板只提供四个坐标。
+        大多数弹窗是"任选一个"（默认 count=1）；「梦境交织」要选两个角色共舞，传 count=2。
+        卡片数量/位置会变，所以用「详情」当锚点、从左往右取，不写死卡片坐标。
         """
         offset = self.CARD_DETAIL_OFFSET if offset is None else offset
         self.ts.forward(self.get_screen())
@@ -729,16 +729,22 @@ class SimulatedCurrency(CurrencyUtils):
             item for item in self.ts.find_with_box(detail_box)
             if "详情" in item["raw_text"]
         ]
+        details.sort(key=lambda item: item["box"][0])
+
         if details:
-            details.sort(key=lambda item: item["box"][0])
-            box = details[0]["box"]
-            position = ((box[0] + box[2]) // 2, max(0, box[1] - offset))
-            CUS_LOGGER.info("%s按「详情」锚点选卡：%s", label, position)
-            key_mouse_manager.click_point(*position)
+            if len(details) < count:
+                CUS_LOGGER.warning(
+                    "%s只认出 %d 张卡，需要选 %d 张", label, len(details), count)
+            for index, item in enumerate(details[:count], start=1):
+                box = item["box"]
+                position = ((box[0] + box[2]) // 2, max(0, box[1] - offset))
+                CUS_LOGGER.info("%s按「详情」锚点选第 %d 张卡：%s", label, index, position)
+                key_mouse_manager.click_point(*position)
+                key_mouse_manager.wait()
         else:
-            CUS_LOGGER.warning("%s没认出「详情」，按固定位置点第一张卡", label)
+            CUS_LOGGER.warning("%s没认出「详情」，按固定位置点卡", label)
             key_mouse_manager.click_point(*fallback)
-        key_mouse_manager.wait()
+            key_mouse_manager.wait()
 
         if not self.click_text(
             text="确认选择", box=confirm_box, click=True, allow_fail=True
@@ -750,10 +756,10 @@ class SimulatedCurrency(CurrencyUtils):
         return 1
 
     def choose_dream_weave (self):
-        """「梦境交织」面板：挑一个角色共舞，再点「确认选择」。"""
+        """「梦境交织」面板：**要选两个**角色共舞（跟只选一个的面板不同），再点「确认选择」。"""
         return self.pick_card_above_detail(
             self.DREAM_DETAIL_BOX, self.DREAM_CONFIRM_BOX,
-            self.DREAM_FALLBACK_POSITION, label="梦境交织")
+            self.DREAM_FALLBACK_POSITION, count=2, label="梦境交织")
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。
