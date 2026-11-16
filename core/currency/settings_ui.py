@@ -44,9 +44,17 @@ class SettingsDialog(BaseDialog):
         ui.Currency_max_runs_spin.setValue(settings["max_runs"])
         ui.Currency_gather_mode_checkbox.setChecked(settings["gather_mode"])
 
+        self.strategy_targets = list(settings["strategy_targets"])
+        self.strategy_avoid = list(settings["strategy_avoid"])
+        ui.Currency_strategy_targets_edit.setText("、".join(self.strategy_targets))
+        ui.Currency_strategy_avoid_edit.setText("、".join(self.strategy_avoid))
+        ui.Currency_auto_exit_plane_checkbox.setChecked(settings["auto_exit_plane"])
+
         ui.Currency_priority_settings_btn.clicked.connect(self.open_priority)
         ui.Currency_deployment_settings_btn.clicked.connect(self.open_deployment)
         ui.Currency_affix_targets_btn.clicked.connect(self.open_affix_targets)
+        ui.Currency_strategy_targets_btn.clicked.connect(self.open_strategy_targets)
+        ui.Currency_strategy_avoid_btn.clicked.connect(self.open_strategy_avoid)
 
     def open_priority(self):
         CurrencyPriorityDialog(self).exec_()
@@ -71,6 +79,9 @@ class SettingsDialog(BaseDialog):
             "gamemode": ui.Currency_gamemode_combo.currentData(),
             "difficulty_mode": ui.Currency_difficulty_mode_combo.currentData(),
             "affix_targets": list(self.affix_targets),
+            "strategy_targets": list(self.strategy_targets),
+            "strategy_avoid": list(self.strategy_avoid),
+            "auto_exit_plane": ui.Currency_auto_exit_plane_checkbox.isChecked(),
             "max_runs": ui.Currency_max_runs_spin.value(),
             "gather_mode": ui.Currency_gather_mode_checkbox.isChecked(),
         }, path=self.path)
