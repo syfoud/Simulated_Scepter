@@ -637,10 +637,7 @@
         "name": "自动战斗检测",
         "trigger": {
             "photo": "auto_battle",
-            "pos": {
-                "x": 21,
-                "y": 919
-            },
+            "pos": {"x": 21,"y": 919},
             "threshold": 0.9,
             "condition": "startbattle"
         },
@@ -817,39 +814,6 @@
         ]
     },
     {
-        "name": "出战",
-        "trigger": {
-            "state_only": true,
-            "condition": "battle_ready",
-            "interval": 3
-        },
-        "actions": [
-            "start_battle"
-        ]
-    },
-    {
-        "name": "商店",
-        "trigger": {
-            "text": "收起",
-            "box": [
-                1597,
-                967,
-                1644,
-                992
-            ],
-            "interval": 3,
-            "redundancy": 60
-        },
-        "actions": [
-            {
-                "position": [
-                    1620,
-                    980
-                ]
-            }
-        ]
-    },
-    {
         "name": "选择主角",
         "trigger": {
             "text": "选择主角",
@@ -864,40 +828,6 @@
         },
         "actions": [
             "select_protagonist"
-        ]
-    },
-    {
-        "name": "出战前准备",
-        "trigger": {
-            "text": "出战",
-            "box": [
-                1784,
-                730,
-                1852,
-                770
-            ],
-            "interval": 3,
-            "redundancy": 60
-        },
-        "actions": [
-            "prepare_battle"
-        ]
-    },
-    {
-        "name": "大世界",
-        "trigger": {
-            "photo": "smartphone",
-            "pos": {
-                "x": 32,
-                "y": 67
-            },
-            "threshold": 0.96
-        },
-        "actions": [
-            {
-                "set_state": "goto_currency"
-            },
-            "goto_currency"
         ]
     },
     {
@@ -1232,6 +1162,70 @@
         },
         "actions": [
             "choose_dream_weave"
+        ]
+    },
+    {
+        "name": "出战",
+        "trigger": {
+            "state_only": true,
+            "condition": "battle_ready",
+            "interval": 3
+        },
+        "actions": [
+            "start_battle"
+        ]
+    },
+    {
+        "name": "商店",
+        "trigger": {
+            "text": "收起",
+            "box": [
+                1597,
+                967,
+                1644,
+                992
+            ],
+            "interval": 3,
+            "redundancy": 60
+        },
+        "actions": [
+            {
+                "position": [
+                    1620,
+                    980
+                ]
+            }
+        ]
+    },
+    {
+        "name": "出战前准备",
+        "trigger": {
+            "text": "出战",
+            "box": [
+                1784,
+                730,
+                1852,
+                770
+            ],
+            "interval": 3,
+            "redundancy": 60
+        },
+        "actions": [
+            "prepare_battle"
+        ]
+    },
+    {
+        "name": "大世界",
+        "trigger": {
+            "photo": "smartphone",
+            "pos": {"x": 32,"y": 67},
+            "threshold": 0.96
+        },
+        "actions": [
+            {
+                "set_state": "goto_currency"
+            },
+            "goto_currency"
         ]
     }
 ]
