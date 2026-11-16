@@ -140,6 +140,8 @@ class SimulatedCurrency(CurrencyUtils):
     DIFFICULTY_SELECTED_EFFECT_BOX = [660, 380, 1250, 450]
     DIFFICULTY_ENTER_BOX = [1550, 930, 1800, 1000]
     DIFFICULTY_DOWN_POSITION = (960, 844)
+    DIFFICULTY_SETTLE_TIMEOUT = 0.8    # 点完向下后，轮询等难度描述变一次
+    DIFFICULTY_SETTLE_STEP = 0.05
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
     ENVIRONMENT_CONFIRM_BOX = [1053, 967, 1108, 998]
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
@@ -412,10 +414,36 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("前往货币战争")
         key_mouse_manager.press("interastral_peace_guide")
 
+    def wait_difficulty_settled (self, timeout=None, step=None):
+        """点完向下箭头后，等难度描述文字发生变化（最多等 DIFFICULTY_SETTLE_TIMEOUT）。
+
+        列表滚动是动画，点完立刻回头看会读到上一帧，容易多按几下。
+        """
+        timeout = self.DIFFICULTY_SETTLE_TIMEOUT if timeout is None else timeout
+        step = self.DIFFICULTY_SETTLE_STEP if step is None else step
+        self.get_screen()
+        before = self.read_difficulty_text()
+        deadline = time.monotonic() + timeout
+        for _ in range(int(timeout / step) + 1):
+            time.sleep(step)
+            self.get_screen()
+            current = self.read_difficulty_text()
+            if current and current != before:
+                return current
+        return before
+
     def on_difficulty_screen (self):
         """现在还在不在难度界面：右下角应该能看到「开始对局」。"""
         return bool(self.click_text(
             text="开始对局", box=self.DIFFICULTY_ENTER_BOX, click=False, allow_fail=True))
+
+    def read_difficulty_text (self):
+        """读难度 1 的效果描述行（读不到返回空串）。"""
+        try:
+            return merge_text(self.ts.find_with_box(
+                self.DIFFICULTY_SELECTED_EFFECT_BOX, forward=1))
+        except Exception:
+            return ""
 
     def is_one (self):
         try:
@@ -465,6 +493,8 @@ class SimulatedCurrency(CurrencyUtils):
             )
             key_mouse_manager.click_point(*self.DIFFICULTY_DOWN_POSITION)
             key_mouse_manager.wait()
+            # 难度列表滚动有动画：轮询等描述文字变一次再判断，别拿动画中间帧当结果
+            self.wait_difficulty_settled()
 
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False

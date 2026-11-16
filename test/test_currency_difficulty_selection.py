@@ -112,6 +112,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency = self.make_currency()
         currency.get_screen = Mock()
         currency.is_one = Mock(side_effect=[False, True])
+        currency.wait_difficulty_settled = Mock()
         currency.complete_difficulty_selection = Mock(return_value=True)
 
         self.assertTrue(currency.select_difficulty_start())
@@ -149,6 +150,17 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
 
         self.assertTrue(currency.select_difficulty_start())
         manager.click_point.assert_not_called()
+
+    def test_waits_for_difficulty_text_to_change(self):
+        """点完向下箭头后轮询等描述变化，别拿动画中间帧当结果。"""
+        currency = self.make_currency()
+        currency.get_screen = Mock()
+        currency.read_difficulty_text = Mock(side_effect=["敌人难度+2", "", "敌人难度+1"])
+
+        with patch("core.currency.automation.time.sleep"):
+            settled = currency.wait_difficulty_settled(timeout=0.5, step=0.05)
+
+        self.assertEqual(settled, "敌人难度+1")
 
 
 if __name__ == "__main__":
