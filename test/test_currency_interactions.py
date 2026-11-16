@@ -212,6 +212,41 @@ class CurrencyInteractionTests(unittest.TestCase):
         # 只点了「选择主角」按钮，没有后续动作
         self.assertEqual(manager.click_point.call_count, 1)
 
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_confirms_aura_replacement(self, manager, _sleep):
+        """一局两次主角面板，第二次角色已有光环会弹替换确认，直接点确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        # 面板标题一定命中；替换提示按第二次的实际情况给 True
+        currency.click_text = Mock(side_effect=[True, True])
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        calls = manager.mock_calls
+        self.assertIn(call.click_point(1501, 502), calls)                      # 光环
+        self.assertIn(call.click_point(1189, 671), calls)                      # 替换确认
+        # 替换确认在光环之后、面板确认之前
+        self.assertLess(calls.index(call.click_point(1501, 502)),
+                        calls.index(call.click_point(1189, 671)))
+        self.assertEqual(
+            calls[-2],
+            call.click_point(968, 953, box=SimulatedCurrency.PROTAGONIST_CONFIRM_BOX),
+        )
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_skips_replacement_when_no_dialog(self, manager, _sleep):
+        """第一次选主角不会弹替换确认，别去点那个坐标。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(side_effect=[True, False])
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        clicked = [c for c in manager.mock_calls if c[0] == "click_point"]
+        self.assertNotIn(call.click_point(1189, 671), clicked)
+
 
 if __name__ == "__main__":
     unittest.main()

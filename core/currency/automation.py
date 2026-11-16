@@ -144,6 +144,9 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
     PROTAGONIST_WAIT_ATTEMPTS = 10
     PROTAGONIST_WAIT_INTERVAL = 0.3
+    # 第二次选主角时该角色已有光环，点光环会弹「是否替换该角色原有光环？」（实测 OCR 框）
+    PROTAGONIST_REPLACE_TITLE_BOX = [800, 480, 1110, 530]
+    PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -754,6 +757,18 @@ class SimulatedCurrency(CurrencyUtils):
         # 选右侧的主角光环（不刷新，省金币）
         key_mouse_manager.click_point(*self.PROTAGONIST_AURA_POSITION)
         key_mouse_manager.wait()
+
+        # 一局要过两次主角面板：第二次那个角色身上已经有光环，
+        # 再点光环会弹「是否替换该角色原有光环？」——直接确认替换
+        if self.click_text(
+            text="是否替换该角色原有光环",
+            box=self.PROTAGONIST_REPLACE_TITLE_BOX,
+            click=False,
+            allow_fail=True,
+        ):
+            CUS_LOGGER.info("该角色已有光环，确认替换")
+            key_mouse_manager.click_point(*self.PROTAGONIST_REPLACE_CONFIRM_POSITION)
+            key_mouse_manager.wait()
 
         box = self.PROTAGONIST_CONFIRM_BOX
         key_mouse_manager.click_point(
