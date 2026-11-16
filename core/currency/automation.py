@@ -7,6 +7,8 @@ import numpy as np
 import pyautogui
 
 from core.currency.investment_selection import choose_fallback_investment
+from core.currency.strategies import STRATEGY_NAMES, exit_plane_for, match_name
+from core.currency.strategy_stats import StrategySampler
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
     AREA_BOXES,
@@ -200,6 +202,18 @@ class SimulatedCurrency(CurrencyUtils):
         self.front_priority, self.back_priority = resolve_priority(
             currency_settings["deployment"]
         )
+
+        # 策略采样与「目标/负面策略」配置
+        self.strategy_sampler = StrategySampler()
+        self.strategy_targets = currency_settings["strategy_targets"]
+        self.strategy_avoid = currency_settings["strategy_avoid"]
+        self.auto_exit_plane = currency_settings["auto_exit_plane"]
+        if self.strategy_targets:
+            CUS_LOGGER.info("目标投资策略：%s", "、".join(self.strategy_targets))
+        if self.strategy_avoid:
+            CUS_LOGGER.info("负面投资策略（绝不选）：%s", "、".join(self.strategy_avoid))
+        if self.auto_exit_plane:
+            CUS_LOGGER.info("退出位面：按目标策略自动推算")
         if not self.front_priority and not self.back_priority:
             CUS_LOGGER.warning(
                 "尚未配置前台或后台角色优先级，备战角色只会作为补位进入前台空位；"
@@ -368,6 +382,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_plane = self.set_exit_plane
         self.prior_environment_found = False
         self.exit_requested = False
+        self._refresh_auto_exit_plane()
         self.exit_started = False
         self.current_plane = None
         self.plane_strategy_count = {}
@@ -604,7 +619,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         for attempt in range (self.max_refresh + 1):
             self.ts.forward (self.get_screen ())
-            texts = self.recognize_options (boxes)
+            texts = self.canonical_strategies (self.recognize_options (boxes))
             CUS_LOGGER.info (f"OCR 识别结果: {texts}")
 
             icon_presence = [False] * len(roi_boxes)
@@ -616,27 +631,22 @@ class SimulatedCurrency(CurrencyUtils):
                 CUS_LOGGER.info(
                     f"选项{idx+1} 是否有图标: {has_icon} (标准差: {std:.2f})"
                 )
-                if has_icon:
-                    selected_idx = idx
-                    CUS_LOGGER.info(
-                        f"第{attempt}次检测到未解锁图标，选中选项{idx+1}"
-                    )
-                    break
 
-            if selected_idx != -1:
+            pick, reason = self._pick_strategy(texts, icon_presence)
+            if pick is not None and reason != "fallback":
+                selected_idx = pick
+                CUS_LOGGER.info(f"第{attempt}次命中「{reason}」，选中选项{pick+1}")
                 break
 
             if attempt < self.max_refresh:
-                CUS_LOGGER.info(f"第 {attempt+1} 次未匹配，点击刷新")
+                CUS_LOGGER.info(f"第 {attempt+1} 次没命中目标/未解锁，点击刷新")
                 self._refresh_investment_options(texts)
             else:
-                selected_idx = choose_fallback_investment(texts, icon_presence)
-                if selected_idx == 1:
-                    CUS_LOGGER.warning("刷新后仍未找到未解锁图标，默认选中间")
-                else:
-                    CUS_LOGGER.warning(
-                        "中间选项为无图鉴图标的轮回不止，改选左侧以保留跨局资源"
-                    )
+                selected_idx = (
+                    pick if pick is not None
+                    else choose_fallback_investment(texts, icon_presence)
+                )
+                CUS_LOGGER.warning(f"刷新后仍未命中，按兜底选选项{selected_idx+1}")
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
         unlocked_investment = get_newly_unlocked_investment(
@@ -682,6 +692,12 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info(
             "第 %s 面已选过 %d 次策略", plane, self.plane_strategy_count[plane])
 
+        hits = self.strategy_sampler.record(
+            plane, texts, selected_text, targets=self.strategy_targets)
+        if hits:
+            CUS_LOGGER.info("本屏命中目标策略：%s", "、".join(hits))
+        self._refresh_auto_exit_plane()
+
         return 1
 
     def read_team_count(self):
@@ -721,6 +737,60 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    @staticmethod
+    def canonical_strategies (texts):
+        """把 OCR 出来的卡名对齐到 298 条已知策略名，对不上的保留原文（便于发现新策略）。"""
+        aligned = []
+        for text in texts:
+            name = match_name(text) if text else None
+            aligned.append(name or text)
+        return aligned
+
+    def _pick_strategy (self, texts, icon_presence):
+        """选卡优先级：目标策略 > 未解锁图标 > 兜底；负面策略一律不选。
+
+        返回 (下标, 理由)；理由为 fallback 表示"这屏没有值得优先选的"，调用方可以刷新再试。
+        """
+        avoid = set(self.strategy_avoid)
+        allowed = [
+            idx for idx, name in enumerate(texts)
+            if name and name not in avoid
+        ]
+        if not allowed:
+            CUS_LOGGER.warning("这一屏三张都是负面策略，只能跳过优先逻辑")
+            allowed = [idx for idx, name in enumerate(texts) if name]
+        if not allowed:
+            return None, "empty"
+
+        for target in self.strategy_targets:
+            for idx in allowed:
+                if texts[idx] == target:
+                    return idx, f"目标策略「{target}」"
+
+        for idx in allowed:
+            if icon_presence[idx]:
+                return idx, "未解锁图标"
+
+        fallback = choose_fallback_investment(texts, icon_presence)
+        if fallback not in allowed:
+            fallback = allowed[0]
+        return fallback, "fallback"
+
+    def _refresh_auto_exit_plane (self):
+        """按「还没收集到的目标策略」实时推算退出位面。"""
+        if not self.auto_exit_plane:
+            return
+        if not self.strategy_targets:
+            self.exit_plane = self.set_exit_plane
+            return
+        plane = exit_plane_for(self.strategy_targets, self.strategy_sampler.collected)
+        if plane != self.exit_plane:
+            CUS_LOGGER.info(
+                "退出位面自动调整：第 %s 面（目标策略还剩 %d 条未收集）",
+                plane, len(self.strategy_sampler.missing(self.strategy_targets)),
+            )
+        self.exit_plane = plane
 
     def read_stage (self):
         """读顶栏的「位面-节点」标记，返回 (位面, 节点)；认不出来返回 None。

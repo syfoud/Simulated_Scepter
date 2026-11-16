@@ -9,6 +9,7 @@ EXIT_PLANES = (1, 2, 3)
 DEFAULT_EXIT_PLANE = 1
 DEFAULT_EXIT_IF_NO_PRIOR = False
 DEFAULT_PRIOR_EXIT_PLANE = None
+DEFAULT_AUTO_EXIT_PLANE = False
 
 
 PRIORITY_KEYS = (
@@ -101,7 +102,28 @@ def normalize_currency_settings(values=None):
         if isinstance(template, str) and isinstance(name, str) and name.strip()
     }
 
+    strategy_targets = know = values.get("strategy_targets", [])
+    if not isinstance(know, list):
+        strategy_targets = []
+    strategy_targets = [n.strip() for n in strategy_targets if isinstance(n, str) and n.strip()]
+
+
+    strategy_avoid = values.get("strategy_avoid", [])
+    if not isinstance(strategy_avoid, list):
+        strategy_avoid = []
+    strategy_avoid = [n.strip() for n in strategy_avoid if isinstance(n, str) and n.strip()]
+    strategy_targets = list(dict.fromkeys(strategy_targets))
+    strategy_avoid = list(dict.fromkeys(strategy_avoid))
+
+
+    auto_exit_plane = values.get("auto_exit_plane", DEFAULT_AUTO_EXIT_PLANE)
+    if not isinstance(auto_exit_plane, bool):
+        auto_exit_plane = DEFAULT_AUTO_EXIT_PLANE
+
     return {
+        "strategy_targets": strategy_targets,
+        "strategy_avoid": strategy_avoid,
+        "auto_exit_plane": auto_exit_plane,
         "exit_after_plane": exit_plane,
         "exit_if_no_prior": exit_if_no_prior,
         "prior_exit_plane": prior_exit_plane,

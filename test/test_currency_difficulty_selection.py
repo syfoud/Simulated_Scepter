@@ -16,6 +16,9 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency.exit_requested = True
         currency.exit_started = True
         currency.run_history = Mock()
+        currency.auto_exit_plane = False
+        currency.strategy_targets = []
+        currency.strategy_sampler = Mock()
         currency.update_state = Mock(
             side_effect=lambda next_state: setattr(currency, "state", next_state)
         )
