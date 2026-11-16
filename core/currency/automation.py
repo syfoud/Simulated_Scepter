@@ -1437,3 +1437,26 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.wait()
         return 1
 
+    EXIT_MAX_ATTEMPTS = 3
+    EXIT_ACTION_NAME = "开始退出"
+    def _exit_failed(self, reason):
+        """退出没成功：解开「开始退出」的 once 锁存，让下一帧还能再试。
+
+        引擎里命中即锁存，不主动解锁的话这条动作本轮再也不会被调用——
+        日志写着"下一轮重试"却永远不重试，玩家看到的就是卡死。
+        连续失败到上限后停手，避免在错误界面上反复连按 ESC。
+        """
+        self.exit_attempts += 1
+        if self.exit_attempts < self.EXIT_MAX_ATTEMPTS:
+            self.latched_events.discard(self.EXIT_ACTION_NAME)
+            CUS_LOGGER.warning(
+                "%s，第 %d/%d 次退出未完成，下一帧重试",
+                reason, self.exit_attempts, self.EXIT_MAX_ATTEMPTS,
+            )
+        else:
+            CUS_LOGGER.warning(
+                "%s，已连续 %d 次退出失败，本轮停止重试（游戏可能停在非预期界面）",
+                reason, self.exit_attempts,
+            )
+        return 0
+
