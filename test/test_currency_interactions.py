@@ -173,6 +173,35 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_blank_prompt_clicks_the_detected_text_wherever_it_is(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "点击空白处继续", "box": [908, 735, 1052, 760]},
+        ]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.click_blank_prompt(), 1)
+
+        currency.click_box.assert_called_once_with([908, 735, 1052, 760])
+        currency.ts.find_with_box.assert_called_once_with(SimulatedCurrency.BLANK_PROMPT_BOX)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_blank_prompt_does_nothing_when_text_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.click_blank_prompt(), 0)
+
+        currency.click_box.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

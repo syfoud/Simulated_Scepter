@@ -136,6 +136,11 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 「点击空白处继续」在开局前、首领前、奇遇里都会出现，位置各不相同：
+    # 实测 y 分别落在 948~975 / 778~807 / 640~1010 三段，用一条带全罩住，
+    # 点的时候点识别到的那块文字本身，不猜固定坐标
+    BLANK_PROMPT_TEXT = "点击空白处继续"
+    BLANK_PROMPT_BOX = [800, 640, 1140, 1010]
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -709,6 +714,30 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def find_blank_prompt (self):
+        """在当前帧找「点击空白处继续」，返回它的框；没有就返回 None。"""
+        self.ts.forward(self.get_screen())
+        for item in self.ts.find_with_box(self.BLANK_PROMPT_BOX):
+            if self.BLANK_PROMPT_TEXT in item["raw_text"]:
+                return item["box"]
+        return None
+
+    def click_blank_prompt (self):
+        """点「点击空白处继续」：按识别到的位置点，不假设它在哪一屏。
+
+        开局前、首领前、以及后面位面出现的奇遇都会弹这一句，位置还各不相同，
+        所以不能写死坐标；没找到就返回 0 交给下一帧，不会乱点。
+        """
+        target = self.find_blank_prompt()
+        if target is None:
+            CUS_LOGGER.debug("这一帧没找到「点击空白处继续」，等下一帧")
+            return 0
+
+        CUS_LOGGER.debug("点击空白提示：%s", target)
+        self.click_box(target)
+        key_mouse_manager.wait()
+        return 1
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。

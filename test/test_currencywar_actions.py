@@ -163,6 +163,22 @@ class CurrencyWarActionsTest(unittest.TestCase):
         )
         currency.do_action.assert_called_once_with({"position": [1818, 750]})
 
+    def test_blank_prompt_is_one_action_covering_every_screen(self):
+        """「点击空白处继续」在开局前/首领前/奇遇都会出现，位置不同，必须一条动作全罩住。"""
+        actions = [a for a in self.actions if a.get("name") == "点击空白继续"]
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(
+            [a for a in self.actions if a.get("name", "").startswith("点击空白")],
+            actions,
+        )
+        action = actions[0]
+        self.assertEqual(action["trigger"]["text"], "点击空白处继续")
+        self.assertEqual(action["actions"], ["click_blank_prompt"])
+        top, bottom = action["trigger"]["box"][1], action["trigger"]["box"][3]
+        for low, high in ((689, 718), (746, 746), (778, 807), (948, 975)):
+            self.assertLessEqual(top, low)
+            self.assertGreaterEqual(bottom, high)
+
 
 if __name__ == "__main__":
     unittest.main()
