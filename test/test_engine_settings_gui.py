@@ -302,10 +302,11 @@ class EngineSettingsGuiTests(unittest.TestCase):
         dialog = CurrencyPriorityDialog()
         self.addCleanup(dialog.deleteLater)
         values = dialog.collect_current()
-        values["prior_envir"] = ["自定义环境", *values["prior_envir"]]
-        dialog.populate_lists(values)
+        # 勾选表格只认识 72 条已知环境名，这里用一个真实名字（过时名字会被丢弃）
+        values["prior_envir"] = ["蓝海", *values["prior_envir"]]
+        dialog.populate(values)
         with patch.object(QMessageBox, "information"):
-            dialog.save_button.click()
+            dialog.save_current()   # 勾选表格版把保存按钮收进了 QDialogButtonBox
         stored = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(stored["priority"], values)
         self.assertEqual({key: value for key, value in stored.items() if key != "priority"},
@@ -318,6 +319,10 @@ class EngineSettingsGuiTests(unittest.TestCase):
         path = self.paths["Currency"]
         values = json.loads(path.read_text(encoding="utf-8"))
         values["custom"] = "保留"
+        # 默认配置里不再内置 priority 列表（4.7 环境改名后作废），用例自己补一份空的
+        values.setdefault("priority", {
+            key: [] for key in ("prior_envir", "envir_1", "envir_2", "envir_3", "envir_4")
+        })
         path.write_text(json.dumps(values, ensure_ascii=False), encoding="utf-8")
         dialog = self.dialog("Currency")
         dialog.section.Currency_exit_plane_combo.setCurrentIndex(2)
