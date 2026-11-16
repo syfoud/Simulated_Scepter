@@ -912,5 +912,79 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertEqual(currency.choose_beast_chimera(), 0)
 
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_card_picker_uses_leftmost_detail_anchor(self, manager):
+        """通用方法：点最左「详情」正上方 60px，再点确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1153, 399, 1199, 424]},
+            {"raw_text": "详情", "box": [914, 399, 962, 424]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        result = currency.pick_card_above_detail(
+            [880, 390, 1250, 435], [1430, 552, 1560, 600], (938, 339), label="测试")
+
+        self.assertEqual(result, 1)
+        self.assertIn(call.click_point(938, 339), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=[1430, 552, 1560, 600], click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_card_picker_falls_back_and_can_fail(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        result = currency.pick_card_above_detail(
+            [0, 0, 10, 10], [0, 0, 10, 10], (111, 222), label="测试")
+
+        self.assertEqual(result, 0)
+        self.assertIn(call.click_point(111, 222), manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dream_weave_delegates_to_picker(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.pick_card_above_detail = Mock(return_value=1)
+
+        self.assertEqual(currency.choose_dream_weave(), 1)
+        currency.pick_card_above_detail.assert_called_once_with(
+            SimulatedCurrency.DREAM_DETAIL_BOX,
+            SimulatedCurrency.DREAM_CONFIRM_BOX,
+            SimulatedCurrency.DREAM_FALLBACK_POSITION,
+            count=2,
+            label="梦境交织",
+        )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_card_picker_clicks_both_cards_when_count_is_two(self, manager):
+        """梦境交织要选两个角色：最左两张卡都要点，再确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1153, 399, 1199, 424]},
+            {"raw_text": "详情", "box": [914, 399, 962, 424]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        result = currency.pick_card_above_detail(
+            [880, 390, 1250, 435], [1430, 552, 1560, 600], (938, 339),
+            count=2, label="梦境交织")
+
+        self.assertEqual(result, 1)
+        clicked = [c for c in manager.mock_calls if c[0] == "click_point"]
+        self.assertIn(call.click_point(938, 339), clicked)    # 第一张
+        self.assertIn(call.click_point(1176, 339), clicked)   # 第二张 (1153+1199)//2=1176
+        self.assertEqual(len(clicked), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

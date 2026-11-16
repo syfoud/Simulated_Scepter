@@ -1243,5 +1243,39 @@
         "actions": [
             "choose_beast_chimera"
         ]
+    },
+    {
+        "name": "梦境交织-副标题",
+        "trigger": {
+            "text": "选择2个角色进行共舞",
+            "box": [
+                810,
+                115,
+                1290,
+                155
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_dream_weave"
+        ]
+    },
+    {
+        "name": "梦境交织-红字提示",
+        "trigger": {
+            "text": "请选择2名共舞的角色",
+            "box": [
+                1385,
+                500,
+                1600,
+                540
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_dream_weave"
+        ]
     }
 ]

@@ -1770,3 +1770,53 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("奇美拉已选择")
         return 1
 
+    DREAM_DETAIL_BOX = [880, 390, 1250, 435]
+    DREAM_FALLBACK_POSITION = (938, 339)
+    DREAM_CONFIRM_BOX = [1430, 552, 1560, 600]
+    CARD_DETAIL_OFFSET = 60      # 「详情」上方这么多像素就是卡片本体
+
+    def pick_card_above_detail (self, detail_box, confirm_box, fallback,
+                                count=1, offset=None, label="面板"):
+        """通用弹窗处理：一排「详情」按钮 → 点最左边 count 个正上方（= 那几张卡）→ 点「确认选择」。
+
+        大多数弹窗是"任选一个"（默认 count=1）；「梦境交织」要选两个角色共舞，传 count=2。
+        卡片数量/位置会变，所以用「详情」当锚点、从左往右取，不写死卡片坐标。
+        """
+        offset = self.CARD_DETAIL_OFFSET if offset is None else offset
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(detail_box)
+            if "详情" in item["raw_text"]
+        ]
+        details.sort(key=lambda item: item["box"][0])
+
+        if details:
+            if len(details) < count:
+                CUS_LOGGER.warning(
+                    "%s只认出 %d 张卡，需要选 %d 张", label, len(details), count)
+            for index, item in enumerate(details[:count], start=1):
+                box = item["box"]
+                position = ((box[0] + box[2]) // 2, max(0, box[1] - offset))
+                CUS_LOGGER.info("%s按「详情」锚点选第 %d 张卡：%s", label, index, position)
+                key_mouse_manager.click_point(*position)
+                key_mouse_manager.wait()
+        else:
+            CUS_LOGGER.warning("%s没认出「详情」，按固定位置点卡", label)
+            key_mouse_manager.click_point(*fallback)
+            key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=confirm_box, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("%s没点掉「确认选择」，等下一轮", label)
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("%s选择完成", label)
+        return 1
+
+    def choose_dream_weave (self):
+        """「梦境交织」面板：**要选两个**角色共舞（跟只选一个的面板不同），再点「确认选择」。"""
+        return self.pick_card_above_detail(
+            self.DREAM_DETAIL_BOX, self.DREAM_CONFIRM_BOX,
+            self.DREAM_FALLBACK_POSITION, count=2, label="梦境交织")
+
