@@ -260,6 +260,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.gather_mode = currency_settings["gather_mode"]
         self.max_runs = currency_settings["max_runs"]
         self.affix_targets = currency_settings["affix_targets"]
+        # 配了目标策略就是在收集策略：这种跑法不该被"等词缀"卡住（低难度本来就没词缀）
+        self.collecting_strategies = bool(self.strategy_targets)
         self.affix_sampler = AffixSampler()
         CUS_LOGGER.info(
             "对局类型: %s，难度选择: %s%s",
@@ -956,6 +958,13 @@ class SimulatedCurrency(CurrencyUtils):
 
         affixes = self.wait_affixes()
         if not affixes:
+            if getattr(self, "collecting_strategies", False):
+                # 低难度局根本没有词缀，收集策略时不该在这儿卡住
+                CUS_LOGGER.info("本局没有词缀（低难度/未开词缀），策略收集中，直接点下一步")
+                self.affixes_recorded = True
+                key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
+                key_mouse_manager.wait()
+                return 1
             CUS_LOGGER.warning(
                 "等了 %d 帧仍没识别到词缀，先不点下一步，等下一轮重试",
                 self.AFFIX_READ_ATTEMPTS,
@@ -963,7 +972,11 @@ class SimulatedCurrency(CurrencyUtils):
             return 1
         if len(affixes) < self.AFFIX_EXPECTED:
             self.affix_incomplete_rounds += 1
-            if self.affix_incomplete_rounds < self.AFFIX_PARTIAL_RETRY_ROUNDS:
+            give_up = (
+                getattr(self, "collecting_strategies", False)
+                or self.affix_incomplete_rounds >= self.AFFIX_PARTIAL_RETRY_ROUNDS
+            )
+            if not give_up:
                 CUS_LOGGER.warning(
                     "词缀只识别到 %d/%d 条（%s），再等一轮（第 %d 次重试）",
                     len(affixes), self.AFFIX_EXPECTED, "、".join(affixes),
@@ -971,9 +984,8 @@ class SimulatedCurrency(CurrencyUtils):
                 )
                 return 1
             CUS_LOGGER.warning(
-                "重试 %d 轮仍不足 %d 条，按现有 %d 条继续：%s",
-                self.affix_incomplete_rounds, self.AFFIX_EXPECTED,
-                len(affixes), "、".join(affixes),
+                "词缀只识别到 %d/%d 条（%s），按现有条数继续",
+                len(affixes), self.AFFIX_EXPECTED, "、".join(affixes),
             )
         CUS_LOGGER.info("本局词缀：%s", "、".join(affixes))
         self.affixes_recorded = True

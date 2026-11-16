@@ -987,6 +987,42 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertIn(call.click_point(1176, 339), clicked)   # 第二张 (1153+1199)//2=1176
         self.assertEqual(len(clicked), 2)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_strategy_collection_skips_affix_wait(self, manager):
+        """收集策略时低难度局没有词缀：读不到就直接点下一步，不卡在这里。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.affixes_recorded = False
+        currency.collecting_strategies = True
+        currency.wait_affixes = Mock(return_value=[])
+        currency.affix_targets = []
+        currency.max_runs = 0
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        self.assertTrue(currency.affixes_recorded)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
+            manager.mock_calls,
+        )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_gathering_still_waits_when_word_missing(self, manager):
+        """没在收集策略时保持旧行为：读不到词缀就等下一轮，不点下一步。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.affixes_recorded = False
+        currency.collecting_strategies = False
+        currency.wait_affixes = Mock(return_value=[])
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        self.assertFalse(currency.affixes_recorded)
+        self.assertNotIn(
+            call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
+            manager.mock_calls,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
