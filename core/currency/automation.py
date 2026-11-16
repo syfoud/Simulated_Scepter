@@ -529,6 +529,13 @@ class SimulatedCurrency(CurrencyUtils):
         card = self.MODE_CARD_POSITIONS[
             "standard" if self.gamemode == "standard" else "overclock"]
 
+        # 第一层：还没进货币战争时，右下角是「进入货币战争」，先点它
+        if self.click_text(text="进入货币战争", box=self.BATTLE_MODE_BUTTON_BOX,
+                           click=True, allow_fail=True):
+            key_mouse_manager.wait()
+            CUS_LOGGER.info("已点击「进入货币战争」")
+            return 1
+
         # 右下角按钮文字就是"当前选中的模式"，比右侧标题稳定（标题切换时有动画）
         want_button = "进入" + want
         for attempt in range(3):
