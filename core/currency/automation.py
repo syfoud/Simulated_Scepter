@@ -136,6 +136,11 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 克拉拉专属「机心巧匠」强化面板：选项数量会变（3 或 4 张），拿每张卡下面的「详情」当锚点
+    CLARA_DETAIL_BOX = [540, 395, 1560, 455]      # 一整行「详情」按钮
+    CLARA_CARD_OFFSET = 60                        # 详情上方 60px 就是卡片本体
+    CLARA_FALLBACK_POSITION = (610, 350)          # 一个「详情」都没认出时兜底点第一张卡
+    CLARA_CONFIRM_BOX = [1430, 560, 1560, 610]    # 「确认选择」
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -709,6 +714,37 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("上阵人数超出有效范围：%s/%s", placed, capacity)
             return None
         return counts
+
+    def choose_clara_enhance (self):
+        """克拉拉的「机心巧匠」面板：任选一个强化效果，再点「确认选择」。
+
+        选项数量会变（3 张或 4 张），位置也不固定，所以拿每张卡下面的「详情」按钮当锚点：
+        取最左边那个「详情」，点它正上方 60px（就是那张卡），再点确认。
+        """
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(self.CLARA_DETAIL_BOX)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.CLARA_CARD_OFFSET))
+            CUS_LOGGER.info("强化面板按「详情」锚点选卡：%s", position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("强化面板没认出「详情」，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.CLARA_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.CLARA_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("强化面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("强化效果已选择")
+        return 1
 
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。

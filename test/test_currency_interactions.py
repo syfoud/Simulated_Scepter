@@ -173,6 +173,53 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_clara_enhance_clicks_above_leftmost_detail(self, manager):
+        """选项数量会变，用「详情」按钮当锚点：点最左那个详情正上方 60px。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1032, 410, 1081, 440]},
+            {"raw_text": "详情", "box": [586, 410, 635, 440]},
+            {"raw_text": "详情", "box": [884, 410, 933, 440]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_clara_enhance(), 1)
+
+        # 最左边那个详情中心 x=(586+635)//2=610，y=410-60=350
+        self.assertIn(call.click_point(610, 350), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.CLARA_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_clara_enhance_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_clara_enhance(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.CLARA_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_clara_enhance_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_clara_enhance(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

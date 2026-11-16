@@ -887,6 +887,40 @@
         ]
     },
     {
+        "name": "克拉拉强化-面板标题",
+        "trigger": {
+            "text": "请选择1个强化效果",
+            "box": [
+                900,
+                110,
+                1200,
+                165
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_clara_enhance"
+        ]
+    },
+    {
+        "name": "克拉拉强化-红字提示",
+        "trigger": {
+            "text": "请选择强化",
+            "box": [
+                1420,
+                505,
+                1565,
+                555
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_clara_enhance"
+        ]
+    },
+    {
         "name": "出战前准备",
         "trigger": {
             "text": "出战",
