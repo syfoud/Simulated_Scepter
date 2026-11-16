@@ -511,53 +511,57 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
 
+    def read_mode_button (self):
+        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。"""
+        try:
+            return merge_text(self.ts.find_with_box(
+                self.BATTLE_MODE_BUTTON_BOX, redundancy=30))
+        except Exception:
+            return ""
+
     def enter_battle_mode (self):
-        """选择对局类型再进难度界面。
+        """进入对局：入口页 → 模式选择 → 难度界面，逐层判断。
 
-        4.7 的界面：左侧上下两张卡（标准博弈 / 超频博弈），右侧大标题显示当前选中的模式，
-        右下角按钮的文字会跟着变（进入标准博弈 / 进入超频博弈）。所以先按标题判断选没选中，
-        没选中才点卡片，最后点右下角那个按钮。
+        OCR 对这几个按钮很不稳（实测把「超频博弈」读成「超预博到」「超频博弃」），
+        所以不整串匹配，只认关键单字：「货币战争」走入口、「开始」走难度、
+        模式页则看有没有「超」/「标」来判断当前选中哪个模式。
         """
-        # 已经在难度界面（右下角是「开始对局」）就不要再点了：
-        # 这时候按模式卡片的位置点下去，可能点到难度列表上
-        if self.click_text(text="开始对局", box=self.DIFFICULTY_ENTER_BOX,
-                           click=False, allow_fail=True):
-            CUS_LOGGER.debug("已在难度界面，跳过模式切换")
-            self.update_state("difficulty_select")
-            return 1
+        want_overclock = self.gamemode != "standard"
+        want_char = "超" if want_overclock else "标"
+        card = self.MODE_CARD_POSITIONS["overclock" if want_overclock else "standard"]
 
-        want = "标准博弈" if self.gamemode == "standard" else "超频博弈"
-        card = self.MODE_CARD_POSITIONS[
-            "standard" if self.gamemode == "standard" else "overclock"]
-
-        # 第一层：还没进货币战争时，右下角是「开始「货币战争」」，先点它
-        if self.click_text(text="货币战争", box=self.BATTLE_MODE_BUTTON_BOX,
-                           click=True, allow_fail=True):
-            key_mouse_manager.wait()
-            CUS_LOGGER.info("已点击「进入货币战争」")
-            return 1
-
-        # 右下角按钮文字就是"当前选中的模式"，比右侧标题稳定（标题切换时有动画）
-        want_button = "进入" + want
         for attempt in range(3):
-            self.get_screen()
-            if self.click_text(text=want_button, box=self.BATTLE_MODE_BUTTON_BOX,
-                               click=False, allow_fail=True):
-                CUS_LOGGER.info("已选中「%s」（按钮为%s）", want, want_button)
-                break
-            CUS_LOGGER.info("切换到「%s」（第 %d 次）", want, attempt + 1)
+            text = self.read_mode_button()
+            CUS_LOGGER.debug("右下角按钮：%r", text)
+
+            if "货币战争" in text:
+                CUS_LOGGER.info("已点击「进入货币战争」")
+                key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
+                                              box=self.BATTLE_MODE_BUTTON_BOX)
+                key_mouse_manager.wait()
+                return 1
+
+            if "开始" in text:
+                # 「开始对局」——已经在难度界面
+                CUS_LOGGER.debug("已在难度界面，跳过模式切换")
+                self.update_state("difficulty_select")
+                return 1
+
+            if want_char in text:
+                CUS_LOGGER.info("已选中「%s」", "超频博弈" if want_overclock else "标准博弈")
+                key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
+                                              box=self.BATTLE_MODE_BUTTON_BOX)
+                key_mouse_manager.wait()
+                self.update_state("difficulty_select")
+                return 1
+
+            CUS_LOGGER.info("切换到「%s」（第 %d 次）",
+                            "超频博弈" if want_overclock else "标准博弈", attempt + 1)
             key_mouse_manager.click_point(*card)
             key_mouse_manager.wait()
-            time.sleep(0.6)  # 等右侧面板和按钮文字切换完
-        else:
-            CUS_LOGGER.warning("三次都没切到「%s」，先不动，等下一轮", want)
-            return 0
 
-        key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
-        key_mouse_manager.wait()
-        self.update_state("difficulty_select")
-        CUS_LOGGER.info("已点击「进入%s」", want)
-        return 1
+        CUS_LOGGER.warning("三次都没切到目标模式，先不动，等下一轮")
+        return 0
 
     def select_top_difficulty (self):
         """最高职级（A8-20）：有「返回最高职级」就点它切过去，没有说明已经是。"""

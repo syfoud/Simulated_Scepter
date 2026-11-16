@@ -1161,17 +1161,14 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency = object.__new__(SimulatedCurrency)
         currency.gamemode = "overclock"
         currency.update_state = Mock()
-        currency.click_text = Mock(
-            side_effect=lambda text=None, **kwargs: text == "货币战争")
+        currency.read_mode_button = Mock(return_value="开始货币战争")
         manager.reset_mock()
 
         self.assertEqual(currency.enter_battle_mode(), 1)
-        currency.click_text.assert_any_call(
-            text="货币战争",
-            box=SimulatedCurrency.BATTLE_MODE_BUTTON_BOX,
-            click=True,
-            allow_fail=True,
-        )
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.MODE_ENTER_POSITION,
+                             box=SimulatedCurrency.BATTLE_MODE_BUTTON_BOX),
+            manager.mock_calls)
 
     @patch("core.currency.automation.key_mouse_manager")
     def test_enter_battle_mode_does_nothing_on_difficulty_screen(self, manager):
@@ -1179,13 +1176,31 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency = object.__new__(SimulatedCurrency)
         currency.gamemode = "overclock"
         currency.update_state = Mock()
-        currency.click_text = Mock(return_value=True)   # 「开始对局」命中
+        currency.read_mode_button = Mock(return_value="开始对局")
         manager.reset_mock()
 
         self.assertEqual(currency.enter_battle_mode(), 1)
 
         manager.click_point.assert_not_called()
         currency.update_state.assert_called_once_with("difficulty_select")
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_mode_button_ocr_noise_still_selects_overclock(self, manager):
+        """OCR 把「超频博弈」读成「超预博到」「超频博弃」也要认出来。"""
+        for noisy in ("进入超预博到", "进入超频博弃", "进入超频博奔"):
+            with self.subTest(text=noisy):
+                currency = object.__new__(SimulatedCurrency)
+                currency.gamemode = "overclock"
+                currency.update_state = Mock()
+                currency.read_mode_button = Mock(return_value=noisy)
+                manager.reset_mock()
+
+                self.assertEqual(currency.enter_battle_mode(), 1)
+                # 认出来了：直接点进入按钮，不去点模式卡片
+                self.assertIn(
+                    call.click_point(*SimulatedCurrency.MODE_ENTER_POSITION,
+                                     box=SimulatedCurrency.BATTLE_MODE_BUTTON_BOX),
+                    manager.mock_calls)
 
 
 if __name__ == "__main__":
