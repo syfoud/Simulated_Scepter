@@ -1089,6 +1089,11 @@ class SimulatedCurrency(CurrencyUtils):
                 deployed=deployed,
             )
             sources = {slot.index: slot.template for slot in slots if slot.kind == "character"}
+            CUS_LOGGER.debug(
+                "备战识别：人数=%s，前台空位=%s，后台空位=%s，备战角色=%d，补位动作=%d",
+                counts, vacancies["front"], vacancies["back"],
+                len(sources), len(moves),
+            )
             if not moves:
                 if front_occupied == 0:
                     CUS_LOGGER.debug("前台尚无角色，继续等待备战")
