@@ -149,7 +149,9 @@ class SimulatedCurrency(CurrencyUtils):
     # 该按钮的文字框（日志里带上落点来源，便于核对）
     BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
-    OVERCLOCK_TAB_POSITION = (153, 418)
+    # 4.7：模式标签挪到了左下角（以前在左上），标签文字就是当前模式
+    MODE_CHIP_BOX = [88, 848, 242, 918]
+    OVERCLOCK_TAB_POSITION = (160, 882)
     # 只有低难度才会出现的「返回最高职级」；没它说明已经在 A8-20
     TOP_RANK_BUTTON_BOX = [1325, 952, 1457, 979]
     # 词缀界面：标题、左下词缀条、右下「下一步」
@@ -465,9 +467,18 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.info("已点击「进入标准博弈」")
             return 1
 
-        CUS_LOGGER.info("切换到超频博弈标签")
-        key_mouse_manager.click_point(*self.OVERCLOCK_TAB_POSITION)
-        key_mouse_manager.wait()
+        # 先看左下角标签：已经是超频就别再点（再点可能又切回标准）
+        if self.click_text(text="超频博弈", box=self.MODE_CHIP_BOX, click=False, allow_fail=True):
+            CUS_LOGGER.info("左下角标签已是「超频博弈」，不需要切换")
+        else:
+            CUS_LOGGER.info("切换到超频博弈标签")
+            key_mouse_manager.click_point(*self.OVERCLOCK_TAB_POSITION)
+            key_mouse_manager.wait()
+            self.get_screen()
+            if self.click_text(text="超频博弈", box=self.MODE_CHIP_BOX, click=False, allow_fail=True):
+                CUS_LOGGER.info("已切换到超频博弈")
+            else:
+                CUS_LOGGER.warning("点了底下的模式标签，但没看到「超频博弈」，请确认界面")
         return 1
 
     def select_top_difficulty (self):
