@@ -160,6 +160,13 @@
     </widget>
    </item>
    <item>
+    <widget class="QCheckBox" name="Currency_auto_clear_targets_checkbox">
+     <property name="text">
+      <string>刷到目标策略后自动取消勾选（避免它一直压过未解锁图标）</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QCheckBox" name="Currency_auto_exit_plane_checkbox">
      <property name="text">
       <string>按目标策略自动决定退出位面（目标全收完后自动降面，避免空转）</string>

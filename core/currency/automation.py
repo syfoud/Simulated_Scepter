@@ -250,6 +250,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.strategy_targets = currency_settings["strategy_targets"]
         self.strategy_avoid = currency_settings["strategy_avoid"]
         self.auto_exit_plane = currency_settings["auto_exit_plane"]
+        self.auto_clear_targets = currency_settings["auto_clear_targets"]
         # 配了目标策略就是在收集策略：这种跑法不该被"等词缀"卡住（低难度本来就没词缀）
         self.collecting_strategies = bool(self.strategy_targets)
         if self.strategy_targets:
@@ -847,6 +848,13 @@ class SimulatedCurrency(CurrencyUtils):
             plane, texts, selected_text, targets=self.strategy_targets)
         if hits:
             CUS_LOGGER.info("本屏命中目标策略：%s", "、".join(hits))
+            if getattr(self, "auto_clear_targets", False):
+                # 刷到过就取消勾选：否则它下一屏还会压过未解锁图标，等于白占一个优先级
+                self.strategy_targets = [
+                    name for name in self.strategy_targets if name not in hits]
+                CUS_LOGGER.info(
+                    "已自动取消勾选：%s（剩余目标 %d 条）",
+                    "、".join(hits), len(self.strategy_targets))
         self._refresh_auto_exit_plane()
 
         return 1

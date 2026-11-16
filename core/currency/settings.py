@@ -19,6 +19,7 @@ DEFAULT_DIFFICULTY_MODE = "lowest"
 DEFAULT_GATHER_MODE = False
 DEFAULT_MAX_RUNS = 0
 DEFAULT_AUTO_EXIT_PLANE = False
+DEFAULT_AUTO_CLEAR_TARGETS = False
 
 
 PRIORITY_KEYS = (
@@ -114,6 +115,10 @@ def normalize_currency_settings(values=None):
     if not isinstance(auto_exit_plane, bool):
         auto_exit_plane = DEFAULT_AUTO_EXIT_PLANE
 
+    auto_clear_targets = values.get("auto_clear_targets", DEFAULT_AUTO_CLEAR_TARGETS)
+    if not isinstance(auto_clear_targets, bool):
+        auto_clear_targets = DEFAULT_AUTO_CLEAR_TARGETS
+
     gamemode = str(values.get("gamemode", DEFAULT_GAMEMODE)).strip().lower()
     if gamemode not in GAMEMODES:
         gamemode = DEFAULT_GAMEMODE
@@ -141,6 +146,7 @@ def normalize_currency_settings(values=None):
         "strategy_targets": strategy_targets,
         "strategy_avoid": strategy_avoid,
         "auto_exit_plane": auto_exit_plane,
+        "auto_clear_targets": auto_clear_targets,
         "exit_after_plane": exit_plane,
         "exit_if_no_prior": exit_if_no_prior,
         "prior_exit_plane": prior_exit_plane,
