@@ -694,6 +694,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
         self.protagonist_picks = 0
+        self.protagonist_drag_failures = 0
         self.battle_click_attempts = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
@@ -1628,6 +1629,8 @@ class SimulatedCurrency(CurrencyUtils):
     # 一局会过两次主角面板：第二次那个角色身上已经有光环，所以拖第二个角色
     PROTAGONIST_DRAG = ((805, 612), (960, 445))
     PROTAGONIST_SECOND_DRAG = ((910, 609), (964, 441))
+    # 前台 2 号位可能是空的（角色都被分到后台），连试两次不成改从后台第一个拖
+    PROTAGONIST_FALLBACK_DRAG = ((709, 750), (964, 441))
     PROTAGONIST_AURA_POSITION = (1501, 502)
     PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
     PROTAGONIST_WAIT_ATTEMPTS = 25
@@ -1646,8 +1649,12 @@ class SimulatedCurrency(CurrencyUtils):
         # 主循环每帧都刷过截图，这里直接用当前帧（自己抓会依赖 _stop 等运行时状态）
         if self.click_text(text="选择一个角色获得主角光环",
                            box=self.PROTAGONIST_TITLE_BOX, click=False, allow_fail=True):
-            # 面板已经开着（可能是上一轮点的按钮生效了），直接往下走，别再点按钮
-            CUS_LOGGER.info("选择主角面板已打开，直接选角色")
+            # 面板已经开着：可能是上一轮点的按钮生效了，也可能是上一轮拖拽没成功。
+            # 累计失败次数，用来决定要不要换起点。
+            self.protagonist_drag_failures = getattr(self, "protagonist_drag_failures", 0) + 1
+            CUS_LOGGER.info(
+                "选择主角面板已打开（连续第 %d 次处理），直接选角色",
+                self.protagonist_drag_failures)
         else:
             box = self.PROTAGONIST_BUTTON_BOX
             key_mouse_manager.click_point(
@@ -1671,10 +1678,18 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.warning("选择主角面板没等到，交给下一轮重试")
             return 0
 
-        # 第一次拖第一个角色；第二次那个角色已经有光环了，改拖第二个
-        use_second = getattr(self, "protagonist_picks", 0) >= 1
-        start, end = self.PROTAGONIST_SECOND_DRAG if use_second else self.PROTAGONIST_DRAG
-        CUS_LOGGER.info("选择主角：拖第 %d 个角色", 2 if use_second else 1)
+        # 起点选择：默认第一个角色；第二次改拖第二个；连试两次都没成说明那些位置是空的，
+        # 改从后台第一个角色拖（前台 2 号位可能压根没站人）。
+        failures = getattr(self, "protagonist_drag_failures", 0)
+        if failures >= 2:
+            start, end = self.PROTAGONIST_FALLBACK_DRAG
+            CUS_LOGGER.info("选择主角：前两次没拖动，改从后台第一个角色拖（第 %d 次尝试）", failures + 1)
+        elif getattr(self, "protagonist_picks", 0) >= 1:
+            start, end = self.PROTAGONIST_SECOND_DRAG
+            CUS_LOGGER.info("选择主角：拖第 2 个角色")
+        else:
+            start, end = self.PROTAGONIST_DRAG
+            CUS_LOGGER.info("选择主角：拖第 1 个角色")
         key_mouse_manager.drag_point(start[0], start[1], end[0], end[1])
         key_mouse_manager.wait()
 
@@ -1699,6 +1714,7 @@ class SimulatedCurrency(CurrencyUtils):
             (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
         key_mouse_manager.wait()
         self.protagonist_picks = getattr(self, "protagonist_picks", 0) + 1
+        self.protagonist_drag_failures = 0
         CUS_LOGGER.info("主角已选择（本局第 %d 次）", self.protagonist_picks)
         return 1
 

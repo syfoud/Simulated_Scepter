@@ -1279,6 +1279,22 @@ class CurrencyInteractionTests(unittest.TestCase):
             text="确认", box=SimulatedCurrency.BATTLE_FEWER_CONFIRM_BOX,
             click=True, allow_fail=True)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_protagonist_falls_back_to_bench_after_two_failures(self, manager):
+        """前台 2 号位可能是空的：连试两次不成，改从后台第一个角色拖。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)     # 面板已打开
+        currency.protagonist_picks = 5
+        currency.protagonist_drag_failures = 2
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        self.assertIn(call.drag_point(709, 750, 964, 441), manager.mock_calls)
+        self.assertEqual(currency.protagonist_drag_failures, 0)   # 选完清零
+
 
 if __name__ == "__main__":
     unittest.main()
