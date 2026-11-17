@@ -340,6 +340,7 @@ class BackgroundMouse:
                     client, target, self.activation.activated, handled)
             sleep(0.05)
             self._post(WM_LBUTTONUP, 0, client)
+            return True
         finally:
             self._restore_cursor(original, screen_point)
             # 成对撤销：只发不撤会让游戏处于半激活状态，
@@ -368,6 +369,7 @@ class BackgroundMouse:
                 self._post(WM_MOUSEMOVE, MK_LBUTTON, self.to_client(point))
                 sleep(step_sleep)
             self._post(WM_LBUTTONUP, 0, self.to_client(end))
+            return True
         finally:
             self._restore_cursor(original, end)
             self.activation.deactivate()

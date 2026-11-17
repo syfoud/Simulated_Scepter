@@ -677,15 +677,21 @@ class SimulatedCurrency(CurrencyUtils):
             if attempt < self.DIFFICULTY_START_ATTEMPTS:
                 CUS_LOGGER.warning("第 %d 次点「开始对局」没反应，重试", attempt)
         else:
-            # 后台消息整片失效：用一次真实输入（会短暂把游戏切到前台）再试，
-            # 它同时也是把"游戏自认激活"和系统前台重新对齐的唯一手段。
-            CUS_LOGGER.warning(
-                "点了 %d 次「开始对局」都没离开难度页，改用前台兜底点击",
-                self.DIFFICULTY_START_ATTEMPTS)
-            key_mouse_manager.click_point_foreground(*self.DIFFICULTY_START_POSITION)
-            if self.still_on_difficulty_screen():
-                CUS_LOGGER.warning("前台兜底点击也没离开难度页，等下一轮")
-                return True
+            # 后台消息整片失效时的最后手段：真实输入。会短暂把游戏切到前台，
+            # 默认关闭（看网课时闪窗口太打扰），需要时在设置里打开。
+            if getattr(self, "allow_foreground_fallback", False):
+                CUS_LOGGER.warning(
+                    "点了 %d 次「开始对局」都没离开难度页，改用前台兜底点击",
+                    self.DIFFICULTY_START_ATTEMPTS)
+                key_mouse_manager.click_point_foreground(*self.DIFFICULTY_START_POSITION)
+                if self.still_on_difficulty_screen():
+                    CUS_LOGGER.warning("前台兜底点击也没离开难度页，等下一轮")
+            else:
+                CUS_LOGGER.warning(
+                    "点了 %d 次「开始对局」都没离开难度页，等下一轮"
+                    "（如需自动切前台，请开启 background_allow_foreground_fallback）",
+                    self.DIFFICULTY_START_ATTEMPTS)
+            return True
         self.reset_run_state()
         CUS_LOGGER.info("货币战争对局计时开始")
         return True
