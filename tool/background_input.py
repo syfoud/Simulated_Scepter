@@ -234,6 +234,8 @@ class BackgroundKeyboard:
 
 
 _warned = set()
+# 排查「点了没反应」时打开：每次点击都记录落点、激活状态与消息送达结果
+_VERBOSE_CLICK = False
 
 
 def _warn_once(key, message):
@@ -331,7 +333,11 @@ class BackgroundMouse:
                     or abs(actual[1] - target[1]) > self.IDLE_TOLERANCE):
                 _warn_once("后台鼠标:被挪开", "点击前光标被移开（用户正在操作鼠标），本次点击可能落空")
                 win32api.SetCursorPos(target)
-            self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
+            handled = self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
+            if _VERBOSE_CLICK:
+                CUS_LOGGER.info(
+                    "后台点击落点 client=%s 屏幕=%s 激活=%s 送达=%s",
+                    client, target, self.activation.activated, handled)
             sleep(0.05)
             self._post(WM_LBUTTONUP, 0, client)
         finally:

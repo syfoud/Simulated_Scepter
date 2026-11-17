@@ -232,6 +232,7 @@ class KeyMouseManager:
         if not hwnd:
             return
         activation = WindowActivation(hwnd)
+        CUS_LOGGER.info("后台输入通道已建立：hwnd=%s（键盘+鼠标共用一个激活状态）", hwnd)
         self.background = BackgroundKeyboard(hwnd, activation)
         # 鼠标通道跟键盘一起切换：后台模式下点击/拖动改投窗口消息
         self.background_mouse = BackgroundMouse(hwnd, activation)
@@ -356,8 +357,12 @@ class KeyMouseManager:
                 return
             if self.background_mouse is not None:
                 # 后台模式：消息投给窗口，落点借用光标（见 BackgroundMouse 说明）
-                self.background_mouse.click(point)
+                hit = self.background_mouse.click(point)
+                CUS_LOGGER.debug(
+                    "后台点击 (%s, %s) → %s", x, y, "已投递" if hit else "被跳过")
                 return
+            # 走到这里说明后台通道没建立：只会点中当前前台窗口，游戏在后台时等于空点
+            CUS_LOGGER.debug("前台点击 (%s, %s)（未启用后台通道）", x, y)
             win32api.SetCursorPos(point)
             pyautogui.click()
 
