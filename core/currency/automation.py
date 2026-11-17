@@ -173,6 +173,10 @@ class SimulatedCurrency(CurrencyUtils):
     # 游戏自己弹出的「前台区域无角色」提示：它在的时候格子被盖住，空位识别不可信
     FRONT_EMPTY_WARNING_BOX = [816, 512, 1104, 539]
     FRONT_EMPTY_DISMISS = (978, 671)
+    # 选主角面板：顶部标题与底部红条。商店盖住标题时只剩红条 —— 这就是重叠 bug 的签名
+    PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
+    PROTAGONIST_BANNER_BOX = [740, 775, 1180, 830]
+    BROKEN_PANEL_ESC_GAP = 1.2
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
     # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
@@ -1680,6 +1684,32 @@ class SimulatedCurrency(CurrencyUtils):
     # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
     PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
     PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
+
+    def recover_broken_protagonist_panel (self):
+        """游戏偶发 bug：商店与「选择主角」界面叠在一起时，先 ESC 关商店再 ESC 重开。
+
+        判定用「底部红条在、顶部标题不在」这组签名：正常的选主角面板两者都在，
+        商店把标题盖住时只剩底下的「尚未选择主角角色和光环」。
+        """
+        self.get_screen()
+        banner = self.click_text(text="尚未选择主角角色和光环",
+                                 box=self.PROTAGONIST_BANNER_BOX,
+                                 click=False, allow_fail=True)
+        title = self.click_text(text="选择一个角色获得主角光环",
+                                box=self.PROTAGONIST_TITLE_BOX,
+                                click=False, allow_fail=True)
+        if not banner or title:
+            return 0
+
+        CUS_LOGGER.warning(
+            "检测到商店与选择主角界面重叠（游戏偶发 bug）：先按 ESC 关商店，再按 ESC 重开")
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        time.sleep(self.BROKEN_PANEL_ESC_GAP)
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        self.exit_requested = True
+        return 1
 
     def select_protagonist (self):
         """4.7 新 UI「选择主角」：点按钮 → 等面板 → 拖第一个角色 → 选右侧光环 → 确认。
