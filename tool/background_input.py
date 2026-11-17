@@ -4,14 +4,13 @@
 
 - `BackgroundKeyboard`：纯消息，完全不用真实光标，也不需要激活以外的副作用；
   操作前补一条伪造的 WM_ACTIVATE。
-- `BackgroundMouse`：消息投递给窗口，但**落点仍依赖真实光标** —— 实测（见
-  `temp/` 下的 PoC）只发 WM_MOUSEMOVE/LBUTTONDOWN 而不移动光标，游戏不响应；
-  先把光标挪到目标再发消息才生效。所以每次点击/拖动会短暂借用光标，结束后归还。
+- `BackgroundMouse`：消息投递给窗口，但**落点仍依赖真实光标** —— 实测只发
+  WM_MOUSEMOVE/LBUTTONDOWN 而不移动光标时游戏不响应；先把光标挪到目标再发消息才生效。
+  所以每次点击/拖动会短暂借用光标，结束后归还（用户中途动过鼠标就不硬拽）。
 
 滚轮和相对转视角不走后台：滚轮需要真实焦点，转视角是相对鼠标，消息无法伪造。
 """
 
-import ctypes
 import time
 
 import win32api
@@ -84,8 +83,11 @@ class WindowActivation:
     """伪造 / 撤销游戏窗口的激活状态。
 
     后台通道投递的键鼠消息，游戏只有在「自认为激活」时才会处理；窗口被别的程序盖住后
-    它会认为自己是失活状态，消息就石沉大海。所以每批操作前补一条 WM_ACTIVATE(1)，
-    结束后补 WM_ACTIVATE(0)；窗口本来就是前台时不伪造，避免干扰真实焦点。
+    它会认为自己是失活状态，消息就石沉大海。所以操作前补一条 WM_ACTIVATE(1)，
+    任务结束再补 WM_ACTIVATE(0)；窗口本来就是前台时不伪造，避免干扰真实焦点。
+
+    键盘和鼠标**必须共用同一个实例**：各持一份的话，键盘抬键撤销激活后鼠标还以为自己是激活的，
+    紧接着的点击就会被丢弃。
     """
 
     def __init__(self, hwnd):
@@ -134,9 +136,11 @@ class BackgroundKeyboard:
         hwnd: 游戏窗口句柄。
     """
 
-    def __init__(self, hwnd):
+    def __init__(self, hwnd, activation=None):
         self.hwnd = hwnd
-        self.activation = WindowActivation(hwnd)
+        # 激活状态由调用方注入，键盘和鼠标必须是同一个实例：
+        # 两份各自记账会互相拆台（键盘抬起时撤销激活，鼠标却以为自己还是激活的）
+        self.activation = activation or WindowActivation(hwnd)
         # 当前仍处于按下状态的键名
         self.held = set()
 
@@ -175,12 +179,14 @@ class BackgroundKeyboard:
         self.held.add(key)
 
     def key_up(self, key):
-        """抬起一个键；没有其它键按下时撤销伪造激活。"""
+        """抬起一个键。
+
+        这里**不撤销激活**：撤销了会让共用同一份激活状态的鼠标通道漏掉激活
+        （键盘一次按键 → 窗口失活 → 紧接着的点击被丢弃）。激活在任务结束统一释放。
+        """
         info = _key_info(key)
         self._post_key(key, info, key_up=True)
         self.held.discard(key)
-        if not self.held:
-            self.deactivate()
 
     def press(self, key, duration=0, sleep=time.sleep):
         """按下并抬起一个键，duration 秒内保持按下。"""
@@ -218,6 +224,17 @@ class BackgroundKeyboard:
         )
 
 
+_warned = set()
+
+
+def _warn_once(key, message):
+    """同一类告警只记一次，避免长跑时刷屏。"""
+    if key in _warned:
+        return
+    _warned.add(key)
+    CUS_LOGGER.warning(message)
+
+
 SMTO_BLOCK = 0x0001
 SMTO_ABORTIFHUNG = 0x0002
 WM_MOUSEMOVE = 0x0200
@@ -234,7 +251,7 @@ def _lparam(point):
 class BackgroundMouse:
     """后台鼠标：消息投给游戏窗口，落点借用真实光标。
 
-    借用光标的流程（每次操作约 70~100ms，拖动按 duration 更长）：
+    借用光标的流程（点击约 200ms：等空闲 + 激活稳定 120ms + 消息往返；拖动按 duration 更长）：
 
     1. 等真实光标空闲（用户正在动鼠标时先等一等，避免抢走他正在用的光标）；
     2. 记住原位置，把光标挪到目标点；
@@ -252,9 +269,9 @@ class BackgroundMouse:
     IDLE_TOLERANCE = 3        # 像素：小于这个位移认为光标是静止的
     IDLE_TIMEOUT = 1.5        # 秒：等用户停手最多等这么久
 
-    def __init__(self, hwnd):
+    def __init__(self, hwnd, activation=None):
         self.hwnd = hwnd
-        self.activation = WindowActivation(hwnd)
+        self.activation = activation or WindowActivation(hwnd)
 
     def game_is_foreground(self):
         """游戏窗口当前是否为前台窗口。"""
@@ -285,7 +302,10 @@ class BackgroundMouse:
 
     def click(self, screen_point, sleep=time.sleep):
         """在屏幕坐标处点一下（借用光标后归还）。"""
-        self.wait_cursor_idle()
+        if not self.wait_cursor_idle():
+            # 用户一直在动鼠标：这次不抢，交回调用方下一轮再试
+            _warn_once("后台鼠标:忙", "光标一直有动作，跳过本次点击（避免把用户的鼠标抢走）")
+            return False
         original = win32api.GetCursorPos()
         self.activation.activate()
         try:
@@ -299,7 +319,7 @@ class BackgroundMouse:
             sleep(0.05)
             self._post(WM_LBUTTONUP, 0, client)
         finally:
-            win32api.SetCursorPos(original)
+            self._restore_cursor(original, screen_point)
 
     def drag(self, start, end, duration=0.4, sleep=time.sleep):
         """从 start 拖到 end（屏幕坐标）；按 60Hz 步进投递移动消息。"""
@@ -326,6 +346,13 @@ class BackgroundMouse:
         finally:
             win32api.SetCursorPos(original)
 
+    def _restore_cursor(self, original, expected):
+        """把光标放回原处；用户中途动过鼠标就不硬拽（那样会把他的操作打断）。"""
+        current = win32api.GetCursorPos()
+        if (abs(current[0] - int(expected[0])) <= self.IDLE_TOLERANCE
+                and abs(current[1] - int(expected[1])) <= self.IDLE_TOLERANCE):
+            win32api.SetCursorPos(original)
+
     def release(self):
         """任务结束时撤销伪造激活，把焦点还给用户原来的窗口。"""
         self.activation.deactivate()
@@ -333,9 +360,15 @@ class BackgroundMouse:
     def _post(self, message, wparam, client):
         """带超时地投递一条鼠标消息；窗口卡住时放弃这一条，不让线程挂死。"""
         try:
-            win32gui.SendMessageTimeout(
+            handled = win32gui.SendMessageTimeout(
                 self.hwnd, message, wparam, _lparam(client),
                 SMTO_BLOCK | SMTO_ABORTIFHUNG, 500,
             )
         except Exception as error:
             CUS_LOGGER.warning("后台鼠标消息 %s 投递失败：%s", hex(message), error)
+            return
+        if not handled:
+            # 超时/目标无响应时 SendMessageTimeout 返回 0 且不抛异常，
+            # 不记一笔的话，现场就只剩「日志显示点了、游戏没反应」
+            _warn_once(f"后台鼠标超时:{message}",
+                       f"后台鼠标消息 {hex(message)} 超时未处理（窗口可能卡住）")

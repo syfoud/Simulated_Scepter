@@ -49,7 +49,8 @@ class BackgroundKeyboardTests(unittest.TestCase):
     def posts(self):
         return [call.args for call in self.post.call_args_list]
 
-    def test_press_activates_game_posts_key_and_clears_activation(self):
+    def test_press_activates_game_and_posts_key(self):
+        """按键前补激活；抬键不再撤销激活（撤销留给任务结束的统一释放）。"""
         self.keyboard.press("f")
         down = key_lparam(scan_code(0x46), False, False)
         up = key_lparam(scan_code(0x46), False, True)
@@ -57,8 +58,10 @@ class BackgroundKeyboardTests(unittest.TestCase):
             (1234, win32con.WM_ACTIVATE, win32con.WA_ACTIVE, 0),
             (1234, win32con.WM_KEYDOWN, 0x46, down),
             (1234, win32con.WM_KEYUP, 0x46, up),
-            (1234, win32con.WM_ACTIVATE, win32con.WA_INACTIVE, 0),
         ])
+        self.keyboard.release_all()
+        self.assertEqual(self.posts()[-1],
+                         (1234, win32con.WM_ACTIVATE, win32con.WA_INACTIVE, 0))
 
     def test_foreground_game_gets_no_fake_activation(self):
         self.foreground.return_value = 1234
@@ -75,13 +78,13 @@ class BackgroundKeyboardTests(unittest.TestCase):
                 if call.args[1] == win32con.WM_SYSKEYDOWN][0]
         self.assertTrue(down.args[3] & (1 << 29))
 
-    def test_held_keys_keep_activation_until_the_last_release(self):
+    def test_key_up_keeps_activation_for_the_shared_mouse_channel(self):
+        """抬键不撤销激活：不然共用这份状态的鼠标通道会漏掉激活、点击被丢弃。"""
         self.keyboard.key_down("f")
-        self.keyboard.key_down("g")
         self.assertTrue(self.keyboard.activated)
         self.keyboard.key_up("f")
-        self.assertTrue(self.keyboard.activated)
-        self.keyboard.key_up("g")
+        self.assertTrue(self.keyboard.activated)          # 抬键后仍保持激活
+        self.keyboard.release_all()                       # 只有统一释放才撤销
         self.assertFalse(self.keyboard.activated)
         messages = [call.args[1] for call in self.post.call_args_list]
         self.assertEqual(messages.count(win32con.WM_ACTIVATE), 2)
@@ -106,8 +109,10 @@ class BackgroundKeyboardTests(unittest.TestCase):
         self.assertEqual(messages.count(win32con.WM_KEYUP), 2)
 
     def test_game_stealing_foreground_is_restored(self):
+        """游戏借伪造激活抢到前台时，统一释放要把焦点还回原窗口。"""
         self.foreground.side_effect = [999, 1234]
         self.keyboard.press("f")
+        self.keyboard.release_all()
         self.set_foreground.assert_called_once_with(999)
 
 
@@ -219,9 +224,14 @@ class BackgroundMouseTests(unittest.TestCase):
         self.client_to_screen = self.enterContext(
             patch("tool.background_input.win32gui.ClientToScreen", return_value=(20, 30)))
         self.send = self.enterContext(patch("tool.background_input.win32gui.SendMessageTimeout"))
-        self.set_cursor = self.enterContext(patch("tool.background_input.win32api.SetCursorPos"))
-        self.get_cursor = self.enterContext(
-            patch("tool.background_input.win32api.GetCursorPos", return_value=(777, 775)))
+        # 光标位置要有状态：点击会把光标挪到目标，归位逻辑据此判断用户有没有动过
+        self.cursor = {"pos": (777, 775)}
+        self.set_cursor = self.enterContext(patch(
+            "tool.background_input.win32api.SetCursorPos",
+            side_effect=lambda point: self.cursor.__setitem__("pos", point)))
+        self.get_cursor = self.enterContext(patch(
+            "tool.background_input.win32api.GetCursorPos",
+            side_effect=lambda: self.cursor["pos"]))
 
     def make_mouse(self):
         from tool.background_input import BackgroundMouse

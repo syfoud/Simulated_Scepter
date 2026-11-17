@@ -57,7 +57,8 @@ class CurrencyUtils(StateKernel):
     def __init__(self):
         super().__init__()
         settings = load_settings()
-        # 后台模式：截图与键盘走窗口消息，允许游戏窗口被遮挡（不能最小化）；鼠标仍为前台
+        # 后台模式：截图走窗口捕获、键鼠走窗口消息，允许游戏窗口被遮挡（不能最小化）。
+        # 只对本地窗口生效：云游戏是浏览器窗口，后台消息行为未验证，仍按前台模式跑。
         self.background_mode = bool(settings.get("background_mode", False))
         self.capture_backend = resolve_capture_backend(settings, self.background_mode)
         self._stop = False
@@ -70,12 +71,15 @@ class CurrencyUtils(StateKernel):
         self.x0 = self.y0 = self.x1 = self.y1 = 0
         self.scx = self.scy = 1.0
         self.hwnd = None
+        # 云游戏是浏览器窗口，后台消息行为未验证；只有本地窗口才启用后台键鼠
+        self._local_window = True
         self.wait_game_window()
         # 等待窗口期间被用户中断时不再创建截图器：后台捕获没有窗口句柄可用
         if self._stop:
             return
         self.sct = self.create_screen()
-        key_mouse_manager.set_background_keyboard(self.hwnd if self.background_mode else None)
+        key_mouse_manager.set_background_keyboard(
+            self.hwnd if (self.background_mode and self._local_window) else None)
 
     def create_screen(self):
         """按配置创建截图器：前台整屏截屏，后台模式换窗口捕获。"""
@@ -84,13 +88,8 @@ class CurrencyUtils(StateKernel):
         return create_window_capture(self.capture_backend, self.hwnd, self.xx, self.yy)
 
     def get_screen(self):
-        """截图器已释放时返回最后一帧，避免任务线程访问已关闭的句柄。
-
-        判据用「截图器是否存在」而不是 `_stop`：`_stop` 在 `SimulatedCurrency.__init__`
-        里默认就是 True（要等 `start()` 才置 False），用它当判据会让内核启动前的截图
-        （GUI「打印坐标」这类只构造内核、不 start 的调试路径）一直返回全黑占位帧。
-        """
-        if self.sct is None:
+        """停止后返回最后一帧，避免 GUI 线程关闭截图器后任务线程再访问空句柄。"""
+        if self._stop:
             return self.screen
         return super().get_screen()
 
@@ -125,6 +124,7 @@ class CurrencyUtils(StateKernel):
             return 0
         hwnd = game_window.hwnd
         self.hwnd = hwnd
+        self._local_window = game_window.kind != "cloud"
         self.xx = game_window.client_width
         self.yy = game_window.client_height
         if game_window.kind == "cloud":
