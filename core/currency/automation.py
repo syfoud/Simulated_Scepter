@@ -179,7 +179,9 @@ class SimulatedCurrency(CurrencyUtils):
     BROKEN_PANEL_ESC_GAP = 1.2
     # 「开拓商店」：标题在两张版式里都有；点击目标是那张「星穹列车，跃迁！」卡片
     PIONEER_TITLE_BOX = [890, 50, 1180, 105]
-    PIONEER_CARD_POSITION = (1045, 275)     # 「星穹列车，跃迁！」卡片中心
+    # 点「星穹列车，跃迁！」这一行本身（实测 [944,366,1079,396]）；
+    # 再往上就是卡片图标区，怕误开详情，所以不往上取
+    PIONEER_CARD_POSITION = (1011, 381)
     PIONEER_STEP_GAP = 0.9
     # 物品详情面板左上角的「消耗品」标签（实测约 [849,318,900,337]）
     ITEM_DETAIL_LABEL_BOX = [800, 300, 980, 355]
