@@ -1266,18 +1266,17 @@ class CurrencyInteractionTests(unittest.TestCase):
 
 
     @patch("core.currency.automation.key_mouse_manager")
-    def test_battle_short_handed_only_confirms(self, manager):
-        """人数不足提示只点确认：勾选框状态读不出来，点一次就是切换，会越点越乱。"""
+    def test_battle_short_handed_clicks_confirm_directly(self, manager):
+        """直接点确认的固定位置：后台捕获帧滞后时「先识别再点」会一直点不掉。"""
         currency = object.__new__(SimulatedCurrency)
-        currency.click_text = Mock(return_value=True)
+        currency.click_text = Mock(return_value=False)   # 就算识别不到也要能点
         manager.reset_mock()
 
         self.assertEqual(currency.confirm_battle_short_handed(), 1)
 
-        manager.click_point.assert_not_called()
-        currency.click_text.assert_called_once_with(
-            text="确认", box=SimulatedCurrency.BATTLE_FEWER_CONFIRM_BOX,
-            click=True, allow_fail=True)
+        self.assertIn(call.click_point(*SimulatedCurrency.BATTLE_FEWER_CONFIRM_POSITION),
+                      manager.mock_calls)
+        currency.click_text.assert_not_called()
 
     @patch("core.currency.automation.key_mouse_manager")
     def test_protagonist_falls_back_to_bench_after_two_failures(self, manager):

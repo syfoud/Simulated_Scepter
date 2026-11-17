@@ -164,8 +164,8 @@ class SimulatedCurrency(CurrencyUtils):
     # 该按钮的文字框（日志里带上落点来源，便于核对）
     # 右下角按钮：入口页是「开始「货币战争」」，模式页是「进入超频/标准博弈」
     BATTLE_MODE_BUTTON_BOX = [1400, 925, 1900, 1005]
-    # 人数不足提示框的「确认」按钮（「本局不再提示」勾选框状态读不出来，不去碰它）
-    BATTLE_FEWER_CONFIRM_BOX = [1100, 630, 1300, 700]
+    # 人数不足提示框的「确认」按钮：实测文字 [1160,656,1215,686]，取中心直接点
+    BATTLE_FEWER_CONFIRM_POSITION = (1187, 671)
     # 游戏自己弹出的「前台区域无角色」提示：它在的时候格子被盖住，空位识别不可信
     FRONT_EMPTY_WARNING_BOX = [816, 512, 1104, 539]
     FRONT_EMPTY_DISMISS = (978, 671)
@@ -1378,16 +1378,15 @@ class SimulatedCurrency(CurrencyUtils):
         return None
 
     def confirm_battle_short_handed (self):
-        """「可出战角色人数未达上限，是否确认出战？」的提示框——只点确认。
+        """「可出战角色人数未达上限，是否确认出战？」的提示框——直接点确认。
 
-        不去勾「本局不再提示」：那个勾选框的状态读不出来，脚本每次点一下就是**切换**，
-        结果每场战斗都把它翻回来，提示框反而场场重弹（日志里连弹四次）。
-        点确认本身是有效的，代价只是每场多一次点击。
+        不先识别再点：后台模式下捕获帧会滞后，读不到「确认」并不代表按钮不在，
+        结果就是日志里一直「没点掉确认」、提示框关不掉。
+        触发这一动作的本来就是提示框上的「本局不再提示」文字，位置已知，直接点即可。
+
+        也不去勾「本局不再提示」：勾选框是否已勾读不出来，点一次就是切换一次。
         """
-        if not self.click_text(text="确认", box=self.BATTLE_FEWER_CONFIRM_BOX,
-                               click=True, allow_fail=True):
-            CUS_LOGGER.warning("人数不足提示框没点掉「确认」，等下一轮")
-            return 0
+        key_mouse_manager.click_point(*self.BATTLE_FEWER_CONFIRM_POSITION)
         key_mouse_manager.wait()
         CUS_LOGGER.info("已确认按现有人数出战")
         return 1
