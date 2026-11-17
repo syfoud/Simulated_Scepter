@@ -3,11 +3,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from core.currency.envirs import ENVIR_NAMES
 from core.currency.settings import (
     DEFAULT_EXIT_PLANE,
     EXIT_PLANES,
+    PRIORITY_KEYS,
+    default_priority,
     load_currency_settings,
-    load_default_priority,
+    normalize_currency_settings,
     resolve_priority,
     save_currency_settings,
 )
@@ -24,12 +27,12 @@ class CurrencySettingsTests(unittest.TestCase):
             settings = load_currency_settings(path)
         self.assertIsNone(settings["prior_exit_plane"])
         self.assertEqual(settings["priority"]["prior_envir"], [])
-        self.assertEqual(settings["priority"]["envir_1"], load_default_priority()["envir_1"])
+        self.assertEqual(settings["priority"]["envir_1"], [])
 
     def test_partial_saves_preserve_priority_and_exit_settings(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "currency.json"
-            priority = load_default_priority()
+            priority = default_priority()
             priority["prior_envir"] = ["蓝海"]
             save_currency_settings({"priority": priority, "exit_after_plane": 2}, path)
             save_currency_settings({"exit_after_plane": 3}, path)
@@ -49,7 +52,7 @@ class CurrencySettingsTests(unittest.TestCase):
             path = Path(temp_dir) / "currency.json"
             for entries, expected in cases:
                 with self.subTest(entries=entries):
-                    priority = {key: entries[:] for key in load_default_priority()}
+                    priority = {key: entries[:] for key in PRIORITY_KEYS}
                     path.write_text(
                         json.dumps({"priority": priority}, ensure_ascii=False),
                         encoding="utf-8",
@@ -140,6 +143,24 @@ class CurrencySettingsTests(unittest.TestCase):
             self.assertEqual(resolve_priority(deployment), (
                 ["character_A", "character_B"], ["character_C"],
             ))
+
+
+class CurrencyEnvirTableTest(unittest.TestCase):
+    def test_envir_names_cover_current_season(self):
+        self.assertEqual(len(ENVIR_NAMES), 72)
+        self.assertEqual(len(set(ENVIR_NAMES)), len(ENVIR_NAMES))
+        for name in ("蓝海", "银•金•彩", "火药味", "尾彩"):
+            self.assertIn(name, ENVIR_NAMES)
+
+    def test_priority_keys_cover_every_envir_level(self):
+        self.assertEqual(
+            PRIORITY_KEYS,
+            ("prior_envir", "envir_1", "envir_2", "envir_3", "envir_4"),
+        )
+        # 勾选表格按 PRIORITY_KEYS 生成列，两种数据源不能错位
+        values = normalize_currency_settings({"priority": {"envir_2": ["蓝海"]}})
+        self.assertEqual(values["priority"]["envir_2"], ["蓝海"])
+        self.assertEqual(values["priority"]["envir_1"], [])
 
 
 if __name__ == "__main__":

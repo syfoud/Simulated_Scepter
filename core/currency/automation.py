@@ -6,6 +6,10 @@ import cv2
 import numpy as np
 import pyautogui
 
+from core.currency.affixes import AFFIX_NAMES
+from core.currency.affix_stats import AffixSampler
+from core.currency.envirs import ENVIR_NAMES
+from core.currency.textmatch import best_match, similar
 from core.currency.investment_selection import choose_fallback_investment
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
@@ -129,6 +133,7 @@ class SimulatedCurrency(CurrencyUtils):
 
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
+    GOLDEN_ERA_NAMES = ("银•金•彩",)
     DIFFICULTY_MAX_STEPS = 120
     DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
     DIFFICULTY_DOWN_POSITION = (960, 844)
@@ -137,6 +142,37 @@ class SimulatedCurrency(CurrencyUtils):
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
     TEAM_COUNT_BOX = [884, 202, 1150, 280]
     BLESS_REFRESH_POSITIONS = ((384, 869), (868, 869), (1380, 869))
+    # 右下角「进入标准博弈 / 进入超频博弈」按钮：两种博弈是同一个位置
+    MODE_ENTER_POSITION = (1637, 960)
+    # 该按钮的文字框（日志里带上落点来源，便于核对）
+    BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
+    # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
+    OVERCLOCK_TAB_POSITION = (153, 418)
+    # 只有低难度才会出现的「返回最高职级」；没它说明已经在 A8-20
+    TOP_RANK_BUTTON_BOX = [1325, 952, 1457, 979]
+    # 词缀界面：标题、左下词缀条、右下「下一步」
+    AFFIX_TITLE_BOX = [485, 185, 679, 217]
+    AFFIX_STRIP_BOX = [300, 938, 1160, 1020]
+    AFFIX_NEXT_POSITION = (1397, 981)
+    # 「点击空白处继续」：初始/首领/奇遇三处提示的 y 分别在 948~975 / 778~807 / 689~718，
+    # 一条宽条带全罩住；点的时候点识别到的那块文字本身，不靠固定坐标猜
+    BLANK_PROMPT_TEXT = "点击空白处继续"
+    BLANK_PROMPT_BOX = [800, 640, 1140, 1010]
+    # 界面刚切进来时常见「只渲染出一部分」：词缀条/环境卡片都要轮询等它出字，
+    # 拿半帧结果去点下一步或点刷新会漏采、甚至会洗掉必选环境
+    # A8-20 固定给四条词缀，而且是从左往右依次刷出来的：认到一条就跑会漏后面的
+    AFFIX_EXPECTED = 4
+    AFFIX_READ_ATTEMPTS = 10
+    AFFIX_READ_INTERVAL = 0.3
+    # 认不满四条时，最多再等这么多轮（每轮一次触发）才按现有结果继续
+    AFFIX_PARTIAL_RETRY_ROUNDS = 3
+    # 采集模式下，1-1 奖励屏会比奇遇界面先出来：就地轮询等它加载（12×0.5s ≈ 6 秒）。
+    # 等不到就直接退出——奇遇那屏没有我们要的数据，真晚到了也会被「点击空白继续」接住
+    CURIOSITY_WAIT_ATTEMPTS = 12
+    CURIOSITY_WAIT_INTERVAL = 0.5
+    ENVIR_WAIT_ATTEMPTS = 8
+    ENVIR_WAIT_INTERVAL = 0.3
+    ENVIR_MIN_FILLED = 3
 
     def __init__ (self, debug):
         super ().__init__ ()
@@ -172,6 +208,14 @@ class SimulatedCurrency(CurrencyUtils):
 
         self.prior_envir = priority["prior_envir"][:]
         self.envir = [[] for _ in range(4)]
+        # 采集模式用：这一轮下来已经刷到过的投资环境（跨局累计，用来判断目标是否收齐）
+        self.envir_seen = set()
+        # 本局是否已经选完投资环境（采集模式用它区分「词缀后的空白」和「奇遇的空白」）
+        self.envir_selected = False
+        # 本局词缀没认满四条的重试次数
+        self.affix_incomplete_rounds = 0
+        # 本局词缀是否已经记录过（词缀一局只出现一次）
+        self.affixes_recorded = False
 
         for index in range(1, 5):
             self.envir[index - 1] = priority[f"envir_{index}"][:]
@@ -208,6 +252,23 @@ class SimulatedCurrency(CurrencyUtils):
         # 记录本局是否刷出了必选（prior）投资环境
         self.prior_environment_found = False
         self.has_fresh = False
+
+        # 新模式相关配置：对局类型（标准/超频）、难度选择方式、开局词缀收集
+        self.gamemode = currency_settings["gamemode"]
+        self.difficulty_mode = currency_settings["difficulty_mode"]
+        self.gather_mode = currency_settings["gather_mode"]
+        self.max_runs = currency_settings["max_runs"]
+        self.affix_targets = currency_settings["affix_targets"]
+        self.affix_sampler = AffixSampler()
+        CUS_LOGGER.info(
+            "对局类型: %s，难度选择: %s%s",
+            "标准博弈" if self.gamemode == "standard" else "超频博弈",
+            "最高职级(A8-20)" if self.difficulty_mode == "top" else "最低难度",
+            "，已开启开局词缀收集模式" if self.gather_mode else "",
+        )
+        if self.affix_targets:
+            CUS_LOGGER.info("目标词缀: %s", "、".join(self.affix_targets))
+
         exit_plane_text = "不退出" if self.set_exit_plane is None else f"第{self.set_exit_plane}面"
         CUS_LOGGER.info(f"货币战争退出位面设置为: {exit_plane_text}")
 
@@ -221,6 +282,41 @@ class SimulatedCurrency(CurrencyUtils):
                 texts.append (merged)
             except Exception:
                 texts.append ("")
+        return texts
+
+    @staticmethod
+    def canonical_environments (texts):
+        """把 OCR 结果对齐到已知的 72 条环境名。
+
+        OCR 会把「银•金•彩」的间隔点吃掉、偶尔认错形近字；先用已知名字表纠回来，
+        后面的优先级匹配、蓝海/银金彩判定都只看规范名。
+        """
+        return [best_match(text, ENVIR_NAMES) or text for text in texts]
+
+    def wait_environments (self):
+        """等三张投资环境卡片渲染出来再判断。
+
+        刚切进界面时常见只出来第一张（日志里就是 `['二手市场', '', '']`），
+        这时判"没刷到必选环境"会立刻点刷新，直接把必选环境洗掉。
+        """
+        texts = []
+        for attempt in range(self.ENVIR_WAIT_ATTEMPTS):
+            self.get_screen()
+            texts = self.canonical_environments(self.recognize_options(self.ENVIR_BOXES))
+            filled = sum(1 for text in texts if text.strip())
+            if filled >= self.ENVIR_MIN_FILLED:
+                if attempt:
+                    CUS_LOGGER.debug("投资环境卡片已渲染（第 %d 次识别）", attempt + 1)
+                return texts
+            CUS_LOGGER.debug(
+                "投资环境只认出 %d 张卡（第 %d/%d 次识别），等渲染",
+                filled, attempt + 1, self.ENVIR_WAIT_ATTEMPTS,
+            )
+            time.sleep(self.ENVIR_WAIT_INTERVAL)
+        CUS_LOGGER.warning(
+            "投资环境只认出 %d 张卡，仍按当前结果继续",
+            sum(1 for text in texts if text.strip()),
+        )
         return texts
 
     def route (self):
@@ -349,12 +445,42 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
 
+    def enter_battle_mode (self):
+        """点右下角「进入…博弈」按钮：标准博弈直接进，超频博弈先切左上标签。"""
+        if self.gamemode == "standard":
+            key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
+            key_mouse_manager.wait()
+            self.update_state("difficulty_select")
+            CUS_LOGGER.info("已点击「进入标准博弈」")
+            return 1
+
+        CUS_LOGGER.info("切换到超频博弈标签")
+        key_mouse_manager.click_point(*self.OVERCLOCK_TAB_POSITION)
+        key_mouse_manager.wait()
+        return 1
+
+    def select_top_difficulty (self):
+        """最高职级（A8-20）：有「返回最高职级」就点它切过去，没有说明已经是。"""
+        box = self.TOP_RANK_BUTTON_BOX
+        if self.click_text(text="返回最高职级", box=box, click=False, allow_fail=True):
+            CUS_LOGGER.info("当前不是 A8-20，点击「返回最高职级」切换难度")
+            key_mouse_manager.click_point(
+                (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+            key_mouse_manager.wait()
+            self.get_screen()
+        else:
+            CUS_LOGGER.info("未出现「返回最高职级」，判定当前已是 A8-20")
+        return self.complete_difficulty_selection()
+
     def handle_difficulty_selection(self):
         if self.state not in (None, "difficulty_select"):
             return 0
 
         self.update_state("difficulty_select")
         self.get_screen()
+
+        if self.difficulty_mode == "top":
+            return self.select_top_difficulty()
 
         if self.is_one():
             CUS_LOGGER.info("已处于目标难度，直接开始对局")
@@ -375,6 +501,9 @@ class SimulatedCurrency(CurrencyUtils):
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        self.envir_selected = False
+        self.affix_incomplete_rounds = 0
+        self.affixes_recorded = False
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
@@ -398,8 +527,23 @@ class SimulatedCurrency(CurrencyUtils):
                         CUS_LOGGER.info (f"检测到必选环境: {pri}，选择选项{idx+1}")
                         return True, idx
             return False, -1
-        texts = self.recognize_options (self.ENVIR_BOXES)
+        texts = self.wait_environments ()
         CUS_LOGGER.info (f"OCR 识别结果: {texts}")
+        self.envir_seen.update(text for text in texts if text)
+
+        if sum(1 for text in texts if text.strip()) == 1:
+            # 环境只会出现三种卡或一张卡（蓝海的额外环境），没有两张的情况：
+            # 一张卡就按额外环境处理，不要拿半帧结果去点刷新
+            CUS_LOGGER.info("投资环境只出现一张卡（蓝海的额外环境），直接选它")
+            if self._select_blue_ocean_extra_environment():
+                self.investment_tracker.reset()
+                self.envir_selected = True
+                self.update_state("1-1")
+                CUS_LOGGER.info("投资环境选择完成")
+                self.stop_if_gather_goal_reached()
+                return 1
+            CUS_LOGGER.warning("单卡投资环境处理失败，等下一轮")
+            return 0
         matched, selected_idx = match_prior (texts)
 
         if not matched and not self.has_fresh:
@@ -453,8 +597,10 @@ class SimulatedCurrency(CurrencyUtils):
             return 0
 
         self.investment_tracker.reset()
+        self.envir_selected = True
         self.update_state("1-1")
         CUS_LOGGER.info ("投资环境选择完成")
+        self.stop_if_gather_goal_reached()
         return 1
 
     def _apply_environment_effects(self, texts):
@@ -480,7 +626,7 @@ class SimulatedCurrency(CurrencyUtils):
                         "检测到必选环境，但退出位面设置为不调整"
                     )
 
-        if any("银金彩" in text for text in texts):
+        if any(best_match(text, self.GOLDEN_ERA_NAMES) for text in texts):
             self.max_refresh = 3
             CUS_LOGGER.info(
                 "检测到银金彩，已将投资策略刷新次数调整至3次"
@@ -509,7 +655,8 @@ class SimulatedCurrency(CurrencyUtils):
                 continue
 
             self.ts.forward(self.get_screen())
-            texts = self.recognize_options(self.ENVIR_BOXES)
+            texts = self.canonical_environments(self.recognize_options(self.ENVIR_BOXES))
+            self.envir_seen.update(text for text in texts if text)
             available = [idx for idx, text in enumerate(texts) if text.strip()]
             if len(available) != 1:
                 CUS_LOGGER.info(
@@ -724,6 +871,162 @@ class SimulatedCurrency(CurrencyUtils):
             return None
         return counts
 
+    def read_affixes (self):
+        """识别左下词缀条上的词缀名。
+
+        词缀长度不一，四条的框在画面上宽度不同，所以整条一起 OCR、按识别结果收集，
+        不按固定四格切。这里用底层识别器取「未合并」的结果：`forward()` 会把同行
+        相距很近的文字并成一条（实测把前两枚词缀粘成「侵蚀·第一位面强化战个痛快」）。
+        """
+        box = self.AFFIX_STRIP_BOX
+        patch = self.screen[box[1]:box[3], box[0]:box[2]]
+        texts = []
+        try:
+            for _rect, (raw_text, score) in self.ts.ts.ocr(patch):
+                text = re.sub(r"\s+", "", raw_text)
+                if not text or score < 0.6 or text.isdigit():
+                    continue
+                if "敌人难度" in text or self.BLANK_PROMPT_TEXT in text:
+                    continue
+                # 对齐到 53 条已知词缀：OCR 常把首字吃掉或多认一笔（实测「山榜样激励」「首强化」），
+                # 不纠回来的话采样统计会被这些碎片条目污染
+                canonical = best_match(text, AFFIX_NAMES)
+                if canonical is None:
+                    CUS_LOGGER.debug("词缀条读到对不上的文字，丢弃：%s", text)
+                    continue
+                if canonical not in texts:
+                    texts.append(canonical)
+        except Exception:
+            CUS_LOGGER.warning("词缀条 OCR 失败", exc_info=True)
+        return texts
+
+    def gather_goal_reached (self):
+        """采集模式下，目标词缀与必选环境是否都刷到了。
+
+        两边都没配置时不算达成（否则开局就停）。词缀看采样计数器，环境看跨局累计的
+        `envir_seen`；都用形近字匹配，OCR 错一个字不至于漏判。
+        """
+        if not self.gather_mode:
+            return False
+        if not self.affix_targets and not self.prior_envir:
+            return False
+        affixes_done = all(
+            any(similar(target, seen) for seen in self.affix_sampler.counter)
+            for target in self.affix_targets
+        )
+        envir_done = all(
+            any(similar(prior, seen) for seen in self.envir_seen)
+            for prior in self.prior_envir
+        )
+        return affixes_done and envir_done
+
+    def stop_if_gather_goal_reached (self):
+        """目标全部刷到就停下，别让它一直空转。返回是否已停止。"""
+        if not self.gather_goal_reached():
+            return False
+        CUS_LOGGER.info(
+            "采集目标已全部刷到（目标词缀 %d 条 / 必选环境 %d 条，共 %d 把），停止运行；"
+            "游戏会停在当前界面，需要的话手动退出这一局",
+            len(self.affix_targets), len(self.prior_envir), self.affix_sampler.run_index,
+        )
+        self._stop = True
+        return True
+
+    def wait_affixes (self):
+        """轮询等词缀条刷满 AFFIX_EXPECTED 条。
+
+        词缀是一条一条从左往右显出来的，认到一条就点下一步会漏采后面的；
+        等满四条（或等够次数）再返回。
+        """
+        affixes = []
+        for attempt in range(self.AFFIX_READ_ATTEMPTS):
+            self.get_screen()
+            affixes = self.read_affixes()
+            if len(affixes) >= self.AFFIX_EXPECTED:
+                return affixes
+            CUS_LOGGER.debug(
+                "词缀条现有 %d/%d 条（第 %d/%d 次识别）：%s",
+                len(affixes), self.AFFIX_EXPECTED,
+                attempt + 1, self.AFFIX_READ_ATTEMPTS,
+                "、".join(affixes) if affixes else "（空）",
+            )
+            time.sleep(self.AFFIX_READ_INTERVAL)
+        return affixes
+
+    def read_affixes_and_continue (self):
+        """词缀界面：读词缀 → 采样落盘 → 点右下角「下一步」。
+
+        词缀一局只出现一次，点完下一步就没了；但切界面那一两帧文字可能还挂着，
+        不挡住的话会对同一局重复识别（还会把下一屏的「点击空白处继续」当成词缀）。
+        """
+        if self.affixes_recorded:
+            CUS_LOGGER.debug("本局词缀已记录，跳过重复识别")
+            return 1
+
+        affixes = self.wait_affixes()
+        if not affixes:
+            CUS_LOGGER.warning(
+                "等了 %d 帧仍没识别到词缀，先不点下一步，等下一轮重试",
+                self.AFFIX_READ_ATTEMPTS,
+            )
+            return 1
+        if len(affixes) < self.AFFIX_EXPECTED:
+            self.affix_incomplete_rounds += 1
+            if self.affix_incomplete_rounds < self.AFFIX_PARTIAL_RETRY_ROUNDS:
+                CUS_LOGGER.warning(
+                    "词缀只识别到 %d/%d 条（%s），再等一轮（第 %d 次重试）",
+                    len(affixes), self.AFFIX_EXPECTED, "、".join(affixes),
+                    self.affix_incomplete_rounds,
+                )
+                return 1
+            CUS_LOGGER.warning(
+                "重试 %d 轮仍不足 %d 条，按现有 %d 条继续：%s",
+                self.affix_incomplete_rounds, self.AFFIX_EXPECTED,
+                len(affixes), "、".join(affixes),
+            )
+        CUS_LOGGER.info("本局词缀：%s", "、".join(affixes))
+        self.affixes_recorded = True
+        hits = self.affix_sampler.record(affixes, self.affix_targets)
+        if hits:
+            CUS_LOGGER.info("命中目标词缀：%s", "、".join(hits))
+        if self.max_runs and self.affix_sampler.run_index >= self.max_runs:
+            CUS_LOGGER.info("已达到设定的最大把数(%s)，停止采集", self.max_runs)
+            self._stop = True
+            return 1
+        if self.stop_if_gather_goal_reached():
+            return 1
+        key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
+        key_mouse_manager.wait()
+        return 1
+
+    def find_blank_prompt (self):
+        """在当前帧找「点击空白处继续」，返回它的框；没有就返回 None。"""
+        self.ts.forward(self.get_screen())
+        for item in self.ts.find_with_box(self.BLANK_PROMPT_BOX):
+            if self.BLANK_PROMPT_TEXT in item["raw_text"]:
+                return item["box"]
+        return None
+
+    def click_blank_prompt (self):
+        """点「点击空白处继续」：按识别到的文字位置点，不假设它在哪一屏。
+
+        采集模式下，只有在**投资环境已经选完**之后点这一下才算本局采样结束——
+        词缀界面之后就有一个空白提示，那一步还不能退。
+        """
+        target = self.find_blank_prompt()
+        if target is None:
+            CUS_LOGGER.debug("这一帧没找到「点击空白处继续」，等下一帧")
+            return 1
+
+        CUS_LOGGER.debug("点击空白提示：%s", target)
+        self.click_box(target)
+        key_mouse_manager.wait()
+        if self.gather_mode and self.envir_selected:
+            CUS_LOGGER.info("开局词缀收集模式：本局采样结束，请求退出并重开")
+            self.exit_requested = True
+            self.update_state("exit")
+        return 1
+
     def prepare_battle(self):
         """先补满阵容，再按优先级替换，截图确认完成后才允许出战。
 
@@ -841,6 +1144,37 @@ class SimulatedCurrency(CurrencyUtils):
 
     def handle_1_1_reward(self):
         """处理1-1投资环境选择后的奖励界面。"""
+
+        if self.gather_mode:
+            # 采集只要词缀和环境名额，绝不进战斗。
+            # 奇遇界面要加载几秒才出来，这段时间**必须就地等**：只返回 0 的话主循环会继续
+            # 匹配别的动作，「出战前准备」靠屏幕上的「出战」文字触发（不带状态门槛），
+            # 一下就绕过等待把仗打起来了。
+            CUS_LOGGER.info(
+                "开局词缀收集模式：等奇遇界面加载（最多 %.0f 秒）后再退出",
+                self.CURIOSITY_WAIT_ATTEMPTS * self.CURIOSITY_WAIT_INTERVAL,
+            )
+            target = None
+            for attempt in range(self.CURIOSITY_WAIT_ATTEMPTS):
+                if self._stop:      # 用户按了停止就别再傻等
+                    return 0
+                target = self.find_blank_prompt()
+                if target is not None:
+                    CUS_LOGGER.debug("点击空白提示：%s", target)
+                    self.click_box(target)
+                    key_mouse_manager.wait()
+                    break
+                CUS_LOGGER.debug(
+                    "奇遇界面还没出来（第 %d/%d 次等待）",
+                    attempt + 1, self.CURIOSITY_WAIT_ATTEMPTS,
+                )
+                time.sleep(self.CURIOSITY_WAIT_INTERVAL)
+            else:
+                CUS_LOGGER.warning("等奇遇界面超时，直接退出重开")
+
+            self.exit_requested = True
+            self.update_state("exit")
+            return 1
 
         if self.prior_environment_found or not self.exit_if_no_prior:
             self.preparation.reset_members()

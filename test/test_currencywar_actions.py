@@ -76,10 +76,32 @@ class CurrencyWarActionsTest(unittest.TestCase):
         self.assertEqual(detail["actions"], [{"press": "esc"}])
         self.assertLess(names.index("物品详情确认选择"), names.index("物品详情弹层"))
 
+    def test_every_string_action_exists_on_kernel(self):
+        """JSON 里写成字符串的动作必须真能在内核上找到同名方法，别写错名字。"""
+        missing = []
+        for action in self.actions:
+            for step in action["actions"]:
+                if isinstance(step, str) and not callable(
+                        getattr(SimulatedCurrency, step, None)):
+                    missing.append(f"{action['name']} -> {step}")
+        self.assertEqual(missing, [])
+
     def test_run_end_action_keeps_expected_name(self):
         action_names = {action.get("name") for action in self.actions}
 
         self.assertIn(RUN_END_ACTION, action_names)
+
+    def test_blank_prompt_is_one_action_covering_all_screens(self):
+        """三处「点击空白处继续」合成一条，靠宽条带罩住，点的是识别到的那块文字。"""
+        actions = [a for a in self.actions if a.get("name") == "点击空白继续"]
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
+        self.assertEqual(action["trigger"]["text"], "点击空白处继续")
+        self.assertEqual(action["actions"], ["click_blank_prompt"])
+        left, top, right, bottom = action["trigger"]["box"]
+        for band in ((689, 718), (778, 807), (948, 975)):   # 奇遇 / 首领 / 初始
+            self.assertLessEqual(top, band[0])
+            self.assertGreaterEqual(bottom, band[1])
 
     def test_start_button_checks_difficulty_before_starting_run(self):
         matches = [

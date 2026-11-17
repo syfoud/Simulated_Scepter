@@ -1,5 +1,6 @@
 import unittest
-from unittest.mock import Mock, call, patch
+from collections import Counter
+from unittest.mock import MagicMock, Mock, call, patch
 
 from core.currency.automation import SimulatedCurrency
 
@@ -11,6 +12,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.prior_envir = []
         currency.envir = [[], [], [], []]
         currency.has_fresh = False
+        currency.envir_seen = set()
+        currency.gather_mode = False
         currency.ts = Mock()
         currency.get_screen = Mock(return_value=object())
         currency.ENVIR_BOXES = [
@@ -172,6 +175,243 @@ class CurrencyInteractionTests(unittest.TestCase):
             ],
         )
         self.assertEqual(manager.wait.call_count, 4)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_blank_prompt_clicks_detected_text_and_exits_after_envir(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "点击空白处继续", "box": [930, 690, 990, 718]}
+        ]
+        currency.click_box = Mock()
+        currency.update_state = Mock()
+        currency.state = "1-1"
+        currency.gather_mode = True
+        currency.envir_selected = False
+        currency.exit_requested = False
+        manager.reset_mock()
+
+        # 环境还没选完（词缀后面那一次）：只点空白，不退出
+        self.assertEqual(currency.click_blank_prompt(), 1)
+        currency.click_box.assert_called_once_with([930, 690, 990, 718])
+        self.assertFalse(currency.exit_requested)
+
+        # 选完环境之后（奇遇这一次）：点完就请求退出
+        currency.click_box.reset_mock()
+        currency.envir_selected = True
+        self.assertEqual(currency.click_blank_prompt(), 1)
+        currency.click_box.assert_called_once_with([930, 690, 990, 718])
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_blank_prompt_does_nothing_when_text_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_box = Mock()
+        currency.gather_mode = True
+        currency.envir_selected = True
+        currency.exit_requested = False
+        manager.reset_mock()
+
+        self.assertEqual(currency.click_blank_prompt(), 1)
+        currency.click_box.assert_not_called()
+        self.assertFalse(currency.exit_requested)
+
+    @staticmethod
+    def _affix_currency(read_affixes):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.read_affixes = read_affixes
+        currency.affix_sampler = Mock()
+        currency.affix_sampler.record.return_value = []
+        currency.affix_sampler.run_index = 1
+        currency.affix_targets = []
+        currency.gather_mode = False
+        currency.max_runs = 0
+        currency.affix_incomplete_rounds = 0
+        currency.affixes_recorded = False
+        return currency
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_waits_until_four_are_visible(self, manager, _sleep):
+        """词缀从左往右渐显，认到一两条就点下一步会漏采。"""
+        currency = self._affix_currency(Mock(side_effect=[
+            ["侵蚀·第一位面强化"],
+            ["侵蚀·第一位面强化", "冷冻冬眠"],
+            ["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血"],
+            ["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"],
+        ]))
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        currency.affix_sampler.record.assert_called_once_with(
+            ["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"], [])
+        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_partial_result_is_retried_before_accepting(self, manager, _sleep):
+        currency = self._affix_currency(Mock(return_value=["侵蚀·第一位面强化"]))
+        manager.reset_mock()
+
+        rounds = SimulatedCurrency.AFFIX_PARTIAL_RETRY_ROUNDS
+        for _ in range(rounds - 1):
+            self.assertEqual(currency.read_affixes_and_continue(), 1)
+            manager.click_point.assert_not_called()
+            currency.affix_sampler.record.assert_not_called()
+
+        # 最后一轮放弃等待，按现有结果记一笔并继续
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+        currency.affix_sampler.record.assert_called_once_with(["侵蚀·第一位面强化"], [])
+        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_click_is_skipped_when_nothing_is_recognised(self, manager, _sleep):
+        currency = self._affix_currency(Mock(return_value=[]))
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        currency.affix_sampler.record.assert_not_called()
+        manager.click_point.assert_not_called()
+
+    @patch("core.currency.automation.time.sleep")
+    def test_environment_wait_retries_until_cards_are_rendered(self, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.recognize_options = Mock(
+            side_effect=[["二手市场", "", ""], ["黄金时代", "尾彩", "轮岗"]])
+        currency.ENVIR_BOXES = [[0, 0, 10, 10]]
+
+        self.assertEqual(
+            currency.wait_environments(), ["黄金时代", "尾彩", "轮岗"])
+
+    @patch("core.currency.automation.time.sleep")
+    def test_environment_wait_gives_up_after_attempts(self, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.recognize_options = Mock(return_value=["二手市场", "", ""])
+        currency.ENVIR_BOXES = [[0, 0, 10, 10]]
+
+        self.assertEqual(currency.wait_environments(), ["二手市场", "", ""])
+        self.assertEqual(
+            currency.recognize_options.call_count,
+            SimulatedCurrency.ENVIR_WAIT_ATTEMPTS,
+        )
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_gather_mode_waits_inline_for_curiosity_then_exits(self, manager, _sleep):
+        """1-1 奖励屏比奇遇先出现，必须在动作里就地等，否则别的动作会绕过等待去开战。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.gather_mode = True
+        currency.exit_requested = False
+        currency._stop = False
+        currency.update_state = Mock()
+        currency.preparation = Mock()
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.side_effect = [
+            [],
+            [],
+            [{"raw_text": "点击空白处继续", "box": [900, 700, 1000, 720]}],
+        ]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.handle_1_1_reward(), 1)
+
+        currency.click_box.assert_called_once_with([900, 700, 1000, 720])
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
+        currency.preparation.reset_members.assert_not_called()
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_gather_mode_exits_when_curiosity_never_shows(self, _manager, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.gather_mode = True
+        currency.exit_requested = False
+        currency._stop = False
+        currency.update_state = Mock()
+        currency.preparation = Mock()
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_box = Mock()
+
+        self.assertEqual(currency.handle_1_1_reward(), 1)
+
+        currency.click_box.assert_not_called()
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
+        currency.preparation.reset_members.assert_not_called()
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affixes_are_recorded_once_per_run(self, manager, _sleep):
+        """词缀一局只出现一次，切界面时文字还挂着不该重复识别。"""
+        currency = self._affix_currency(
+            Mock(return_value=["侵蚀·第一位面强化", "冷冻冬眠", "紧急止血", "战个痛快"]))
+        manager.reset_mock()
+
+        currency.read_affixes_and_continue()
+        currency.read_affixes_and_continue()
+
+        currency.affix_sampler.record.assert_called_once()
+        manager.click_point.assert_called_once_with(*SimulatedCurrency.AFFIX_NEXT_POSITION)
+
+    def test_read_affixes_keeps_only_known_names(self):
+        """词缀条只保留能对齐到 53 条已知名的结果：UI 文案、数字、乱码统统丢掉。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.screen = MagicMock()
+        currency.ts = Mock()
+        currency.ts.ts.ocr.return_value = [
+            ([], ("点击空白处继续", 0.99)),
+            ([], ("战个痛快", 0.99)),
+            ([], ("敌人难度 89", 0.99)),
+            ([], ("随便乱码", 0.99)),
+        ]
+
+        self.assertEqual(currency.read_affixes(), ["战个痛快"])
+
+    def test_read_affixes_repairs_ocr_variants(self):
+        """实测常把首字吃掉或多认一笔（「山榜样激励」「首强化」），要纠回规范名。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.screen = MagicMock()
+        currency.ts = Mock()
+        currency.ts.ts.ocr.return_value = [
+            ([], ("山榜样激励", 0.95)),
+            ([], ("首强化", 0.95)),
+            ([], ("战个痛快", 0.95)),
+        ]
+
+        self.assertEqual(
+            currency.read_affixes(), ["榜样激励", "首领强化", "战个痛快"])
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_single_environment_card_is_treated_as_extra_environment(self, _manager, _sleep):
+        """环境只有三张卡或蓝海的单张卡，没有两张的情况。"""
+        currency = self.make_currency()
+        currency.recognize_options = Mock(return_value=["蓝海", "", ""])
+        currency._select_blue_ocean_extra_environment = Mock(return_value=True)
+        currency.investment_tracker = Mock()
+        currency.update_state = Mock()
+
+        self.assertEqual(currency.select_envir(), 1)
+
+        currency._select_blue_ocean_extra_environment.assert_called_once_with()
+        currency.investment_tracker.reset.assert_called_once_with()
+        currency.update_state.assert_called_once_with("1-1")
+        self.assertTrue(currency.envir_selected)
 
 
 if __name__ == "__main__":
