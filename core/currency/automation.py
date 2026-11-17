@@ -179,7 +179,7 @@ class SimulatedCurrency(CurrencyUtils):
     BROKEN_PANEL_ESC_GAP = 1.2
     # 「开拓商店」：标题在两张版式里都有；点击目标是那张「星穹列车，跃迁！」卡片
     PIONEER_TITLE_BOX = [890, 50, 1180, 105]
-    PIONEER_CARD_BOX = [850, 350, 1150, 400]
+    PIONEER_CARD_POSITION = (1045, 275)     # 「星穹列车，跃迁！」卡片中心
     PIONEER_STEP_GAP = 0.9
     # 物品详情面板左上角的「消耗品」标签（实测约 [849,318,900,337]）
     ITEM_DETAIL_LABEL_BOX = [800, 300, 980, 355]
@@ -1700,13 +1700,16 @@ class SimulatedCurrency(CurrencyUtils):
         return 1
 
     def close_pioneer_shop (self):
-        """关掉「开拓商店」面板：先点「星穹列车，跃迁！」这张卡，再按 ESC 回备战。"""
+        """关掉「开拓商店」面板：先点「星穹列车，跃迁！」那张卡，再按 ESC 回备战。
+
+        必须点卡片本体（不能只按 ESC，实测直接 ESC 关不掉）；
+        也不能按文字中心点——文字在卡片下边缘，会点到空隙里。
+        """
         self.get_screen()
-        CUS_LOGGER.info("发现「开拓商店」面板，先处理掉再继续")
-        if self.click_text(text="星穹列车", box=self.PIONEER_CARD_BOX,
-                           click=True, allow_fail=True):
-            key_mouse_manager.wait()
-            time.sleep(self.PIONEER_STEP_GAP)
+        CUS_LOGGER.info("发现「开拓商店」面板，先点卡片再按 ESC")
+        key_mouse_manager.click_point(*self.PIONEER_CARD_POSITION)
+        key_mouse_manager.wait()
+        time.sleep(self.PIONEER_STEP_GAP)
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
         CUS_LOGGER.info("已关闭「开拓商店」")
