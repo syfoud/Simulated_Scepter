@@ -165,8 +165,7 @@ class SimulatedCurrency(CurrencyUtils):
     # 该按钮的文字框（日志里带上落点来源，便于核对）
     # 右下角按钮：入口页是「开始「货币战争」」，模式页是「进入超频/标准博弈」
     BATTLE_MODE_BUTTON_BOX = [1400, 925, 1900, 1005]
-    # 人数不足提示框：「本局不再提示」的方框与「确认」按钮
-    BATTLE_FEWER_CHECKBOX = (888, 607)
+    # 人数不足提示框的「确认」按钮（「本局不再提示」勾选框状态读不出来，不去碰它）
     BATTLE_FEWER_CONFIRM_BOX = [1100, 630, 1300, 700]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
@@ -1375,20 +1374,18 @@ class SimulatedCurrency(CurrencyUtils):
         return None
 
     def confirm_battle_short_handed (self):
-        """「可出战角色人数未达上限，是否确认出战？」的提示框。
+        """「可出战角色人数未达上限，是否确认出战？」的提示框——只点确认。
 
-        顺手把「本局不再提示」勾上：不勾的话整局每次出战都要问一遍，
-        每次都得等一拍。勾完再点确认。
+        不去勾「本局不再提示」：那个勾选框的状态读不出来，脚本每次点一下就是**切换**，
+        结果每场战斗都把它翻回来，提示框反而场场重弹（日志里连弹四次）。
+        点确认本身是有效的，代价只是每场多一次点击。
         """
-        # 勾选框在文字左边（实测文字 [911,590,1060,617]，方框中心约 (888,607)）
-        key_mouse_manager.click_point(*self.BATTLE_FEWER_CHECKBOX)
-        key_mouse_manager.wait()
         if not self.click_text(text="确认", box=self.BATTLE_FEWER_CONFIRM_BOX,
                                click=True, allow_fail=True):
             CUS_LOGGER.warning("人数不足提示框没点掉「确认」，等下一轮")
             return 0
         key_mouse_manager.wait()
-        CUS_LOGGER.info("已确认按现有人数出战（并勾选本局不再提示）")
+        CUS_LOGGER.info("已确认按现有人数出战")
         return 1
 
     def start_battle(self):
