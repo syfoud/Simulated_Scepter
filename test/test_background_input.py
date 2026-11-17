@@ -6,7 +6,12 @@ from unittest.mock import Mock, patch
 
 import win32con
 
-from tool.background_input import BackgroundKeyboard, key_lparam, scan_code
+from tool.background_input import (
+    BackgroundKeyboard,
+    BackgroundMouse,
+    key_lparam,
+    scan_code,
+)
 from tool.key_mouse_manager import KeyMouseManager
 
 
@@ -178,14 +183,14 @@ class KeyMouseManagerRoutingTests(unittest.TestCase):
         background.press.assert_not_called()
         gui.keyDown.assert_not_called()
 
-    def test_click_is_blocked_when_game_is_not_foreground(self):
-        background = Mock(spec=BackgroundKeyboard)
-        background.game_is_foreground.return_value = False
-        self.manager.background = background
-        with patch("tool.key_mouse_manager.pyautogui") as gui, \
-                patch("tool.key_mouse_manager.win32api") as api:
+    def test_click_uses_background_mouse_even_when_game_is_not_foreground(self):
+        """后台模式下点击投窗口消息（落点借光标），不再因为游戏不在前台就跳过。"""
+        mouse = Mock(spec=BackgroundMouse)
+        mouse.game_is_foreground.return_value = False
+        self.manager.background_mouse = mouse
+        with patch("tool.key_mouse_manager.pyautogui") as gui:
             self.manager._execute_operation({"type": "click", "x": 100, "y": 100})
-        api.SetCursorPos.assert_not_called()
+        mouse.click.assert_called_once_with((100, 100))
         gui.click.assert_not_called()
 
     def test_foreground_mode_still_injects_with_pyautogui(self):
@@ -207,6 +212,53 @@ class KeyMouseManagerRoutingTests(unittest.TestCase):
         self.assertIsInstance(self.manager.background, BackgroundKeyboard)
         self.manager.set_background_keyboard(None)
         self.assertIsNone(self.manager.background)
+
+class BackgroundMouseTests(unittest.TestCase):
+    def setUp(self):
+        self.hwnd = 4321
+        self.client_to_screen = self.enterContext(
+            patch("tool.background_input.win32gui.ClientToScreen", return_value=(20, 30)))
+        self.send = self.enterContext(patch("tool.background_input.win32gui.SendMessageTimeout"))
+        self.set_cursor = self.enterContext(patch("tool.background_input.win32api.SetCursorPos"))
+        self.get_cursor = self.enterContext(
+            patch("tool.background_input.win32api.GetCursorPos", return_value=(777, 775)))
+
+    def make_mouse(self):
+        from tool.background_input import BackgroundMouse
+
+        mouse = BackgroundMouse(self.hwnd)
+        mouse.wait_cursor_idle = lambda *args, **kwargs: True
+        return mouse
+
+    def test_client_coordinates_are_relative_to_client_origin(self):
+        mouse = self.make_mouse()
+        self.assertEqual(mouse.to_client((120, 230)), (100, 200))
+
+    def test_click_posts_move_down_up_and_restores_cursor(self):
+        from tool.background_input import WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE
+
+        mouse = self.make_mouse()
+        mouse.click((120, 230), sleep=lambda _seconds: None)
+
+        messages = [call.args[1] for call in self.send.call_args_list]
+        self.assertEqual(messages, [WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP])
+        # 先挪到目标，最后放回原处
+        positions = [call.args[0] for call in self.set_cursor.call_args_list]
+        self.assertEqual(positions[0], (120, 230))
+        self.assertEqual(positions[-1], (777, 775))
+
+    def test_drag_presses_moves_and_releases(self):
+        from tool.background_input import WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE
+
+        mouse = self.make_mouse()
+        mouse.drag((120, 230), (220, 330), duration=0.2, sleep=lambda _seconds: None)
+
+        messages = [call.args[1] for call in self.send.call_args_list]
+        self.assertEqual(messages[0], WM_MOUSEMOVE)     # 先把光标放到起点
+        self.assertEqual(messages[1], WM_LBUTTONDOWN)
+        self.assertEqual(messages[-1], WM_LBUTTONUP)
+        self.assertGreater(len(messages), 8)      # 中间有逐步移动
+        self.assertEqual(self.set_cursor.call_args_list[-1].args[0], (777, 775))
 
 
 if __name__ == "__main__":
