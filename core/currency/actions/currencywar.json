@@ -1,5 +1,22 @@
 [
     {
+        "name": "关闭物品详情",
+        "trigger": {
+            "text": "消耗品",
+            "box": [
+                800,
+                300,
+                980,
+                355
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "dismiss_item_detail"
+        ]
+    },
+    {
         "name": "关闭开拓商店",
         "trigger": {
             "text": "开拓商店",

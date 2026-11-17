@@ -181,6 +181,8 @@ class SimulatedCurrency(CurrencyUtils):
     PIONEER_TITLE_BOX = [890, 50, 1180, 105]
     PIONEER_CARD_BOX = [850, 350, 1150, 400]
     PIONEER_STEP_GAP = 0.9
+    # 物品详情面板左上角的「消耗品」标签（实测约 [849,318,900,337]）
+    ITEM_DETAIL_LABEL_BOX = [800, 300, 980, 355]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
     # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
@@ -1688,6 +1690,14 @@ class SimulatedCurrency(CurrencyUtils):
     # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
     PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
     PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
+
+    def dismiss_item_detail (self):
+        """关掉误触打开的物品详情面板（界面上只有「消耗品」说明框）。"""
+        self.get_screen()
+        CUS_LOGGER.info("检测到物品详情面板，按 ESC 退出")
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        return 1
 
     def close_pioneer_shop (self):
         """关掉「开拓商店」面板：先点「星穹列车，跃迁！」这张卡，再按 ESC 回备战。"""
