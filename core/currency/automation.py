@@ -1221,11 +1221,16 @@ class SimulatedCurrency(CurrencyUtils):
         每次只执行一个拖拽并重新采集，避免备战栏压缩后使用过期的格子坐标。
         返回 1 表示已准备好，0 表示仍需准备；识别和落位失败均不放行。
         """
+        CUS_LOGGER.debug(
+            "出战前准备：state=%s stop=%s exit_requested=%s counts上限=%s",
+            self.state, self._stop, self.exit_requested, self.exit_plane)
         if self._stop or self.exit_requested:
+            CUS_LOGGER.debug("出战前准备：已请求退出/已停止，跳过")
             return 0
         # 备战界面是唯一能稳定读到「位面-节点」的地方，退出判定放这儿：
         # 连续出现两屏策略时，一定是第二屏点完、回到备战界面才按 ESC
         if self._maybe_exit_by_stage():
+            CUS_LOGGER.debug("出战前准备：位面判定要求退出，本轮不准备")
             return 0
         if self.state == "battle_ready":
             self.update_state("currency_main")
