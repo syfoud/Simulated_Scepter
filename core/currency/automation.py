@@ -386,11 +386,27 @@ class SimulatedCurrency(CurrencyUtils):
             self.loop ()
         CUS_LOGGER.info ("已停止任务")
 
+    def game_is_foreground (self):
+        """游戏窗口是不是前台窗口。不是的话截到的是桌面/别的程序，识别全是乱的。"""
+        try:
+            import win32gui
+
+            return bool(self.hwnd) and win32gui.GetForegroundWindow() == self.hwnd
+        except Exception:
+            return True   # 判断不了就别挡着跑
+
     def loop (self):
         CUS_LOGGER.info ("开始OCR识别，等待触发文字")
         silent_time = time.time ()
         shot_saved = False
         while not self._stop:
+            # 游戏被切到后台时，截图抓到的是桌面或别的窗口，动作会点到乱七八糟的地方
+            if not self.game_is_foreground():
+                CUS_LOGGER.warning("游戏窗口不在前台，先把切回来再继续（不执行任何动作）")
+                set_forground()
+                time.sleep(1)
+                continue
+
             self.ts.forward (self.get_screen())
             name, _ = self.run_static ()
             if name:
