@@ -6,7 +6,7 @@ import pyautogui
 import win32api
 import win32con
 
-from tool.background_input import BackgroundKeyboard, BackgroundMouse
+from tool.background_input import BackgroundKeyboard, BackgroundMouse, WindowActivation
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
@@ -220,18 +220,30 @@ class KeyMouseManager:
         self.y0 = y1-yy
 
     def set_background_keyboard(self, hwnd=None):
-        """切换后台键盘通道。
+        """切换后台输入通道（键盘 + 鼠标）。
+
+        两个通道共用同一份窗口激活状态：分开记账会互相拆台——键盘抬键撤销激活后，
+        鼠标还以为自己是激活的，接着的点击就被游戏丢弃。
 
         Args:
-            hwnd: 游戏窗口句柄；传入后按键改投窗口消息，None 表示恢复前台按键。
+            hwnd: 游戏窗口句柄；传入后按键/点击改投窗口消息，None 表示恢复前台注入。
         """
+        self.release_background_input()
+        if not hwnd:
+            return
+        activation = WindowActivation(hwnd)
+        self.background = BackgroundKeyboard(hwnd, activation)
+        # 鼠标通道跟键盘一起切换：后台模式下点击/拖动改投窗口消息
+        self.background_mouse = BackgroundMouse(hwnd, activation)
+
+    def release_background_input(self):
+        """释放后台输入：抬起按键、撤销伪造激活、归还焦点。"""
         if self.background is not None:
             self.background.release_all()
         if self.background_mouse is not None:
             self.background_mouse.release()
-        self.background = BackgroundKeyboard(hwnd) if hwnd else None
-        # 鼠标通道跟键盘一起切换：后台模式下点击/拖动改投窗口消息
-        self.background_mouse = BackgroundMouse(hwnd) if hwnd else None
+        self.background = None
+        self.background_mouse = None
 
     def start(self):
         """
@@ -258,9 +270,8 @@ class KeyMouseManager:
                 self.operation_queue.clear()  # 清空队列中的所有操作
                 self.operation_queue.append("stop")
             self.worker_thread.join()
-        # 后台键盘不会随线程自动释放：停止时补发抬起消息，避免游戏里按键一直按着
-        if self.background is not None:
-            self.background.release_all()
+        # 后台输入不会随线程自动释放：停止时抬起按键、撤销伪造激活并归还焦点
+        self.release_background_input()
 
     def clean(self):
         """
