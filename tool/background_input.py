@@ -99,13 +99,22 @@ class WindowActivation:
         """游戏窗口当前是否为前台窗口。"""
         return win32gui.GetForegroundWindow() == self.hwnd
 
-    def activate(self):
-        """让游戏窗口认为自己是激活状态；窗口本来就是前台时不伪造激活。"""
-        if self.activated:
+    def activate(self, force=False):
+        """让游戏窗口认为自己是激活状态。
+
+        Args:
+            force: 即使已经记过"已激活"也重新发一次。鼠标通道必须用 force——
+                用户中途切过窗口后，游戏其实已经失活，但缓存还写着 True，
+                不重发的话投递的点击会被直接丢掉（正是"点了没反应"的现场）。
+        """
+        if self.activated and not force:
             return
-        self.previous_foreground = win32gui.GetForegroundWindow()
-        if self.previous_foreground == self.hwnd:
+        current = win32gui.GetForegroundWindow()
+        if current == self.hwnd:
+            self.activated = True
             return
+        if not self.previous_foreground:
+            self.previous_foreground = current
         try:
             win32gui.PostMessage(self.hwnd, win32con.WM_ACTIVATE, win32con.WA_ACTIVE, 0)
         except Exception as error:      # 窗口已关闭 / 句柄失效
@@ -307,14 +316,21 @@ class BackgroundMouse:
             _warn_once("后台鼠标:忙", "光标一直有动作，跳过本次点击（避免把用户的鼠标抢走）")
             return False
         original = win32api.GetCursorPos()
-        self.activation.activate()
+        self.activation.activate(force=True)
         try:
             # 激活刚发出去时游戏还没处理完焦点变化，立刻点会被丢掉
             sleep(self.ACTIVATE_SETTLE)
-            win32api.SetCursorPos((int(screen_point[0]), int(screen_point[1])))
-            sleep(0.02)
+            target = (int(screen_point[0]), int(screen_point[1]))
+            win32api.SetCursorPos(target)
             client = self.to_client(screen_point)
             self._post(WM_MOUSEMOVE, 0, client)
+            # 发按下消息前再对齐一次光标：游戏按真实光标位置判定落点，
+            # 用户在这几十毫秒里挪了鼠标就会点歪
+            actual = win32api.GetCursorPos()
+            if (abs(actual[0] - target[0]) > self.IDLE_TOLERANCE
+                    or abs(actual[1] - target[1]) > self.IDLE_TOLERANCE):
+                _warn_once("后台鼠标:被挪开", "点击前光标被移开（用户正在操作鼠标），本次点击可能落空")
+                win32api.SetCursorPos(target)
             self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
             sleep(0.05)
             self._post(WM_LBUTTONUP, 0, client)
