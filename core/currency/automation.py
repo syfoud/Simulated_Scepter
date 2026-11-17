@@ -1715,6 +1715,12 @@ class SimulatedCurrency(CurrencyUtils):
         选项区文字有没有变，没变就换下一个候选。
         """
         self.ts.forward(self.get_screen())
+        # 面板打开时可能已经默认选中了某一项（右侧直接有「确认」）：
+        # 这时候再点选项反而会取消选中，必须直接去确认。
+        if self.option_confirmed():
+            CUS_LOGGER.debug("茶歇选项已处于选中状态，直接等确认")
+            return 1
+
         options = [
             item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX, redundancy=30)
             if item["raw_text"].strip()

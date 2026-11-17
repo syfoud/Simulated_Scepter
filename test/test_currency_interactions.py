@@ -536,7 +536,8 @@ class CurrencyInteractionTests(unittest.TestCase):
             {"raw_text": "第二个选项", "box": [1151, 620, 1423, 650]},
             {"raw_text": "第一个选项", "box": [1151, 460, 1423, 490]},
         ]
-        currency.option_confirmed = Mock(return_value=True)   # 点中后会出现「确认」
+        # 第一次问是"进来时是否已选中"（否），之后问是"这一点有没有选中"（是）
+        currency.option_confirmed = Mock(side_effect=[False, True])
         currency.click_box = Mock()
         manager.reset_mock()
 
@@ -554,7 +555,7 @@ class CurrencyInteractionTests(unittest.TestCase):
             {"raw_text": "效果说明", "box": [1151, 660, 1423, 690]},
             {"raw_text": "选项标题", "box": [1151, 600, 1423, 630]},
         ]
-        currency.option_confirmed = Mock(side_effect=[False, True])
+        currency.option_confirmed = Mock(side_effect=[False, False, True])
         currency.click_box = Mock()
         manager.reset_mock()
 
@@ -1262,6 +1263,23 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.prepare_battle()
 
         self.assertFalse(currency.exit_requested)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_tea_option_already_selected_goes_straight_to_confirm(self, manager):
+        """面板打开时若已默认选中（右侧已有「确认」），不能再点选项，那会取消选中。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "见者有份！", "box": [1149, 583, 1263, 612]},
+        ]
+        currency.option_confirmed = Mock(return_value=True)
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_tea_break_option(), 1)
+
+        currency.click_box.assert_not_called()
 
 
 if __name__ == "__main__":
