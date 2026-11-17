@@ -235,7 +235,7 @@ class BackgroundKeyboard:
 
 _warned = set()
 # 排查「点了没反应」时打开：每次点击都记录落点、激活状态与消息送达结果
-_VERBOSE_CLICK = False
+_VERBOSE_CLICK = True
 
 
 def _warn_once(key, message):
