@@ -1710,41 +1710,23 @@ class SimulatedCurrency(CurrencyUtils):
         except Exception:
             return False
 
-    def wait_option_confirmed (self, timeout=None, step=None):
-        """点完选项后轮询等「确认」按钮出现。
-
-        按钮是选中后才渲染出来的，点完立刻查会读到空（实测日志里一直是「响应：空」），
-        于是以为没点中、又去点下一个候选。
-        """
-        timeout = self.TEA_CONFIRM_TIMEOUT if timeout is None else timeout
-        step = self.TEA_CONFIRM_STEP if step is None else step
-        deadline = time.monotonic() + timeout
-        for _ in range(int(timeout / step) + 1):
-            if self.option_confirmed():
-                return True
-            time.sleep(step)
-            self.get_screen()
-        return False
-
     def choose_tea_break_option (self):
-        """茶歇对话的选项：从上往下试，点中能推进的那个。
+        """茶歇对话的选项：轮流点候选，选中后由「茶歇-确认奖励」去点确认。
 
-        不同剧情的选项版式不一样：标题行可以点，下面那行效果说明点了没反应；
-        只靠坐标猜会点空（面板原地不动、每轮重复点同一个位置）。所以点一次就确认一次
-        选项区文字有没有变，没变就换下一个候选。
+        两个坑决定了不能用"点完立刻验证"的写法：
+
+        1. 选项区同时混着台词气泡和效果说明，前者点了没反应、后者只有标题行能点；
+        2. 后台模式下窗口捕获的画面会滞后一点，点完当帧读到的还是旧画面，
+           于是"确认按钮没出现"并不代表没点中。
+
+        所以这里只负责轮流点不同候选（避免死盯同一条无效文本），
+        真正的推进交给「茶歇-确认奖励」：它在后续帧看到「确认」就会去点。
         """
         self.ts.forward(self.get_screen())
-        # 面板打开时可能已经默认选中了某一项（右侧直接有「确认」）：
-        # 这时候再点选项反而会取消选中，必须直接去确认。
-        if self.option_confirmed():
-            CUS_LOGGER.debug("茶歇选项已处于选中状态，直接等确认")
-            return 1
-
         options = [
             item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX, redundancy=30)
             if item["raw_text"].strip()
             and "返回" not in item["raw_text"]
-            # 台词整句很长，选项标题和效果说明都短得多
             and len(item["raw_text"].strip()) <= 15
         ]
         if not options:
@@ -1752,16 +1734,15 @@ class SimulatedCurrency(CurrencyUtils):
             return 0
 
         options.sort(key=lambda item: item["box"][1])
-        for item in options:
-            CUS_LOGGER.info("尝试茶歇选项：%s", item["raw_text"])
-            self.click_box(item["box"])
-            key_mouse_manager.wait()
-            self.ts.forward(self.get_screen())
-            if self.wait_option_confirmed():
-                CUS_LOGGER.info("已选中茶歇选项：%s（等待确认）", item["raw_text"])
-                return 1
-        CUS_LOGGER.warning("所有候选都点了但没出现「确认」，等下一轮")
-        return 0
+        attempt = getattr(self, "tea_option_attempt", 0)
+        item = options[attempt % len(options)]
+        self.tea_option_attempt = attempt + 1
+        if self.tea_option_attempt >= len(options) * 2:
+            self.tea_option_attempt = 0
+        CUS_LOGGER.info("尝试茶歇选项（第 %d 次）：%s", attempt + 1, item["raw_text"])
+        self.click_box(item["box"])
+        key_mouse_manager.wait()
+        return 1
 
     EXIT_MAX_ATTEMPTS = 3
     EXIT_ACTION_NAME = "开始退出"
