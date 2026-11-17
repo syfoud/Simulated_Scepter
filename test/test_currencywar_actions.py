@@ -131,7 +131,8 @@ class CurrencyWarActionsTest(unittest.TestCase):
         self.assertNotIn("condition", by_name["出战前准备"]["trigger"])
         self.assertEqual(by_name["出战前准备"]["actions"], ["prepare_battle"])
         self.assertEqual(by_name["1-1主界面进战"]["trigger"]["condition"], "1-1")
-        self.assertEqual(by_name["出战人数"]["trigger"]["condition"], "startbattle")
+        # 主角等流程走完后状态可能已经不是 startbattle，带门槛会导致提示框在屏幕上却永不触发
+        self.assertNotIn("condition", by_name["出战人数"]["trigger"])
 
     def test_peace_token_skip_action_handles_both_remaining_counts(self):
         skip_action = next(

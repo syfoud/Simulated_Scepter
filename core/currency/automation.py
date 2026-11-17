@@ -1690,6 +1690,11 @@ class SimulatedCurrency(CurrencyUtils):
         # 主循环每帧都刷过截图，这里直接用当前帧（自己抓会依赖 _stop 等运行时状态）
         if self.click_text(text="选择一个角色获得主角光环",
                            box=self.PROTAGONIST_TITLE_BOX, click=False, allow_fail=True):
+            # 刚选完的这几秒里不要再点开面板：面板标题那条动作会立刻把它重新打开，
+            # 结果就是每次都白等一轮（日志里连着 25 次「面板还没出现」）
+            if time.monotonic() - getattr(self, "protagonist_done_at", 0.0) < 3.0:
+                CUS_LOGGER.debug("主角刚选完，跳过这次面板处理")
+                return 1
             # 面板已经开着：可能是上一轮点的按钮生效了，也可能是上一轮拖拽没成功。
             # 累计失败次数，用来决定要不要换起点。
             self.protagonist_drag_failures = getattr(self, "protagonist_drag_failures", 0) + 1
@@ -1756,6 +1761,7 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.wait()
         self.protagonist_picks = getattr(self, "protagonist_picks", 0) + 1
         self.protagonist_drag_failures = 0
+        self.protagonist_done_at = time.monotonic()
         CUS_LOGGER.info("主角已选择（本局第 %d 次）", self.protagonist_picks)
         return 1
 

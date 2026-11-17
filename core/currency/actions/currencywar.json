@@ -254,8 +254,7 @@
                 617
             ],
             "interval": 2,
-            "redundancy": 30,
-            "condition": "startbattle"
+            "redundancy": 30
         },
         "actions": [
             "confirm_battle_short_handed",
