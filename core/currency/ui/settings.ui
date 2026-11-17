@@ -25,12 +25,81 @@
      <item row="1" column="1">
       <widget class="QComboBox" name="Currency_prior_exit_plane_combo" />
      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="Currency_gamemode_label">
+        <property name="text">
+         <string>对局类型（刷开局用标准博弈，少一次标签点击）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="Currency_gamemode_combo" />
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="Currency_difficulty_mode_label">
+        <property name="text">
+         <string>难度选择方式（A8-20 开局带词缀）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QComboBox" name="Currency_difficulty_mode_combo" />
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="Currency_affix_targets_label">
+        <property name="text">
+         <string>目标词缀（空格或顿号分隔，可多选；留空表示只统计）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <layout class="QHBoxLayout" name="Currency_affix_targets_layout">
+        <item>
+         <widget class="QLineEdit" name="Currency_affix_targets_edit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+          <property name="placeholderText">
+           <string>点击右侧「选择」勾选词缀（留空 = 只统计）</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="Currency_affix_targets_btn">
+          <property name="text">
+           <string>选择…</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="Currency_max_runs_label">
+        <property name="text">
+         <string>开局词缀收集最大把数（0 = 不限）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QSpinBox" name="Currency_max_runs_spin">
+        <property name="maximum">
+         <number>100000</number>
+        </property>
+       </widget>
+      </item>
     </layout>
    </item>
    <item>
     <widget class="QCheckBox" name="Currency_exit_if_no_prior_checkbox">
      <property name="text">
       <string>未刷出必选投资环境时立即退出</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="Currency_gather_mode_checkbox">
+     <property name="text">
+      <string>开局词缀收集模式（走到词缀界面就记录并重开）</string>
      </property>
     </widget>
    </item>
