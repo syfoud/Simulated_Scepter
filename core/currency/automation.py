@@ -177,6 +177,10 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
     PROTAGONIST_BANNER_BOX = [740, 775, 1180, 830]
     BROKEN_PANEL_ESC_GAP = 1.2
+    # 「开拓商店」：标题在两张版式里都有；点击目标是那张「星穹列车，跃迁！」卡片
+    PIONEER_TITLE_BOX = [890, 50, 1180, 105]
+    PIONEER_CARD_BOX = [850, 350, 1150, 400]
+    PIONEER_STEP_GAP = 0.9
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
     # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
@@ -1684,6 +1688,19 @@ class SimulatedCurrency(CurrencyUtils):
     # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
     PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
     PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
+
+    def close_pioneer_shop (self):
+        """关掉「开拓商店」面板：先点「星穹列车，跃迁！」这张卡，再按 ESC 回备战。"""
+        self.get_screen()
+        CUS_LOGGER.info("发现「开拓商店」面板，先处理掉再继续")
+        if self.click_text(text="星穹列车", box=self.PIONEER_CARD_BOX,
+                           click=True, allow_fail=True):
+            key_mouse_manager.wait()
+            time.sleep(self.PIONEER_STEP_GAP)
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("已关闭「开拓商店」")
+        return 1
 
     def recover_broken_protagonist_panel (self):
         """游戏偶发 bug：商店与「选择主角」界面叠在一起时，先 ESC 关商店再 ESC 重开。

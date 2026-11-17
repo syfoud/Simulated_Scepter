@@ -1,5 +1,22 @@
 [
     {
+        "name": "关闭开拓商店",
+        "trigger": {
+            "text": "开拓商店",
+            "box": [
+                890,
+                50,
+                1180,
+                105
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "close_pioneer_shop"
+        ]
+    },
+    {
         "name": "修复重叠界面",
         "trigger": {
             "text": "尚未选择主角角色和光环",
