@@ -1651,7 +1651,9 @@ class SimulatedCurrency(CurrencyUtils):
     TEA_BLANK_BOX = [1400, 895, 1585, 945]     # 对话里的「点击空白处继续」（右侧，和别处不同位）
     TEA_BLANK_POSITION = (1491, 920)
     TEA_BACK_BOX = [1140, 705, 1215, 750]      # 选项列表里的「返回」（用来判定"这是选项界面"）
-    TEA_OPTIONS_BOX = [980, 420, 1700, 700]    # 选项正文区域（在「返回」上方）
+    # 选项区域：上边界要躲开角色台词气泡（实测气泡在 y423~450，会被误当成选项），
+    # 下边界要躲开「返回」（实测 y711~742）
+    TEA_OPTIONS_BOX = [1000, 480, 1700, 700]
     TEA_CONFIRM_BOX = [1725, 580, 1800, 630]   # 选项右侧的「确认」
     TEA_REWARD_BOX = [860, 175, 1060, 220]     # 「领取茶歇奖励」
     TEA_OPEN_POSITION = (961, 983)             # 「开启」
@@ -1665,7 +1667,10 @@ class SimulatedCurrency(CurrencyUtils):
         self.ts.forward(self.get_screen())
         options = [
             item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX)
-            if item["raw_text"].strip() and "返回" not in item["raw_text"]
+            if item["raw_text"].strip()
+            and "返回" not in item["raw_text"]
+            # 选项标题很短，长的都是下面的效果说明，不能点
+            and len(item["raw_text"].strip()) <= 15
         ]
         if not options:
             CUS_LOGGER.warning("茶歇选项没识别到，等下一轮")
