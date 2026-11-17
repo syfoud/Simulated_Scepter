@@ -80,26 +80,18 @@ def key_lparam(scan, extended, key_up, sys_key=False):
     return lparam
 
 
-class BackgroundKeyboard:
-    """向游戏窗口投递键盘消息的后台输入通道。
+class WindowActivation:
+    """伪造 / 撤销游戏窗口的激活状态。
 
-    Args:
-        hwnd: 游戏窗口句柄。
+    后台通道投递的键鼠消息，游戏只有在「自认为激活」时才会处理；窗口被别的程序盖住后
+    它会认为自己是失活状态，消息就石沉大海。所以每批操作前补一条 WM_ACTIVATE(1)，
+    结束后补 WM_ACTIVATE(0)；窗口本来就是前台时不伪造，避免干扰真实焦点。
     """
 
     def __init__(self, hwnd):
         self.hwnd = hwnd
-        # 是否已经给游戏发过伪造激活；窗口本来就是前台时保持 False
         self.activated = False
-        # 伪造激活前的前台窗口，用于发现游戏借机抢到前台时还原
         self.previous_foreground = 0
-        # 当前仍处于按下状态的键名
-        self.held = set()
-
-    @staticmethod
-    def supports(key):
-        """判断后台通道是否支持该物理键名。"""
-        return key in _KEYS
 
     def game_is_foreground(self):
         """游戏窗口当前是否为前台窗口。"""
@@ -112,20 +104,68 @@ class BackgroundKeyboard:
         self.previous_foreground = win32gui.GetForegroundWindow()
         if self.previous_foreground == self.hwnd:
             return
-        win32gui.PostMessage(self.hwnd, win32con.WM_ACTIVATE, win32con.WA_ACTIVE, 0)
+        try:
+            win32gui.PostMessage(self.hwnd, win32con.WM_ACTIVATE, win32con.WA_ACTIVE, 0)
+        except Exception as error:      # 窗口已关闭 / 句柄失效
+            CUS_LOGGER.warning("伪造激活失败（窗口可能已关闭）：%s", error)
+            return
         self.activated = True
 
     def deactivate(self):
         """撤销伪造激活；游戏借机抢到前台时把焦点还原到原来的窗口。"""
         if not self.activated:
             return
-        win32gui.PostMessage(self.hwnd, win32con.WM_ACTIVATE, win32con.WA_INACTIVE, 0)
+        try:
+            win32gui.PostMessage(self.hwnd, win32con.WM_ACTIVATE, win32con.WA_INACTIVE, 0)
+        except Exception as error:
+            CUS_LOGGER.warning("撤销伪造激活失败：%s", error)
         self.activated = False
         if self.previous_foreground and self.game_is_foreground():
             try:
                 win32gui.SetForegroundWindow(self.previous_foreground)
             except Exception as error:  # 系统可能拒绝后台进程切换前台窗口
-                CUS_LOGGER.warning("后台按键结束后游戏仍在前台，恢复原窗口失败：%s", error)
+                CUS_LOGGER.warning("后台操作结束后游戏仍在前台，恢复原窗口失败：%s", error)
+
+
+class BackgroundKeyboard:
+    """向游戏窗口投递键盘消息的后台输入通道。
+
+    Args:
+        hwnd: 游戏窗口句柄。
+    """
+
+    def __init__(self, hwnd):
+        self.hwnd = hwnd
+        self.activation = WindowActivation(hwnd)
+        # 当前仍处于按下状态的键名
+        self.held = set()
+
+    @property
+    def activated(self):
+        """是否已经给游戏发过伪造激活（兼容旧调用方的直接读取）。"""
+        return self.activation.activated
+
+    @property
+    def previous_foreground(self):
+        """伪造激活前的前台窗口句柄。"""
+        return self.activation.previous_foreground
+
+    @staticmethod
+    def supports(key):
+        """判断后台通道是否支持该物理键名。"""
+        return key in _KEYS
+
+    def game_is_foreground(self):
+        """游戏窗口当前是否为前台窗口。"""
+        return self.activation.game_is_foreground()
+
+    def activate(self):
+        """让游戏窗口认为自己是激活状态。"""
+        self.activation.activate()
+
+    def deactivate(self):
+        """撤销伪造激活，必要时把焦点还原。"""
+        self.activation.deactivate()
 
     def key_down(self, key):
         """按下一个键（保持按下，直到 key_up 或 release_all）。"""
@@ -211,10 +251,11 @@ class BackgroundMouse:
 
     def __init__(self, hwnd):
         self.hwnd = hwnd
+        self.activation = WindowActivation(hwnd)
 
     def game_is_foreground(self):
         """游戏窗口当前是否为前台窗口。"""
-        return win32gui.GetForegroundWindow() == self.hwnd
+        return self.activation.game_is_foreground()
 
     def client_origin(self):
         """客户区左上角在屏幕上的坐标。"""
@@ -243,6 +284,7 @@ class BackgroundMouse:
         """在屏幕坐标处点一下（借用光标后归还）。"""
         self.wait_cursor_idle()
         original = win32api.GetCursorPos()
+        self.activation.activate()
         try:
             win32api.SetCursorPos((int(screen_point[0]), int(screen_point[1])))
             sleep(0.02)
@@ -253,6 +295,7 @@ class BackgroundMouse:
             self._post(WM_LBUTTONUP, 0, client)
         finally:
             win32api.SetCursorPos(original)
+            self.activation.deactivate()
 
     def drag(self, start, end, duration=0.4, sleep=time.sleep):
         """从 start 拖到 end（屏幕坐标）；按 60Hz 步进投递移动消息。"""
@@ -260,6 +303,7 @@ class BackgroundMouse:
         original = win32api.GetCursorPos()
         steps = max(8, int(duration * self.MOVE_STEPS_PER_SECOND))
         step_sleep = duration / steps
+        self.activation.activate()
         try:
             win32api.SetCursorPos((int(start[0]), int(start[1])))
             sleep(0.08)
@@ -276,6 +320,7 @@ class BackgroundMouse:
             self._post(WM_LBUTTONUP, 0, self.to_client(end))
         finally:
             win32api.SetCursorPos(original)
+            self.activation.deactivate()
 
     def _post(self, message, wparam, client):
         """带超时地投递一条鼠标消息；窗口卡住时放弃这一条，不让线程挂死。"""
