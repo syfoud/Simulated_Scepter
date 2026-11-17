@@ -278,7 +278,7 @@ class BackgroundMouse:
     # 立刻点会被丢掉（实测表现为“偶尔点得动、多数点不动”）
     ACTIVATE_SETTLE = 0.12
     IDLE_TOLERANCE = 3        # 像素：小于这个位移认为光标是静止的
-    IDLE_TIMEOUT = 1.5        # 秒：等用户停手最多等这么久
+    IDLE_TIMEOUT = 0.4        # 秒：等用户停手最多等这么久（等不到也照常点）
 
     def __init__(self, hwnd, activation=None):
         self.hwnd = hwnd
@@ -314,9 +314,9 @@ class BackgroundMouse:
     def click(self, screen_point, sleep=time.sleep):
         """在屏幕坐标处点一下（借用光标后归还）。"""
         if not self.wait_cursor_idle():
-            # 用户一直在动鼠标：这次不抢，交回调用方下一轮再试
-            _warn_once("后台鼠标:忙", "光标一直有动作，跳过本次点击（避免把用户的鼠标抢走）")
-            return False
+            # 光标一直在动（可能是用户，也可能是游戏自己抓着光标）：
+            # 不能因此整个跳过，否则就成了"后台点击全部被跳过"、什么界面都推不动
+            _warn_once("后台鼠标:忙", "光标一直有动作，仍按落点点击（可能打断用户的鼠标操作）")
         original = win32api.GetCursorPos()
         self.activation.activate(force=True)
         try:

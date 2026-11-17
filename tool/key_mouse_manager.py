@@ -5,6 +5,7 @@ from collections import deque
 import pyautogui
 import win32api
 import win32con
+import win32gui
 
 from tool.background_input import BackgroundKeyboard, BackgroundMouse, WindowActivation
 from tool.log import CUS_LOGGER
@@ -623,6 +624,36 @@ class KeyMouseManager:
             'force': force
         }
         self._enqueue(operation)
+
+    def click_point_foreground(self, x, y):
+        """兜底点击：把游戏短暂切到前台，用真实输入点一下，再把焦点还回去。
+
+        后台消息在个别界面会整片失效（游戏卡在"半激活"状态时连真人点击都没反应），
+        这时只有真实激活才能把游戏和系统重新对齐。代价是窗口会闪一下。
+        """
+        point = self._game_point("前台兜底点击", x, y)
+        if point is None:
+            return False
+        hwnd = self.background.hwnd if self.background is not None else None
+        if not hwnd:
+            return False
+        previous = win32gui.GetForegroundWindow()
+        try:
+            win32gui.SetForegroundWindow(hwnd)
+        except Exception as error:
+            CUS_LOGGER.warning("切前台失败，放弃这次兜底点击：%s", error)
+            return False
+        time.sleep(0.25)                      # 等窗口真的拿到焦点
+        win32api.SetCursorPos(point)
+        pyautogui.click()
+        time.sleep(0.1)
+        try:
+            if previous and previous != hwnd:
+                win32gui.SetForegroundWindow(previous)
+        except Exception:
+            pass
+        CUS_LOGGER.info("前台兜底点击 (%s, %s) 已执行", x, y)
+        return True
 
     def click_point(self, x, y, force=False, box=None):
         """
