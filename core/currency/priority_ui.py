@@ -1,26 +1,42 @@
+"""投资环境优先级：72 个环境 × 5 个级别的勾选表格。
 
-from PyQt5.QtCore import QSize, Qt
+比原来的拖拽列表省事：环境总量只有 72 个（策略有 298 个），一屏表格就能看全，
+勾选即可，不需要拖来拖去。同一行只能勾一个级别（勾新的会自动取消同行的旧勾）。
+"""
+
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QAbstractItemView,
     QDialog,
-    QHBoxLayout,
+    QDialogButtonBox,
+    QHeaderView,
     QLabel,
     QListWidget,
-    QListWidgetItem,
     QMessageBox,
-    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
 )
 
-from core.currency.settings import (
-    load_currency_settings,
-    load_default_priority,
-    save_currency_settings,
-)
+from core.currency.envirs import ENVIR_NAMES
+from core.currency.settings import PRIORITY_KEYS, load_currency_settings, save_currency_settings
 from tool.storage import config_path
+
+LEVEL_TITLES = {
+    "prior_envir": "必选",
+    "envir_1": "优先级 1",
+    "envir_2": "优先级 2",
+    "envir_3": "优先级 3",
+    "envir_4": "优先级 4",
+}
+
+# 彩蛋：优先级 0 的位置一直是这句话，别删
+EGG_TEXT = "水梦梦天下第一可爱！"
 
 
 class CurrencyPriorityListWidget(QListWidget):
+    """可拖拽排序的列表（上阵角色优先级等仍在用；环境优先级已改成勾选表格）。"""
+
     def __init__(self):
         super().__init__()
         self.drop_indicator = None
@@ -163,224 +179,113 @@ class CurrencyPriorityListWidget(QListWidget):
         painter.drawLine(x, top, x, bottom)
 
 
-class Priority0ListWidget(QListWidget):
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-
-        viewport = self.viewport()
-        assert viewport is not None
-
-        width = viewport.width()
-        self.setGridSize(QSize(width, 32))
-
-        if self.count():
-            item = self.item(0)
-            assert item is not None
-            item.setSizeHint(QSize(width, 32))
-
-
 class CurrencyPriorityDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-
         self.setWindowTitle("自定义投资环境优先级")
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowContextHelpButtonHint
-        )
-        self.resize(1050, 850)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        if parent is not None:
+            self.setStyleSheet(parent.styleSheet())
+            self.setFont(parent.font())
 
-        self.priority_lists = []
+        layout = QVBoxLayout(self)
+        hint = QLabel("勾选每个环境的级别（同一环境只能属于一个级别）；不勾表示不参与优先级。")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
 
-        main_layout = QVBoxLayout(self)
+        self.table = QTableWidget(len(ENVIR_NAMES) + 1, 1 + len(PRIORITY_KEYS), self)
+        self.table.setHorizontalHeaderLabels(
+            ["投资环境"] + [LEVEL_TITLES[key] for key in PRIORITY_KEYS])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
 
-        sections = [
-            ("必选环境", "prior_envir"),
-        ]
+        for row, name in enumerate(ENVIR_NAMES):
+            title = QTableWidgetItem(name)
+            title.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.table.setItem(row, 0, title)
+            for column in range(1, self.table.columnCount()):
+                cell = QTableWidgetItem()
+                cell.setFlags(
+                    Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+                cell.setCheckState(Qt.Unchecked)
+                self.table.setItem(row, column, cell)
 
-        for title, key in sections:
-            label = QLabel(title)
-            label.setAlignment(Qt.AlignCenter)
-            main_layout.addWidget(label)
+        # 最后一行是彩蛋（原来挂在「优先级 0」那一行，挪进表格最底部，照旧别删）
+        egg_row = len(ENVIR_NAMES)
+        egg = QTableWidgetItem(EGG_TEXT)
+        egg.setFlags(Qt.ItemIsEnabled)
+        egg.setTextAlignment(Qt.AlignCenter)
+        self.table.setItem(egg_row, 0, egg)
+        self.table.setSpan(egg_row, 0, 1, self.table.columnCount())
 
-            list_widget = self.create_priority_list()
-            list_widget.priority_key = key
-            self.priority_lists.append(list_widget)
-            main_layout.addWidget(list_widget)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        for column in range(1, self.table.columnCount()):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        self.table.itemChanged.connect(self.on_item_changed)
+        layout.addWidget(self.table)
 
-        priority_0_label = QLabel("优先级0")
-        priority_0_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(priority_0_label)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.button(QDialogButtonBox.Save).setText("保存")
+        buttons.button(QDialogButtonBox.Cancel).setText("取消")
+        buttons.accepted.connect(self.save_current)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
 
-        priority_0_list = self.create_priority_0_list()
-        main_layout.addWidget(priority_0_list)
-
-        sections = [
-            ("优先级1环境", "envir_1"),
-            ("优先级2环境", "envir_2"),
-            ("优先级3环境", "envir_3"),
-            ("优先级4环境", "envir_4"),
-        ]
-
-        for title, key in sections:
-            label = QLabel(title)
-            label.setAlignment(Qt.AlignCenter)
-            main_layout.addWidget(label)
-
-            list_widget = self.create_priority_list()
-            list_widget.priority_key = key
-            self.priority_lists.append(list_widget)
-            main_layout.addWidget(list_widget)
-
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        self.restore_default_button = QPushButton("恢复默认")
-        self.save_button = QPushButton("保存")
-
-        button_layout.addWidget(self.restore_default_button)
-        button_layout.addWidget(self.save_button)
-
-        button_layout.addStretch()
-        main_layout.addLayout(button_layout)
-
-        self.restore_default_button.clicked.connect(
-            self.restore_default
-        )
-        self.save_button.clicked.connect(
-            self.save_current
-        )
-
+        available = self.screen().availableGeometry()
+        self.resize(min(860, available.width() - 80), min(880, available.height() - 100))
         self.load_current()
 
-    @staticmethod
-    def create_priority_list():
-        list_widget = CurrencyPriorityListWidget()
-
-        list_widget.setViewMode(QListWidget.IconMode)
-        list_widget.setFlow(QListWidget.LeftToRight)
-        list_widget.setWrapping(True)
-        list_widget.setResizeMode(QListWidget.Adjust)
-
-        list_widget.setDragEnabled(True)
-        list_widget.setAcceptDrops(True)
-        list_widget.setDropIndicatorShown(False)
-        list_widget.setDragDropMode(QAbstractItemView.DragDrop)
-        list_widget.setDefaultDropAction(Qt.MoveAction)
-
-        list_widget.setSelectionMode(
-            QAbstractItemView.SingleSelection
-        )
-        list_widget.setEditTriggers(
-            QAbstractItemView.NoEditTriggers
-        )
-
-        list_widget.setSpacing(5)
-        list_widget.setGridSize(QSize(175, 38))
-
-        list_widget.setMinimumHeight(75)
-        list_widget.setMaximumHeight(150)
-
-        return list_widget
-
-    @staticmethod
-    def create_priority_0_list():
-        list_widget = Priority0ListWidget()
-
-        list_widget.setViewMode(QListWidget.IconMode)
-        list_widget.setFlow(QListWidget.LeftToRight)
-        list_widget.setWrapping(False)
-        list_widget.setResizeMode(QListWidget.Adjust)
-
-        list_widget.setDragEnabled(False)
-        list_widget.setAcceptDrops(False)
-        list_widget.setDropIndicatorShown(False)
-        list_widget.setMovement(QListWidget.Static)
-
-        list_widget.setSelectionMode(
-            QAbstractItemView.NoSelection
-        )
-        list_widget.setEditTriggers(
-            QAbstractItemView.NoEditTriggers
-        )
-
-        list_widget.setSpacing(0)
-        list_widget.setGridSize(QSize(175, 32))
-        list_widget.setFixedHeight(42)
-
-        item = QListWidgetItem("水梦梦天下第一可爱！")
-        item.setSizeHint(QSize(0, 32))
-        item.setTextAlignment(Qt.AlignCenter)
-        item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
-
-        list_widget.addItem(item)
-
-        return list_widget
+    def on_item_changed(self, item):
+        """一行只允许勾一个级别。"""
+        if item.column() == 0 or item.checkState() != Qt.Checked:
+            return
+        for column in range(1, self.table.columnCount()):
+            if column == item.column():
+                continue
+            other = self.table.item(item.row(), column)
+            if other.checkState() == Qt.Checked:
+                other.setCheckState(Qt.Unchecked)
 
     def load_current(self):
         currency_settings = load_currency_settings(path=config_path(__file__))
-        priority = currency_settings["priority"]
-        self.populate_lists(priority)
+        self.populate(currency_settings["priority"])
 
-    def populate_lists(self, data):
-        for list_widget in self.priority_lists:
-            list_widget.clear()
-
-            for text in data.get(list_widget.priority_key, []):
-                item = QListWidgetItem(text)
-                item.setSizeHint(QSize(165, 32))
-                list_widget.addItem(item)
+    def populate(self, data):
+        rows = {name: row for row, name in enumerate(ENVIR_NAMES)}
+        self.table.blockSignals(True)
+        for row in range(len(ENVIR_NAMES)):
+            for column in range(1, self.table.columnCount()):
+                self.table.item(row, column).setCheckState(Qt.Unchecked)
+        for column, key in enumerate(PRIORITY_KEYS, start=1):
+            for name in data.get(key, []):
+                row = rows.get(name)
+                if row is None:
+                    continue  # 旧配置里的过时环境名直接丢弃
+                self.table.item(row, column).setCheckState(Qt.Checked)
+        self.table.blockSignals(False)
 
     def collect_current(self):
-        data = {}
-
-        for list_widget in self.priority_lists:
-            data[list_widget.priority_key] = [
-                list_widget.item(index).text()
-                for index in range(list_widget.count())
-            ]
-
+        """按表格行序收集，同一级别内的先后就是环境列表顺序。"""
+        data = {key: [] for key in PRIORITY_KEYS}
+        for row in range(len(ENVIR_NAMES)):
+            name = self.table.item(row, 0).text()
+            for column, key in enumerate(PRIORITY_KEYS, start=1):
+                if self.table.item(row, column).checkState() == Qt.Checked:
+                    data[key].append(name)
         return data
 
     def save_current(self):
         data = self.collect_current()
-
         try:
             currency_settings = load_currency_settings(path=config_path(__file__))
             currency_settings["priority"] = data
             save_currency_settings(currency_settings, path=config_path(__file__))
         except OSError as error:
-            QMessageBox.critical(
-                self,
-                "错误",
-                f"投资环境优先级保存失败：{error}",
-            )
+            QMessageBox.critical(self, "错误", f"投资环境优先级保存失败：{error}")
             return
 
-        QMessageBox.information(
-            self,
-            "提示",
-            "投资环境优先级已保存",
-        )
-
-    def restore_default(self):
-        default_priority = load_default_priority()
-        self.populate_lists(default_priority)
-
-        try:
-            currency_settings = load_currency_settings(path=config_path(__file__))
-            currency_settings["priority"] = default_priority
-            save_currency_settings(currency_settings, path=config_path(__file__))
-        except OSError as error:
-            QMessageBox.critical(
-                self,
-                "错误",
-                f"恢复默认失败：{error}",
-            )
-            return
-
-        QMessageBox.information(
-            self,
-            "提示",
-            "投资环境优先级已恢复默认",
-        )
-
+        QMessageBox.information(self, "提示", "投资环境优先级已保存")
+        self.accept()

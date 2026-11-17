@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from tool import EXTRA
-from tool.storage import config_path, resource_path, write_data
+from tool.storage import config_path, write_data
 
 EXIT_PLANES = (1, 2, 3)
 DEFAULT_EXIT_PLANE = 1
@@ -28,20 +28,9 @@ PRIORITY_KEYS = (
     "envir_4",
 )
 
-def load_default_priority():
-    """Load the default currency-war priority from the example config."""
-    try:
-        with open(resource_path(__file__, "config/default.json"), encoding="utf-8") as config_file:
-            values = json.load(config_file) or {}
-    except (OSError, ValueError):
-        return {}
-
-    priority = values.get("priority")
-
-    if not isinstance(priority, dict):
-        return {}
-
-    return priority
+def default_priority():
+    """默认优先级：五个级别都留空（旧的内置列表已随 4.7 环境改名作废）。"""
+    return {key: [] for key in PRIORITY_KEYS}
 
 def normalize_currency_settings(values=None):
     """Validate currency-war settings and return serializable values.
@@ -83,11 +72,9 @@ def normalize_currency_settings(values=None):
     if not isinstance(priority, dict):
         priority = {}
 
-    default_priority = load_default_priority()
-
     for key in PRIORITY_KEYS:
         if key not in priority or not isinstance(priority[key], list):
-            priority[key] = default_priority.get(key, [])
+            priority[key] = []
         priority[key] = [entry for entry in priority[key] if isinstance(entry, str)]
 
     deployment = values.get("deployment", {})
