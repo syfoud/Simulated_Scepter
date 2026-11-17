@@ -177,6 +177,8 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
     PROTAGONIST_BANNER_BOX = [740, 775, 1180, 830]
     BROKEN_PANEL_ESC_GAP = 1.2
+    # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
+    BATTLE_HUD_BOX = [0, 0, 1920, 1080]
     # 「开拓商店」：标题在两张版式里都有；点击目标是那张「星穹列车，跃迁！」卡片
     PIONEER_TITLE_BOX = [890, 50, 1180, 105]
     # 点「星穹列车，跃迁！」这一行本身（实测 [944,366,1079,396]）；
@@ -1446,6 +1448,11 @@ class SimulatedCurrency(CurrencyUtils):
 
     def start_battle(self):
         """仅在可出战状态点击出战，等待输入完成后进入战斗状态。"""
+        if self.exit_requested:
+            # 已经决定退出就别再开一局战斗：开了之后 ESC 按不动，退出流程会一直空转
+            CUS_LOGGER.info("已请求退出，跳过出战")
+            self.update_state("currency_main")
+            return 0
         # 连续点了好几次还没进战斗，说明有东西挡着：把整屏文字打出来，免得到现场猜
         self.battle_click_attempts = getattr(self, "battle_click_attempts", 0) + 1
         if self.battle_click_attempts == 3:
@@ -1589,6 +1596,11 @@ class SimulatedCurrency(CurrencyUtils):
                 self.exit_started = True
                 return 1
 
+            # 战斗中按 ESC 是无效动作：先等战斗结束（结算画面由「战斗结束后」动作负责）
+            if self.in_battle_screen():
+                CUS_LOGGER.info("还在战斗界面，等战斗结束后再退出")
+                return 0
+
             CUS_LOGGER.debug(
                 f"未检测到退出页面，第 {attempt + 1}/{max_attempts} 次按 ESC"
             )
@@ -1597,6 +1609,17 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.wait()
 
         return self._exit_failed("按 ESC 后没能进入放弃并结算页面")
+
+    def in_battle_screen (self):
+        """当前是不是还在战斗里（战斗界面按 ESC 没用，得等结算）。"""
+        for text, box in (
+            ("自动战斗", self.BATTLE_HUD_BOX),
+            ("挑战成功", self.BATTLE_HUD_BOX),
+            ("战斗结束", self.BATTLE_HUD_BOX),
+        ):
+            if self.click_text(text=text, box=box, click=False, allow_fail=True):
+                return True
+        return False
 
     def reset_battle_click_attempts (self):
         self.battle_click_attempts = 0
