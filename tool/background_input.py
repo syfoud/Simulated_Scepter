@@ -246,6 +246,9 @@ class BackgroundMouse:
     """
 
     MOVE_STEPS_PER_SECOND = 60
+    # 伪造激活后等一下再发鼠标消息：游戏处理焦点变化需要一点时间，
+    # 立刻点会被丢掉（实测表现为“偶尔点得动、多数点不动”）
+    ACTIVATE_SETTLE = 0.12
     IDLE_TOLERANCE = 3        # 像素：小于这个位移认为光标是静止的
     IDLE_TIMEOUT = 1.5        # 秒：等用户停手最多等这么久
 
@@ -286,6 +289,8 @@ class BackgroundMouse:
         original = win32api.GetCursorPos()
         self.activation.activate()
         try:
+            # 激活刚发出去时游戏还没处理完焦点变化，立刻点会被丢掉
+            sleep(self.ACTIVATE_SETTLE)
             win32api.SetCursorPos((int(screen_point[0]), int(screen_point[1])))
             sleep(0.02)
             client = self.to_client(screen_point)
@@ -295,7 +300,6 @@ class BackgroundMouse:
             self._post(WM_LBUTTONUP, 0, client)
         finally:
             win32api.SetCursorPos(original)
-            self.activation.deactivate()
 
     def drag(self, start, end, duration=0.4, sleep=time.sleep):
         """从 start 拖到 end（屏幕坐标）；按 60Hz 步进投递移动消息。"""
@@ -305,6 +309,7 @@ class BackgroundMouse:
         step_sleep = duration / steps
         self.activation.activate()
         try:
+            sleep(self.ACTIVATE_SETTLE)
             win32api.SetCursorPos((int(start[0]), int(start[1])))
             sleep(0.08)
             client = self.to_client(start)
@@ -320,7 +325,10 @@ class BackgroundMouse:
             self._post(WM_LBUTTONUP, 0, self.to_client(end))
         finally:
             win32api.SetCursorPos(original)
-            self.activation.deactivate()
+
+    def release(self):
+        """任务结束时撤销伪造激活，把焦点还给用户原来的窗口。"""
+        self.activation.deactivate()
 
     def _post(self, message, wparam, client):
         """带超时地投递一条鼠标消息；窗口卡住时放弃这一条，不让线程挂死。"""

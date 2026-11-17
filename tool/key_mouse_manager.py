@@ -227,6 +227,8 @@ class KeyMouseManager:
         """
         if self.background is not None:
             self.background.release_all()
+        if self.background_mouse is not None:
+            self.background_mouse.release()
         self.background = BackgroundKeyboard(hwnd) if hwnd else None
         # 鼠标通道跟键盘一起切换：后台模式下点击/拖动改投窗口消息
         self.background_mouse = BackgroundMouse(hwnd) if hwnd else None
