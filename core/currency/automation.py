@@ -175,7 +175,7 @@ class SimulatedCurrency(CurrencyUtils):
     FRONT_EMPTY_DISMISS = (978, 671)
     # 选主角面板：顶部标题与底部红条。商店盖住标题时只剩红条 —— 这就是重叠 bug 的签名
     PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
-    PROTAGONIST_BANNER_BOX = [740, 775, 1180, 830]
+    PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
     BROKEN_PANEL_ESC_GAP = 1.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
     BATTLE_HUD_BOX = [0, 0, 1920, 1080]
@@ -1750,7 +1750,9 @@ class SimulatedCurrency(CurrencyUtils):
         banner = self.click_text(text="尚未选择主角角色和光环",
                                  box=self.PROTAGONIST_BANNER_BOX,
                                  click=False, allow_fail=True)
-        title = self.click_text(text="选择一个角色获得主角光环",
+        # 用短词「主角光环」判断标题在不在：长句一旦 OCR 掉字就会被误判成"标题缺失"，
+        # 那会误触发 ESC 把正常的一局退出掉
+        title = self.click_text(text="主角光环",
                                 box=self.PROTAGONIST_TITLE_BOX,
                                 click=False, allow_fail=True)
         if not banner or title:
