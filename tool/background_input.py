@@ -342,6 +342,9 @@ class BackgroundMouse:
             self._post(WM_LBUTTONUP, 0, client)
         finally:
             self._restore_cursor(original, screen_point)
+            # 成对撤销：只发不撤会让游戏处于半激活状态，
+            # 连用户自己的真实点击都会被它忽略（实机复现过）
+            self.activation.deactivate()
 
     def drag(self, start, end, duration=0.4, sleep=time.sleep):
         """从 start 拖到 end（屏幕坐标）；按 60Hz 步进投递移动消息。"""
@@ -366,7 +369,8 @@ class BackgroundMouse:
                 sleep(step_sleep)
             self._post(WM_LBUTTONUP, 0, self.to_client(end))
         finally:
-            win32api.SetCursorPos(original)
+            self._restore_cursor(original, end)
+            self.activation.deactivate()
 
     def _restore_cursor(self, original, expected):
         """把光标放回原处；用户中途动过鼠标就不硬拽（那样会把他的操作打断）。"""
