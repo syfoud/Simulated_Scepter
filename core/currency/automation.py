@@ -1689,25 +1689,37 @@ class SimulatedCurrency(CurrencyUtils):
     TEA_BLANK_BOX = [1400, 895, 1585, 945]     # 对话里的「点击空白处继续」（右侧，和别处不同位）
     TEA_BLANK_POSITION = (1491, 920)
     TEA_BACK_BOX = [1140, 705, 1215, 750]      # 选项列表里的「返回」（用来判定"这是选项界面"）
-    # 选项区域：上边界要躲开角色台词气泡（实测气泡在 y423~450，会被误当成选项），
-    # 下边界要躲开「返回」（实测 y711~742）
-    TEA_OPTIONS_BOX = [1000, 480, 1700, 700]
-    TEA_CONFIRM_BOX = [1725, 580, 1800, 630]   # 选项右侧的「确认」
+    # 选项区域：上边界让开标题、下边界让开「返回」。
+    # 取「最靠下的那一项」（也就是「返回」正上方）而不是最上面那个：
+    # 台词气泡永远在选项上方，取最上面的会被气泡骗到；选项下面的效果说明点下去
+    # 同样落在该选项区块里，不影响结果。
+    TEA_OPTIONS_BOX = [1050, 380, 1750, 800]
+    # 选项右侧的「确认」：位置随选项行高变化，实测 y 580~703 都出现过
+    TEA_CONFIRM_BOX = [1500, 560, 1900, 780]
     TEA_REWARD_BOX = [860, 175, 1060, 220]     # 「领取茶歇奖励」
     TEA_OPEN_POSITION = (961, 983)             # 「开启」
 
-    def choose_tea_break_option (self):
-        """茶歇对话的选项：点最上面那一项。
+    def option_confirmed (self):
+        """选项被点中后，右侧会出现「确认」按钮；用它判断这一下有没有点中。"""
+        try:
+            return bool(self.click_text(
+                text="确认", box=self.TEA_CONFIRM_BOX, click=False, allow_fail=True))
+        except Exception:
+            return False
 
-        选项数量不固定、位置也会变，所以不写死坐标：按「返回」上方那块区域 OCR，
-        取最靠上的一个点掉（最下面的「返回」在选区之外，不会被选中）。
+    def choose_tea_break_option (self):
+        """茶歇对话的选项：从上往下试，点中能推进的那个。
+
+        不同剧情的选项版式不一样：标题行可以点，下面那行效果说明点了没反应；
+        只靠坐标猜会点空（面板原地不动、每轮重复点同一个位置）。所以点一次就确认一次
+        选项区文字有没有变，没变就换下一个候选。
         """
         self.ts.forward(self.get_screen())
         options = [
-            item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX)
+            item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX, redundancy=30)
             if item["raw_text"].strip()
             and "返回" not in item["raw_text"]
-            # 选项标题很短，长的都是下面的效果说明，不能点
+            # 台词整句很长，选项标题和效果说明都短得多
             and len(item["raw_text"].strip()) <= 15
         ]
         if not options:
@@ -1715,10 +1727,16 @@ class SimulatedCurrency(CurrencyUtils):
             return 0
 
         options.sort(key=lambda item: item["box"][1])
-        CUS_LOGGER.info("选择茶歇选项：%s", options[0]["raw_text"])
-        self.click_box(options[0]["box"])
-        key_mouse_manager.wait()
-        return 1
+        for item in options:
+            CUS_LOGGER.info("尝试茶歇选项：%s", item["raw_text"])
+            self.click_box(item["box"])
+            key_mouse_manager.wait()
+            self.ts.forward(self.get_screen())
+            if self.option_confirmed():
+                CUS_LOGGER.info("已选中茶歇选项：%s（等待确认）", item["raw_text"])
+                return 1
+        CUS_LOGGER.warning("所有候选都点了但没出现「确认」，等下一轮")
+        return 0
 
     EXIT_MAX_ATTEMPTS = 3
     EXIT_ACTION_NAME = "开始退出"
