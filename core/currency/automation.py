@@ -415,8 +415,9 @@ class SimulatedCurrency(CurrencyUtils):
         silent_time = time.time ()
         shot_saved = False
         while not self._stop:
-            # 游戏被切到后台时，截图抓到的是桌面或别的窗口，动作会点到乱七八糟的地方
-            if not self.game_is_foreground():
+            # 游戏被切到后台时，截图抓到的是桌面或别的窗口，动作会点到乱七八糟的地方。
+            # 后台模式是另一套链路（窗口捕获），这里不能抢前台
+            if not getattr(self, "background_mode", False) and not self.game_is_foreground():
                 CUS_LOGGER.warning("游戏窗口不在前台，先把切回来再继续（不执行任何动作）")
                 set_forground()
                 time.sleep(1)
