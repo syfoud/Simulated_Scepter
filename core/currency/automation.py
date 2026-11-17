@@ -589,18 +589,25 @@ class SimulatedCurrency(CurrencyUtils):
                 self.update_state("difficulty_select")
                 return 1
 
-            if want_char in text:
-                CUS_LOGGER.info("已选中「%s」", "超频博弈" if want_overclock else "标准博弈")
-                key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
-                                              box=self.BATTLE_MODE_BUTTON_BOX)
+            if "博" in text:
+                # 只要出现「博」就说明在模式页（OCR 会把「博弈」读成「博到/博弃/博奔」），
+                # 这时才敢点左侧模式卡；入口页和难度页都不会有这个字
+                if want_char in text:
+                    CUS_LOGGER.info("已选中「%s」", "超频博弈" if want_overclock else "标准博弈")
+                    key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
+                                                  box=self.BATTLE_MODE_BUTTON_BOX)
+                    key_mouse_manager.wait()
+                    self.update_state("difficulty_select")
+                    return 1
+                CUS_LOGGER.info("切换到「%s」（第 %d 次）",
+                                "超频博弈" if want_overclock else "标准博弈", attempt + 1)
+                key_mouse_manager.click_point(*card)
                 key_mouse_manager.wait()
-                self.update_state("difficulty_select")
-                return 1
+                continue
 
-            CUS_LOGGER.info("切换到「%s」（第 %d 次）",
-                            "超频博弈" if want_overclock else "标准博弈", attempt + 1)
-            key_mouse_manager.click_point(*card)
-            key_mouse_manager.wait()
+            # 按钮文字没读到或不是这几种：宁可什么都不点，也别把点打到攻略/图例上
+            CUS_LOGGER.warning("认不出右下角按钮（%r），本轮不点击任何位置", text)
+            return 0
 
         CUS_LOGGER.warning("三次都没切到目标模式，先不动，等下一轮")
         return 0

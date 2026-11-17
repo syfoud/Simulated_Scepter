@@ -1210,6 +1210,18 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertIsNone(read_count_number(recognizer, np.zeros((0, 0, 3), np.uint8)))
         recognizer.ocr_one_row.assert_not_called()
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_mode_entry_clicks_nothing_when_button_unreadable(self, manager):
+        """按钮读不到时一个坐标都不能点——盲点会点到攻略/图例上。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.gamemode = "overclock"
+        currency.update_state = Mock()
+        currency.read_mode_button = Mock(return_value="")
+        manager.reset_mock()
+
+        self.assertEqual(currency.enter_battle_mode(), 0)
+        manager.click_point.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
