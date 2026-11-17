@@ -166,6 +166,9 @@ class SimulatedCurrency(CurrencyUtils):
     BATTLE_MODE_BUTTON_BOX = [1400, 925, 1900, 1005]
     # 人数不足提示框的「确认」按钮（「本局不再提示」勾选框状态读不出来，不去碰它）
     BATTLE_FEWER_CONFIRM_BOX = [1100, 630, 1300, 700]
+    # 游戏自己弹出的「前台区域无角色」提示：它在的时候格子被盖住，空位识别不可信
+    FRONT_EMPTY_WARNING_BOX = [816, 512, 1104, 539]
+    FRONT_EMPTY_DISMISS = (978, 671)
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
     # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
@@ -1246,6 +1249,14 @@ class SimulatedCurrency(CurrencyUtils):
             "出战前准备：state=%s stop=%s exit_requested=%s 退出位面=%s",
             self.state, self._stop, self.exit_requested,
             getattr(self, "exit_plane", None))
+        # 游戏在说「前台区域无角色」时，格子被提示框盖着，空位/人数识别都不可信，
+        # 这时候判"阵容就位"会直接再点一次出战，死循环。先关掉提示，等真正的备战画面再补位。
+        if self.click_text(text="前台区域无角色", box=self.FRONT_EMPTY_WARNING_BOX,
+                           click=False, allow_fail=True):
+            CUS_LOGGER.info("游戏提示前台无角色，先关掉提示，等备战画面再补位")
+            key_mouse_manager.click_point(*self.FRONT_EMPTY_DISMISS)
+            key_mouse_manager.wait()
+            return 0
         if self._stop:
             CUS_LOGGER.debug("出战前准备：已停止，跳过")
             return 0

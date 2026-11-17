@@ -1256,6 +1256,7 @@ class CurrencyInteractionTests(unittest.TestCase):
         # 走到 read_team_count 之前就应已复位并继续
         currency.ts = Mock()
         currency.get_screen = Mock(return_value="frame")
+        currency.click_text = Mock(return_value=False)   # 屏幕上没有"前台区域无角色"提示
         currency.read_team_count = Mock(return_value=None)
         currency._maybe_exit_by_stage = Mock(return_value=False)
 
@@ -1293,6 +1294,25 @@ class CurrencyInteractionTests(unittest.TestCase):
 
         self.assertIn(call.drag_point(709, 750, 964, 441), manager.mock_calls)
         self.assertEqual(currency.protagonist_drag_failures, 0)   # 选完清零
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_prepare_battle_dismisses_front_empty_warning_first(self, manager):
+        """游戏提示「前台区域无角色」时，格子被盖住，不能据此判"阵容就位"。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "startbattle"
+        currency._stop = False
+        currency.exit_requested = False
+        currency.exit_plane = 3
+        # 提示文字命中
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.prepare_battle(), 0)
+
+        self.assertIn(call.click_point(*SimulatedCurrency.FRONT_EMPTY_DISMISS),
+                      manager.mock_calls)
+        currency.update_state = Mock()
+        currency.update_state.assert_not_called()      # 不能判成 battle_ready
 
 
 if __name__ == "__main__":
