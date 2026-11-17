@@ -314,12 +314,7 @@
             "condition": "startbattle"
         },
         "actions": [
-            {
-                "position": [
-                    1185,
-                    670
-                ]
-            },
+            "confirm_battle_short_handed",
             {
                 "set_state": "startbattle"
             }
@@ -611,14 +606,13 @@
         "trigger": {
             "text": "跳过",
             "box": [
-                1784,
-                730,
-                1852,
-                770
+                1600,
+                700,
+                1920,
+                790
             ],
-            "interval": 3,
-            "redundancy": 60,
-            "condition": "currency_main"
+            "interval": 2,
+            "redundancy": 60
         },
         "actions": [
             {

@@ -123,7 +123,9 @@ class CurrencyWarActionsTest(unittest.TestCase):
 
         self.assertLess(skip_index, battle_index)
         self.assertEqual(skip_action["trigger"]["text"], "跳过")
-        self.assertEqual(skip_action["trigger"]["condition"], "currency_main")
+        # 拿到免战牌后状态可能还停在 startbattle，不能带状态门槛，否则永远不触发
+        self.assertNotIn("condition", skip_action["trigger"])
+        self.assertEqual(skip_action["trigger"]["box"], [1600, 700, 1920, 790])
         self.assertEqual(skip_action["actions"], [{"position": [1818, 750]}])
         self.assertIn(skip_action["trigger"]["text"], "跳过(2/2)")
         self.assertIn(skip_action["trigger"]["text"], "跳过(1/2)")
@@ -143,7 +145,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
         currency.ts.find_with_box.return_value = [
             {
                 "raw_text": "跳过(2/2)",
-                "box": [1784, 730, 1852, 770],
+                "box": [1749, 734, 1883, 767],
             }
         ]
         currency.do_action = Mock(return_value=1)
@@ -158,7 +160,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
 
         self.assertEqual(result, ("跳过战斗", 1))
         currency.ts.find_with_box.assert_called_once_with(
-            [1784, 730, 1852, 770],
+            [1600, 700, 1920, 790],
             redundancy=60,
         )
         currency.do_action.assert_called_once_with({"position": [1818, 750]})

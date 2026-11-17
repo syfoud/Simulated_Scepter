@@ -131,6 +131,8 @@ class SimulatedCurrency(CurrencyUtils):
     DIFFICULTY_MAX_STEPS = 120
     DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
     DIFFICULTY_DOWN_POSITION = (960, 844)
+    # 人数不足提示框的「确认」按钮（实测 [1160,656,1215,686]）
+    BATTLE_FEWER_CONFIRM_BOX = [1100, 630, 1300, 700]
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
     ENVIRONMENT_CONFIRM_BOX = [1053, 967, 1108, 998]
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
@@ -817,6 +819,20 @@ class SimulatedCurrency(CurrencyUtils):
         # 一次无效拖拽不能撤销其他已确认角色，否则下一轮会重复拖动同名份。
         CUS_LOGGER.debug("角色拖拽未确认，本轮跳过该动作：%s，人数=%s", move, after_count)
         return None
+
+    def confirm_battle_short_handed (self):
+        """「可出战角色人数未达上限，是否确认出战？」的提示框——只点确认。
+
+        不去勾「本局不再提示」：那个勾选框有没有打勾读不出来，脚本每场点一下就是切换一次，
+        反而可能把已勾上的取消掉。点确认本身是有效的，代价只是每场多一次点击。
+        """
+        if not self.click_text(text="确认", box=self.BATTLE_FEWER_CONFIRM_BOX,
+                               click=True, allow_fail=True):
+            CUS_LOGGER.warning("人数不足提示框没点掉「确认」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("已确认按现有人数出战")
+        return 1
 
     def start_battle(self):
         """仅在可出战状态点击出战，等待输入完成后进入战斗状态。"""

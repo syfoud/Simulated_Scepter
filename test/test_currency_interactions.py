@@ -173,6 +173,20 @@ class CurrencyInteractionTests(unittest.TestCase):
         )
         self.assertEqual(manager.wait.call_count, 4)
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_battle_short_handed_only_confirms(self, manager):
+        """人数不足提示只点确认：勾选框状态读不出来，点一次就是切换，会越点越乱。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.confirm_battle_short_handed(), 1)
+
+        manager.click_point.assert_not_called()
+        currency.click_text.assert_called_once_with(
+            text="确认", box=SimulatedCurrency.BATTLE_FEWER_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
 
 if __name__ == "__main__":
     unittest.main()
