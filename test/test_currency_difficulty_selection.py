@@ -55,6 +55,8 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         """
         currency = self.make_currency()
         currency.has_fresh = True  # 上一局刷过刷新、并因此刷出了必选环境
+        # 点完「开始对局」后要确认已离开难度页，这里直接认定为已离开
+        currency.still_on_difficulty_screen = Mock(return_value=False)
 
         self.assertTrue(currency.complete_difficulty_selection())
 

@@ -152,6 +152,10 @@ class SimulatedCurrency(CurrencyUtils):
     DIFFICULTY_SELECTED_EFFECT_BOX = [660, 380, 1250, 450]
     DIFFICULTY_ENTER_BOX = [1550, 930, 1800, 1000]
     DIFFICULTY_DOWN_POSITION = (960, 844)
+    DIFFICULTY_START_POSITION = (1692, 965)     # 难度页右下角的「开始对局」
+    DIFFICULTY_START_ATTEMPTS = 3               # 点了没离开难度页时的重试次数
+    DIFFICULTY_LEAVE_TIMEOUT = 1.2              # 每次点击后等界面切换的时间
+    DIFFICULTY_LEAVE_STEP = 0.2
     DIFFICULTY_SETTLE_TIMEOUT = 0.8    # 点完向下后，轮询等难度描述变一次
     DIFFICULTY_SETTLE_STEP = 0.05
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
@@ -663,11 +667,37 @@ class SimulatedCurrency(CurrencyUtils):
             return True
 
         key_mouse_manager.clean()
-        key_mouse_manager.click_point(1692, 965, force=True) # “开始对局”按钮坐标
-        key_mouse_manager.wait()
+        # 点「开始对局」后确认真的离开了难度页：后台模式下点击偶尔会被丢掉，
+        # 不确认的话就会每 2 秒原地重点一次，日志里只看到同一句"直接开始对局"。
+        for attempt in range(1, self.DIFFICULTY_START_ATTEMPTS + 1):
+            key_mouse_manager.click_point(*self.DIFFICULTY_START_POSITION, force=True)
+            key_mouse_manager.wait()
+            if not self.still_on_difficulty_screen():
+                break
+            if attempt < self.DIFFICULTY_START_ATTEMPTS:
+                CUS_LOGGER.warning("第 %d 次点「开始对局」没反应，重试", attempt)
+        else:
+            CUS_LOGGER.warning(
+                "点了 %d 次「开始对局」都没离开难度页，等下一轮",
+                self.DIFFICULTY_START_ATTEMPTS)
+            return True
         self.reset_run_state()
         CUS_LOGGER.info("货币战争对局计时开始")
         return True
+
+    def still_on_difficulty_screen (self, timeout=None, step=None):
+        """轮询确认还在不在难度页：按钮文字「开始对局」消失即视为已进入对局。"""
+        timeout = self.DIFFICULTY_LEAVE_TIMEOUT if timeout is None else timeout
+        step = self.DIFFICULTY_LEAVE_STEP if step is None else step
+        deadline = time.monotonic() + timeout
+        while True:
+            self.get_screen()
+            if not self.click_text(text="开始对局", box=self.DIFFICULTY_ENTER_BOX,
+                                   click=False, allow_fail=True):
+                return False
+            if time.monotonic() >= deadline:
+                return True
+            time.sleep(step)
 
     def reset_run_state (self):
         """每局开局的复位。放在「投资环境选择完成」也调用一次：
