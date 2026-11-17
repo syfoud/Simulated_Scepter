@@ -1806,6 +1806,11 @@ class SimulatedCurrency(CurrencyUtils):
         真正的推进交给「茶歇-确认奖励」：它在后续帧看到「确认」就会去点。
         """
         self.ts.forward(self.get_screen())
+        # 选项已经选中时右侧会出现「确认」：这一步必须让给「茶歇-确认奖励」去点。
+        # 否则「返回」一直在这条动作就会一直触发，把确认那一步饿死（实机卡在茶歇就是这样）。
+        if self.option_confirmed():
+            CUS_LOGGER.debug("茶歇选项已选中，等「确认」处理")
+            return 0
         options = [
             item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX, redundancy=30)
             if item["raw_text"].strip()

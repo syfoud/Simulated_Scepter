@@ -912,23 +912,6 @@
         ]
     },
     {
-        "name": "茶歇-选择选项",
-        "trigger": {
-            "text": "返回",
-            "box": [
-                1090,
-                400,
-                1420,
-                900
-            ],
-            "interval": 1,
-            "redundancy": 30
-        },
-        "actions": [
-            "choose_tea_break_option"
-        ]
-    },
-    {
         "name": "茶歇-确认奖励",
         "trigger": {
             "text": "确认",
@@ -951,6 +934,23 @@
                     820
                 ]
             }
+        ]
+    },
+    {
+        "name": "茶歇-选择选项",
+        "trigger": {
+            "text": "返回",
+            "box": [
+                1090,
+                400,
+                1420,
+                900
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_tea_break_option"
         ]
     },
     {
