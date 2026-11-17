@@ -238,6 +238,14 @@ _warned = set()
 _VERBOSE_CLICK = True
 
 
+def _window_class(hwnd):
+    """取窗口类名，用来核对句柄指向的是不是游戏窗口。"""
+    try:
+        return win32gui.GetClassName(hwnd)
+    except Exception:
+        return "?"
+
+
 def _warn_once(key, message):
     """同一类告警只记一次，避免长跑时刷屏。"""
     if key in _warned:
@@ -336,8 +344,9 @@ class BackgroundMouse:
             handled = self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
             if _VERBOSE_CLICK:
                 CUS_LOGGER.info(
-                    "后台点击落点 client=%s 屏幕=%s 激活=%s 送达=%s",
-                    client, target, self.activation.activated, handled)
+                    "后台点击 hwnd=%s class=%s 落点=%s 屏幕=%s 激活=%s 送达=%s",
+                    self.hwnd, _window_class(self.hwnd), client, target,
+                    self.activation.activated, handled)
             sleep(0.05)
             self._post(WM_LBUTTONUP, 0, client)
             return True
@@ -400,3 +409,4 @@ class BackgroundMouse:
             # 不记一笔的话，现场就只剩「日志显示点了、游戏没反应」
             _warn_once(f"后台鼠标超时:{message}",
                        f"后台鼠标消息 {hex(message)} 超时未处理（窗口可能卡住）")
+        return handled
