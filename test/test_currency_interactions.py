@@ -537,7 +537,7 @@ class CurrencyInteractionTests(unittest.TestCase):
             {"raw_text": "第一个选项", "box": [1151, 460, 1423, 490]},
         ]
         # 第一次问是"进来时是否已选中"（否），之后问是"这一点有没有选中"（是）
-        currency.option_confirmed = Mock(side_effect=[False, True])
+        currency.wait_option_confirmed = Mock(return_value=True)
         currency.click_box = Mock()
         manager.reset_mock()
 
@@ -555,7 +555,7 @@ class CurrencyInteractionTests(unittest.TestCase):
             {"raw_text": "效果说明", "box": [1151, 660, 1423, 690]},
             {"raw_text": "选项标题", "box": [1151, 600, 1423, 630]},
         ]
-        currency.option_confirmed = Mock(side_effect=[False, False, True])
+        currency.wait_option_confirmed = Mock(side_effect=[False, True])
         currency.click_box = Mock()
         manager.reset_mock()
 

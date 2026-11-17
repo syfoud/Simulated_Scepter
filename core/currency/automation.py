@@ -1696,6 +1696,8 @@ class SimulatedCurrency(CurrencyUtils):
     TEA_OPTIONS_BOX = [1050, 380, 1750, 800]
     # 选项右侧的「确认」：位置随选项行高变化，实测 y 580~703 都出现过
     TEA_CONFIRM_BOX = [1500, 560, 1900, 780]
+    TEA_CONFIRM_TIMEOUT = 1.2      # 等「确认」按钮渲染出来的上限
+    TEA_CONFIRM_STEP = 0.15
     TEA_REWARD_BOX = [860, 175, 1060, 220]     # 「领取茶歇奖励」
     TEA_OPEN_POSITION = (961, 983)             # 「开启」
 
@@ -1706,6 +1708,22 @@ class SimulatedCurrency(CurrencyUtils):
                 text="确认", box=self.TEA_CONFIRM_BOX, click=False, allow_fail=True))
         except Exception:
             return False
+
+    def wait_option_confirmed (self, timeout=None, step=None):
+        """点完选项后轮询等「确认」按钮出现。
+
+        按钮是选中后才渲染出来的，点完立刻查会读到空（实测日志里一直是「响应：空」），
+        于是以为没点中、又去点下一个候选。
+        """
+        timeout = self.TEA_CONFIRM_TIMEOUT if timeout is None else timeout
+        step = self.TEA_CONFIRM_STEP if step is None else step
+        deadline = time.monotonic() + timeout
+        for _ in range(int(timeout / step) + 1):
+            if self.option_confirmed():
+                return True
+            time.sleep(step)
+            self.get_screen()
+        return False
 
     def choose_tea_break_option (self):
         """茶歇对话的选项：从上往下试，点中能推进的那个。
@@ -1738,7 +1756,7 @@ class SimulatedCurrency(CurrencyUtils):
             self.click_box(item["box"])
             key_mouse_manager.wait()
             self.ts.forward(self.get_screen())
-            if self.option_confirmed():
+            if self.wait_option_confirmed():
                 CUS_LOGGER.info("已选中茶歇选项：%s（等待确认）", item["raw_text"])
                 return 1
         CUS_LOGGER.warning("所有候选都点了但没出现「确认」，等下一轮")
