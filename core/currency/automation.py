@@ -652,6 +652,17 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.clean()
         key_mouse_manager.click_point(1692, 965, force=True) # “开始对局”按钮坐标
         key_mouse_manager.wait()
+        self.reset_run_state()
+        CUS_LOGGER.info("货币战争对局计时开始")
+        return True
+
+    def reset_run_state (self):
+        """每局开局的复位。放在「投资环境选择完成」也调用一次：
+
+        难度那一步有可能被跳过（比如「开始对局」文字没认出来就提前返回），
+        那样 exit_requested 会带着上一局的 True 进来，prepare_battle 直接静默返回，
+        整局都在空转。
+        """
         self.exit_plane = self.set_exit_plane
         self.prior_environment_found = False
         self.exit_requested = False
@@ -665,11 +676,10 @@ class SimulatedCurrency(CurrencyUtils):
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
         self.protagonist_picks = 0
+        self.battle_click_attempts = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
-        CUS_LOGGER.info("货币战争对局计时开始")
-        return True
 
     def auto_battle(self):
         # 需要打开自动战斗
@@ -1222,10 +1232,18 @@ class SimulatedCurrency(CurrencyUtils):
         返回 1 表示已准备好，0 表示仍需准备；识别和落位失败均不放行。
         """
         CUS_LOGGER.debug(
-            "出战前准备：state=%s stop=%s exit_requested=%s counts上限=%s",
-            self.state, self._stop, self.exit_requested, self.exit_plane)
-        if self._stop or self.exit_requested:
-            CUS_LOGGER.debug("出战前准备：已请求退出/已停止，跳过")
+            "出战前准备：state=%s stop=%s exit_requested=%s 退出位面=%s",
+            self.state, self._stop, self.exit_requested,
+            getattr(self, "exit_plane", None))
+        if self._stop:
+            CUS_LOGGER.debug("出战前准备：已停止，跳过")
+            return 0
+        if self.exit_requested and self.state != "exit":
+            # 状态机没在退出流程里，标志却是 True：一定是上一局漏清的，别拿它卡住整局
+            CUS_LOGGER.warning("退出标志与状态不符（state=%s），复位后继续", self.state)
+            self.reset_run_state()
+        if self.exit_requested:
+            CUS_LOGGER.debug("出战前准备：已请求退出，跳过")
             return 0
         # 备战界面是唯一能稳定读到「位面-节点」的地方，退出判定放这儿：
         # 连续出现两屏策略时，一定是第二屏点完、回到备战界面才按 ESC

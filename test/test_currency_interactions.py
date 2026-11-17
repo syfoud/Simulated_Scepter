@@ -1222,6 +1222,27 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertEqual(currency.enter_battle_mode(), 0)
         manager.click_point.assert_not_called()
 
+    def test_prepare_battle_self_heals_stale_exit_flag(self):
+        """退出标志和状态不符时（上一局漏清）要复位，不能整局空转。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "startbattle"
+        currency._stop = False
+        currency.exit_requested = True
+        currency.set_exit_plane = 2
+        currency.run_history = Mock()
+        currency.envir_selected = False
+        currency.update_state = Mock()
+
+        # 走到 read_team_count 之前就应已复位并继续
+        currency.ts = Mock()
+        currency.get_screen = Mock(return_value="frame")
+        currency.read_team_count = Mock(return_value=None)
+        currency._maybe_exit_by_stage = Mock(return_value=False)
+
+        currency.prepare_battle()
+
+        self.assertFalse(currency.exit_requested)
+
 
 if __name__ == "__main__":
     unittest.main()
