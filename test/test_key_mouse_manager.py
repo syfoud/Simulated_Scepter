@@ -171,7 +171,8 @@ class KeyMouseBoundaryTests(unittest.TestCase):
             box=[np.float64(100), np.float64(200), np.float64(300), np.float64(400)])
         self.manager.wait()
         self.cursor.assert_called_once_with((170, 381))
-        logged = str(self.logger.debug.call_args)
+        # 点击日志里还有一条"走哪条通道"，操作字典不一定是最后一条，按全部调用查
+        logged = " ".join(str(call) for call in self.logger.debug.call_args_list)
         self.assertIn("'x': 150", logged)
         self.assertIn("'y': 351", logged)
         self.assertIn("'box': [100, 200, 300, 400]", logged)
@@ -179,7 +180,8 @@ class KeyMouseBoundaryTests(unittest.TestCase):
     def test_click_without_box_keeps_old_log_shape(self):
         """没有来源框的纯坐标点击不带 box 字段，日志与改版前一致。"""
         self.click_at(215, 896)
-        self.assertNotIn("'box'", str(self.logger.debug.call_args))
+        logged = " ".join(str(call) for call in self.logger.debug.call_args_list)
+        self.assertNotIn("'box'", logged)
 
     def test_background_mode_click_goes_through_window_messages(self):
         """后台模式：点击不再移动光标注入，而是交给后台鼠标通道。"""

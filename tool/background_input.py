@@ -99,13 +99,22 @@ class WindowActivation:
         """游戏窗口当前是否为前台窗口。"""
         return win32gui.GetForegroundWindow() == self.hwnd
 
-    def activate(self):
-        """让游戏窗口认为自己是激活状态；窗口本来就是前台时不伪造激活。"""
-        if self.activated:
+    def activate(self, force=False):
+        """让游戏窗口认为自己是激活状态。
+
+        Args:
+            force: 即使已经记过"已激活"也重新发一次。鼠标通道必须用 force——
+                用户中途切过窗口后，游戏其实已经失活，但缓存还写着 True，
+                不重发的话投递的点击会被直接丢掉（正是"点了没反应"的现场）。
+        """
+        if self.activated and not force:
             return
-        self.previous_foreground = win32gui.GetForegroundWindow()
-        if self.previous_foreground == self.hwnd:
+        current = win32gui.GetForegroundWindow()
+        if current == self.hwnd:
+            self.activated = True
             return
+        if not self.previous_foreground:
+            self.previous_foreground = current
         try:
             win32gui.PostMessage(self.hwnd, win32con.WM_ACTIVATE, win32con.WA_ACTIVE, 0)
         except Exception as error:      # 窗口已关闭 / 句柄失效
@@ -225,6 +234,16 @@ class BackgroundKeyboard:
 
 
 _warned = set()
+# 排查「点了没反应」时打开：每次点击都记录落点、激活状态与消息送达结果
+_VERBOSE_CLICK = False
+
+
+def _window_class(hwnd):
+    """取窗口类名，用来核对句柄指向的是不是游戏窗口。"""
+    try:
+        return win32gui.GetClassName(hwnd)
+    except Exception:
+        return "?"
 
 
 def _warn_once(key, message):
@@ -267,7 +286,7 @@ class BackgroundMouse:
     # 立刻点会被丢掉（实测表现为“偶尔点得动、多数点不动”）
     ACTIVATE_SETTLE = 0.12
     IDLE_TOLERANCE = 3        # 像素：小于这个位移认为光标是静止的
-    IDLE_TIMEOUT = 1.5        # 秒：等用户停手最多等这么久
+    IDLE_TIMEOUT = 0.4        # 秒：等用户停手最多等这么久（等不到也照常点）
 
     def __init__(self, hwnd, activation=None):
         self.hwnd = hwnd
@@ -303,23 +322,39 @@ class BackgroundMouse:
     def click(self, screen_point, sleep=time.sleep):
         """在屏幕坐标处点一下（借用光标后归还）。"""
         if not self.wait_cursor_idle():
-            # 用户一直在动鼠标：这次不抢，交回调用方下一轮再试
-            _warn_once("后台鼠标:忙", "光标一直有动作，跳过本次点击（避免把用户的鼠标抢走）")
-            return False
+            # 光标一直在动（可能是用户，也可能是游戏自己抓着光标）：
+            # 不能因此整个跳过，否则就成了"后台点击全部被跳过"、什么界面都推不动
+            _warn_once("后台鼠标:忙", "光标一直有动作，仍按落点点击（可能打断用户的鼠标操作）")
         original = win32api.GetCursorPos()
-        self.activation.activate()
+        self.activation.activate(force=True)
         try:
             # 激活刚发出去时游戏还没处理完焦点变化，立刻点会被丢掉
             sleep(self.ACTIVATE_SETTLE)
-            win32api.SetCursorPos((int(screen_point[0]), int(screen_point[1])))
-            sleep(0.02)
+            target = (int(screen_point[0]), int(screen_point[1]))
+            win32api.SetCursorPos(target)
             client = self.to_client(screen_point)
             self._post(WM_MOUSEMOVE, 0, client)
-            self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
+            # 发按下消息前再对齐一次光标：游戏按真实光标位置判定落点，
+            # 用户在这几十毫秒里挪了鼠标就会点歪
+            actual = win32api.GetCursorPos()
+            if (abs(actual[0] - target[0]) > self.IDLE_TOLERANCE
+                    or abs(actual[1] - target[1]) > self.IDLE_TOLERANCE):
+                _warn_once("后台鼠标:被挪开", "点击前光标被移开（用户正在操作鼠标），本次点击可能落空")
+                win32api.SetCursorPos(target)
+            handled = self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
+            if _VERBOSE_CLICK:
+                CUS_LOGGER.info(
+                    "后台点击 hwnd=%s class=%s 落点=%s 屏幕=%s 激活=%s 送达=%s",
+                    self.hwnd, _window_class(self.hwnd), client, target,
+                    self.activation.activated, handled)
             sleep(0.05)
             self._post(WM_LBUTTONUP, 0, client)
+            return True
         finally:
             self._restore_cursor(original, screen_point)
+            # 成对撤销：只发不撤会让游戏处于半激活状态，
+            # 连用户自己的真实点击都会被它忽略（实机复现过）
+            self.activation.deactivate()
 
     def drag(self, start, end, duration=0.4, sleep=time.sleep):
         """从 start 拖到 end（屏幕坐标）；按 60Hz 步进投递移动消息。"""
@@ -343,8 +378,10 @@ class BackgroundMouse:
                 self._post(WM_MOUSEMOVE, MK_LBUTTON, self.to_client(point))
                 sleep(step_sleep)
             self._post(WM_LBUTTONUP, 0, self.to_client(end))
+            return True
         finally:
-            win32api.SetCursorPos(original)
+            self._restore_cursor(original, end)
+            self.activation.deactivate()
 
     def _restore_cursor(self, original, expected):
         """把光标放回原处；用户中途动过鼠标就不硬拽（那样会把他的操作打断）。"""
@@ -372,3 +409,4 @@ class BackgroundMouse:
             # 不记一笔的话，现场就只剩「日志显示点了、游戏没反应」
             _warn_once(f"后台鼠标超时:{message}",
                        f"后台鼠标消息 {hex(message)} 超时未处理（窗口可能卡住）")
+        return handled
