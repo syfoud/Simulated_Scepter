@@ -6,7 +6,7 @@ import pyautogui
 import win32api
 import win32con
 
-from tool.background_input import BackgroundKeyboard
+from tool.background_input import BackgroundKeyboard, BackgroundMouse
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
@@ -185,6 +185,8 @@ class KeyMouseManager:
         self.skipped_pointer = None
         # 后台键盘通道；为 None 时按键走 pyautogui 前台注入
         self.background = None
+        # 后台鼠标通道；为 None 时点击/拖动走 pyautogui 前台注入
+        self.background_mouse = None
 
     def set_config(self, config):
         """应用内核的转身倍率与 DPI 缩放。
@@ -226,6 +228,8 @@ class KeyMouseManager:
         if self.background is not None:
             self.background.release_all()
         self.background = BackgroundKeyboard(hwnd) if hwnd else None
+        # 鼠标通道跟键盘一起切换：后台模式下点击/拖动改投窗口消息
+        self.background_mouse = BackgroundMouse(hwnd) if hwnd else None
 
     def start(self):
         """
@@ -333,11 +337,13 @@ class KeyMouseManager:
 
         elif op_type == 'click':
             x, y = operation['x'], operation['y']
-            if self._background_mouse_blocked("点击"):
-                return
             # 转换坐标，并确认落点在游戏窗口内
             point = self._game_point("点击", x, y)
             if point is None:
+                return
+            if self.background_mouse is not None:
+                # 后台模式：消息投给窗口，落点借用光标（见 BackgroundMouse 说明）
+                self.background_mouse.click(point)
                 return
             win32api.SetCursorPos(point)
             pyautogui.click()
@@ -370,12 +376,13 @@ class KeyMouseManager:
             start_x, start_y = operation['start_x'], operation['start_y']
             end_x, end_y = operation['end_x'], operation['end_y']
             duration = operation.get('duration', 0.4)
-            if self._background_mouse_blocked("拖动"):
-                return
             # 转换坐标，并确认起止点都在游戏窗口内
             start = self._game_point("拖拽起点", start_x, start_y)
             end = self._game_point("拖拽终点", end_x, end_y)
             if start is None or end is None:
+                return
+            if self.background_mouse is not None:
+                self.background_mouse.drag(start, end, duration)
                 return
             win32api.SetCursorPos(start)
             self._sleep(0.2)

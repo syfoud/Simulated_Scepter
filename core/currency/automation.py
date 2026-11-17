@@ -23,6 +23,7 @@ from core.currency.run_history import (
 )
 from core.currency.settings import load_currency_settings, resolve_priority
 from core.currency.utils import CurrencyUtils, set_forground
+from tool.utils.game_window import find_game_window
 from route import PATHS
 from tool import GLOBAL
 from tool.GLOBAL import key_mouse_manager
@@ -223,6 +224,19 @@ class SimulatedCurrency(CurrencyUtils):
         return texts
 
     def route (self):
+        if getattr(self, "background_mode", False):
+            # 后台模式：窗口被挡住也能跑，全程不抢前台；只要求窗口存在（不能最小化）
+            while not self._stop:
+                window = find_game_window()
+                if window is None:
+                    CUS_LOGGER.debug("后台模式：暂时找不到游戏窗口，等 0.5 秒再看")
+                    time.sleep(0.5)
+                    continue
+                self.hwnd = window.hwnd
+                self.loop()
+            CUS_LOGGER.info("已停止任务")
+            return
+
         set_forground ()
         while not self._stop:
             hwnd,Text = get_hwnd_and_text ()

@@ -181,6 +181,38 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.click_at(215, 896)
         self.assertNotIn("'box'", str(self.logger.debug.call_args))
 
+    def test_background_mode_click_goes_through_window_messages(self):
+        """后台模式：点击不再移动光标注入，而是交给后台鼠标通道。"""
+        channel = self.enterContext(patch("tool.key_mouse_manager.BackgroundMouse"))
+        self.manager.set_background_keyboard(12345)
+        self.manager.background_mouse = channel.return_value
+        self.cursor.reset_mock()
+        self.click.reset_mock()
+
+        self.click_at(100, 200)
+
+        channel.return_value.click.assert_called_once_with((120, 230))
+        self.cursor.assert_not_called()
+        self.click.assert_not_called()
+
+    def test_background_mode_drag_goes_through_window_messages(self):
+        """后台模式：拖动同样交给后台鼠标通道，步进由它内部完成。"""
+        channel = self.enterContext(patch("tool.key_mouse_manager.BackgroundMouse"))
+        self.manager.set_background_keyboard(12345)
+        self.manager.background_mouse = channel.return_value
+        self.cursor.reset_mock()
+        self.drag_to.reset_mock()
+
+        self.manager.drag_point(10, 20, 30, 40, 0.4)
+        self.manager.wait()
+
+        channel.return_value.drag.assert_called_once()
+        args = channel.return_value.drag.call_args[0]
+        self.assertEqual(args[0], (30, 50))     # 起点加客户区原点 (20,30)
+        self.assertEqual(args[1], (50, 70))
+        self.cursor.assert_not_called()
+        self.drag_to.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,10 +1,17 @@
-"""后台键盘输入：把按键消息直接投递给游戏窗口，不需要游戏处于前台。
+"""后台输入通道：把按键/鼠标消息直接投递给游戏窗口，不需要游戏处于前台。
 
-鼠标、滚轮和转视角仍走前台实现（需要真实光标），本模块目前只提供键盘通道。
-操作前给游戏补一条伪造的 WM_ACTIVATE，让它认为自己是激活状态；窗口本来就是前台时
-不发伪造激活，避免干扰真实的焦点状态。
+两个通道的实现边界不一样，分开表达：
+
+- `BackgroundKeyboard`：纯消息，完全不用真实光标，也不需要激活以外的副作用；
+  操作前补一条伪造的 WM_ACTIVATE。
+- `BackgroundMouse`：消息投递给窗口，但**落点仍依赖真实光标** —— 实测（见
+  `temp/` 下的 PoC）只发 WM_MOUSEMOVE/LBUTTONDOWN 而不移动光标，游戏不响应；
+  先把光标挪到目标再发消息才生效。所以每次点击/拖动会短暂借用光标，结束后归还。
+
+滚轮和相对转视角不走后台：滚轮需要真实焦点，转视角是相对鼠标，消息无法伪造。
 """
 
+import ctypes
 import time
 
 import win32api
@@ -169,3 +176,113 @@ class BackgroundKeyboard:
             vk,
             key_lparam(scan_code(vk), extended, key_up, sys_key),
         )
+
+
+SMTO_BLOCK = 0x0001
+SMTO_ABORTIFHUNG = 0x0002
+WM_MOUSEMOVE = 0x0200
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
+MK_LBUTTON = 0x0001
+
+
+def _lparam(point):
+    """把客户区坐标打包成鼠标消息的 lParam。"""
+    return (int(point[1]) << 16) | (int(point[0]) & 0xFFFF)
+
+
+class BackgroundMouse:
+    """后台鼠标：消息投给游戏窗口，落点借用真实光标。
+
+    借用光标的流程（每次操作约 70~100ms，拖动按 duration 更长）：
+
+    1. 等真实光标空闲（用户正在动鼠标时先等一等，避免抢走他正在用的光标）；
+    2. 记住原位置，把光标挪到目标点；
+    3. 向窗口投递 WM_MOUSEMOVE / WM_LBUTTONDOWN / WM_LBUTTONUP（拖动是连续 MOVE）；
+    4. 把光标放回原处。
+
+    因此**焦点可以留在别的窗口**，但用户的鼠标会被短暂借用，这是 Unity 只认系统光标
+    位置决定的，绕不过去。
+    """
+
+    MOVE_STEPS_PER_SECOND = 60
+    IDLE_TOLERANCE = 3        # 像素：小于这个位移认为光标是静止的
+    IDLE_TIMEOUT = 1.5        # 秒：等用户停手最多等这么久
+
+    def __init__(self, hwnd):
+        self.hwnd = hwnd
+
+    def game_is_foreground(self):
+        """游戏窗口当前是否为前台窗口。"""
+        return win32gui.GetForegroundWindow() == self.hwnd
+
+    def client_origin(self):
+        """客户区左上角在屏幕上的坐标。"""
+        return win32gui.ClientToScreen(self.hwnd, (0, 0))
+
+    def to_client(self, screen_point):
+        """屏幕坐标 → 客户区坐标（消息里用的是客户区坐标）。"""
+        left, top = self.client_origin()
+        return int(screen_point[0]) - left, int(screen_point[1]) - top
+
+    def wait_cursor_idle(self, timeout=None):
+        """等真实光标停下来，避免把用户正在操作的鼠标抢走。"""
+        timeout = self.IDLE_TIMEOUT if timeout is None else timeout
+        start = win32api.GetCursorPos()
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(0.03)
+            current = win32api.GetCursorPos()
+            if (abs(current[0] - start[0]) <= self.IDLE_TOLERANCE
+                    and abs(current[1] - start[1]) <= self.IDLE_TOLERANCE):
+                return True
+            start = current
+        return False
+
+    def click(self, screen_point, sleep=time.sleep):
+        """在屏幕坐标处点一下（借用光标后归还）。"""
+        self.wait_cursor_idle()
+        original = win32api.GetCursorPos()
+        try:
+            win32api.SetCursorPos((int(screen_point[0]), int(screen_point[1])))
+            sleep(0.02)
+            client = self.to_client(screen_point)
+            self._post(WM_MOUSEMOVE, 0, client)
+            self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
+            sleep(0.05)
+            self._post(WM_LBUTTONUP, 0, client)
+        finally:
+            win32api.SetCursorPos(original)
+
+    def drag(self, start, end, duration=0.4, sleep=time.sleep):
+        """从 start 拖到 end（屏幕坐标）；按 60Hz 步进投递移动消息。"""
+        self.wait_cursor_idle()
+        original = win32api.GetCursorPos()
+        steps = max(8, int(duration * self.MOVE_STEPS_PER_SECOND))
+        step_sleep = duration / steps
+        try:
+            win32api.SetCursorPos((int(start[0]), int(start[1])))
+            sleep(0.08)
+            client = self.to_client(start)
+            self._post(WM_MOUSEMOVE, 0, client)
+            self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
+            for index in range(1, steps + 1):
+                ratio = index / steps
+                point = (int(start[0] + (end[0] - start[0]) * ratio),
+                         int(start[1] + (end[1] - start[1]) * ratio))
+                win32api.SetCursorPos(point)
+                self._post(WM_MOUSEMOVE, MK_LBUTTON, self.to_client(point))
+                sleep(step_sleep)
+            self._post(WM_LBUTTONUP, 0, self.to_client(end))
+        finally:
+            win32api.SetCursorPos(original)
+
+    def _post(self, message, wparam, client):
+        """带超时地投递一条鼠标消息；窗口卡住时放弃这一条，不让线程挂死。"""
+        try:
+            win32gui.SendMessageTimeout(
+                self.hwnd, message, wparam, _lparam(client),
+                SMTO_BLOCK | SMTO_ABORTIFHUNG, 500,
+            )
+        except Exception as error:
+            CUS_LOGGER.warning("后台鼠标消息 %s 投递失败：%s", hex(message), error)
