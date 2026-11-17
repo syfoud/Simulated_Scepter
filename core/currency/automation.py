@@ -144,6 +144,9 @@ class SimulatedCurrency(CurrencyUtils):
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
     GOLDEN_ERA_NAMES = ("银•金•彩",)
+    # 本工具自己的窗口里才会出现的文字：出现就说明画面被盖住了
+    CONTAMINATION_MARKERS = ("运行输出", "中控台", "模拟权杖", "DeepSeek Harness")
+
     DIFFICULTY_MAX_STEPS = 120
     # 4.7 实测：这个框要比文字行宽一点，框太窄 OCR 会把「获得」认成「医得」
     DIFFICULTY_SELECTED_EFFECT_BOX = [660, 380, 1250, 450]
@@ -386,6 +389,18 @@ class SimulatedCurrency(CurrencyUtils):
             self.loop ()
         CUS_LOGGER.info ("已停止任务")
 
+    def screen_contaminated (self):
+        """这一帧是不是把本工具自己的窗口也截进来了。
+
+        截图是抓屏幕像素的：只要控制台窗口盖在游戏画面上，抓到的就是控制台。
+        识别到控制台里的文字时，任何点击都不可信，必须跳过。
+        """
+        try:
+            texts = " ".join(item["raw_text"] for item in self.ts.res)
+        except Exception:
+            return False
+        return any(marker in texts for marker in self.CONTAMINATION_MARKERS)
+
     def game_is_foreground (self):
         """游戏窗口是不是前台窗口。不是的话截到的是桌面/别的程序，识别全是乱的。"""
         try:
@@ -408,6 +423,12 @@ class SimulatedCurrency(CurrencyUtils):
                 continue
 
             self.ts.forward (self.get_screen())
+            if self.screen_contaminated():
+                CUS_LOGGER.warning(
+                    "画面里混进了控制台窗口的内容，多半是窗口盖住了游戏；这一帧不执行任何动作"
+                )
+                time.sleep(0.5)
+                continue
             name, _ = self.run_static ()
             if name:
                 silent_time = time.time ()
