@@ -51,23 +51,6 @@
         ]
     },
     {
-        "name": "修复重叠界面",
-        "trigger": {
-            "text": "尚未选择主角角色和光环",
-            "box": [
-                700,
-                845,
-                1260,
-                940
-            ],
-            "interval": 3,
-            "redundancy": 30
-        },
-        "actions": [
-            "recover_broken_protagonist_panel"
-        ]
-    },
-    {
         "name": "货币战争外",
         "trigger": {
             "text": "货币战争",

@@ -1850,7 +1850,11 @@ class SimulatedCurrency(CurrencyUtils):
         判定用「底部红条在、顶部标题不在」这组签名：正常的选主角面板两者都在，
         商店把标题盖住时只剩底下的「尚未选择主角角色和光环」。
         """
-        self.get_screen()
+        try:
+            self.get_screen()
+        except Exception:
+            # 独立阶段（没有截图器）时不该因为这个判定把流程打断
+            return 0
         banner = self.click_text(text="尚未选择主角角色和光环",
                                  box=self.PROTAGONIST_BANNER_BOX,
                                  click=False, allow_fail=True)
@@ -1878,6 +1882,10 @@ class SimulatedCurrency(CurrencyUtils):
         面板出现在第一位面和第二位面首领之前的备战界面，按钮就压在「出战」的位置上，
         不处理的话主循环等不到「出战」文字会一直空转。
         """
+
+        # 先排掉"商店把标题盖住"的偶发重叠：那种情况下拖拽落点全错，只能 ESC 重开。
+        if self.recover_broken_protagonist_panel():
+            return 1
         # 主循环每帧都刷过截图，这里直接用当前帧（自己抓会依赖 _stop 等运行时状态）
         if self.click_text(text="选择一个角色获得主角光环",
                            box=self.PROTAGONIST_TITLE_BOX, click=False, allow_fail=True):
