@@ -174,6 +174,32 @@ class RuntimeGuiLayoutTests(unittest.TestCase):
             self.assertEqual(load_settings()["debug"], debug)
             self.assertIsNone(self.window.findChild(QWidget, "debug_checkbox2"))
 
+    def test_debug_overlay_switch_is_off_by_default_and_persists(self):
+        """识别遮罩会干扰识别，默认关闭，由用户在调试诊断设置里单独打开。"""
+        self.assertFalse(self.window.debug_overlay_checkbox.isChecked())
+        self.set_mode(True)
+        self.assertTrue(self.window.debug_overlay_checkbox.isEnabled())
+        self.window.debug_overlay_checkbox.setChecked(True)
+        with patch.object(QMessageBox, "information"):
+            self.window.general_settings_save_btn.click()
+        self.assertTrue(load_settings()["debug_overlay"])
+
+    def test_debug_overlay_is_only_shown_after_switching_it_on(self):
+        """开关关闭时命中结果到达界面也不能创建遮罩，勾选并保存后才显示。"""
+        with patch.object(self.module, "DebugOverlay") as overlay:
+            self.window.show_debug_match("选择祝福", [1, 2, 3, 4])
+        overlay.assert_not_called()
+        self.assertIsNone(self.window.debug_overlay)
+
+        self.set_mode(True)
+        self.window.debug_overlay_checkbox.setChecked(True)
+        with patch.object(QMessageBox, "information"):
+            self.window.general_settings_save_btn.click()
+        with patch.object(self.module, "DebugOverlay") as overlay:
+            self.window.show_debug_match("选择祝福", [1, 2, 3, 4])
+        overlay.assert_called_once_with()
+        overlay.return_value.add_mark.assert_called_once_with("选择祝福", [1, 2, 3, 4])
+
     def test_focus_reclaim_wait_setting_is_nonnegative_integer_and_persists(self):
         wait_label = self.window.focus_reclaim_wait_label
         wait_input = self.window.focus_reclaim_wait_input
