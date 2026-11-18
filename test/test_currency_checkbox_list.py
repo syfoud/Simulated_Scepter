@@ -47,6 +47,22 @@ class SearchableCheckListTest(unittest.TestCase):
         self.assertIn("已选 2 项", text)
         self.assertIn("显示 1 项", text)
 
+    def test_bulk_actions_only_touch_visible_items(self):
+        widget = self.make_list(selected=["大裁员"])
+        widget.apply_filter("军火")
+        widget.select_visible_button.click()
+        # 只勾上了筛选出来的那条，筛选外的保持原样
+        self.assertEqual(widget.selected_names(), ["军火贸易", "大裁员"])
+
+        widget.clear_visible_button.click()
+        self.assertEqual(widget.selected_names(), ["大裁员"])
+
+    def test_clear_all_resets_everything(self):
+        widget = self.make_list(selected=["军火贸易", "期货"])
+        widget.apply_filter("期货")
+        widget.clear_all_button.click()
+        self.assertEqual(widget.selected_names(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

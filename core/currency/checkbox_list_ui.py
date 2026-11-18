@@ -8,8 +8,10 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QCheckBox,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
@@ -41,6 +43,17 @@ class SearchableCheckList(QWidget):
         self.search.setClearButtonEnabled(True)
         layout.addWidget(self.search)
 
+        actions = QHBoxLayout()
+        self.select_visible_button = QPushButton("全选当前筛选", self)
+        self.clear_visible_button = QPushButton("取消当前筛选", self)
+        self.clear_all_button = QPushButton("清空全部", self)
+        for button in (self.select_visible_button, self.clear_visible_button,
+                       self.clear_all_button):
+            button.setAutoDefault(False)
+            actions.addWidget(button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
         self.counter = QLabel(self)
         layout.addWidget(self.counter)
 
@@ -60,6 +73,10 @@ class SearchableCheckList(QWidget):
 
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
+
+        self.select_visible_button.clicked.connect(lambda: self.set_visible_checked(True))
+        self.clear_visible_button.clicked.connect(lambda: self.set_visible_checked(False))
+        self.clear_all_button.clicked.connect(lambda: self.set_selected([]))
 
         self.search.textChanged.connect(self.apply_filter)
         self.apply_filter("")
@@ -81,14 +98,21 @@ class SearchableCheckList(QWidget):
                 if column >= self.columns:
                     column = 0
                     row += 1
-        self._visible = sum(
-            1 for name in self.names
-            if not keyword or keyword in name.lower())
+        self._visible_names = [
+            name for name in self.names
+            if not keyword or keyword in name.lower()]
+        self._visible = len(self._visible_names)
         self._update_counter()
 
     def _update_counter(self, *_args):
         chosen = sum(1 for box in self.checkboxes.values() if box.isChecked())
         self.counter.setText(f"已选 {chosen} 项 · 当前显示 {getattr(self, '_visible', len(self.names))} 项")
+
+    def set_visible_checked(self, checked):
+        """把「当前筛选出来的」项统一勾上（或取消）。"""
+        for name in getattr(self, "_visible_names", self.names):
+            self.checkboxes[name].setChecked(checked)
+        self._update_counter()
 
     def selected_names(self):
         """按原始顺序返回勾选项，保证写回配置时顺序稳定。"""
