@@ -11,6 +11,7 @@
 滚轮和相对转视角不走后台：滚轮需要真实焦点，转视角是相对鼠标，消息无法伪造。
 """
 
+import ctypes
 import time
 
 import win32api
@@ -233,6 +234,72 @@ class BackgroundKeyboard:
         )
 
 
+# ---------------------------------------------------------------------------
+# 绝对坐标移动光标：SendInput 会生成真实输入事件（Raw Input 可见），
+# SetCursorPos 只改系统光标位置，不产生输入事件。
+# ---------------------------------------------------------------------------
+_MOUSEEVENTF_MOVE = 0x0001
+_MOUSEEVENTF_ABSOLUTE = 0x8000
+_MOUSEEVENTF_VIRTUALDESK = 0x4000
+
+_ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
+
+
+class _MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", ctypes.c_ulong),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", _ULONG_PTR),
+    ]
+
+
+class _INPUTUNION(ctypes.Union):
+    _fields_ = [("mi", _MOUSEINPUT)]
+
+
+class _INPUT(ctypes.Structure):
+    _anonymous_ = ("u",)
+    _fields_ = [("type", ctypes.c_ulong), ("u", _INPUTUNION)]
+
+
+def move_cursor(x, y, use_send_input=True):
+    """把光标移到屏幕坐标 (x, y)。
+
+    Args:
+        use_send_input: True 用 SendInput（产生真实输入事件）；False 用 SetCursorPos。
+
+    Returns:
+        实际使用的方式，便于日志核对。
+    """
+    x, y = int(x), int(y)
+    if use_send_input:
+        try:
+            screen_w = win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN) or 1920
+            screen_h = win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN) or 1080
+            origin_x = win32api.GetSystemMetrics(win32con.SM_XVIRTUALSCREEN)
+            origin_y = win32api.GetSystemMetrics(win32con.SM_YVIRTUALSCREEN)
+            ax = int((x - origin_x) * 65535 / max(1, screen_w - 1))
+            ay = int((y - origin_y) * 65535 / max(1, screen_h - 1))
+            event = _INPUT(
+                type=0,
+                mi=_MOUSEINPUT(
+                    dx=ax, dy=ay, mouseData=0,
+                    dwFlags=_MOUSEEVENTF_MOVE | _MOUSEEVENTF_ABSOLUTE | _MOUSEEVENTF_VIRTUALDESK,
+                    time=0, dwExtraInfo=0,
+                ),
+            )
+            sent = ctypes.windll.user32.SendInput(1, ctypes.byref(event), ctypes.sizeof(_INPUT))
+            if sent:
+                return "SendInput"
+        except Exception as error:
+            CUS_LOGGER.warning("SendInput 移动光标失败，回退 SetCursorPos：%s", error)
+    win32api.SetCursorPos((x, y))
+    return "SetCursorPos"
+
+
 _warned = set()
 # 排查「点了没反应」时打开：每次点击都记录落点、激活状态与消息送达结果
 _VERBOSE_CLICK = False
@@ -331,7 +398,7 @@ class BackgroundMouse:
             # 激活刚发出去时游戏还没处理完焦点变化，立刻点会被丢掉
             sleep(self.ACTIVATE_SETTLE)
             target = (int(screen_point[0]), int(screen_point[1]))
-            win32api.SetCursorPos(target)
+            move_cursor(*target)
             client = self.to_client(screen_point)
             self._post(WM_MOUSEMOVE, 0, client)
             # 发按下消息前再对齐一次光标：游戏按真实光标位置判定落点，
@@ -340,7 +407,7 @@ class BackgroundMouse:
             if (abs(actual[0] - target[0]) > self.IDLE_TOLERANCE
                     or abs(actual[1] - target[1]) > self.IDLE_TOLERANCE):
                 _warn_once("后台鼠标:被挪开", "点击前光标被移开（用户正在操作鼠标），本次点击可能落空")
-                win32api.SetCursorPos(target)
+                move_cursor(*target)
             handled = self._post(WM_LBUTTONDOWN, MK_LBUTTON, client)
             if _VERBOSE_CLICK:
                 CUS_LOGGER.info(
@@ -374,7 +441,7 @@ class BackgroundMouse:
                 ratio = index / steps
                 point = (int(start[0] + (end[0] - start[0]) * ratio),
                          int(start[1] + (end[1] - start[1]) * ratio))
-                win32api.SetCursorPos(point)
+                move_cursor(*point)
                 self._post(WM_MOUSEMOVE, MK_LBUTTON, self.to_client(point))
                 sleep(step_sleep)
             self._post(WM_LBUTTONUP, 0, self.to_client(end))
