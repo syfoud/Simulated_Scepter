@@ -169,19 +169,43 @@ class KeyMouseManagerRoutingTests(unittest.TestCase):
         self.manager = KeyMouseManager()
         self.manager.set_screen_params(1920, 1080, 1920, 1080)
 
+    def make_background(self, background):
+        """把两个通道都挂上，并让"游戏在前台"为假——这样才会走后台通道。"""
+        mouse = Mock(spec=BackgroundMouse)
+        self.manager.background = background
+        self.manager.background_mouse = mouse
+        with patch("tool.key_mouse_manager.win32gui.GetForegroundWindow",
+                   return_value=999), \
+                patch.object(mouse, "hwnd", 1234, create=True):
+            background.game_is_foreground.return_value = False
+            return mouse
+
     def test_press_is_sent_through_background_channel(self):
         background = Mock(spec=BackgroundKeyboard)
         background.supports.return_value = True
-        self.manager.background = background
+        self.make_background(background)
         self.manager._execute_operation(
             {"type": "press", "key": "f", "duration": 0.1, "allow_e": 1})
         background.press.assert_called_once()
         self.assertEqual(background.press.call_args.args[0], "f")
 
+    def test_foreground_game_uses_real_injection(self):
+        """游戏在前台时用真实注入：后台消息在个别界面会被忽略，前台注入才可靠。"""
+        background = Mock(spec=BackgroundKeyboard)
+        background.supports.return_value = True
+        background.game_is_foreground.return_value = True
+        self.manager.background = background
+        self.manager.background_mouse = Mock(spec=BackgroundMouse)
+        with patch("tool.key_mouse_manager.pyautogui") as gui:
+            self.manager._execute_operation(
+                {"type": "press", "key": "f", "duration": 0, "allow_e": 1})
+        gui.keyDown.assert_called_once_with("f")
+        background.press.assert_not_called()
+
     def test_unsupported_key_is_skipped_instead_of_falling_back(self):
         background = Mock(spec=BackgroundKeyboard)
         background.supports.return_value = False
-        self.manager.background = background
+        self.make_background(background)
         with patch("tool.key_mouse_manager.pyautogui") as gui:
             self.manager._execute_operation(
                 {"type": "press", "key": "f", "duration": 0, "allow_e": 1})
@@ -192,8 +216,11 @@ class KeyMouseManagerRoutingTests(unittest.TestCase):
         """后台模式下点击投窗口消息（落点借光标），不再因为游戏不在前台就跳过。"""
         mouse = Mock(spec=BackgroundMouse)
         mouse.game_is_foreground.return_value = False
+        mouse.hwnd = 1234
         self.manager.background_mouse = mouse
-        with patch("tool.key_mouse_manager.pyautogui") as gui:
+        with patch("tool.key_mouse_manager.pyautogui") as gui, \
+                patch("tool.key_mouse_manager.win32gui.GetForegroundWindow",
+                      return_value=999):
             self.manager._execute_operation({"type": "click", "x": 100, "y": 100})
         mouse.click.assert_called_once_with((100, 100))
         gui.click.assert_not_called()
