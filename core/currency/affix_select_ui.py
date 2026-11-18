@@ -1,18 +1,10 @@
-"""目标词缀多选对话框：三列勾选，选项来自解包的 53 条词缀名。"""
+"""目标词缀多选对话框：带搜索框的多列勾选，选项来自解包的 53 条词缀名。"""
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
-    QCheckBox,
-    QDialog,
-    QDialogButtonBox,
-    QGridLayout,
-    QLabel,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
 from core.currency.affixes import AFFIX_NAMES, ordered_selection
+from core.currency.checkbox_list_ui import SearchableCheckList
 
 
 class AffixSelectDialog(QDialog):
@@ -33,22 +25,14 @@ class AffixSelectDialog(QDialog):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        content = QWidget(scroll)
-        grid = QGridLayout(content)
-        grid.setAlignment(Qt.AlignTop)
-
-        selected = set(selected)
-        self.checkboxes = {}
-        for index, name in enumerate(AFFIX_NAMES):
-            box = QCheckBox(name, content)
-            box.setChecked(name in selected)
-            self.checkboxes[name] = box
-            grid.addWidget(box, index // self.COLUMNS, index % self.COLUMNS)
-
-        scroll.setWidget(content)
-        layout.addWidget(scroll)
+        self.list = SearchableCheckList(
+            AFFIX_NAMES,
+            columns=self.COLUMNS,
+            selected=selected,
+            placeholder="搜索词缀名（例如：复仇、护盾、增幅）",
+            parent=self,
+        )
+        layout.addWidget(self.list, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("确定")
@@ -62,5 +46,4 @@ class AffixSelectDialog(QDialog):
 
     def selected_affixes(self):
         """按词缀表的顺序返回勾选项，保证配置文件里的顺序稳定。"""
-        return ordered_selection(
-            name for name, box in self.checkboxes.items() if box.isChecked())
+        return ordered_selection(self.list.selected_names())

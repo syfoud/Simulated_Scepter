@@ -1,20 +1,12 @@
-"""投资策略多选对话框：三列勾选，选项来自 298 条名单。
+"""投资策略多选对话框：带搜索框的多列勾选，选项来自 298 条名单。
 
 目标策略与负面策略共用这一个对话框，只换标题和提示。
 """
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import (
-    QCheckBox,
-    QDialog,
-    QDialogButtonBox,
-    QGridLayout,
-    QLabel,
-    QScrollArea,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
 
+from core.currency.checkbox_list_ui import SearchableCheckList
 from core.currency.strategies import STRATEGY_NAMES
 
 
@@ -37,22 +29,14 @@ class StrategySelectDialog(QDialog):
             label.setWordWrap(True)
             layout.addWidget(label)
 
-        scroll = QScrollArea(self)
-        scroll.setWidgetResizable(True)
-        content = QWidget(scroll)
-        grid = QGridLayout(content)
-        grid.setAlignment(Qt.AlignTop)
-
-        selected = set(selected)
-        self.checkboxes = {}
-        for index, name in enumerate(STRATEGY_NAMES):
-            box = QCheckBox(name, content)
-            box.setChecked(name in selected)
-            self.checkboxes[name] = box
-            grid.addWidget(box, index // self.COLUMNS, index % self.COLUMNS)
-
-        scroll.setWidget(content)
-        layout.addWidget(scroll)
+        self.list = SearchableCheckList(
+            STRATEGY_NAMES,
+            columns=self.COLUMNS,
+            selected=selected,
+            placeholder="搜索策略名（例如：军火、星徽、期货）",
+            parent=self,
+        )
+        layout.addWidget(self.list, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("确定")
@@ -66,4 +50,4 @@ class StrategySelectDialog(QDialog):
 
     def selected_strategies(self):
         """按名单顺序返回勾选项，保证配置里的顺序稳定。"""
-        return [name for name in STRATEGY_NAMES if self.checkboxes[name].isChecked()]
+        return self.list.selected_names()
