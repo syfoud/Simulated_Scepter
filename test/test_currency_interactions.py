@@ -1317,6 +1317,28 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.update_state = Mock()
         currency.update_state.assert_not_called()      # 不能判成 battle_ready
 
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_pair_strategy_layout_is_detected_by_label(self, manager):
+        """「一个选择 + 两个都带走」版式靠标签识别，不能把普通三卡也当过去。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.click_text = Mock(return_value=True)
+        self.assertTrue(currency.on_pair_strategy_layout())
+
+        currency.click_text = Mock(return_value=False)
+        self.assertFalse(currency.on_pair_strategy_layout())
+
+    def test_pair_layout_wanted_only_accepts_targets(self):
+        """并取版式的判定：目标名单内、且不在负面名单里才算想要。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["小复制"]
+        currency.strategy_avoid = ["大裁员"]
+        self.assertTrue(currency._is_wanted("小复制", {"大裁员"}))
+        self.assertFalse(currency._is_wanted("大裁员", {"大裁员"}))
+        self.assertFalse(currency._is_wanted("别的策略", set()))
+        self.assertFalse(currency._is_wanted("", set()))
+
 
 if __name__ == "__main__":
     unittest.main()

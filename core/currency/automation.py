@@ -279,6 +279,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         self.ENVIR_BOXES = [[266, 375, 610, 413], [780, 375, 1134, 414], [1314, 373, 1645, 413]]
         self.BLESS_BOXES = [[298, 472, 608, 513], [783, 472, 1095, 513], [1298, 472, 1605, 513]]
+        # 「一个选择 + 两个都带走」版式：三张卡不等距，确认按钮也居中
 
         if debug != 2:
             # 似乎是避免鼠标越界的一个标志
@@ -344,6 +345,72 @@ class SimulatedCurrency(CurrencyUtils):
         exit_plane_text = "不退出" if self.set_exit_plane is None else f"第{self.set_exit_plane}面"
         CUS_LOGGER.info(f"货币战争退出位面设置为: {exit_plane_text}")
 
+    def on_pair_strategy_layout (self):
+        """判断是不是「一个选择 + 两个都带走」那种三卡版式。"""
+        self.ts.forward(self.get_screen())
+        if self.click_text(text="两个都带走", box=self.PAIR_LAYOUT_TITLE_BOX,
+                           click=False, allow_fail=True):
+            return True
+        return False
+
+    def select_strategy_pair_layout (self, selection):
+        """处理「一个选择 + 两个都带走」版式：左一右二。"""
+        CUS_LOGGER.info("投资策略：检测到「一个选择 + 两个都带走」版式")
+        for attempt in range(self.max_refresh + 1):
+            self.ts.forward(self.get_screen())
+            texts = self.canonical_strategies(
+                self.recognize_options(self.PAIR_LAYOUT_TEXT_BOXES))
+            CUS_LOGGER.info(f"OCR 识别结果（左/右1/右2）: {texts}")
+
+            avoid = set(self.strategy_avoid)
+            left_hit = self._is_wanted(texts[0], avoid)
+            # 右侧是"两张一起拿"，所以两张都不能是负面策略
+            right_hit = (
+                self._is_wanted(texts[1], avoid) or self._is_wanted(texts[2], avoid)
+            ) and not (texts[1] in avoid or texts[2] in avoid)
+            if right_hit:
+                index = 1
+                CUS_LOGGER.info("右侧两张里有目标策略，整组带走")
+                break
+            if left_hit:
+                index = 0
+                CUS_LOGGER.info("左侧是目标策略，选左侧")
+                break
+            if attempt < self.max_refresh:
+                CUS_LOGGER.info(f"第 {attempt+1} 次没有目标策略，刷新一次")
+                self._refresh_investment_options(texts)
+                continue
+            index = 0
+            CUS_LOGGER.warning("刷新后仍无目标策略，只拿左侧一张（风险最小）")
+            break
+
+        key_mouse_manager.click_point(*self.PAIR_LAYOUT_CENTERS[index])
+        key_mouse_manager.wait()
+        if not self.click_text(text="确认", box=self.PAIR_LAYOUT_CONFIRM_BOX,
+                               click=True, allow_fail=True):
+            CUS_LOGGER.warning("「一个选择 + 两个都带走」版式没点到确认")
+        self.investment_tracker.complete_selection(selection, grants_bonus=False)
+        CUS_LOGGER.info("投资策略选择完成（并取版式）")
+        return 1
+
+    def _is_wanted (self, name, avoid):
+        """这个策略名是不是目标策略（且不是负面策略）。"""
+        if not name or name in avoid:
+            return False
+        return name in self.strategy_targets
+
+    # 「一个选择 + 两个都带走」版式（群友提供的低概率版式，实测坐标）：
+    # 「两个都带走」[1151,235,1263,262]；三张卡标题 y≈553~587，分别在
+    # [441,555,587,586] / [919,555,1091,586] / [1368,553,1452,587]；确认在 [952,969,1005,999]
+    PAIR_LAYOUT_TITLE_BOX = [1100, 220, 1300, 275]
+    PAIR_LAYOUT_TEXT_BOXES = [
+        [420, 545, 615, 595],      # 左卡标题（再往下就是效果说明，别框进来）
+        [900, 545, 1110, 595],     # 右卡1
+        [1350, 545, 1470, 595],    # 右卡2
+    ]
+    PAIR_LAYOUT_CENTERS = [(511, 470), (1003, 470), (1419, 470)]
+    PAIR_LAYOUT_CONFIRM_BOX = [900, 950, 1060, 1015]
+
     def recognize_options (self, boxes, redundancy = 30):
         """对多个选项区域进行 OCR 识别，返回文字列表"""
         texts = []
@@ -392,6 +459,13 @@ class SimulatedCurrency(CurrencyUtils):
         return texts
 
     def route (self):
+        if self.background_mode:
+            # 后台模式：不抢前台，直接进主循环（loop() 自身就是 while，窗口消失由 loop 内处理）
+            CUS_LOGGER.info("后台模式：不抢前台，直接开始识别")
+            self.loop()
+            CUS_LOGGER.info("已停止任务")
+            return
+
         set_forground ()
         while not self._stop:
             hwnd,Text = get_hwnd_and_text ()
@@ -962,6 +1036,8 @@ class SimulatedCurrency(CurrencyUtils):
         """选择投资策略，并区分普通位面选择与黄金/白银投资奖励。"""
 
         selection = self.investment_tracker.begin_selection()
+        if self.on_pair_strategy_layout():
+            return self.select_strategy_pair_layout(selection)
         kind_text = {
             SelectionKind.NORMAL: "普通位面",
             SelectionKind.IMMEDIATE_BONUS: "立即奖励",
