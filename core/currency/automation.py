@@ -1878,6 +1878,8 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
         self.exit_requested = True
+        # 这里**不**推进到 exit：那会让「开始退出」再按一轮 ESC，把刚弹出来的确认框搅掉。
+        # 确认框交给「重开2」（已去掉状态门槛）点「放弃并结算」。
         return 1
 
     def has_text (self, box, text):

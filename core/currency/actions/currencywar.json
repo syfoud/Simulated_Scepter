@@ -739,8 +739,7 @@
                 756
             ],
             "interval": 2,
-            "redundancy": 30,
-            "condition": "exit"
+            "redundancy": 30
         },
         "actions": [
             {
