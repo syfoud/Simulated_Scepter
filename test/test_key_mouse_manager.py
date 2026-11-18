@@ -171,8 +171,7 @@ class KeyMouseBoundaryTests(unittest.TestCase):
             box=[np.float64(100), np.float64(200), np.float64(300), np.float64(400)])
         self.manager.wait()
         self.cursor.assert_called_once_with((170, 381))
-        # 点击日志里还有一条"走哪条通道"，操作字典不一定是最后一条，按全部调用查
-        logged = " ".join(str(call) for call in self.logger.debug.call_args_list)
+        logged = str(self.logger.debug.call_args)
         self.assertIn("'x': 150", logged)
         self.assertIn("'y': 351", logged)
         self.assertIn("'box': [100, 200, 300, 400]", logged)
@@ -180,40 +179,7 @@ class KeyMouseBoundaryTests(unittest.TestCase):
     def test_click_without_box_keeps_old_log_shape(self):
         """没有来源框的纯坐标点击不带 box 字段，日志与改版前一致。"""
         self.click_at(215, 896)
-        logged = " ".join(str(call) for call in self.logger.debug.call_args_list)
-        self.assertNotIn("'box'", logged)
-
-    def test_background_mode_click_goes_through_window_messages(self):
-        """后台模式：点击不再移动光标注入，而是交给后台鼠标通道。"""
-        channel = self.enterContext(patch("tool.key_mouse_manager.BackgroundMouse"))
-        self.manager.set_background_keyboard(12345)
-        self.manager.background_mouse = channel.return_value
-        self.cursor.reset_mock()
-        self.click.reset_mock()
-
-        self.click_at(100, 200)
-
-        channel.return_value.click.assert_called_once_with((120, 230))
-        self.cursor.assert_not_called()
-        self.click.assert_not_called()
-
-    def test_background_mode_drag_goes_through_window_messages(self):
-        """后台模式：拖动同样交给后台鼠标通道，步进由它内部完成。"""
-        channel = self.enterContext(patch("tool.key_mouse_manager.BackgroundMouse"))
-        self.manager.set_background_keyboard(12345)
-        self.manager.background_mouse = channel.return_value
-        self.cursor.reset_mock()
-        self.drag_to.reset_mock()
-
-        self.manager.drag_point(10, 20, 30, 40, 0.4)
-        self.manager.wait()
-
-        channel.return_value.drag.assert_called_once()
-        args = channel.return_value.drag.call_args[0]
-        self.assertEqual(args[0], (30, 50))     # 起点加客户区原点 (20,30)
-        self.assertEqual(args[1], (50, 70))
-        self.cursor.assert_not_called()
-        self.drag_to.assert_not_called()
+        self.assertNotIn("'box'", str(self.logger.debug.call_args))
 
 
 if __name__ == "__main__":

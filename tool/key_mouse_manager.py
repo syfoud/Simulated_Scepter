@@ -5,9 +5,8 @@ from collections import deque
 import pyautogui
 import win32api
 import win32con
-import win32gui
 
-from tool.background_input import BackgroundKeyboard, BackgroundMouse, WindowActivation
+from tool.background_input import BackgroundKeyboard
 from tool.log import CUS_LOGGER
 from tool.thread import ThreadWithException
 
@@ -186,8 +185,6 @@ class KeyMouseManager:
         self.skipped_pointer = None
         # 后台键盘通道；为 None 时按键走 pyautogui 前台注入
         self.background = None
-        # 后台鼠标通道；为 None 时点击/拖动走 pyautogui 前台注入
-        self.background_mouse = None
 
     def set_config(self, config):
         """应用内核的转身倍率与 DPI 缩放。
@@ -221,31 +218,14 @@ class KeyMouseManager:
         self.y0 = y1-yy
 
     def set_background_keyboard(self, hwnd=None):
-        """切换后台输入通道（键盘 + 鼠标）。
-
-        两个通道共用同一份窗口激活状态：分开记账会互相拆台——键盘抬键撤销激活后，
-        鼠标还以为自己是激活的，接着的点击就被游戏丢弃。
+        """切换后台键盘通道。
 
         Args:
-            hwnd: 游戏窗口句柄；传入后按键/点击改投窗口消息，None 表示恢复前台注入。
+            hwnd: 游戏窗口句柄；传入后按键改投窗口消息，None 表示恢复前台按键。
         """
-        self.release_background_input()
-        if not hwnd:
-            return
-        activation = WindowActivation(hwnd)
-        CUS_LOGGER.info("后台输入通道已建立：hwnd=%s（键盘+鼠标共用一个激活状态）", hwnd)
-        self.background = BackgroundKeyboard(hwnd, activation)
-        # 鼠标通道跟键盘一起切换：后台模式下点击/拖动改投窗口消息
-        self.background_mouse = BackgroundMouse(hwnd, activation)
-
-    def release_background_input(self):
-        """释放后台输入：抬起按键、撤销伪造激活、归还焦点。"""
         if self.background is not None:
             self.background.release_all()
-        if self.background_mouse is not None:
-            self.background_mouse.release()
-        self.background = None
-        self.background_mouse = None
+        self.background = BackgroundKeyboard(hwnd) if hwnd else None
 
     def start(self):
         """
@@ -272,8 +252,9 @@ class KeyMouseManager:
                 self.operation_queue.clear()  # 清空队列中的所有操作
                 self.operation_queue.append("stop")
             self.worker_thread.join()
-        # 后台输入不会随线程自动释放：停止时抬起按键、撤销伪造激活并归还焦点
-        self.release_background_input()
+        # 后台键盘不会随线程自动释放：停止时补发抬起消息，避免游戏里按键一直按着
+        if self.background is not None:
+            self.background.release_all()
 
     def clean(self):
         """
@@ -338,18 +319,6 @@ class KeyMouseManager:
             )
         return None
 
-    def _use_background_input(self):
-        """当前该用后台消息还是前台注入：游戏在前台就用前台注入（可靠）。"""
-        mouse = self.background_mouse
-        if mouse is None:
-            return False
-        if self.background is not None and self.background.game_is_foreground():
-            return False
-        try:
-            return win32gui.GetForegroundWindow() != mouse.hwnd
-        except Exception:
-            return True
-
     def _execute_operation(self, operation):
         """
         执行单个键鼠操作
@@ -364,18 +333,12 @@ class KeyMouseManager:
 
         elif op_type == 'click':
             x, y = operation['x'], operation['y']
+            if self._background_mouse_blocked("点击"):
+                return
             # 转换坐标，并确认落点在游戏窗口内
             point = self._game_point("点击", x, y)
             if point is None:
                 return
-            if self._use_background_input():
-                # 游戏不在前台：消息投给窗口，落点借用光标（见 BackgroundMouse 说明）
-                hit = self.background_mouse.click(point)
-                CUS_LOGGER.debug(
-                    "后台点击 (%s, %s) → %s", x, y, "已投递" if hit else "被跳过")
-                return
-            # 走到这里要么没建后台通道，要么游戏就在前台 —— 用真实注入最可靠
-            CUS_LOGGER.debug("前台点击 (%s, %s)", x, y)
             win32api.SetCursorPos(point)
             pyautogui.click()
 
@@ -407,13 +370,12 @@ class KeyMouseManager:
             start_x, start_y = operation['start_x'], operation['start_y']
             end_x, end_y = operation['end_x'], operation['end_y']
             duration = operation.get('duration', 0.4)
+            if self._background_mouse_blocked("拖动"):
+                return
             # 转换坐标，并确认起止点都在游戏窗口内
             start = self._game_point("拖拽起点", start_x, start_y)
             end = self._game_point("拖拽终点", end_x, end_y)
             if start is None or end is None:
-                return
-            if self.background_mouse is not None:
-                self.background_mouse.drag(start, end, duration)
                 return
             win32api.SetCursorPos(start)
             self._sleep(0.2)
@@ -430,7 +392,7 @@ class KeyMouseManager:
         if op_type == 'press' and operation.get('allow_e', 1) == 0 and operation['key'] == 'technique':
             return
         key = resolve_key(operation['key'])
-        if self.background is not None and self._use_background_input():
+        if self.background is not None:
             if not self.background.supports(key):
                 _warn_once(f"后台按键:{key}", f"后台模式暂不支持按键 {key!r}，本次按键已跳过")
                 return
@@ -636,36 +598,6 @@ class KeyMouseManager:
             'force': force
         }
         self._enqueue(operation)
-
-    def click_point_foreground(self, x, y):
-        """兜底点击：把游戏短暂切到前台，用真实输入点一下，再把焦点还回去。
-
-        后台消息在个别界面会整片失效（游戏卡在"半激活"状态时连真人点击都没反应），
-        这时只有真实激活才能把游戏和系统重新对齐。代价是窗口会闪一下。
-        """
-        point = self._game_point("前台兜底点击", x, y)
-        if point is None:
-            return False
-        hwnd = self.background.hwnd if self.background is not None else None
-        if not hwnd:
-            return False
-        previous = win32gui.GetForegroundWindow()
-        try:
-            win32gui.SetForegroundWindow(hwnd)
-        except Exception as error:
-            CUS_LOGGER.warning("切前台失败，放弃这次兜底点击：%s", error)
-            return False
-        time.sleep(0.25)                      # 等窗口真的拿到焦点
-        win32api.SetCursorPos(point)
-        pyautogui.click()
-        time.sleep(0.1)
-        try:
-            if previous and previous != hwnd:
-                win32gui.SetForegroundWindow(previous)
-        except Exception:
-            pass
-        CUS_LOGGER.info("前台兜底点击 (%s, %s) 已执行", x, y)
-        return True
 
     def click_point(self, x, y, force=False, box=None):
         """

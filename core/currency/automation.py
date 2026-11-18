@@ -392,13 +392,6 @@ class SimulatedCurrency(CurrencyUtils):
         return texts
 
     def route (self):
-        if self.background_mode:
-            # 后台模式：不抢前台，直接进主循环（loop() 自身就是 while，窗口消失由 loop 内处理）
-            CUS_LOGGER.info("后台模式：不抢前台，直接开始识别")
-            self.loop()
-            CUS_LOGGER.info("已停止任务")
-            return
-
         set_forground ()
         while not self._stop:
             hwnd,Text = get_hwnd_and_text ()

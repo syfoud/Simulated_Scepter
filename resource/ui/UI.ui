@@ -1234,10 +1234,10 @@
                      <item>
                       <widget class="QCheckBox" name="background_mode_checkbox">
                        <property name="text">
-                        <string>后台模式（截图与键鼠都不抢前台，允许窗口被遮挡）</string>
+                        <string>后台模式（截图与按键不抢前台，允许窗口被遮挡）</string>
                        </property>
                        <property name="toolTip">
-                        <string>开启后任务启动不再抢前台，截图改走窗口捕获，按键与鼠标点击/拖动改投窗口消息，焦点留在你正在用的窗口上。限制：①窗口不能最小化（捕获不到画面）；②点击会短暂借用光标（约 0.2 秒）后归还；③个别界面可能不接受后台点击（需要真实焦点），此时会自动重试，仍不行请改用前台模式；④滚轮与转视角仍不支持后台；云游戏窗口不走后台模式。</string>
+                        <string>开启后任务启动不再抢前台，截图改走窗口捕获、按键改投窗口消息。鼠标点击、拖动和滚轮仍需游戏在前台，暂不支持后台；窗口不能最小化。</string>
                        </property>
                       </widget>
                      </item>

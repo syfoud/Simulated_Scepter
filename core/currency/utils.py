@@ -71,15 +71,12 @@ class CurrencyUtils(StateKernel):
         self.x0 = self.y0 = self.x1 = self.y1 = 0
         self.scx = self.scy = 1.0
         self.hwnd = None
-        # 云游戏是浏览器窗口，后台消息行为未验证；只有本地窗口才启用后台键鼠
-        self._local_window = True
         self.wait_game_window()
         # 等待窗口期间被用户中断时不再创建截图器：后台捕获没有窗口句柄可用
         if self._stop:
             return
         self.sct = self.create_screen()
-        key_mouse_manager.set_background_keyboard(
-            self.hwnd if (self.background_mode and self._local_window) else None)
+        key_mouse_manager.set_background_keyboard(self.hwnd if self.background_mode else None)
 
     def create_screen(self):
         """按配置创建截图器：前台整屏截屏，后台模式换窗口捕获。"""
@@ -129,7 +126,6 @@ class CurrencyUtils(StateKernel):
             return 0
         hwnd = game_window.hwnd
         self.hwnd = hwnd
-        self._local_window = game_window.kind != "cloud"
         self.xx = game_window.client_width
         self.yy = game_window.client_height
         if game_window.kind == "cloud":

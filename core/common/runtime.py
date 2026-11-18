@@ -64,8 +64,7 @@ class ScriptKernel(StateKernel):
         # 必须在这里就设置，等待游戏窗口期间也该按正确的调试模式运行。
         settings = load_settings()
         GLOBAL.DEBUG_MODE = bool(settings.get("debug", False))
-        # 后台模式：截图走窗口捕获、键鼠走窗口消息，允许游戏窗口被遮挡（不能最小化）。
-        # 只对本地窗口生效：云游戏是浏览器窗口，后台消息行为未验证，仍按前台模式跑。
+        # 后台模式：截图与键盘走窗口消息，允许游戏窗口被遮挡（不能最小化）；鼠标仍为前台
         self.background_mode = bool(settings.get("background_mode", False))
         self.capture_backend = resolve_capture_backend(settings, self.background_mode)
         self._stop = False
@@ -110,7 +109,7 @@ class ScriptKernel(StateKernel):
                 key_mouse_manager.set_screen_params(self.x1, self.y1, self.xx, self.yy)
                 # 后台模式按键改投窗口消息；前台模式恢复 pyautogui 注入
                 key_mouse_manager.set_background_keyboard(
-                    window.hwnd if (self.background_mode and window.kind == "local") else None)
+                    window.hwnd if self.background_mode else None)
                 # 转身速度异常时据此判断是 DPI 还是校准值的问题
                 CUS_LOGGER.debug(f"DPI: {self.dpi_scale} A: {int(self.multi * 100) / 100}")
                 return
