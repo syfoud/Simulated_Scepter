@@ -88,8 +88,13 @@ class CurrencyUtils(StateKernel):
         return create_window_capture(self.capture_backend, self.hwnd, self.xx, self.yy)
 
     def get_screen(self):
-        """停止后返回最后一帧，避免 GUI 线程关闭截图器后任务线程再访问空句柄。"""
-        if self._stop:
+        """截图器已释放时返回最后一帧，避免任务线程访问已关闭的句柄。
+
+        判据用「截图器是否存在」而不是 `_stop`：`_stop` 在 `SimulatedCurrency.__init__`
+        里默认就是 True（要等 `start()` 才置 False），用它当判据会让内核启动前的截图
+        （GUI「打印坐标」这类只构造内核、不 start 的调试路径）一直返回全黑占位帧。
+        """
+        if self.sct is None:
             return self.screen
         return super().get_screen()
 
