@@ -1,5 +1,73 @@
 [
     {
+        "name": "备战席已满退局",
+        "trigger": {
+            "text": "备战席已满",
+            "box": [
+                740,
+                505,
+                1200,
+                558
+            ],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions": [
+            "restart_on_bench_full"
+        ]
+    },
+    {
+        "name": "关闭物品详情",
+        "trigger": {
+            "text": "消耗品",
+            "box": [
+                800,
+                300,
+                980,
+                355
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "dismiss_item_detail"
+        ]
+    },
+    {
+        "name": "关闭开拓商店",
+        "trigger": {
+            "text": "开拓商店",
+            "box": [
+                890,
+                50,
+                1180,
+                105
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "close_pioneer_shop"
+        ]
+    },
+    {
+        "name": "修复重叠界面",
+        "trigger": {
+            "text": "尚未选择主角角色和光环",
+            "box": [
+                700,
+                845,
+                1260,
+                940
+            ],
+            "interval": 3,
+            "redundancy": 30
+        },
+        "actions": [
+            "recover_broken_protagonist_panel"
+        ]
+    },
+    {
         "name": "货币战争外",
         "trigger": {
             "text": "货币战争",
@@ -155,15 +223,7 @@
             "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    1585,
-                    972
-                ]
-            },
-            {
-                "set_state": "start_currencywar"
-            }
+            "enter_battle_mode"
         ]
     },
     {
@@ -171,10 +231,10 @@
         "trigger": {
             "text": "进入标准博弈",
             "box": [
-                1563,
-                946,
-                1711,
-                973
+                1540,
+                930,
+                1740,
+                995
             ],
             "interval": 1,
             "redundancy": 30
@@ -197,15 +257,7 @@
             "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    1637,
-                    960
-                ]
-            },
-            {
-                "set_state": "difficulty_select"
-            }
+            "enter_battle_mode"
         ]
     },
     {
@@ -270,16 +322,10 @@
                 617
             ],
             "interval": 2,
-            "redundancy": 30,
-            "condition": "startbattle"
+            "redundancy": 30
         },
         "actions": [
-            {
-                "position": [
-                    1185,
-                    670
-                ]
-            },
+            "confirm_battle_short_handed",
             {
                 "set_state": "startbattle"
             }
@@ -380,22 +426,21 @@
     {
         "name": "啊哈大悦",
         "trigger": {
-            "text": "查看详情",
+            "text": "简易装备",
             "box": [
-                625,
-                329,
-                717,
-                356
+                860,
+                35,
+                1200,
+                85
             ],
-            "interval": 2,
-            "redundancy": 30,
-            "once": true
+            "interval": 1,
+            "redundancy": 30
         },
         "actions": [
             {
                 "position": [
-                    663,
-                    290
+                    602,
+                    315
                 ]
             }
         ]
@@ -571,14 +616,13 @@
         "trigger": {
             "text": "跳过",
             "box": [
-                1784,
-                730,
-                1852,
-                770
+                1600,
+                700,
+                1920,
+                790
             ],
-            "interval": 3,
-            "redundancy": 60,
-            "condition": "currency_main"
+            "interval": 2,
+            "redundancy": 60
         },
         "actions": [
             {
@@ -620,8 +664,7 @@
                 910
             ],
             "interval": 2,
-            "redundancy": 30,
-            "condition": "startbattle"
+            "redundancy": 30
         },
         "actions": [
             {
@@ -811,6 +854,413 @@
                     898
                 ]
             }
+        ]
+    },
+    {
+        "name": "选择主角-面板标题",
+        "trigger": {
+            "text": "主角光环",
+            "box": [
+                760,
+                58,
+                1160,
+                122
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            "select_protagonist"
+        ]
+    },
+    {
+        "name": "确认替换光环",
+        "trigger": {
+            "text": "原有光环",
+            "box": [
+                760,
+                468,
+                1180,
+                548
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    1187,
+                    670
+                ]
+            }
+        ]
+    },
+    {
+        "name": "选择主角",
+        "trigger": {
+            "text": "选择主角",
+            "box": [
+                1755,
+                732,
+                1877,
+                768
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "select_protagonist"
+        ]
+    },
+    {
+        "name": "进入幕后茶歇",
+        "trigger": {
+            "text": "幕后茶歇",
+            "box": [
+                1750,
+                730,
+                1885,
+                775
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    1816,
+                    752
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-聊一聊",
+        "trigger": {
+            "text": "聊一聊",
+            "box": [
+                340,
+                810,
+                435,
+                865
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    387,
+                    837
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-推进对话",
+        "trigger": {
+            "text": "点击空白处继续",
+            "box": [
+                1395,
+                890,
+                1590,
+                950
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    1491,
+                    920
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-确认奖励",
+        "trigger": {
+            "text": "确认",
+            "box": [
+                1600,
+                400,
+                1900,
+                820
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "text": "确认",
+                "box": [
+                    1600,
+                    400,
+                    1900,
+                    820
+                ]
+            }
+        ]
+    },
+    {
+        "name": "茶歇-选择选项",
+        "trigger": {
+            "text": "返回",
+            "box": [
+                1090,
+                400,
+                1420,
+                900
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_tea_break_option"
+        ]
+    },
+    {
+        "name": "茶歇-领取奖励",
+        "trigger": {
+            "text": "领取茶歇奖励",
+            "box": [
+                855,
+                170,
+                1065,
+                225
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    961,
+                    983
+                ]
+            }
+        ]
+    },
+    {
+        "name": "银狼骇入效果",
+        "trigger": {
+            "text": "入效果",
+            "box": [
+                700,
+                60,
+                1800,
+                700
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_hack_effect"
+        ]
+    },
+    {
+        "name": "克拉拉强化-面板标题",
+        "trigger": {
+            "text": "强化效果",
+            "box": [
+                830,
+                65,
+                1270,
+                210
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_clara_enhance"
+        ]
+    },
+    {
+        "name": "克拉拉强化-红字提示",
+        "trigger": {
+            "text": "请选择强化",
+            "box": [
+                1350,
+                460,
+                1635,
+                600
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_clara_enhance"
+        ]
+    },
+    {
+        "name": "龙丹羁绊-面板标题",
+        "trigger": {
+            "text": "羁绊加入",
+            "box": [
+                870,
+                65,
+                1220,
+                200
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_dragon_enhance"
+        ]
+    },
+    {
+        "name": "龙丹羁绊-红字提示",
+        "trigger": {
+            "text": "请选择一个羁绊",
+            "box": [
+                1330,
+                475,
+                1650,
+                610
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_dragon_enhance"
+        ]
+    },
+    {
+        "name": "关闭黑市主理人",
+        "trigger": {
+            "text": "黑市主理人",
+            "box": [
+                870,
+                5,
+                1190,
+                145
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "close_black_market"
+        ]
+    },
+    {
+        "name": "从师-副标题",
+        "trigger": {
+            "text": "师父",
+            "box": [
+                800,
+                85,
+                1290,
+                140
+            ],
+            "interval": 1,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_master"
+        ]
+    },
+    {
+        "name": "巡海游侠-副标题",
+        "trigger": {
+            "text": "使其成为",
+            "box": [
+                810,
+                70,
+                1285,
+                200
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_ranger_hero"
+        ]
+    },
+    {
+        "name": "巡海游侠-红字提示",
+        "trigger": {
+            "text": "请选择一名角色",
+            "box": [
+                1330,
+                475,
+                1650,
+                610
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_ranger_hero"
+        ]
+    },
+    {
+        "name": "奇兽花园-副标题",
+        "trigger": {
+            "text": "奇美拉",
+            "box": [
+                910,
+                70,
+                1185,
+                200
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_beast_chimera"
+        ]
+    },
+    {
+        "name": "奇兽花园-红字提示",
+        "trigger": {
+            "text": "请选择奇美拉",
+            "box": [
+                1345,
+                475,
+                1640,
+                610
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_beast_chimera"
+        ]
+    },
+    {
+        "name": "梦境交织-副标题",
+        "trigger": {
+            "text": "共舞",
+            "box": [
+                740,
+                70,
+                1360,
+                200
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_dream_weave"
+        ]
+    },
+    {
+        "name": "梦境交织-红字提示",
+        "trigger": {
+            "text": "名共舞的角色",
+            "box": [
+                1315,
+                455,
+                1670,
+                585
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            "choose_dream_weave"
         ]
     },
     {

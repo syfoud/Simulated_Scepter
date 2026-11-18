@@ -11,6 +11,8 @@ from core.currency.affix_stats import AffixSampler
 from core.currency.envirs import ENVIR_NAMES
 from core.currency.textmatch import best_match, similar
 from core.currency.investment_selection import choose_fallback_investment
+from core.currency.strategies import exit_plane_for, match_name
+from core.currency.strategy_stats import StrategySampler
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
     AREA_BOXES,
@@ -25,7 +27,11 @@ from core.currency.run_history import (
     CurrencyRunHistory,
     get_newly_unlocked_investment,
 )
-from core.currency.settings import load_currency_settings, resolve_priority
+from core.currency.settings import (
+    load_currency_settings,
+    resolve_priority,
+    save_currency_settings,
+)
 from core.currency.utils import CurrencyUtils, set_forground
 from route import PATHS
 from tool import GLOBAL
@@ -112,12 +118,17 @@ def split_count_line(patch):
             and np.median(widths) <= width * 0.35
             and abs(centers[-1] - centers[0]) >= width * 0.5
         ):
+            # 切分点贴边会切出空数组，后面 OCR 一裁片就 cv2 断言崩掉
+            if left < 6 or right > mask.shape[1] - 6:
+                continue
             return patch[:, :left], patch[:, right:]
     return None
 
 
 def read_count_number(recognizer, patch):
     """识别人数裁片一侧的数字；识别结果不是一个数字时返回 None。"""
+    if patch is None or not getattr(patch, "size", 0):
+        return None
     digits = re.findall(r"\d+", recognizer.ocr_one_row(patch))
     if len(digits) != 1:
         return None
@@ -133,9 +144,20 @@ class SimulatedCurrency(CurrencyUtils):
 
     SPECIAL_INVESTMENTS = ("黄金投资", "白银投资")
     GOLDEN_ERA_NAMES = ("银•金•彩",)
+    # 本工具自己的窗口里才会出现的文字：出现就说明画面被盖住了
+    CONTAMINATION_MARKERS = ("运行输出", "中控台", "模拟权杖", "DeepSeek Harness")
+
     DIFFICULTY_MAX_STEPS = 120
-    DIFFICULTY_SELECTED_EFFECT_BOX = [700, 350, 1200, 465]
+    # 4.7 实测：这个框要比文字行宽一点，框太窄 OCR 会把「获得」认成「医得」
+    DIFFICULTY_SELECTED_EFFECT_BOX = [660, 380, 1250, 450]
+    DIFFICULTY_ENTER_BOX = [1550, 930, 1800, 1000]
     DIFFICULTY_DOWN_POSITION = (960, 844)
+    DIFFICULTY_START_POSITION = (1692, 965)     # 难度页右下角的「开始对局」
+    DIFFICULTY_START_ATTEMPTS = 3               # 点了没离开难度页时的重试次数
+    DIFFICULTY_LEAVE_TIMEOUT = 1.2              # 每次点击后等界面切换的时间
+    DIFFICULTY_LEAVE_STEP = 0.2
+    DIFFICULTY_SETTLE_TIMEOUT = 0.8    # 点完向下后，轮询等难度描述变一次
+    DIFFICULTY_SETTLE_STEP = 0.05
     ENVIRONMENT_TITLE_BOX = [897, 80, 1018, 114]
     ENVIRONMENT_CONFIRM_BOX = [1053, 967, 1108, 998]
     # 上阵人数裁片：避开左侧人物图标，右侧留出两位数上限的宽度。
@@ -144,9 +166,42 @@ class SimulatedCurrency(CurrencyUtils):
     # 右下角「进入标准博弈 / 进入超频博弈」按钮：两种博弈是同一个位置
     MODE_ENTER_POSITION = (1637, 960)
     # 该按钮的文字框（日志里带上落点来源，便于核对）
-    BATTLE_MODE_BUTTON_BOX = [1563, 946, 1711, 973]
+    # 右下角按钮：入口页是「开始「货币战争」」，模式页是「进入超频/标准博弈」
+    BATTLE_MODE_BUTTON_BOX = [1400, 925, 1900, 1005]
+    # 人数不足提示框的「确认」按钮：实测文字 [1160,656,1215,686]，取中心直接点
+    BATTLE_FEWER_CONFIRM_POSITION = (1187, 671)
+    # 游戏自己弹出的「前台区域无角色」提示：它在的时候格子被盖住，空位识别不可信
+    FRONT_EMPTY_WARNING_BOX = [816, 512, 1104, 539]
+    FRONT_EMPTY_DISMISS = (978, 671)
+    # 选主角面板：顶部标题与底部红条。商店盖住标题时只剩红条 —— 这就是重叠 bug 的签名
+    PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
+    PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
+    BROKEN_PANEL_ESC_GAP = 1.2
+    MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
+    MODE_SWITCH_STEP = 0.2
+    # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
+    BATTLE_HUD_BOX = [0, 0, 1920, 1080]
+    # 「开拓商店」：标题在两张版式里都有；点击目标是那张「星穹列车，跃迁！」卡片
+    PIONEER_TITLE_BOX = [890, 50, 1180, 105]
+    # 点「星穹列车，跃迁！」这一行本身（实测 [944,366,1079,396]）；
+    # 再往上就是卡片图标区，怕误开详情，所以不往上取
+    PIONEER_CARD_POSITION = (1011, 381)
+    PIONEER_STEP_GAP = 0.9
+    # 物品详情面板左上角的「消耗品」标签（实测约 [849,318,900,337]）
+    ITEM_DETAIL_LABEL_BOX = [800, 300, 980, 355]
+    # 「备战席已满，请出售角色或提升等级」红条（实测约 [905,528,1350,562]）
+    BENCH_FULL_BOX = [740, 505, 1200, 558]   # 红条实测 [783,522,1147,545]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
-    OVERCLOCK_TAB_POSITION = (153, 418)
+    # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
+    # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
+    MASTER_NAME_BAND = [560, 320, 1700, 385]
+    MASTER_CARD_LIFT = 90
+    MASTER_CARD_POSITION = (625, 240)   # 卡名都没认出来时的兜底
+    MASTER_CONFIRM_BOX = [1400, 505, 1580, 570]
+
+    # 4.7 的模式选择界面：左侧上下两张卡（标准 / 超频），右侧大标题显示当前选中的模式
+    MODE_TITLE_BOX = [560, 125, 780, 185]
+    MODE_CARD_POSITIONS = {"standard": (155, 226), "overclock": (155, 418)}
     # 只有低难度才会出现的「返回最高职级」；没它说明已经在 A8-20
     TOP_RANK_BUTTON_BOX = [1325, 952, 1457, 979]
     # 词缀界面：标题、左下词缀条、右下「下一步」
@@ -202,6 +257,11 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         # 是否已开始退出
         self.exit_started = False
+        # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
+        self.current_plane = None
+        self.plane_strategy_count = {}
+        # 退出失败重试计数（连续失败到上限就停手）
+        self.exit_attempts = 0
 
         priority = load_currency_settings()["priority"]
 
@@ -221,6 +281,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         self.ENVIR_BOXES = [[266, 375, 610, 413], [780, 375, 1134, 414], [1314, 373, 1645, 413]]
         self.BLESS_BOXES = [[298, 472, 608, 513], [783, 472, 1095, 513], [1298, 472, 1605, 513]]
+        # 「一个选择 + 两个都带走」版式：三张卡不等距，确认按钮也居中
 
         if debug != 2:
             # 似乎是避免鼠标越界的一个标志
@@ -236,6 +297,21 @@ class SimulatedCurrency(CurrencyUtils):
         self.front_priority, self.back_priority = resolve_priority(
             currency_settings["deployment"]
         )
+
+        # 策略采样与「目标/负面策略」配置
+        self.strategy_sampler = StrategySampler()
+        self.strategy_targets = currency_settings["strategy_targets"]
+        self.strategy_avoid = currency_settings["strategy_avoid"]
+        self.auto_exit_plane = currency_settings["auto_exit_plane"]
+        self.auto_clear_targets = currency_settings["auto_clear_targets"]
+        # 配了目标策略就是在收集策略：这种跑法不该被"等词缀"卡住（低难度本来就没词缀）
+        self.collecting_strategies = bool(self.strategy_targets)
+        if self.strategy_targets:
+            CUS_LOGGER.info("目标投资策略：%s", "、".join(self.strategy_targets))
+        if self.strategy_avoid:
+            CUS_LOGGER.info("负面投资策略（绝不选）：%s", "、".join(self.strategy_avoid))
+        if self.auto_exit_plane:
+            CUS_LOGGER.info("退出位面：按目标策略自动推算")
         if not self.front_priority and not self.back_priority:
             CUS_LOGGER.warning(
                 "尚未配置前台或后台角色优先级，备战角色只会作为补位进入前台空位；"
@@ -270,6 +346,72 @@ class SimulatedCurrency(CurrencyUtils):
 
         exit_plane_text = "不退出" if self.set_exit_plane is None else f"第{self.set_exit_plane}面"
         CUS_LOGGER.info(f"货币战争退出位面设置为: {exit_plane_text}")
+
+    def on_pair_strategy_layout (self):
+        """判断是不是「一个选择 + 两个都带走」那种三卡版式。"""
+        self.ts.forward(self.get_screen())
+        if self.click_text(text="两个都带走", box=self.PAIR_LAYOUT_TITLE_BOX,
+                           click=False, allow_fail=True):
+            return True
+        return False
+
+    def select_strategy_pair_layout (self, selection):
+        """处理「一个选择 + 两个都带走」版式：左一右二。"""
+        CUS_LOGGER.info("投资策略：检测到「一个选择 + 两个都带走」版式")
+        for attempt in range(self.max_refresh + 1):
+            self.ts.forward(self.get_screen())
+            texts = self.canonical_strategies(
+                self.recognize_options(self.PAIR_LAYOUT_TEXT_BOXES))
+            CUS_LOGGER.info(f"OCR 识别结果（左/右1/右2）: {texts}")
+
+            avoid = set(self.strategy_avoid)
+            left_hit = self._is_wanted(texts[0], avoid)
+            # 右侧是"两张一起拿"，所以两张都不能是负面策略
+            right_hit = (
+                self._is_wanted(texts[1], avoid) or self._is_wanted(texts[2], avoid)
+            ) and not (texts[1] in avoid or texts[2] in avoid)
+            if right_hit:
+                index = 1
+                CUS_LOGGER.info("右侧两张里有目标策略，整组带走")
+                break
+            if left_hit:
+                index = 0
+                CUS_LOGGER.info("左侧是目标策略，选左侧")
+                break
+            if attempt < self.max_refresh:
+                CUS_LOGGER.info(f"第 {attempt+1} 次没有目标策略，刷新一次")
+                self._refresh_investment_options(texts)
+                continue
+            index = 0
+            CUS_LOGGER.warning("刷新后仍无目标策略，只拿左侧一张（风险最小）")
+            break
+
+        key_mouse_manager.click_point(*self.PAIR_LAYOUT_CENTERS[index])
+        key_mouse_manager.wait()
+        if not self.click_text(text="确认", box=self.PAIR_LAYOUT_CONFIRM_BOX,
+                               click=True, allow_fail=True):
+            CUS_LOGGER.warning("「一个选择 + 两个都带走」版式没点到确认")
+        self.investment_tracker.complete_selection(selection, grants_bonus=False)
+        CUS_LOGGER.info("投资策略选择完成（并取版式）")
+        return 1
+
+    def _is_wanted (self, name, avoid):
+        """这个策略名是不是目标策略（且不是负面策略）。"""
+        if not name or name in avoid:
+            return False
+        return name in self.strategy_targets
+
+    # 「一个选择 + 两个都带走」版式（群友提供的低概率版式，实测坐标）：
+    # 「两个都带走」[1151,235,1263,262]；三张卡标题 y≈553~587，分别在
+    # [441,555,587,586] / [919,555,1091,586] / [1368,553,1452,587]；确认在 [952,969,1005,999]
+    PAIR_LAYOUT_TITLE_BOX = [1100, 220, 1300, 275]
+    PAIR_LAYOUT_TEXT_BOXES = [
+        [420, 545, 615, 595],      # 左卡标题（再往下就是效果说明，别框进来）
+        [900, 545, 1110, 595],     # 右卡1
+        [1350, 545, 1470, 595],    # 右卡2
+    ]
+    PAIR_LAYOUT_CENTERS = [(511, 470), (1003, 470), (1419, 470)]
+    PAIR_LAYOUT_CONFIRM_BOX = [900, 950, 1060, 1015]
 
     def recognize_options (self, boxes, redundancy = 30):
         """对多个选项区域进行 OCR 识别，返回文字列表"""
@@ -319,6 +461,13 @@ class SimulatedCurrency(CurrencyUtils):
         return texts
 
     def route (self):
+        if self.background_mode:
+            # 后台模式：不抢前台，直接进主循环（loop() 自身就是 while，窗口消失由 loop 内处理）
+            CUS_LOGGER.info("后台模式：不抢前台，直接开始识别")
+            self.loop()
+            CUS_LOGGER.info("已停止任务")
+            return
+
         set_forground ()
         while not self._stop:
             hwnd,Text = get_hwnd_and_text ()
@@ -341,12 +490,47 @@ class SimulatedCurrency(CurrencyUtils):
             self.loop ()
         CUS_LOGGER.info ("已停止任务")
 
+    def screen_contaminated (self):
+        """这一帧是不是把本工具自己的窗口也截进来了。
+
+        截图是抓屏幕像素的：只要控制台窗口盖在游戏画面上，抓到的就是控制台。
+        识别到控制台里的文字时，任何点击都不可信，必须跳过。
+        """
+        try:
+            texts = " ".join(item["raw_text"] for item in self.ts.res)
+        except Exception:
+            return False
+        return any(marker in texts for marker in self.CONTAMINATION_MARKERS)
+
+    def game_is_foreground (self):
+        """游戏窗口是不是前台窗口。不是的话截到的是桌面/别的程序，识别全是乱的。"""
+        try:
+            import win32gui
+
+            return bool(self.hwnd) and win32gui.GetForegroundWindow() == self.hwnd
+        except Exception:
+            return True   # 判断不了就别挡着跑
+
     def loop (self):
         CUS_LOGGER.info ("开始OCR识别，等待触发文字")
         silent_time = time.time ()
         shot_saved = False
         while not self._stop:
+            # 游戏被切到后台时，截图抓到的是桌面或别的窗口，动作会点到乱七八糟的地方。
+            # 后台模式是另一套链路（窗口捕获），这里不能抢前台
+            if not getattr(self, "background_mode", False) and not self.game_is_foreground():
+                CUS_LOGGER.warning("游戏窗口不在前台，先把切回来再继续（不执行任何动作）")
+                set_forground()
+                time.sleep(1)
+                continue
+
             self.ts.forward (self.get_screen())
+            if self.screen_contaminated():
+                CUS_LOGGER.warning(
+                    "画面里混进了控制台窗口的内容，多半是窗口盖住了游戏；这一帧不执行任何动作"
+                )
+                time.sleep(0.5)
+                continue
             name, _ = self.run_static ()
             if name:
                 silent_time = time.time ()
@@ -386,6 +570,37 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("前往货币战争")
         key_mouse_manager.press("interastral_peace_guide")
 
+    def wait_difficulty_settled (self, timeout=None, step=None):
+        """点完向下箭头后，等难度描述文字发生变化（最多等 DIFFICULTY_SETTLE_TIMEOUT）。
+
+        列表滚动是动画，点完立刻回头看会读到上一帧，容易多按几下。
+        """
+        timeout = self.DIFFICULTY_SETTLE_TIMEOUT if timeout is None else timeout
+        step = self.DIFFICULTY_SETTLE_STEP if step is None else step
+        self.get_screen()
+        before = self.read_difficulty_text()
+        deadline = time.monotonic() + timeout
+        for _ in range(int(timeout / step) + 1):
+            time.sleep(step)
+            self.get_screen()
+            current = self.read_difficulty_text()
+            if current and current != before:
+                return current
+        return before
+
+    def on_difficulty_screen (self):
+        """现在还在不在难度界面：右下角应该能看到「开始对局」。"""
+        return bool(self.click_text(
+            text="开始对局", box=self.DIFFICULTY_ENTER_BOX, click=False, allow_fail=True))
+
+    def read_difficulty_text (self):
+        """读难度 1 的效果描述行（读不到返回空串）。"""
+        try:
+            return merge_text(self.ts.find_with_box(
+                self.DIFFICULTY_SELECTED_EFFECT_BOX, forward=1))
+        except Exception:
+            return ""
+
     def is_one (self):
         try:
             text_list = self.ts.find_with_box(
@@ -394,7 +609,9 @@ class SimulatedCurrency(CurrencyUtils):
             )
             merged = merge_text (text_list)
             CUS_LOGGER.debug(f"OCR 识别结果: {merged}")
-            return "开局时获得" in merged
+            # 只认「开局时」：难度 1 的效果行开头就是它，OCR 后面的字容易错（获得→医得），
+            # 掐头两个字足够判别，又不至于把「敌人难度+1」那行误判成难度 1
+            return "开局时" in merged
         except Exception:
             CUS_LOGGER.info("正在选择难度1")
             return False
@@ -414,6 +631,11 @@ class SimulatedCurrency(CurrencyUtils):
                 CUS_LOGGER.info(f"停止选择难度，当前状态：{self.state}")
                 return True
             self.get_screen()
+            if not self.on_difficulty_screen():
+                # 点完「开始对局」会先进黑屏，状态却还是 difficulty_select；
+                # 这时候再连点只会往空处点，直接收手
+                CUS_LOGGER.info("难度界面已消失（对局已开始或界面已切换），停止选择难度")
+                return True
             if self.is_one ():
                 CUS_LOGGER.info ("已识别到难度1")
                 return self.complete_difficulty_selection()
@@ -427,23 +649,92 @@ class SimulatedCurrency(CurrencyUtils):
             )
             key_mouse_manager.click_point(*self.DIFFICULTY_DOWN_POSITION)
             key_mouse_manager.wait()
+            # 难度列表滚动有动画：轮询等描述文字变一次再判断，别拿动画中间帧当结果
+            self.wait_difficulty_settled()
 
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
 
-    def enter_battle_mode (self):
-        """点右下角「进入…博弈」按钮：标准博弈直接进，超频博弈先切左上标签。"""
-        if self.gamemode == "standard":
-            key_mouse_manager.click_point(*self.MODE_ENTER_POSITION, box=self.BATTLE_MODE_BUTTON_BOX)
-            key_mouse_manager.wait()
-            self.update_state("difficulty_select")
-            CUS_LOGGER.info("已点击「进入标准博弈」")
-            return 1
+    def read_mode_button (self):
+        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。"""
+        try:
+            return merge_text(self.ts.find_with_box(
+                self.BATTLE_MODE_BUTTON_BOX, redundancy=30))
+        except Exception:
+            return ""
 
-        CUS_LOGGER.info("切换到超频博弈标签")
-        key_mouse_manager.click_point(*self.OVERCLOCK_TAB_POSITION)
-        key_mouse_manager.wait()
-        return 1
+    def enter_battle_mode (self):
+        """进入对局：入口页 → 模式选择 → 难度界面，逐层判断。
+
+        OCR 对这几个按钮很不稳（实测把「超频博弈」读成「超预博到」「超频博弃」），
+        所以不整串匹配，只认关键单字：「货币战争」走入口、「开始」走难度、
+        模式页则看有没有「超」/「标」来判断当前选中哪个模式。
+        """
+        want_overclock = self.gamemode != "standard"
+        want_char = "超" if want_overclock else "标"
+        card = self.MODE_CARD_POSITIONS["overclock" if want_overclock else "standard"]
+
+        for attempt in range(3):
+            text = self.read_mode_button()
+            CUS_LOGGER.debug("右下角按钮：%r", text)
+
+            if "货币战争" in text:
+                CUS_LOGGER.info("已点击「进入货币战争」")
+                key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
+                                              box=self.BATTLE_MODE_BUTTON_BOX)
+                key_mouse_manager.wait()
+                return 1
+
+            if "开始" in text:
+                # 「开始对局」——已经在难度界面
+                CUS_LOGGER.debug("已在难度界面，跳过模式切换")
+                self.update_state("difficulty_select")
+                return 1
+
+            if "博" in text:
+                # 只要出现「博」就说明在模式页（OCR 会把「博弈」读成「博到/博弃/博奔」），
+                # 这时才敢点左侧模式卡；入口页和难度页都不会有这个字
+                if want_char in text:
+                    CUS_LOGGER.info("已选中「%s」", "超频博弈" if want_overclock else "标准博弈")
+                    key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
+                                                  box=self.BATTLE_MODE_BUTTON_BOX)
+                    key_mouse_manager.wait()
+                    self.update_state("difficulty_select")
+                    return 1
+                CUS_LOGGER.info("切换到「%s」（第 %d 次）",
+                                "超频博弈" if want_overclock else "标准博弈", attempt + 1)
+                key_mouse_manager.click_point(*card)
+                key_mouse_manager.wait()
+                # 后台模式下捕获帧会滞后：点完立刻读还是旧文字，会误判"没切过去"连点三次。
+                # 所以轮询等按钮文字真的变过来。
+                if self.wait_mode_switched(want_char):
+                    CUS_LOGGER.info("模式已切到「%s」",
+                                    "超频博弈" if want_overclock else "标准博弈")
+                    key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
+                                                  box=self.BATTLE_MODE_BUTTON_BOX)
+                    key_mouse_manager.wait()
+                    self.update_state("difficulty_select")
+                    return 1
+                continue
+
+            # 按钮文字没读到或不是这几种：宁可什么都不点，也别把点打到攻略/图例上
+            CUS_LOGGER.warning("认不出右下角按钮（%r），本轮不点击任何位置", text)
+            return 0
+
+        CUS_LOGGER.warning("三次都没切到目标模式，先不动，等下一轮")
+        return 0
+
+    def wait_mode_switched (self, want_char, timeout=None, step=None):
+        """轮询等右下角按钮文字变成目标模式（后台捕获帧滞后，点完要等）。"""
+        timeout = self.MODE_SWITCH_TIMEOUT if timeout is None else timeout
+        step = self.MODE_SWITCH_STEP if step is None else step
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(step)
+            text = self.read_mode_button()
+            if want_char in text:
+                return True
+        return False
 
     def select_top_difficulty (self):
         """最高职级（A8-20）：有「返回最高职级」就点它切过去，没有说明已经是。"""
@@ -460,7 +751,9 @@ class SimulatedCurrency(CurrencyUtils):
 
     def handle_difficulty_selection(self):
         if self.state not in (None, "difficulty_select"):
-            return 0
+            # 这个动作是靠「开始对局」触发的，能走到这儿说明人就在难度界面，
+            # 状态没跟上（比如刚点完进入按钮）就直接纠正，别空转
+            CUS_LOGGER.info("难度界面已出现，状态从 %s 纠正为 difficulty_select", self.state)
 
         self.update_state("difficulty_select")
         self.get_screen()
@@ -481,20 +774,74 @@ class SimulatedCurrency(CurrencyUtils):
             return True
 
         key_mouse_manager.clean()
-        key_mouse_manager.click_point(1692, 965, force=True) # “开始对局”按钮坐标
-        key_mouse_manager.wait()
+        # 点「开始对局」后确认真的离开了难度页：后台模式下点击偶尔会被丢掉，
+        # 不确认的话就会每 2 秒原地重点一次，日志里只看到同一句"直接开始对局"。
+        for attempt in range(1, self.DIFFICULTY_START_ATTEMPTS + 1):
+            key_mouse_manager.click_point(*self.DIFFICULTY_START_POSITION, force=True)
+            key_mouse_manager.wait()
+            if not self.still_on_difficulty_screen():
+                break
+            if attempt < self.DIFFICULTY_START_ATTEMPTS:
+                CUS_LOGGER.warning("第 %d 次点「开始对局」没反应，重试", attempt)
+        else:
+            # 后台消息整片失效时的最后手段：真实输入。会短暂把游戏切到前台，
+            # 默认关闭（看网课时闪窗口太打扰），需要时在设置里打开。
+            if getattr(self, "allow_foreground_fallback", False):
+                CUS_LOGGER.warning(
+                    "点了 %d 次「开始对局」都没离开难度页，改用前台兜底点击",
+                    self.DIFFICULTY_START_ATTEMPTS)
+                key_mouse_manager.click_point_foreground(*self.DIFFICULTY_START_POSITION)
+                if self.still_on_difficulty_screen():
+                    CUS_LOGGER.warning("前台兜底点击也没离开难度页，等下一轮")
+            else:
+                CUS_LOGGER.warning(
+                    "点了 %d 次「开始对局」都没离开难度页，等下一轮"
+                    "（如需自动切前台，请开启 background_allow_foreground_fallback）",
+                    self.DIFFICULTY_START_ATTEMPTS)
+            return True
+        self.reset_run_state()
+        CUS_LOGGER.info("货币战争对局计时开始")
+        return True
+
+    def still_on_difficulty_screen (self, timeout=None, step=None):
+        """轮询确认还在不在难度页：按钮文字「开始对局」消失即视为已进入对局。"""
+        timeout = self.DIFFICULTY_LEAVE_TIMEOUT if timeout is None else timeout
+        step = self.DIFFICULTY_LEAVE_STEP if step is None else step
+        deadline = time.monotonic() + timeout
+        while True:
+            self.get_screen()
+            if not self.click_text(text="开始对局", box=self.DIFFICULTY_ENTER_BOX,
+                                   click=False, allow_fail=True):
+                return False
+            if time.monotonic() >= deadline:
+                return True
+            time.sleep(step)
+
+    def reset_run_state (self):
+        """每局开局的复位。放在「投资环境选择完成」也调用一次：
+
+        难度那一步有可能被跳过（比如「开始对局」文字没认出来就提前返回），
+        那样 exit_requested 会带着上一局的 True 进来，prepare_battle 直接静默返回，
+        整局都在空转。
+        """
         self.exit_plane = self.set_exit_plane
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
+        self.current_plane = None
+        self.plane_strategy_count = {}
+        # 退出失败重试计数（连续失败到上限就停手）
+        self.exit_attempts = 0
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
+        self.protagonist_picks = 0
+        self.protagonist_drag_failures = 0
+        self.battle_click_attempts = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
         self.run_history.start_run()
-        CUS_LOGGER.info("货币战争对局计时开始")
-        return True
 
     def auto_battle(self):
         # 需要打开自动战斗
@@ -713,6 +1060,8 @@ class SimulatedCurrency(CurrencyUtils):
         """选择投资策略，并区分普通位面选择与黄金/白银投资奖励。"""
 
         selection = self.investment_tracker.begin_selection()
+        if self.on_pair_strategy_layout():
+            return self.select_strategy_pair_layout(selection)
         kind_text = {
             SelectionKind.NORMAL: "普通位面",
             SelectionKind.IMMEDIATE_BONUS: "立即奖励",
@@ -741,7 +1090,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         for attempt in range (self.max_refresh + 1):
             self.ts.forward (self.get_screen ())
-            texts = self.recognize_options (boxes)
+            texts = self.canonical_strategies (self.recognize_options (boxes))
             CUS_LOGGER.info (f"OCR 识别结果: {texts}")
 
             icon_presence = [False] * len(roi_boxes)
@@ -753,27 +1102,22 @@ class SimulatedCurrency(CurrencyUtils):
                 CUS_LOGGER.info(
                     f"选项{idx+1} 是否有图标: {has_icon} (标准差: {std:.2f})"
                 )
-                if has_icon:
-                    selected_idx = idx
-                    CUS_LOGGER.info(
-                        f"第{attempt}次检测到未解锁图标，选中选项{idx+1}"
-                    )
-                    break
 
-            if selected_idx != -1:
+            pick, reason = self._pick_strategy(texts, icon_presence)
+            if pick is not None and reason != "fallback":
+                selected_idx = pick
+                CUS_LOGGER.info(f"第{attempt}次命中「{reason}」，选中选项{pick+1}")
                 break
 
             if attempt < self.max_refresh:
-                CUS_LOGGER.info(f"第 {attempt+1} 次未匹配，点击刷新")
+                CUS_LOGGER.info(f"第 {attempt+1} 次没命中目标/未解锁，点击刷新")
                 self._refresh_investment_options(texts)
             else:
-                selected_idx = choose_fallback_investment(texts, icon_presence)
-                if selected_idx == 1:
-                    CUS_LOGGER.warning("刷新后仍未找到未解锁图标，默认选中间")
-                else:
-                    CUS_LOGGER.warning(
-                        "中间选项为无图鉴图标的轮回不止，改选左侧以保留跨局资源"
-                    )
+                selected_idx = (
+                    pick if pick is not None
+                    else choose_fallback_investment(texts, icon_presence)
+                )
+                CUS_LOGGER.warning(f"刷新后仍未命中，按兜底选选项{selected_idx+1}")
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
         unlocked_investment = get_newly_unlocked_investment(
@@ -812,10 +1156,19 @@ class SimulatedCurrency(CurrencyUtils):
             f"延迟奖励={self.investment_tracker.delayed_count}"
         )
 
-        if self.investment_tracker.should_exit(self.exit_plane):
-            CUS_LOGGER.info(f"达到退出位面（{self.exit_plane}面），尝试重开")
-            self.exit_requested = True
-            self.update_state("exit")
+        # 4.7 起策略可能在同一面出现多次、也可能一次都不出现，
+        # 所以这里只记账；退不退出交给备战界面的位面判定（_maybe_exit_by_stage）
+        plane = self.current_plane if self.current_plane is not None else 0
+        self.plane_strategy_count[plane] = self.plane_strategy_count.get(plane, 0) + 1
+        CUS_LOGGER.info(
+            "第 %s 面已选过 %d 次策略", plane, self.plane_strategy_count[plane])
+
+        hits = self.strategy_sampler.record(
+            plane, texts, selected_text, targets=self.strategy_targets)
+        if hits:
+            CUS_LOGGER.info("本屏命中目标策略：%s", "、".join(hits))
+            self.auto_clear_target(selected_text)
+        self._refresh_auto_exit_plane()
 
         return 1
 
@@ -830,6 +1183,9 @@ class SimulatedCurrency(CurrencyUtils):
         """
         box = self.TEAM_COUNT_BOX
         patch = self.screen[box[1]:box[3], box[0]:box[2]]
+        if patch is None or not patch.size:
+            CUS_LOGGER.debug("人数裁片为空（窗口尺寸可能不对），等下一轮")
+            return None
         counts = None
         halves = split_count_line(patch)
         if halves is not None:
@@ -892,7 +1248,7 @@ class SimulatedCurrency(CurrencyUtils):
         两边都没配置时不算达成（否则开局就停）。词缀看采样计数器，环境看跨局累计的
         `envir_seen`；都用形近字匹配，OCR 错一个字不至于漏判。
         """
-        if not self.gather_mode:
+        if not getattr(self, "gather_mode", False):
             return False
         if not self.affix_targets and not self.prior_envir:
             return False
@@ -949,8 +1305,25 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.debug("本局词缀已记录，跳过重复识别")
             return 1
 
+        # 只有开了词缀收集（或配了目标词缀）才值得花时间读词缀；否则直接点下一步，
+        # 在低难度刷策略时这一步会白等十几秒
+        if not getattr(self, "gather_mode", False):
+            # 不置「已记录」：这一下没点掉时下一帧要能接着点，
+            # 置了标记就会永远跳过，卡在这个界面
+            CUS_LOGGER.debug("未开启词缀收集模式，跳过词缀识别直接点下一步")
+            key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
+            key_mouse_manager.wait()
+            return 1
+
         affixes = self.wait_affixes()
         if not affixes:
+            if getattr(self, "collecting_strategies", False):
+                # 低难度局根本没有词缀，收集策略时不该在这儿卡住
+                CUS_LOGGER.info("本局没有词缀（低难度/未开词缀），策略收集中，直接点下一步")
+                self.affixes_recorded = True
+                key_mouse_manager.click_point(*self.AFFIX_NEXT_POSITION)
+                key_mouse_manager.wait()
+                return 1
             CUS_LOGGER.warning(
                 "等了 %d 帧仍没识别到词缀，先不点下一步，等下一轮重试",
                 self.AFFIX_READ_ATTEMPTS,
@@ -958,7 +1331,11 @@ class SimulatedCurrency(CurrencyUtils):
             return 1
         if len(affixes) < self.AFFIX_EXPECTED:
             self.affix_incomplete_rounds += 1
-            if self.affix_incomplete_rounds < self.AFFIX_PARTIAL_RETRY_ROUNDS:
+            give_up = (
+                getattr(self, "collecting_strategies", False)
+                or self.affix_incomplete_rounds >= self.AFFIX_PARTIAL_RETRY_ROUNDS
+            )
+            if not give_up:
                 CUS_LOGGER.warning(
                     "词缀只识别到 %d/%d 条（%s），再等一轮（第 %d 次重试）",
                     len(affixes), self.AFFIX_EXPECTED, "、".join(affixes),
@@ -966,9 +1343,8 @@ class SimulatedCurrency(CurrencyUtils):
                 )
                 return 1
             CUS_LOGGER.warning(
-                "重试 %d 轮仍不足 %d 条，按现有 %d 条继续：%s",
-                self.affix_incomplete_rounds, self.AFFIX_EXPECTED,
-                len(affixes), "、".join(affixes),
+                "词缀只识别到 %d/%d 条（%s），按现有条数继续",
+                len(affixes), self.AFFIX_EXPECTED, "、".join(affixes),
             )
         CUS_LOGGER.info("本局词缀：%s", "、".join(affixes))
         self.affixes_recorded = True
@@ -1007,7 +1383,7 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.debug("点击空白提示：%s", target)
         self.click_box(target)
         key_mouse_manager.wait()
-        if self.gather_mode and self.envir_selected:
+        if getattr(self, "gather_mode", False) and self.envir_selected:
             CUS_LOGGER.info("开局词缀收集模式：本局采样结束，请求退出并重开")
             self.exit_requested = True
             self.update_state("exit")
@@ -1019,7 +1395,32 @@ class SimulatedCurrency(CurrencyUtils):
         每次只执行一个拖拽并重新采集，避免备战栏压缩后使用过期的格子坐标。
         返回 1 表示已准备好，0 表示仍需准备；识别和落位失败均不放行。
         """
-        if self._stop or self.exit_requested:
+        CUS_LOGGER.debug(
+            "出战前准备：state=%s stop=%s exit_requested=%s 退出位面=%s",
+            self.state, self._stop, self.exit_requested,
+            getattr(self, "exit_plane", None))
+        # 游戏在说「前台区域无角色」时，格子被提示框盖着，空位/人数识别都不可信，
+        # 这时候判"阵容就位"会直接再点一次出战，死循环。先关掉提示，等真正的备战画面再补位。
+        if self.click_text(text="前台区域无角色", box=self.FRONT_EMPTY_WARNING_BOX,
+                           click=False, allow_fail=True):
+            CUS_LOGGER.info("游戏提示前台无角色，先关掉提示，等备战画面再补位")
+            key_mouse_manager.click_point(*self.FRONT_EMPTY_DISMISS)
+            key_mouse_manager.wait()
+            return 0
+        if self._stop:
+            CUS_LOGGER.debug("出战前准备：已停止，跳过")
+            return 0
+        if self.exit_requested and self.state != "exit":
+            # 状态机没在退出流程里，标志却是 True：一定是上一局漏清的，别拿它卡住整局
+            CUS_LOGGER.warning("退出标志与状态不符（state=%s），复位后继续", self.state)
+            self.reset_run_state()
+        if self.exit_requested:
+            CUS_LOGGER.debug("出战前准备：已请求退出，跳过")
+            return 0
+        # 备战界面是唯一能稳定读到「位面-节点」的地方，退出判定放这儿：
+        # 连续出现两屏策略时，一定是第二屏点完、回到备战界面才按 ESC
+        if self._maybe_exit_by_stage():
+            CUS_LOGGER.debug("出战前准备：位面判定要求退出，本轮不准备")
             return 0
         if self.state == "battle_ready":
             self.update_state("currency_main")
@@ -1046,6 +1447,11 @@ class SimulatedCurrency(CurrencyUtils):
                 deployed=deployed,
             )
             sources = {slot.index: slot.template for slot in slots if slot.kind == "character"}
+            CUS_LOGGER.debug(
+                "备战识别：人数=%s，前台空位=%s，后台空位=%s，备战角色=%d，补位动作=%d",
+                counts, vacancies["front"], vacancies["back"],
+                len(sources), len(moves),
+            )
             if not moves:
                 if front_occupied == 0:
                     CUS_LOGGER.debug("前台尚无角色，继续等待备战")
@@ -1121,8 +1527,39 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.debug("角色拖拽未确认，本轮跳过该动作：%s，人数=%s", move, after_count)
         return None
 
+    def confirm_battle_short_handed (self):
+        """「可出战角色人数未达上限，是否确认出战？」的提示框——直接点确认。
+
+        不先识别再点：后台模式下捕获帧会滞后，读不到「确认」并不代表按钮不在，
+        结果就是日志里一直「没点掉确认」、提示框关不掉。
+        触发这一动作的本来就是提示框上的「本局不再提示」文字，位置已知，直接点即可。
+
+        也不去勾「本局不再提示」：勾选框是否已勾读不出来，点一次就是切换一次。
+        """
+        key_mouse_manager.click_point(*self.BATTLE_FEWER_CONFIRM_POSITION)
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("已确认按现有人数出战")
+        return 1
+
     def start_battle(self):
         """仅在可出战状态点击出战，等待输入完成后进入战斗状态。"""
+        if self.exit_requested:
+            # 已经决定退出就别再开一局战斗：开了之后 ESC 按不动，退出流程会一直空转
+            CUS_LOGGER.info("已请求退出，跳过出战")
+            self.update_state("currency_main")
+            return 0
+        # 连续点了好几次还没进战斗，说明有东西挡着：把整屏文字打出来，免得到现场猜
+        self.battle_click_attempts = getattr(self, "battle_click_attempts", 0) + 1
+        if self.battle_click_attempts == 3:
+            try:
+                self.ts.forward(self.get_screen())
+                texts = [item["raw_text"].strip() for item in self.ts.res]
+                CUS_LOGGER.warning(
+                    "连点 3 次出战都没进战斗，当前屏幕文字：%s", " ".join(t for t in texts if t)
+                )
+            except Exception:
+                CUS_LOGGER.warning("连点 3 次出战都没进战斗，且整屏识别失败", exc_info=True)
+
         key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
         self.update_state("startbattle")
@@ -1131,7 +1568,7 @@ class SimulatedCurrency(CurrencyUtils):
     def handle_1_1_reward(self):
         """处理1-1投资环境选择后的奖励界面。"""
 
-        if self.gather_mode:
+        if getattr(self, "gather_mode", False):
             # 采集只要词缀和环境名额，绝不进战斗。
             # 奇遇界面要加载几秒才出来，这段时间**必须就地等**：只返回 0 的话主循环会继续
             # 匹配别的动作，「出战前准备」靠屏幕上的「出战」文字触发（不带状态门槛），
@@ -1191,6 +1628,7 @@ class SimulatedCurrency(CurrencyUtils):
         """执行当前货币战争对局的统一退出流程。"""
 
         if self.exit_started:
+            self.exit_attempts = 0
             return 1
 
         CUS_LOGGER.info("执行货币战争退出流程")
@@ -1205,6 +1643,7 @@ class SimulatedCurrency(CurrencyUtils):
         ):
             CUS_LOGGER.debug("检测到退出页面")
             self.exit_started = True
+            self.exit_attempts = 0
             return 1
 
         # 虽然正常情况下exit的时候不会在战斗状态，但是万一呢
@@ -1224,10 +1663,9 @@ class SimulatedCurrency(CurrencyUtils):
             ):
                 CUS_LOGGER.debug("检测到退出页面")
                 self.exit_started = True
+                self.exit_attempts = 0
                 return 1
-            else:
-                CUS_LOGGER.debug("未检测到退出页面，将重试")
-                return 0
+            return self._exit_failed("战斗内没能进入放弃并结算页面")
 
         max_attempts = 15
         timeout = 6
@@ -1253,6 +1691,11 @@ class SimulatedCurrency(CurrencyUtils):
                 self.exit_started = True
                 return 1
 
+            # 战斗中按 ESC 是无效动作：先等战斗结束（结算画面由「战斗结束后」动作负责）
+            if self.in_battle_screen():
+                CUS_LOGGER.info("还在战斗界面，等战斗结束后再退出")
+                return 0
+
             CUS_LOGGER.debug(
                 f"未检测到退出页面，第 {attempt + 1}/{max_attempts} 次按 ESC"
             )
@@ -1260,10 +1703,24 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.press("esc")
             key_mouse_manager.wait()
 
-        CUS_LOGGER.warning("未能确认进入“放弃并结算”页面，本次退出尝试失败，将在下一轮重试")
-        return 0
+        return self._exit_failed("按 ESC 后没能进入放弃并结算页面")
+
+    def in_battle_screen (self):
+        """当前是不是还在战斗里（战斗界面按 ESC 没用，得等结算）。"""
+        for text, box in (
+            ("自动战斗", self.BATTLE_HUD_BOX),
+            ("挑战成功", self.BATTLE_HUD_BOX),
+            ("战斗结束", self.BATTLE_HUD_BOX),
+        ):
+            if self.click_text(text=text, box=box, click=False, allow_fail=True):
+                return True
+        return False
+
+    def reset_battle_click_attempts (self):
+        self.battle_click_attempts = 0
 
     def handle_battle_finished(self):
+        self.battle_click_attempts = 0
         if self.exit_requested:
             self.update_state("exit")
         else:
@@ -1337,3 +1794,673 @@ class SimulatedCurrency(CurrencyUtils):
             self.sct.close()
             self.sct = None
         self.map_thread = None
+    PROTAGONIST_BUTTON_BOX = [1755, 732, 1877, 768]
+    # 贴着文字边界裁会读空，左右上下都留出余量
+    PROTAGONIST_TITLE_BOX = [760, 58, 1160, 122]
+    # 一局会过两次主角面板：第二次那个角色身上已经有光环，所以拖第二个角色
+    PROTAGONIST_DRAG = ((805, 612), (960, 445))
+    PROTAGONIST_SECOND_DRAG = ((910, 609), (964, 441))
+    # 前台 2 号位可能是空的（角色都被分到后台），连试两次不成改从后台第一个拖
+    PROTAGONIST_FALLBACK_DRAG = ((709, 750), (964, 441))
+    PROTAGONIST_AURA_POSITION = (1501, 502)
+    PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
+    PROTAGONIST_WAIT_ATTEMPTS = 25
+    PROTAGONIST_WAIT_INTERVAL = 0.4
+    # 第二次选主角时该角色已有光环，点光环会弹「是否替换该角色原有光环？」（实测 OCR 框）
+    # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
+    PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
+    PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
+
+    def restart_on_bench_full (self):
+        """备战席已满且无法出战：这一局直接退出重开，不去卖角色。"""
+        if self.exit_requested:
+            return 0
+        CUS_LOGGER.warning("备战席已满，无法出战，本局直接退出重开")
+        self.exit_requested = True
+        self.update_state("exit")
+        return 1
+
+    def dismiss_item_detail (self):
+        """关掉误触打开的物品详情面板（界面上只有「消耗品」说明框）。"""
+        self.get_screen()
+        CUS_LOGGER.info("检测到物品详情面板，按 ESC 退出")
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        return 1
+
+    def close_pioneer_shop (self):
+        """关掉「开拓商店」面板：先点「星穹列车，跃迁！」那张卡，再按 ESC 回备战。
+
+        必须点卡片本体（不能只按 ESC，实测直接 ESC 关不掉）；
+        也不能按文字中心点——文字在卡片下边缘，会点到空隙里。
+        """
+        self.get_screen()
+        CUS_LOGGER.info("发现「开拓商店」面板，先点卡片再按 ESC")
+        key_mouse_manager.click_point(*self.PIONEER_CARD_POSITION)
+        key_mouse_manager.wait()
+        time.sleep(self.PIONEER_STEP_GAP)
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("已关闭「开拓商店」")
+        return 1
+
+    def recover_broken_protagonist_panel (self):
+        """游戏偶发 bug：商店与「选择主角」界面叠在一起时，先 ESC 关商店再 ESC 重开。
+
+        判定用「底部红条在、顶部标题不在」这组签名：正常的选主角面板两者都在，
+        商店把标题盖住时只剩底下的「尚未选择主角角色和光环」。
+        """
+        self.get_screen()
+        banner = self.click_text(text="尚未选择主角角色和光环",
+                                 box=self.PROTAGONIST_BANNER_BOX,
+                                 click=False, allow_fail=True)
+        # 用短词「主角光环」判断标题在不在：长句一旦 OCR 掉字就会被误判成"标题缺失"，
+        # 那会误触发 ESC 把正常的一局退出掉
+        title = self.click_text(text="主角光环",
+                                box=self.PROTAGONIST_TITLE_BOX,
+                                click=False, allow_fail=True)
+        if not banner or title:
+            return 0
+
+        CUS_LOGGER.warning(
+            "检测到商店与选择主角界面重叠（游戏偶发 bug）：先按 ESC 关商店，再按 ESC 重开")
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        time.sleep(self.BROKEN_PANEL_ESC_GAP)
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+        self.exit_requested = True
+        return 1
+
+    def select_protagonist (self):
+        """4.7 新 UI「选择主角」：点按钮 → 等面板 → 拖第一个角色 → 选右侧光环 → 确认。
+
+        面板出现在第一位面和第二位面首领之前的备战界面，按钮就压在「出战」的位置上，
+        不处理的话主循环等不到「出战」文字会一直空转。
+        """
+        # 主循环每帧都刷过截图，这里直接用当前帧（自己抓会依赖 _stop 等运行时状态）
+        if self.click_text(text="选择一个角色获得主角光环",
+                           box=self.PROTAGONIST_TITLE_BOX, click=False, allow_fail=True):
+            # 刚选完的这几秒里不要再点开面板：面板标题那条动作会立刻把它重新打开，
+            # 结果就是每次都白等一轮（日志里连着 25 次「面板还没出现」）
+            if time.monotonic() - getattr(self, "protagonist_done_at", 0.0) < 3.0:
+                CUS_LOGGER.debug("主角刚选完，跳过这次面板处理")
+                return 1
+            # 面板已经开着：可能是上一轮点的按钮生效了，也可能是上一轮拖拽没成功。
+            # 累计失败次数，用来决定要不要换起点。
+            self.protagonist_drag_failures = getattr(self, "protagonist_drag_failures", 0) + 1
+            CUS_LOGGER.info(
+                "选择主角面板已打开（连续第 %d 次处理），直接选角色",
+                self.protagonist_drag_failures)
+        else:
+            box = self.PROTAGONIST_BUTTON_BOX
+            key_mouse_manager.click_point(
+                (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+            key_mouse_manager.wait()
+
+        for attempt in range(self.PROTAGONIST_WAIT_ATTEMPTS):
+            if self.click_text(
+                text="选择一个角色获得主角光环",
+                box=self.PROTAGONIST_TITLE_BOX,
+                click=False,
+                allow_fail=True,
+            ):
+                break
+            CUS_LOGGER.debug(
+                "选择主角面板还没出现（第 %d/%d 次等待）",
+                attempt + 1, self.PROTAGONIST_WAIT_ATTEMPTS,
+            )
+            time.sleep(self.PROTAGONIST_WAIT_INTERVAL)
+        else:
+            CUS_LOGGER.warning("选择主角面板没等到，交给下一轮重试")
+            return 0
+
+        # 起点选择：默认第一个角色；第二次改拖第二个；连试两次都没成说明那些位置是空的，
+        # 改从后台第一个角色拖（前台 2 号位可能压根没站人）。
+        failures = getattr(self, "protagonist_drag_failures", 0)
+        if failures >= 2:
+            start, end = self.PROTAGONIST_FALLBACK_DRAG
+            CUS_LOGGER.info("选择主角：前两次没拖动，改从后台第一个角色拖（第 %d 次尝试）", failures + 1)
+        elif getattr(self, "protagonist_picks", 0) >= 1:
+            start, end = self.PROTAGONIST_SECOND_DRAG
+            CUS_LOGGER.info("选择主角：拖第 2 个角色")
+        else:
+            start, end = self.PROTAGONIST_DRAG
+            CUS_LOGGER.info("选择主角：拖第 1 个角色")
+        key_mouse_manager.drag_point(start[0], start[1], end[0], end[1])
+        key_mouse_manager.wait()
+
+        # 选右侧的主角光环（不刷新，省金币）
+        key_mouse_manager.click_point(*self.PROTAGONIST_AURA_POSITION)
+        key_mouse_manager.wait()
+
+        # 一局要过两次主角面板：第二次那个角色身上已经有光环，
+        # 再点光环会弹「是否替换该角色原有光环？」——直接确认替换
+        if self.click_text(
+            text="是否替换该角色原有光环",
+            box=self.PROTAGONIST_REPLACE_TITLE_BOX,
+            click=False,
+            allow_fail=True,
+        ):
+            CUS_LOGGER.info("该角色已有光环，确认替换")
+            key_mouse_manager.click_point(*self.PROTAGONIST_REPLACE_CONFIRM_POSITION)
+            key_mouse_manager.wait()
+
+        box = self.PROTAGONIST_CONFIRM_BOX
+        key_mouse_manager.click_point(
+            (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
+        key_mouse_manager.wait()
+        self.protagonist_picks = getattr(self, "protagonist_picks", 0) + 1
+        self.protagonist_drag_failures = 0
+        self.protagonist_done_at = time.monotonic()
+        CUS_LOGGER.info("主角已选择（本局第 %d 次）", self.protagonist_picks)
+        return 1
+
+    TEA_ENTRY_BOX = [1753, 732, 1879, 768]
+    TEA_ENTRY_POSITION = (1816, 752)
+    TEA_CHAT_BOX = [345, 815, 430, 860]        # 「聊一聊」
+    TEA_CHAT_POSITION = (387, 837)
+    TEA_BLANK_BOX = [1400, 895, 1585, 945]     # 对话里的「点击空白处继续」（右侧，和别处不同位）
+    TEA_BLANK_POSITION = (1491, 920)
+    TEA_BACK_BOX = [1140, 705, 1215, 750]      # 选项列表里的「返回」（用来判定"这是选项界面"）
+    # 选项区域：上边界让开标题、下边界让开「返回」。
+    # 取「最靠下的那一项」（也就是「返回」正上方）而不是最上面那个：
+    # 台词气泡永远在选项上方，取最上面的会被气泡骗到；选项下面的效果说明点下去
+    # 同样落在该选项区块里，不影响结果。
+    TEA_OPTIONS_BOX = [1050, 380, 1750, 800]
+    # 选项右侧的「确认」：纵向位置跟着被选中那一行走（实测 y 460~703 都可能出现），
+    # 所以不锁高度，只锁右侧这条竖带；左下角是真按钮（点它的识别框中心）
+    TEA_CONFIRM_BOX = [1600, 400, 1900, 820]
+    # 选项行内右侧空白区的横坐标（标题文字止于 x≈1377，行块右边约 1840）
+    TEA_OPTION_CLICK_X = 1520
+    TEA_CONFIRM_TIMEOUT = 1.2      # 等「确认」按钮渲染出来的上限
+    TEA_CONFIRM_STEP = 0.15
+    TEA_REWARD_BOX = [860, 175, 1060, 220]     # 「领取茶歇奖励」
+    TEA_OPEN_POSITION = (961, 983)             # 「开启」
+
+    def option_confirmed (self):
+        """选项被点中后，右侧会出现「确认」按钮；用它判断这一下有没有点中。"""
+        try:
+            return bool(self.click_text(
+                text="确认", box=self.TEA_CONFIRM_BOX, click=False, allow_fail=True))
+        except Exception:
+            return False
+
+    def choose_tea_break_option (self):
+        """茶歇对话的选项：轮流点候选，选中后由「茶歇-确认奖励」去点确认。
+
+        两个坑决定了不能用"点完立刻验证"的写法：
+
+        1. 选项区同时混着台词气泡和效果说明，前者点了没反应、后者只有标题行能点；
+        2. 后台模式下窗口捕获的画面会滞后一点，点完当帧读到的还是旧画面，
+           于是"确认按钮没出现"并不代表没点中。
+
+        所以这里只负责轮流点不同候选（避免死盯同一条无效文本），
+        真正的推进交给「茶歇-确认奖励」：它在后续帧看到「确认」就会去点。
+        """
+        self.ts.forward(self.get_screen())
+        # 选项已经选中时右侧会出现「确认」：这一步必须让给「茶歇-确认奖励」去点。
+        # 否则「返回」一直在这条动作就会一直触发，把确认那一步饿死（实机卡在茶歇就是这样）。
+        if self.option_confirmed():
+            CUS_LOGGER.debug("茶歇选项已选中，等「确认」处理")
+            return 0
+        options = [
+            item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX, redundancy=30)
+            if item["raw_text"].strip()
+            and "返回" not in item["raw_text"]
+            # 「获得1个【三月七】。」这类是描述行，点它会弹角色详情
+            and not item["raw_text"].strip().startswith("获得")
+            and len(item["raw_text"].strip()) <= 15
+        ]
+        if not options:
+            CUS_LOGGER.warning("茶歇选项没识别到，等下一轮")
+            return 0
+
+        options.sort(key=lambda item: item["box"][1])
+        attempt = getattr(self, "tea_option_attempt", 0)
+        item = options[attempt % len(options)]
+        self.tea_option_attempt = attempt + 1
+        if self.tea_option_attempt >= len(options) * 2:
+            self.tea_option_attempt = 0
+        CUS_LOGGER.info("尝试茶歇选项（第 %d 次）：%s", attempt + 1, item["raw_text"])
+        # 点在行内右侧空白区，避免正好压在文字上触发详情
+        self.click_box([
+            self.TEA_OPTION_CLICK_X, item["box"][1],
+            self.TEA_OPTION_CLICK_X + 1, item["box"][3],
+        ])
+        key_mouse_manager.wait()
+        return 1
+
+    EXIT_MAX_ATTEMPTS = 3
+    EXIT_ACTION_NAME = "开始退出"
+    def _exit_failed(self, reason):
+        """退出没成功：解开「开始退出」的 once 锁存，让下一帧还能再试。
+
+        引擎里命中即锁存，不主动解锁的话这条动作本轮再也不会被调用——
+        日志写着"下一轮重试"却永远不重试，玩家看到的就是卡死。
+        连续失败到上限后停手，避免在错误界面上反复连按 ESC。
+        """
+        self.exit_attempts += 1
+        if self.exit_attempts < self.EXIT_MAX_ATTEMPTS:
+            self.latched_events.discard(self.EXIT_ACTION_NAME)
+            CUS_LOGGER.warning(
+                "%s，第 %d/%d 次退出未完成，下一帧重试",
+                reason, self.exit_attempts, self.EXIT_MAX_ATTEMPTS,
+            )
+        else:
+            CUS_LOGGER.warning(
+                "%s，已连续 %d 次退出失败，本轮停止重试（游戏可能停在非预期界面）",
+                reason, self.exit_attempts,
+            )
+        return 0
+
+    STAGE_BOXES = ([430, 48, 515, 100], [250, 85, 330, 135])
+    STAGE_UPSCALE = 3           # 原尺寸 OCR 会漏字，放大三倍才稳
+    # 各面终局节点：1 面到 1-6，2/3 面到 x-5（幕后茶歇会顶掉一个奖励节点，1-5 不算终局）
+    PLANE_LAST_NODE = {1: 6, 2: 5, 3: 5}
+    def auto_clear_target (self, chosen):
+        """刷到并选中目标策略后取消它的勾选。
+
+        只取消"这次真的选了"的那条：本屏出现过但没选的不算，下一屏还得靠它压优先级。
+        """
+        if not getattr(self, "auto_clear_targets", False):
+            return False
+        if not chosen or chosen not in self.strategy_targets:
+            return False
+        self.strategy_targets = [name for name in self.strategy_targets if name != chosen]
+        CUS_LOGGER.info("已自动取消勾选：%s（剩余目标 %d 条）", chosen, len(self.strategy_targets))
+        self.persist_strategy_targets()
+        return True
+
+    def persist_strategy_targets (self):
+        """把取消后的目标列表写回配置文件——否则重开/下一把又会全勾回来。"""
+        try:
+            save_currency_settings({"strategy_targets": list(self.strategy_targets)})
+        except Exception:
+            CUS_LOGGER.warning("保存目标策略列表失败", exc_info=True)
+
+    @staticmethod
+    def canonical_strategies (texts):
+        """把 OCR 出来的卡名对齐到 298 条已知策略名，对不上的保留原文（便于发现新策略）。"""
+        aligned = []
+        for text in texts:
+            name = match_name(text) if text else None
+            aligned.append(name or text)
+        return aligned
+
+    def _pick_strategy (self, texts, icon_presence):
+        """选卡优先级：目标策略 > 未解锁图标 > 兜底；负面策略一律不选。
+
+        返回 (下标, 理由)；理由为 fallback 表示"这屏没有值得优先选的"，调用方可以刷新再试。
+        """
+        avoid = set(self.strategy_avoid)
+        allowed = [
+            idx for idx, name in enumerate(texts)
+            if name and name not in avoid
+        ]
+        if not allowed:
+            CUS_LOGGER.warning("这一屏三张都是负面策略，只能跳过优先逻辑")
+            allowed = [idx for idx, name in enumerate(texts) if name]
+        if not allowed:
+            return None, "empty"
+
+        for target in self.strategy_targets:
+            for idx in allowed:
+                if texts[idx] == target:
+                    return idx, f"目标策略「{target}」"
+
+        for idx in allowed:
+            if icon_presence[idx]:
+                return idx, "未解锁图标"
+
+        fallback = choose_fallback_investment(texts, icon_presence)
+        if fallback not in allowed:
+            fallback = allowed[0]
+        return fallback, "fallback"
+
+    def _refresh_auto_exit_plane (self):
+        """按「还没收集到的目标策略」实时推算退出位面。"""
+        if not self.auto_exit_plane:
+            return
+        if not self.strategy_targets:
+            self.exit_plane = self.set_exit_plane
+            return
+        plane = exit_plane_for(self.strategy_targets, self.strategy_sampler.collected)
+        if plane != self.exit_plane:
+            CUS_LOGGER.info(
+                "退出位面自动调整：第 %s 面（目标策略还剩 %d 条未收集）",
+                plane, len(self.strategy_sampler.missing(self.strategy_targets)),
+            )
+        self.exit_plane = plane
+
+    def read_stage (self):
+        """读顶栏的「位面-节点」标记，返回 (位面, 节点)；认不出来返回 None。
+
+        原来的写法不读位面（只按"选了几次策略"数），4.7 里策略数量和位面不再一一对应，
+        必须真读一次。原尺寸 OCR 会漏字，放大三倍才稳。
+        """
+        self.get_screen()
+        for box in self.STAGE_BOXES:
+            patch = self.screen[box[1]:box[3], box[0]:box[2]]
+            if patch is None or patch.size == 0:
+                continue
+            upscaled = cv2.resize(
+                patch, None, fx=self.STAGE_UPSCALE, fy=self.STAGE_UPSCALE,
+                interpolation=cv2.INTER_CUBIC)
+            text = self.ts.ocr_one_row(upscaled)
+            match = re.search(r"(\d)\s*[-—~]\s*(\d+)", text or "")
+            if match:
+                return int(match.group(1)), int(match.group(2))
+        return None
+
+    def _maybe_exit_by_stage (self):
+        """在备战界面判断能不能退。
+
+        条件：到达设定退出位面、且这一面已经选过策略。
+        另外两种情况直接退：已经走过设定面数；或者设定面的终局节点到了却一次策略都没出现
+        （周天鸽会把某一面的策略提前，那个面的选择就没了）。
+        """
+        if self.exit_plane is None:
+            return False
+
+        stage = self.read_stage()
+        if stage is None:
+            CUS_LOGGER.debug("没读到位面标记，本轮不判断退出")
+            return False
+
+        plane, node = stage
+        self.current_plane = plane
+        selected = self.plane_strategy_count.get(plane, 0)
+        last_node = self.PLANE_LAST_NODE.get(plane, 5)
+
+        if plane > self.exit_plane:
+            CUS_LOGGER.info(
+                "已越过退出位面（当前 %d-%d，设定第 %d 面），直接退出", plane, node, self.exit_plane)
+            reason = "越过退出位面"
+        elif plane == self.exit_plane and selected:
+            CUS_LOGGER.info(
+                "第 %d 面已选过 %d 次策略（当前 %d-%d），退出", plane, selected, plane, node)
+            reason = "到达退出位面且已选过策略"
+        elif plane == self.exit_plane and node >= last_node and not selected:
+            CUS_LOGGER.info(
+                "第 %d 面已到终局节点 %d-%d 却没出现策略（被提前到前面了），直接退出",
+                plane, plane, node)
+            reason = "设定面无策略"
+        else:
+            return False
+
+        CUS_LOGGER.info("退出条件满足：%s", reason)
+        self.exit_requested = True
+        self.update_state("exit")
+        return True
+
+    HACK_OPTIONS_BOX = [480, 150, 1400, 430]   # 两张效果卡的文字区
+    HACK_FALLBACK_POSITION = (1288, 284)       # 认不出选项时兜底点右侧那张卡
+    HACK_CONFIRM_BOX = [1430, 575, 1560, 620]  # 「确认选择」
+
+    def choose_hack_effect (self):
+        """银狼的「骇入效果」面板：选右侧那张卡，再点确认选择。
+
+        选项名字会变（数据拷贝仪 / 病毒防火墙…），所以不写死文字：OCR 卡片区，
+        取最右边那张点掉；认不出来就按固定位置兜底，最后点「确认选择」。
+        """
+        self.ts.forward(self.get_screen())
+        options = [
+            item for item in self.ts.find_with_box(self.HACK_OPTIONS_BOX)
+            if item["raw_text"].strip()
+        ]
+        if options:
+            options.sort(key=lambda item: item["box"][0])
+            target = options[-1]["box"]
+            CUS_LOGGER.info("骇入效果选右侧：%s", options[-1]["raw_text"])
+            self.click_box(target)
+        else:
+            CUS_LOGGER.warning("骇入面板没认出选项文字，按固定位置点右侧")
+            key_mouse_manager.click_point(*self.HACK_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.HACK_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("骇入面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("骇入效果已选择")
+        return 1
+
+    CLARA_DETAIL_BOX = [540, 395, 1560, 455]      # 一整行「详情」按钮
+    CLARA_CARD_OFFSET = 60                        # 详情上方 60px 就是卡片本体
+    CLARA_FALLBACK_POSITION = (610, 350)          # 一个「详情」都没认出时兜底点第一张卡
+    CLARA_CONFIRM_BOX = [1430, 560, 1560, 610]    # 「确认选择」
+
+    def choose_clara_enhance (self):
+        """克拉拉的「机心巧匠」面板：任选一个强化效果，再点「确认选择」。
+
+        选项数量会变（3 张或 4 张），位置也不固定，所以拿每张卡下面的「详情」按钮当锚点：
+        取最左边那个「详情」，点它正上方 60px（就是那张卡），再点确认。
+        """
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(self.CLARA_DETAIL_BOX)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.CLARA_CARD_OFFSET))
+            CUS_LOGGER.info("强化面板按「详情」锚点选卡：%s", position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("强化面板没认出「详情」，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.CLARA_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.CLARA_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("强化面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("强化效果已选择")
+        return 1
+
+    DRAGON_DETAIL_BOX = [620, 380, 1520, 425]
+    DRAGON_CARD_OFFSET = 60
+    DRAGON_FALLBACK_POSITION = (697, 332)
+    DRAGON_CONFIRM_BOX = [1430, 575, 1560, 620]
+
+    def choose_dragon_enhance (self):
+        """龙丹的「双龙吟」面板：任选一个羁绊，再点「确认选择」。
+
+        四张卡位置固定，但仍拿「详情」按钮当锚点（点它正上方 60px），
+        这样即使以后卡片重排也不会点空。
+        """
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(self.DRAGON_DETAIL_BOX)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.DRAGON_CARD_OFFSET))
+            CUS_LOGGER.info("双龙吟面板按「详情」锚点选卡：%s", position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("双龙吟面板没认出「详情」，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.DRAGON_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.DRAGON_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("双龙吟面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("羁绊效果已选择")
+        return 1
+
+    BLACK_MARKET_TITLE_BOX = [940, 50, 1120, 100]
+
+    def close_black_market (self):
+        """翡翠的「黑市主理人」面板：不买任何东西，按 ESC 关掉并确认真的关了。"""
+        key_mouse_manager.press("esc")
+        key_mouse_manager.wait()
+
+        if self.click_text(
+            text="黑市主理人", box=self.BLACK_MARKET_TITLE_BOX, click=False, allow_fail=True
+        ):
+            CUS_LOGGER.warning("「黑市主理人」按了 ESC 还在，等下一轮再按")
+            return 0
+        CUS_LOGGER.info("「黑市主理人」面板已关闭")
+        return 1
+
+    RANGER_DETAIL_BOX = [620, 380, 1520, 430]
+    RANGER_CARD_OFFSET = 60
+    RANGER_FALLBACK_POSITION = (700, 334)
+    RANGER_CONFIRM_BOX = [1430, 575, 1560, 620]
+
+    def choose_ranger_hero (self):
+        """「巡海游侠」任命面板：任选一名角色，再点「确认选择」。
+
+        四张卡位置固定，但仍拿「详情」按钮当锚点（点它正上方 60px），卡片重排也不会点空。
+        """
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(self.RANGER_DETAIL_BOX)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.RANGER_CARD_OFFSET))
+            CUS_LOGGER.info("巡海游侠面板按「详情」锚点选角色：%s", position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("巡海游侠面板没认出「详情」，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.RANGER_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.RANGER_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("巡海游侠面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("巡海游侠任命完成")
+        return 1
+
+    BEAST_DETAIL_BOX = [680, 425, 1660, 480]
+    BEAST_CARD_OFFSET = 60
+    BEAST_FALLBACK_POSITION = (761, 377)
+    BEAST_CONFIRM_BOX = [1430, 575, 1560, 620]
+
+    def choose_beast_chimera (self):
+        """「奇兽花园」面板：任选一只奇美拉，再点「确认选择」。
+
+        三张宽卡位置固定，但仍拿「详情」按钮当锚点（点它正上方 60px），卡片重排也不会点空。
+        """
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(self.BEAST_DETAIL_BOX)
+            if "详情" in item["raw_text"]
+        ]
+        if details:
+            details.sort(key=lambda item: item["box"][0])
+            box = details[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.BEAST_CARD_OFFSET))
+            CUS_LOGGER.info("奇兽花园面板按「详情」锚点选卡：%s", position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("奇兽花园面板没认出「详情」，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.BEAST_FALLBACK_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=self.BEAST_CONFIRM_BOX, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("奇兽花园面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("奇美拉已选择")
+        return 1
+
+    DREAM_DETAIL_BOX = [880, 390, 1250, 435]
+    DREAM_FALLBACK_POSITION = (938, 339)
+    DREAM_CONFIRM_BOX = [1430, 552, 1560, 600]
+    CARD_DETAIL_OFFSET = 60      # 「详情」上方这么多像素就是卡片本体
+
+    def choose_master (self):
+        """「从师」面板：任选一名角色作为师父，再点「确认选择」。
+
+        这个面板的卡片没有「详情」按钮行，直接点卡片本体。
+        注意红字提示和「巡海游侠」面板一样是「请选择一名角色」，靠副标题区分。
+        """
+        names = [
+            item for item in self.ts.find_with_box(self.MASTER_NAME_BAND, forward=1)
+            if item["raw_text"].strip()
+        ]
+        if names:
+            names.sort(key=lambda item: item["box"][0])
+            box = names[0]["box"]
+            position = ((box[0] + box[2]) // 2, max(0, box[1] - self.MASTER_CARD_LIFT))
+            CUS_LOGGER.info("从师面板按卡名「%s」选卡：%s", names[0]["raw_text"], position)
+            key_mouse_manager.click_point(*position)
+        else:
+            CUS_LOGGER.warning("从师面板没认出卡名，按固定位置点第一张卡")
+            key_mouse_manager.click_point(*self.MASTER_CARD_POSITION)
+        key_mouse_manager.wait()
+
+        if not self.click_text(text="确认选择", box=self.MASTER_CONFIRM_BOX,
+                               click=True, allow_fail=True):
+            CUS_LOGGER.warning("从师面板没点掉「确认选择」，等下一轮")
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("已选择师父")
+        return 1
+
+    def pick_card_above_detail (self, detail_box, confirm_box, fallback,
+                                count=1, offset=None, label="面板"):
+        """通用弹窗处理：一排「详情」按钮 → 点最左边 count 个正上方（= 那几张卡）→ 点「确认选择」。
+
+        大多数弹窗是"任选一个"（默认 count=1）；「梦境交织」要选两个角色共舞，传 count=2。
+        卡片数量/位置会变，所以用「详情」当锚点、从左往右取，不写死卡片坐标。
+        """
+        offset = self.CARD_DETAIL_OFFSET if offset is None else offset
+        self.ts.forward(self.get_screen())
+        details = [
+            item for item in self.ts.find_with_box(detail_box)
+            if "详情" in item["raw_text"]
+        ]
+        details.sort(key=lambda item: item["box"][0])
+
+        if details:
+            if len(details) < count:
+                CUS_LOGGER.warning(
+                    "%s只认出 %d 张卡，需要选 %d 张", label, len(details), count)
+            for index, item in enumerate(details[:count], start=1):
+                box = item["box"]
+                position = ((box[0] + box[2]) // 2, max(0, box[1] - offset))
+                CUS_LOGGER.info("%s按「详情」锚点选第 %d 张卡：%s", label, index, position)
+                key_mouse_manager.click_point(*position)
+                key_mouse_manager.wait()
+        else:
+            CUS_LOGGER.warning("%s没认出「详情」，按固定位置点卡", label)
+            key_mouse_manager.click_point(*fallback)
+            key_mouse_manager.wait()
+
+        if not self.click_text(
+            text="确认选择", box=confirm_box, click=True, allow_fail=True
+        ):
+            CUS_LOGGER.warning("%s没点掉「确认选择」，等下一轮", label)
+            return 0
+        key_mouse_manager.wait()
+        CUS_LOGGER.info("%s选择完成", label)
+        return 1
+
+    def choose_dream_weave (self):
+        """「梦境交织」面板：**要选两个**角色共舞（跟只选一个的面板不同），再点「确认选择」。"""
+        return self.pick_card_above_detail(
+            self.DREAM_DETAIL_BOX, self.DREAM_CONFIRM_BOX,
+            self.DREAM_FALLBACK_POSITION, count=2, label="梦境交织")
+

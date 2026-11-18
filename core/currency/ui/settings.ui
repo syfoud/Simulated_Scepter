@@ -87,6 +87,62 @@
         </property>
        </widget>
       </item>
+      <item row="6" column="0">
+       <widget class="QLabel" name="Currency_strategy_targets_label">
+        <property name="text">
+         <string>目标投资策略（优先选，实时决定退出位面）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <layout class="QHBoxLayout" name="Currency_strategy_targets_layout">
+        <item>
+         <widget class="QLineEdit" name="Currency_strategy_targets_edit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+          <property name="placeholderText">
+           <string>点击右侧「选择」勾选</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="Currency_strategy_targets_btn">
+          <property name="text">
+           <string>选择…</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="7" column="0">
+       <widget class="QLabel" name="Currency_strategy_avoid_label">
+        <property name="text">
+         <string>负面投资策略（绝不选，如跨局继承/清场类）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <layout class="QHBoxLayout" name="Currency_strategy_avoid_layout">
+        <item>
+         <widget class="QLineEdit" name="Currency_strategy_avoid_edit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+          <property name="placeholderText">
+           <string>点击右侧「选择」勾选</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="Currency_strategy_avoid_btn">
+          <property name="text">
+           <string>选择…</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
     </layout>
    </item>
    <item>
@@ -100,6 +156,20 @@
     <widget class="QCheckBox" name="Currency_gather_mode_checkbox">
      <property name="text">
       <string>开局词缀收集模式（走到词缀界面就记录并重开）</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="Currency_auto_clear_targets_checkbox">
+     <property name="text">
+      <string>刷到目标策略后自动取消勾选（避免它一直压过未解锁图标）</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="Currency_auto_exit_plane_checkbox">
+     <property name="text">
+      <string>按目标策略自动决定退出位面（目标全收完后自动降面，避免空转）</string>
      </property>
     </widget>
    </item>

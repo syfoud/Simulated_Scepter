@@ -57,7 +57,8 @@ class CurrencyUtils(StateKernel):
     def __init__(self):
         super().__init__()
         settings = load_settings()
-        # 后台模式：截图与键盘走窗口消息，允许游戏窗口被遮挡（不能最小化）；鼠标仍为前台
+        # 后台模式：截图走窗口捕获、键鼠走窗口消息，允许游戏窗口被遮挡（不能最小化）。
+        # 只对本地窗口生效：云游戏是浏览器窗口，后台消息行为未验证，仍按前台模式跑。
         self.background_mode = bool(settings.get("background_mode", False))
         self.capture_backend = resolve_capture_backend(settings, self.background_mode)
         self._stop = False

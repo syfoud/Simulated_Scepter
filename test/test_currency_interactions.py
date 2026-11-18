@@ -1,8 +1,26 @@
 import unittest
+
+import numpy as np
 from collections import Counter
 from unittest.mock import MagicMock, Mock, call, patch
 
 from core.currency.automation import SimulatedCurrency
+
+
+def _protagonist_click_text(panel_after=1):
+    """模拟「选择主角」面板：第 panel_after 次查询标题之后就认为面板开了。
+
+    面板标题同时用于"面板是否已打开"的预检和等待循环，所以要按调用次数递进。
+    """
+    state = {"seen": 0}
+
+    def fake(text=None, **_kwargs):
+        if text == "选择一个角色获得主角光环":
+            state["seen"] += 1
+            return state["seen"] > panel_after
+        return True
+
+    return fake
 
 
 class CurrencyInteractionTests(unittest.TestCase):
@@ -230,7 +248,9 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.affix_sampler.record.return_value = []
         currency.affix_sampler.run_index = 1
         currency.affix_targets = []
-        currency.gather_mode = False
+        currency.gather_mode = True    # 这些用例验证的是「词缀收集」路径
+        currency.prior_envir = []
+        currency.envir_seen = set()
         currency.max_runs = 0
         currency.affix_incomplete_rounds = 0
         currency.affixes_recorded = False
@@ -412,6 +432,912 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.investment_tracker.reset.assert_called_once_with()
         currency.update_state.assert_called_once_with("1-1")
         self.assertTrue(currency.envir_selected)
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_runs_full_panel_flow(self, manager, _sleep):
+        """4.7 新 UI：点按钮 → 等面板 → 拖角色 → 选光环 → 确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = _protagonist_click_text()
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        calls = manager.mock_calls
+        # 第一次点击是「选择主角」按钮（中心 1816,750）
+        self.assertEqual(
+            calls[0],
+            call.click_point(1816, 750, box=SimulatedCurrency.PROTAGONIST_BUTTON_BOX),
+        )
+        # 拖拽第一个角色到主角位
+        self.assertIn(call.drag_point(805, 612, 960, 445), calls)
+        # 选右侧光环
+        self.assertIn(call.click_point(1501, 502), calls)
+        # 最后点确认（中心 968,953）
+        self.assertEqual(
+            calls[-2],
+            call.click_point(968, 953, box=SimulatedCurrency.PROTAGONIST_CONFIRM_BOX),
+        )
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_gives_up_when_panel_never_shows(self, manager, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 0)
+
+        manager.drag_point.assert_not_called()
+        # 只点了「选择主角」按钮，没有后续动作
+        self.assertEqual(manager.click_point.call_count, 1)
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_confirms_aura_replacement(self, manager, _sleep):
+        """一局两次主角面板，第二次角色已有光环会弹替换确认，直接点确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        # 面板标题恒命中（预检和等待循环都会问），替换提示也同样为真
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        calls = manager.mock_calls
+        self.assertIn(call.click_point(1501, 502), calls)                      # 光环
+        self.assertIn(call.click_point(1189, 671), calls)                      # 替换确认
+        # 替换确认在光环之后、面板确认之前
+        self.assertLess(calls.index(call.click_point(1501, 502)),
+                        calls.index(call.click_point(1189, 671)))
+        self.assertEqual(
+            calls[-2],
+            call.click_point(968, 953, box=SimulatedCurrency.PROTAGONIST_CONFIRM_BOX),
+        )
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_select_protagonist_skips_replacement_when_no_dialog(self, manager, _sleep):
+        """第一次选主角不会弹替换确认，别去点那个坐标。"""
+        currency = object.__new__(SimulatedCurrency)
+        # 面板标题命中，但不是"替换光环"提示
+        currency.click_text = Mock(
+            side_effect=lambda text=None, **_kwargs: text != "是否替换该角色原有光环")
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        clicked = [c for c in manager.mock_calls if c[0] == "click_point"]
+        self.assertNotIn(call.click_point(1189, 671), clicked)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_blank_prompt_clicks_the_detected_text_wherever_it_is(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "点击空白处继续", "box": [908, 735, 1052, 760]},
+        ]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.click_blank_prompt(), 1)
+
+        currency.click_box.assert_called_once_with([908, 735, 1052, 760])
+        currency.ts.find_with_box.assert_called_once_with(SimulatedCurrency.BLANK_PROMPT_BOX)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_tea_option_clicks_candidates_in_turn(self, manager):
+        """选项区混着气泡和说明：轮流点不同候选，避免死盯同一条无效文本。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "第二个选项", "box": [1151, 620, 1423, 650]},
+            {"raw_text": "第一个选项", "box": [1151, 460, 1423, 490]},
+        ]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_tea_break_option(), 1)
+        # 点击横坐标固定落在行内右侧空白区，纵向跟随候选行
+        clicked = currency.click_box.call_args.args[0]
+        self.assertEqual(clicked[0], SimulatedCurrency.TEA_OPTION_CLICK_X)
+        self.assertEqual((clicked[1], clicked[3]), (460, 490))
+
+        # 下一次换成第二条候选（第一条可能点是气泡/说明，没反应）
+        currency.choose_tea_break_option()
+        clicked = currency.click_box.call_args.args[0]
+        self.assertEqual((clicked[1], clicked[3]), (620, 650))
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_tea_option_attempt_counter_wraps(self, manager):
+        """轮完一圈要回到第一条，不能无限往下数。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "唯一选项", "box": [1151, 460, 1423, 490]},
+        ]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        for _ in range(5):
+            currency.choose_tea_break_option()
+
+        self.assertLessEqual(currency.tea_option_attempt, 2)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_tea_option_gives_up_when_nothing_recognised(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [{"raw_text": "返回", "box": [1147, 713, 1203, 742]}]
+        currency.click_box = Mock()
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_tea_break_option(), 0)
+        currency.click_box.assert_not_called()
+
+
+    @staticmethod
+    def _exit_currency(can_see_page):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.click_text = Mock(side_effect=can_see_page)
+        currency.is_battle_started = Mock(return_value=False)
+        currency.latched_events = set()
+        currency.exit_started = False
+        currency.exit_attempts = 0
+        currency._stop = False
+        return currency
+
+    @patch("core.currency.automation.time.monotonic", side_effect=[0] * 200)
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_exit_success_marks_started(self, _manager, _sleep, _mono):
+        currency = self._exit_currency(lambda **kwargs: True)
+
+        self.assertEqual(currency.exit(), 1)
+        self.assertTrue(currency.exit_started)
+        self.assertEqual(currency.exit_attempts, 0)
+
+    @patch("core.currency.automation.time.monotonic", side_effect=[0] * 200)
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_exit_failure_unlatches_so_it_can_retry(self, _manager, _sleep, _mono):
+        """「开始退出」带 once 锁存，失败必须解锁，否则下一帧永远不会再调 exit()。"""
+        currency = self._exit_currency(lambda **kwargs: False)
+        currency.latched_events.add(SimulatedCurrency.EXIT_ACTION_NAME)
+
+        self.assertEqual(currency.exit(), 0)
+
+        self.assertNotIn(SimulatedCurrency.EXIT_ACTION_NAME, currency.latched_events)
+        self.assertEqual(currency.exit_attempts, 1)
+
+    @patch("core.currency.automation.time.monotonic", side_effect=[0] * 200)
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_exit_stops_retrying_after_limit(self, _manager, _sleep, _mono):
+        currency = self._exit_currency(lambda **kwargs: False)
+        currency.exit_attempts = SimulatedCurrency.EXIT_MAX_ATTEMPTS - 1
+        currency.latched_events.add(SimulatedCurrency.EXIT_ACTION_NAME)
+
+        self.assertEqual(currency.exit(), 0)
+
+        # 到上限就不再解锁，避免在错误界面上反复连按 ESC
+        self.assertIn(SimulatedCurrency.EXIT_ACTION_NAME, currency.latched_events)
+
+
+    @staticmethod
+    def _stage_currency(stage_text, exit_plane=1, counts=None):
+        currency = object.__new__(SimulatedCurrency)
+        currency.screen = np.zeros((1080, 1920, 3), dtype=np.uint8)
+        currency.get_screen = Mock(return_value=currency.screen)
+        currency.ts = Mock()
+        currency.ts.ocr_one_row = Mock(return_value=stage_text)
+        currency.exit_plane = exit_plane
+        currency.exit_requested = False
+        currency.current_plane = None
+        currency.plane_strategy_count = dict(counts or {})
+        currency.update_state = Mock()
+        return currency
+
+    def test_read_stage_parses_plane_and_node(self):
+        for text, expected in (("1-6", (1, 6)), ("2-5", (2, 5)), ("3-5 ", (3, 5))):
+            with self.subTest(text=text):
+                currency = self._stage_currency(text)
+                self.assertEqual(currency.read_stage(), expected)
+
+    def test_read_stage_returns_none_when_nothing_recognised(self):
+        currency = self._stage_currency("")
+        self.assertIsNone(currency.read_stage())
+
+    def test_exit_when_plane_reached_and_strategy_selected(self):
+        currency = self._stage_currency("2-3", exit_plane=2, counts={2: 1})
+
+        self.assertTrue(currency._maybe_exit_by_stage())
+        self.assertTrue(currency.exit_requested)
+        currency.update_state.assert_called_once_with("exit")
+
+    def test_no_exit_before_strategy_on_the_target_plane(self):
+        currency = self._stage_currency("2-3", exit_plane=2, counts={})
+
+        self.assertFalse(currency._maybe_exit_by_stage())
+        self.assertFalse(currency.exit_requested)
+
+    def test_exit_when_plane_passed_already(self):
+        currency = self._stage_currency("3-1", exit_plane=2, counts={})
+
+        self.assertTrue(currency._maybe_exit_by_stage())
+
+    def test_exit_when_target_plane_ends_without_any_strategy(self):
+        """周天鸽会把某面的策略提前，那一面的选择就没了。"""
+        currency = self._stage_currency("2-5", exit_plane=2, counts={})
+
+        self.assertTrue(currency._maybe_exit_by_stage())
+
+    def test_never_exit_when_plane_is_none(self):
+        currency = self._stage_currency("2-5", exit_plane=None, counts={2: 3})
+
+        self.assertFalse(currency._maybe_exit_by_stage())
+        self.assertFalse(currency.exit_requested)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_hack_effect_picks_rightmost_option_then_confirms(self, manager):
+        """银狼面板的选项名字会变，按位置取最右边那张，再点确认选择。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "数据拷贝仪LV.1", "box": [576, 372, 754, 407]},
+            {"raw_text": "病毒防火墙LV.1", "box": [1090, 377, 1264, 404]},
+        ]
+        currency.click_box = Mock()
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_hack_effect(), 1)
+
+        currency.click_box.assert_called_once_with([1090, 377, 1264, 404])
+        currency.click_text.assert_called_once_with(
+            text="确认选择",
+            box=SimulatedCurrency.HACK_CONFIRM_BOX,
+            click=True,
+            allow_fail=True,
+        )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_hack_effect_falls_back_to_fixed_position(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_box = Mock()
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_hack_effect(), 1)
+
+        currency.click_box.assert_not_called()
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.HACK_FALLBACK_POSITION), manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_hack_effect_reports_failure_when_confirm_not_found(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "病毒防火墙LV.1", "box": [1090, 377, 1264, 404]},
+        ]
+        currency.click_box = Mock()
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_hack_effect(), 0)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_clara_enhance_clicks_above_leftmost_detail(self, manager):
+        """选项数量会变，用「详情」按钮当锚点：点最左那个详情正上方 60px。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1032, 410, 1081, 440]},
+            {"raw_text": "详情", "box": [586, 410, 635, 440]},
+            {"raw_text": "详情", "box": [884, 410, 933, 440]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_clara_enhance(), 1)
+
+        # 最左边那个详情中心 x=(586+635)//2=610，y=410-60=350
+        self.assertIn(call.click_point(610, 350), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.CLARA_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_clara_enhance_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_clara_enhance(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.CLARA_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_clara_enhance_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_clara_enhance(), 0)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dragon_bond_clicks_above_leftmost_detail(self, manager):
+        """四张卡位置固定，但仍用「详情」锚点，避免以后重排点空。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1393, 392, 1442, 417]},
+            {"raw_text": "详情", "box": [673, 392, 721, 417]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_dragon_enhance(), 1)
+
+        # 最左详情中心 x=(673+721)//2=697，y=392-60=332
+        self.assertIn(call.click_point(697, 332), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.DRAGON_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dragon_bond_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_dragon_enhance(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.DRAGON_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dragon_bond_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_dragon_enhance(), 0)
+
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_black_market_closes_with_escape(self, manager, _sleep):
+        """翡翠的黑市面板不用点任何东西，ESC 一下并确认它真的消失。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=False)   # 按完 ESC 已经看不到标题
+        manager.reset_mock()
+
+        self.assertEqual(currency.close_black_market(), 1)
+
+        manager.press.assert_called_once_with("esc")
+        currency.click_text.assert_called_once_with(
+            text="黑市主理人",
+            box=SimulatedCurrency.BLACK_MARKET_TITLE_BOX,
+            click=False,
+            allow_fail=True,
+        )
+
+    @patch("core.currency.automation.time.sleep")
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_black_market_reports_failure_when_panel_remains(self, manager, _sleep):
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=True)    # ESC 之后标题还在
+        manager.reset_mock()
+
+        self.assertEqual(currency.close_black_market(), 0)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_ranger_hero_clicks_above_leftmost_detail(self, manager):
+        """巡海游侠四张卡位置固定，仍用「详情」锚点，避免重排点空。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1389, 394, 1439, 424]},
+            {"raw_text": "详情", "box": [675, 394, 725, 424]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_ranger_hero(), 1)
+
+        # 最左详情中心 x=(675+725)//2=700，y=394-60=334
+        self.assertIn(call.click_point(700, 334), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.RANGER_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_ranger_hero_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_ranger_hero(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.RANGER_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_ranger_hero_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_ranger_hero(), 0)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_beast_panel_clicks_above_leftmost_detail(self, manager):
+        """三张宽卡，用「详情」锚点：点最左详情正上方 60px 再确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1549, 437, 1602, 470]},
+            {"raw_text": "详情", "box": [735, 437, 788, 470]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_beast_chimera(), 1)
+
+        # 最左详情中心 x=(735+788)//2=761，y=437-60=377
+        self.assertIn(call.click_point(761, 377), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.BEAST_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_beast_panel_falls_back_without_detail_anchor(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_beast_chimera(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.BEAST_FALLBACK_POSITION),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_beast_panel_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_beast_chimera(), 0)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_card_picker_uses_leftmost_detail_anchor(self, manager):
+        """通用方法：点最左「详情」正上方 60px，再点确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1153, 399, 1199, 424]},
+            {"raw_text": "详情", "box": [914, 399, 962, 424]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        result = currency.pick_card_above_detail(
+            [880, 390, 1250, 435], [1430, 552, 1560, 600], (938, 339), label="测试")
+
+        self.assertEqual(result, 1)
+        self.assertIn(call.click_point(938, 339), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=[1430, 552, 1560, 600], click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_card_picker_falls_back_and_can_fail(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        result = currency.pick_card_above_detail(
+            [0, 0, 10, 10], [0, 0, 10, 10], (111, 222), label="测试")
+
+        self.assertEqual(result, 0)
+        self.assertIn(call.click_point(111, 222), manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_dream_weave_delegates_to_picker(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.pick_card_above_detail = Mock(return_value=1)
+
+        self.assertEqual(currency.choose_dream_weave(), 1)
+        currency.pick_card_above_detail.assert_called_once_with(
+            SimulatedCurrency.DREAM_DETAIL_BOX,
+            SimulatedCurrency.DREAM_CONFIRM_BOX,
+            SimulatedCurrency.DREAM_FALLBACK_POSITION,
+            count=2,
+            label="梦境交织",
+        )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_card_picker_clicks_both_cards_when_count_is_two(self, manager):
+        """梦境交织要选两个角色：最左两张卡都要点，再确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "详情", "box": [1153, 399, 1199, 424]},
+            {"raw_text": "详情", "box": [914, 399, 962, 424]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        result = currency.pick_card_above_detail(
+            [880, 390, 1250, 435], [1430, 552, 1560, 600], (938, 339),
+            count=2, label="梦境交织")
+
+        self.assertEqual(result, 1)
+        clicked = [c for c in manager.mock_calls if c[0] == "click_point"]
+        self.assertIn(call.click_point(938, 339), clicked)    # 第一张
+        self.assertIn(call.click_point(1176, 339), clicked)   # 第二张 (1153+1199)//2=1176
+        self.assertEqual(len(clicked), 2)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_strategy_collection_skips_affix_wait(self, manager):
+        """收集策略时低难度局没有词缀：读不到就直接点下一步，不卡在这里。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.affixes_recorded = False
+        currency.collecting_strategies = True
+        currency.wait_affixes = Mock(return_value=[])
+        currency.affix_targets = []
+        currency.max_runs = 0
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        # 不置「已记录」：没点掉时下一帧还要能接着点
+        self.assertFalse(currency.affixes_recorded)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
+            manager.mock_calls,
+        )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_gathering_still_waits_when_word_missing(self, manager):
+        """没在收集策略时保持旧行为：读不到词缀就等下一轮，不点下一步。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.affixes_recorded = False
+        currency.collecting_strategies = False
+        currency.gather_mode = True      # 开了词缀收集才会去读词缀
+        currency.affix_targets = ["复仇心切"]
+        currency.wait_affixes = Mock(return_value=[])
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        self.assertFalse(currency.affixes_recorded)
+        self.assertNotIn(
+            call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
+            manager.mock_calls,
+        )
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_affix_is_not_read_when_collection_is_off(self, manager):
+        """没开词缀收集模式时不该花十几秒读词缀，直接点下一步（配了目标词缀也一样）。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.affixes_recorded = False
+        currency.gather_mode = False
+        currency.affix_targets = ["复仇心切"]   # 配了目标词缀也该跳过
+        currency.wait_affixes = Mock(return_value=[])
+        manager.reset_mock()
+
+        self.assertEqual(currency.read_affixes_and_continue(), 1)
+
+        currency.wait_affixes.assert_not_called()
+        self.assertIn(call.click_point(*SimulatedCurrency.AFFIX_NEXT_POSITION),
+                      manager.mock_calls)
+
+    def test_auto_clear_only_unchecks_the_chosen_target(self):
+        """本屏出现但没选的那条目标不能取消勾选。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐", "市场干预"]
+        currency.auto_clear_targets = True
+
+        self.assertTrue(currency.auto_clear_target("市场干预"))
+        self.assertEqual(currency.strategy_targets, ["免费午餐"])
+
+    def test_auto_clear_ignores_strategy_that_was_not_chosen(self):
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐"]
+        currency.auto_clear_targets = True
+
+        self.assertFalse(currency.auto_clear_target("特战资金"))
+        self.assertEqual(currency.strategy_targets, ["免费午餐"])
+
+    def test_auto_clear_is_off_by_default(self):
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐"]
+        currency.auto_clear_targets = False
+
+        self.assertFalse(currency.auto_clear_target("免费午餐"))
+        self.assertEqual(currency.strategy_targets, ["免费午餐"])
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_master_panel_picks_first_card_then_confirms(self, manager):
+        """「从师」面板没有详情行，直接点卡片本体再确认。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.es = None
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = [
+            {"raw_text": "波提欧", "box": [1007, 339, 1087, 371]},
+            {"raw_text": "绯英", "box": [739, 340, 793, 371]},
+        ]
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_master(), 1)
+
+        # 最左卡名 绯英 中心 x=766，往上 90px 点卡身
+        self.assertIn(call.click_point(766, 250), manager.mock_calls)
+        currency.click_text.assert_called_once_with(
+            text="确认选择", box=SimulatedCurrency.MASTER_CONFIRM_BOX,
+            click=True, allow_fail=True)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_master_panel_falls_back_when_names_not_recognised(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_master(), 1)
+        self.assertIn(call.click_point(*SimulatedCurrency.MASTER_CARD_POSITION),
+                      manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_master_panel_reports_failure_when_confirm_missing(self, manager):
+        currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertEqual(currency.choose_master(), 0)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_second_protagonist_panel_drags_second_character(self, manager):
+        """一局两次主角面板：第二次那个角色已有光环，要拖第二个。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)
+        currency.protagonist_picks = 1        # 已经选过一次
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        self.assertIn(call.drag_point(910, 609, 964, 441), manager.mock_calls)
+        self.assertEqual(currency.protagonist_picks, 2)
+
+    def test_auto_clear_writes_back_to_config(self):
+        """取消勾选要落盘，否则重开又全勾回来。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["免费午餐", "市场干预"]
+        currency.auto_clear_targets = True
+
+        with patch("core.currency.automation.save_currency_settings") as save:
+            self.assertTrue(currency.auto_clear_target("市场干预"))
+
+        save.assert_called_once_with({"strategy_targets": ["免费午餐"]})
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_enter_battle_mode_clicks_enter_currency_war_first(self, manager):
+        """还没进货币战争时，右下角是「进入货币战争」，先点它。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.gamemode = "overclock"
+        currency.update_state = Mock()
+        currency.read_mode_button = Mock(return_value="开始货币战争")
+        manager.reset_mock()
+
+        self.assertEqual(currency.enter_battle_mode(), 1)
+        self.assertIn(
+            call.click_point(*SimulatedCurrency.MODE_ENTER_POSITION,
+                             box=SimulatedCurrency.BATTLE_MODE_BUTTON_BOX),
+            manager.mock_calls)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_enter_battle_mode_does_nothing_on_difficulty_screen(self, manager):
+        """已经在难度界面（右下角是「开始对局」）时，不能再按模式卡片的坐标乱点。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.gamemode = "overclock"
+        currency.update_state = Mock()
+        currency.read_mode_button = Mock(return_value="开始对局")
+        manager.reset_mock()
+
+        self.assertEqual(currency.enter_battle_mode(), 1)
+
+        manager.click_point.assert_not_called()
+        currency.update_state.assert_called_once_with("difficulty_select")
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_mode_button_ocr_noise_still_selects_overclock(self, manager):
+        """OCR 把「超频博弈」读成「超预博到」「超频博弃」也要认出来。"""
+        for noisy in ("进入超预博到", "进入超频博弃", "进入超频博奔"):
+            with self.subTest(text=noisy):
+                currency = object.__new__(SimulatedCurrency)
+                currency.gamemode = "overclock"
+                currency.update_state = Mock()
+                currency.read_mode_button = Mock(return_value=noisy)
+                manager.reset_mock()
+
+                self.assertEqual(currency.enter_battle_mode(), 1)
+                # 认出来了：直接点进入按钮，不去点模式卡片
+                self.assertIn(
+                    call.click_point(*SimulatedCurrency.MODE_ENTER_POSITION,
+                                     box=SimulatedCurrency.BATTLE_MODE_BUTTON_BOX),
+                    manager.mock_calls)
+
+    def test_count_number_ignores_empty_patch(self):
+        """切分点贴边会切出空数组，此时不能拿去 OCR（会 cv2 断言崩掉）。"""
+        from core.currency.automation import read_count_number
+
+        recognizer = Mock()
+        self.assertIsNone(read_count_number(recognizer, np.zeros((0, 0, 3), np.uint8)))
+        recognizer.ocr_one_row.assert_not_called()
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_mode_entry_clicks_nothing_when_button_unreadable(self, manager):
+        """按钮读不到时一个坐标都不能点——盲点会点到攻略/图例上。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.gamemode = "overclock"
+        currency.update_state = Mock()
+        currency.read_mode_button = Mock(return_value="")
+        manager.reset_mock()
+
+        self.assertEqual(currency.enter_battle_mode(), 0)
+        manager.click_point.assert_not_called()
+
+    def test_prepare_battle_self_heals_stale_exit_flag(self):
+        """退出标志和状态不符时（上一局漏清）要复位，不能整局空转。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "startbattle"
+        currency._stop = False
+        currency.exit_requested = True
+        currency.set_exit_plane = 2
+        currency.run_history = Mock()
+        currency.envir_selected = False
+        currency.update_state = Mock()
+
+        # 走到 read_team_count 之前就应已复位并继续
+        currency.ts = Mock()
+        currency.get_screen = Mock(return_value="frame")
+        currency.click_text = Mock(return_value=False)   # 屏幕上没有"前台区域无角色"提示
+        currency.read_team_count = Mock(return_value=None)
+        currency._maybe_exit_by_stage = Mock(return_value=False)
+
+        currency.prepare_battle()
+
+        self.assertFalse(currency.exit_requested)
+
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_battle_short_handed_clicks_confirm_directly(self, manager):
+        """直接点确认的固定位置：后台捕获帧滞后时「先识别再点」会一直点不掉。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.click_text = Mock(return_value=False)   # 就算识别不到也要能点
+        manager.reset_mock()
+
+        self.assertEqual(currency.confirm_battle_short_handed(), 1)
+
+        self.assertIn(call.click_point(*SimulatedCurrency.BATTLE_FEWER_CONFIRM_POSITION),
+                      manager.mock_calls)
+        currency.click_text.assert_not_called()
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_protagonist_falls_back_to_bench_after_two_failures(self, manager):
+        """前台 2 号位可能是空的：连试两次不成，改从后台第一个角色拖。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=True)     # 面板已打开
+        currency.protagonist_picks = 5
+        currency.protagonist_drag_failures = 2
+        manager.reset_mock()
+
+        self.assertEqual(currency.select_protagonist(), 1)
+
+        self.assertIn(call.drag_point(709, 750, 964, 441), manager.mock_calls)
+        self.assertEqual(currency.protagonist_drag_failures, 0)   # 选完清零
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_prepare_battle_dismisses_front_empty_warning_first(self, manager):
+        """游戏提示「前台区域无角色」时，格子被盖住，不能据此判"阵容就位"。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "startbattle"
+        currency._stop = False
+        currency.exit_requested = False
+        currency.exit_plane = 3
+        # 提示文字命中
+        currency.click_text = Mock(return_value=True)
+        manager.reset_mock()
+
+        self.assertEqual(currency.prepare_battle(), 0)
+
+        self.assertIn(call.click_point(*SimulatedCurrency.FRONT_EMPTY_DISMISS),
+                      manager.mock_calls)
+        currency.update_state = Mock()
+        currency.update_state.assert_not_called()      # 不能判成 battle_ready
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_pair_strategy_layout_is_detected_by_label(self, manager):
+        """「一个选择 + 两个都带走」版式靠标签识别，不能把普通三卡也当过去。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.click_text = Mock(return_value=True)
+        self.assertTrue(currency.on_pair_strategy_layout())
+
+        currency.click_text = Mock(return_value=False)
+        self.assertFalse(currency.on_pair_strategy_layout())
+
+    def test_pair_layout_wanted_only_accepts_targets(self):
+        """并取版式的判定：目标名单内、且不在负面名单里才算想要。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.strategy_targets = ["小复制"]
+        currency.strategy_avoid = ["大裁员"]
+        self.assertTrue(currency._is_wanted("小复制", {"大裁员"}))
+        self.assertFalse(currency._is_wanted("大裁员", {"大裁员"}))
+        self.assertFalse(currency._is_wanted("别的策略", set()))
+        self.assertFalse(currency._is_wanted("", set()))
 
 
 if __name__ == "__main__":

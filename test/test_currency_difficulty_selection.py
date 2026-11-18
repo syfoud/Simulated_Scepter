@@ -16,6 +16,11 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency.exit_requested = True
         currency.exit_started = True
         currency.run_history = Mock()
+        currency.ts = Mock()
+        currency.click_text = Mock(return_value=True)   # 默认仍在难度界面
+        currency.auto_exit_plane = False
+        currency.strategy_targets = []
+        currency.strategy_sampler = Mock()
         currency.update_state = Mock(
             side_effect=lambda next_state: setattr(currency, "state", next_state)
         )
@@ -27,6 +32,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
     def test_lowest_difficulty_uses_selected_effect_region(self):
         currency = self.make_currency()
         currency.ts = Mock()
+        currency.click_text = Mock(return_value=True)   # 默认仍在难度界面
         currency.ts.find_with_box.return_value = [
             {
                 "raw_text": "开局时获得【精密拆装扳手】",
@@ -49,6 +55,8 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         """
         currency = self.make_currency()
         currency.has_fresh = True  # 上一局刷过刷新、并因此刷出了必选环境
+        # 点完「开始对局」后要确认已离开难度页，这里直接认定为已离开
+        currency.still_on_difficulty_screen = Mock(return_value=False)
 
         self.assertTrue(currency.complete_difficulty_selection())
 
@@ -106,6 +114,7 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         currency = self.make_currency()
         currency.get_screen = Mock()
         currency.is_one = Mock(side_effect=[False, True])
+        currency.wait_difficulty_settled = Mock()
         currency.complete_difficulty_selection = Mock(return_value=True)
 
         self.assertTrue(currency.select_difficulty_start())
@@ -131,6 +140,29 @@ class CurrencyDifficultySelectionTest(unittest.TestCase):
         self.assertEqual(manager.click_point.call_count, 2)
         manager.click_point.assert_called_with(*currency.DIFFICULTY_DOWN_POSITION)
         self.assertEqual(manager.wait.call_count, 2)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_stops_clicking_once_difficulty_screen_is_gone(self, manager):
+        """点完开始对局会先黑屏，状态却还是 difficulty_select——不能再往空处连点。"""
+        currency = self.make_currency()
+        currency.get_screen = Mock()
+        currency.is_one = Mock(return_value=False)
+        currency.on_difficulty_screen = Mock(return_value=False)
+        manager.reset_mock()
+
+        self.assertTrue(currency.select_difficulty_start())
+        manager.click_point.assert_not_called()
+
+    def test_waits_for_difficulty_text_to_change(self):
+        """点完向下箭头后轮询等描述变化，别拿动画中间帧当结果。"""
+        currency = self.make_currency()
+        currency.get_screen = Mock()
+        currency.read_difficulty_text = Mock(side_effect=["敌人难度+2", "", "敌人难度+1"])
+
+        with patch("core.currency.automation.time.sleep"):
+            settled = currency.wait_difficulty_settled(timeout=0.5, step=0.05)
+
+        self.assertEqual(settled, "敌人难度+1")
 
 
 if __name__ == "__main__":
