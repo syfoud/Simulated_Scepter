@@ -177,6 +177,8 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
     PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
     BROKEN_PANEL_ESC_GAP = 1.2
+    MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
+    MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
     BATTLE_HUD_BOX = [0, 0, 1920, 1080]
     # 「开拓商店」：标题在两张版式里都有；点击目标是那张「星穹列车，跃迁！」卡片
@@ -703,6 +705,16 @@ class SimulatedCurrency(CurrencyUtils):
                                 "超频博弈" if want_overclock else "标准博弈", attempt + 1)
                 key_mouse_manager.click_point(*card)
                 key_mouse_manager.wait()
+                # 后台模式下捕获帧会滞后：点完立刻读还是旧文字，会误判"没切过去"连点三次。
+                # 所以轮询等按钮文字真的变过来。
+                if self.wait_mode_switched(want_char):
+                    CUS_LOGGER.info("模式已切到「%s」",
+                                    "超频博弈" if want_overclock else "标准博弈")
+                    key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
+                                                  box=self.BATTLE_MODE_BUTTON_BOX)
+                    key_mouse_manager.wait()
+                    self.update_state("difficulty_select")
+                    return 1
                 continue
 
             # 按钮文字没读到或不是这几种：宁可什么都不点，也别把点打到攻略/图例上
@@ -711,6 +723,18 @@ class SimulatedCurrency(CurrencyUtils):
 
         CUS_LOGGER.warning("三次都没切到目标模式，先不动，等下一轮")
         return 0
+
+    def wait_mode_switched (self, want_char, timeout=None, step=None):
+        """轮询等右下角按钮文字变成目标模式（后台捕获帧滞后，点完要等）。"""
+        timeout = self.MODE_SWITCH_TIMEOUT if timeout is None else timeout
+        step = self.MODE_SWITCH_STEP if step is None else step
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(step)
+            text = self.read_mode_button()
+            if want_char in text:
+                return True
+        return False
 
     def select_top_difficulty (self):
         """最高职级（A8-20）：有「返回最高职级」就点它切过去，没有说明已经是。"""
