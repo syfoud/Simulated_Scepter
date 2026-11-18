@@ -67,7 +67,7 @@
         <item>
          <widget class="QPushButton" name="Currency_affix_targets_btn">
           <property name="text">
-           <string>选择…</string>
+           <string>选择词缀…</string>
           </property>
          </widget>
         </item>
@@ -109,7 +109,7 @@
         <item>
          <widget class="QPushButton" name="Currency_strategy_targets_btn">
           <property name="text">
-           <string>选择…</string>
+           <string>选择目标策略…</string>
           </property>
          </widget>
         </item>
@@ -137,7 +137,7 @@
         <item>
          <widget class="QPushButton" name="Currency_strategy_avoid_btn">
           <property name="text">
-           <string>选择…</string>
+           <string>选择负面策略…</string>
           </property>
          </widget>
         </item>
