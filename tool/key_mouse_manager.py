@@ -338,6 +338,18 @@ class KeyMouseManager:
             )
         return None
 
+    def _use_background_input(self):
+        """当前该用后台消息还是前台注入：游戏在前台就用前台注入（可靠）。"""
+        mouse = self.background_mouse
+        if mouse is None:
+            return False
+        if self.background is not None and self.background.game_is_foreground():
+            return False
+        try:
+            return win32gui.GetForegroundWindow() != mouse.hwnd
+        except Exception:
+            return True
+
     def _execute_operation(self, operation):
         """
         执行单个键鼠操作
@@ -356,14 +368,14 @@ class KeyMouseManager:
             point = self._game_point("点击", x, y)
             if point is None:
                 return
-            if self.background_mouse is not None:
-                # 后台模式：消息投给窗口，落点借用光标（见 BackgroundMouse 说明）
+            if self._use_background_input():
+                # 游戏不在前台：消息投给窗口，落点借用光标（见 BackgroundMouse 说明）
                 hit = self.background_mouse.click(point)
                 CUS_LOGGER.debug(
                     "后台点击 (%s, %s) → %s", x, y, "已投递" if hit else "被跳过")
                 return
-            # 走到这里说明后台通道没建立：只会点中当前前台窗口，游戏在后台时等于空点
-            CUS_LOGGER.debug("前台点击 (%s, %s)（未启用后台通道）", x, y)
+            # 走到这里要么没建后台通道，要么游戏就在前台 —— 用真实注入最可靠
+            CUS_LOGGER.debug("前台点击 (%s, %s)", x, y)
             win32api.SetCursorPos(point)
             pyautogui.click()
 
@@ -418,7 +430,7 @@ class KeyMouseManager:
         if op_type == 'press' and operation.get('allow_e', 1) == 0 and operation['key'] == 'technique':
             return
         key = resolve_key(operation['key'])
-        if self.background is not None:
+        if self.background is not None and self._use_background_input():
             if not self.background.supports(key):
                 _warn_once(f"后台按键:{key}", f"后台模式暂不支持按键 {key!r}，本次按键已跳过")
                 return
