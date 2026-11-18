@@ -6,7 +6,12 @@ from unittest.mock import Mock, patch
 
 import win32con
 
-from tool.background_input import BackgroundKeyboard, key_lparam, scan_code
+from tool.background_input import (
+    BackgroundKeyboard,
+    BackgroundMouse,
+    key_lparam,
+    scan_code,
+)
 from tool.key_mouse_manager import KeyMouseManager
 
 
@@ -44,7 +49,8 @@ class BackgroundKeyboardTests(unittest.TestCase):
     def posts(self):
         return [call.args for call in self.post.call_args_list]
 
-    def test_press_activates_game_posts_key_and_clears_activation(self):
+    def test_press_activates_game_and_posts_key(self):
+        """按键前补激活；抬键不再撤销激活（撤销留给任务结束的统一释放）。"""
         self.keyboard.press("f")
         down = key_lparam(scan_code(0x46), False, False)
         up = key_lparam(scan_code(0x46), False, True)
@@ -52,8 +58,10 @@ class BackgroundKeyboardTests(unittest.TestCase):
             (1234, win32con.WM_ACTIVATE, win32con.WA_ACTIVE, 0),
             (1234, win32con.WM_KEYDOWN, 0x46, down),
             (1234, win32con.WM_KEYUP, 0x46, up),
-            (1234, win32con.WM_ACTIVATE, win32con.WA_INACTIVE, 0),
         ])
+        self.keyboard.release_all()
+        self.assertEqual(self.posts()[-1],
+                         (1234, win32con.WM_ACTIVATE, win32con.WA_INACTIVE, 0))
 
     def test_foreground_game_gets_no_fake_activation(self):
         self.foreground.return_value = 1234
@@ -70,13 +78,13 @@ class BackgroundKeyboardTests(unittest.TestCase):
                 if call.args[1] == win32con.WM_SYSKEYDOWN][0]
         self.assertTrue(down.args[3] & (1 << 29))
 
-    def test_held_keys_keep_activation_until_the_last_release(self):
+    def test_key_up_keeps_activation_for_the_shared_mouse_channel(self):
+        """抬键不撤销激活：不然共用这份状态的鼠标通道会漏掉激活、点击被丢弃。"""
         self.keyboard.key_down("f")
-        self.keyboard.key_down("g")
         self.assertTrue(self.keyboard.activated)
         self.keyboard.key_up("f")
-        self.assertTrue(self.keyboard.activated)
-        self.keyboard.key_up("g")
+        self.assertTrue(self.keyboard.activated)          # 抬键后仍保持激活
+        self.keyboard.release_all()                       # 只有统一释放才撤销
         self.assertFalse(self.keyboard.activated)
         messages = [call.args[1] for call in self.post.call_args_list]
         self.assertEqual(messages.count(win32con.WM_ACTIVATE), 2)
@@ -101,8 +109,10 @@ class BackgroundKeyboardTests(unittest.TestCase):
         self.assertEqual(messages.count(win32con.WM_KEYUP), 2)
 
     def test_game_stealing_foreground_is_restored(self):
+        """游戏借伪造激活抢到前台时，统一释放要把焦点还回原窗口。"""
         self.foreground.side_effect = [999, 1234]
         self.keyboard.press("f")
+        self.keyboard.release_all()
         self.set_foreground.assert_called_once_with(999)
 
 
@@ -159,33 +169,60 @@ class KeyMouseManagerRoutingTests(unittest.TestCase):
         self.manager = KeyMouseManager()
         self.manager.set_screen_params(1920, 1080, 1920, 1080)
 
+    def make_background(self, background):
+        """把两个通道都挂上，并让"游戏在前台"为假——这样才会走后台通道。"""
+        mouse = Mock(spec=BackgroundMouse)
+        self.manager.background = background
+        self.manager.background_mouse = mouse
+        with patch("tool.key_mouse_manager.win32gui.GetForegroundWindow",
+                   return_value=999), \
+                patch.object(mouse, "hwnd", 1234, create=True):
+            background.game_is_foreground.return_value = False
+            return mouse
+
     def test_press_is_sent_through_background_channel(self):
         background = Mock(spec=BackgroundKeyboard)
         background.supports.return_value = True
-        self.manager.background = background
+        self.make_background(background)
         self.manager._execute_operation(
             {"type": "press", "key": "f", "duration": 0.1, "allow_e": 1})
         background.press.assert_called_once()
         self.assertEqual(background.press.call_args.args[0], "f")
 
+    def test_foreground_game_uses_real_injection(self):
+        """游戏在前台时用真实注入：后台消息在个别界面会被忽略，前台注入才可靠。"""
+        background = Mock(spec=BackgroundKeyboard)
+        background.supports.return_value = True
+        background.game_is_foreground.return_value = True
+        self.manager.background = background
+        self.manager.background_mouse = Mock(spec=BackgroundMouse)
+        with patch("tool.key_mouse_manager.pyautogui") as gui:
+            self.manager._execute_operation(
+                {"type": "press", "key": "f", "duration": 0, "allow_e": 1})
+        gui.keyDown.assert_called_once_with("f")
+        background.press.assert_not_called()
+
     def test_unsupported_key_is_skipped_instead_of_falling_back(self):
         background = Mock(spec=BackgroundKeyboard)
         background.supports.return_value = False
-        self.manager.background = background
+        self.make_background(background)
         with patch("tool.key_mouse_manager.pyautogui") as gui:
             self.manager._execute_operation(
                 {"type": "press", "key": "f", "duration": 0, "allow_e": 1})
         background.press.assert_not_called()
         gui.keyDown.assert_not_called()
 
-    def test_click_is_blocked_when_game_is_not_foreground(self):
-        background = Mock(spec=BackgroundKeyboard)
-        background.game_is_foreground.return_value = False
-        self.manager.background = background
+    def test_click_uses_background_mouse_even_when_game_is_not_foreground(self):
+        """后台模式下点击投窗口消息（落点借光标），不再因为游戏不在前台就跳过。"""
+        mouse = Mock(spec=BackgroundMouse)
+        mouse.game_is_foreground.return_value = False
+        mouse.hwnd = 1234
+        self.manager.background_mouse = mouse
         with patch("tool.key_mouse_manager.pyautogui") as gui, \
-                patch("tool.key_mouse_manager.win32api") as api:
+                patch("tool.key_mouse_manager.win32gui.GetForegroundWindow",
+                      return_value=999):
             self.manager._execute_operation({"type": "click", "x": 100, "y": 100})
-        api.SetCursorPos.assert_not_called()
+        mouse.click.assert_called_once_with((100, 100))
         gui.click.assert_not_called()
 
     def test_foreground_mode_still_injects_with_pyautogui(self):
@@ -207,6 +244,61 @@ class KeyMouseManagerRoutingTests(unittest.TestCase):
         self.assertIsInstance(self.manager.background, BackgroundKeyboard)
         self.manager.set_background_keyboard(None)
         self.assertIsNone(self.manager.background)
+
+class BackgroundMouseTests(unittest.TestCase):
+    def setUp(self):
+        self.hwnd = 4321
+        self.client_to_screen = self.enterContext(
+            patch("tool.background_input.win32gui.ClientToScreen", return_value=(20, 30)))
+        self.send = self.enterContext(patch("tool.background_input.win32gui.SendMessageTimeout"))
+        # 光标位置要有状态：点击会把光标挪到目标，归位逻辑据此判断用户有没有动过
+        self.cursor = {"pos": (777, 775)}
+        self.set_cursor = self.enterContext(patch(
+            "tool.background_input.win32api.SetCursorPos",
+            side_effect=lambda point: self.cursor.__setitem__("pos", point)))
+        self.get_cursor = self.enterContext(patch(
+            "tool.background_input.win32api.GetCursorPos",
+            side_effect=lambda: self.cursor["pos"]))
+        # 借光标现在走 move_cursor（内部 SendInput），测试里直接接到同一个状态上
+        self.move_cursor = self.enterContext(patch(
+            "tool.background_input.move_cursor",
+            side_effect=lambda x, y, **_: self.cursor.__setitem__("pos", (int(x), int(y)))))
+
+    def make_mouse(self):
+        from tool.background_input import BackgroundMouse
+
+        mouse = BackgroundMouse(self.hwnd)
+        mouse.wait_cursor_idle = lambda *args, **kwargs: True
+        return mouse
+
+    def test_client_coordinates_are_relative_to_client_origin(self):
+        mouse = self.make_mouse()
+        self.assertEqual(mouse.to_client((120, 230)), (100, 200))
+
+    def test_click_posts_move_down_up_and_restores_cursor(self):
+        from tool.background_input import WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE
+
+        mouse = self.make_mouse()
+        mouse.click((120, 230), sleep=lambda _seconds: None)
+
+        messages = [call.args[1] for call in self.send.call_args_list]
+        self.assertEqual(messages, [WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP])
+        # 借光标走 move_cursor（内部 SendInput），归位仍用 SetCursorPos
+        self.assertEqual(self.move_cursor.call_args.args[:2], (120, 230))
+        self.assertEqual(self.set_cursor.call_args.args[0], (777, 775))
+
+    def test_drag_presses_moves_and_releases(self):
+        from tool.background_input import WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE
+
+        mouse = self.make_mouse()
+        mouse.drag((120, 230), (220, 330), duration=0.2, sleep=lambda _seconds: None)
+
+        messages = [call.args[1] for call in self.send.call_args_list]
+        self.assertEqual(messages[0], WM_MOUSEMOVE)     # 先把光标放到起点
+        self.assertEqual(messages[1], WM_LBUTTONDOWN)
+        self.assertEqual(messages[-1], WM_LBUTTONUP)
+        self.assertGreater(len(messages), 8)      # 中间有逐步移动
+        self.assertEqual(self.set_cursor.call_args_list[-1].args[0], (777, 775))
 
 
 if __name__ == "__main__":

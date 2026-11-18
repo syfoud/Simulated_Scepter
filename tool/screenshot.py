@@ -109,6 +109,10 @@ class PrintWindowCapture:
         height: 客户区高度，物理像素。
     """
 
+    # 窗口最小化后最多等多久恢复；轮询间隔
+    RESTORE_TIMEOUT = 120
+    RESTORE_POLL = 0.5
+
     def __init__(self, hwnd, width, height):
         self.hwnd = hwnd
         self.width, self.height = width, height
@@ -172,10 +176,16 @@ class PrintWindowCapture:
                 raise RuntimeError("游戏窗口已关闭，无法后台截图")
             width, height = get_client_size(self.hwnd)
             if (width, height) != (self.width, self.height):
-                raise RuntimeError(
-                    f"游戏窗口客户区由 {self.width}x{self.height} 变为 {width}x{height}，"
-                    "请恢复窗口尺寸后重新运行任务"
-                )
+                # 最小化（例如用户按了 Win+D）会让客户区变成 0x0。
+                # 这时候不能把任务打崩，也不能去抢前台把窗口拉回来（会闪屏），
+                # 就在后台等它恢复：用户自己切回来后无缝继续。
+                if win32gui.IsIconic(self.hwnd) or width == 0 or height == 0:
+                    width, height = self._wait_restored()
+                if (width, height) != (self.width, self.height):
+                    raise RuntimeError(
+                        f"游戏窗口客户区由 {self.width}x{self.height} 变为 {width}x{height}，"
+                        "请恢复窗口尺寸后重新运行任务"
+                    )
             # 先让窗口把待重绘内容画出来，再由 PrintWindow 取客户区画面
             self.user32.SendMessageW(self.hwnd, win32con.WM_PAINT, 0, 0)
             if not self.user32.PrintWindow(self.hwnd, self._mem_dc, _PRINTWINDOW_CLIENT):
@@ -187,6 +197,25 @@ class PrintWindowCapture:
                 raise RuntimeError(f"后台截图读取位图失败：读到 {lines}/{self.height} 行")
             return np.frombuffer(bytearray(self.data), dtype=np.uint8).reshape(
                 (self.height, self.width, 4))[:, :, :3]
+
+    def _wait_restored(self):
+        """等窗口从最小化恢复，返回恢复后的客户区尺寸（超时则返回当前尺寸）。"""
+        CUS_LOGGER.info(
+            "游戏窗口被最小化（例如按了 Win+D），等待恢复；期间不抢前台")
+        deadline = time.monotonic() + self.RESTORE_TIMEOUT
+        while time.monotonic() < deadline:
+            time.sleep(self.RESTORE_POLL)
+            if not win32gui.IsWindow(self.hwnd):
+                CUS_LOGGER.warning("等待期间游戏窗口被关闭")
+                break
+            size = get_client_size(self.hwnd)
+            if not win32gui.IsIconic(self.hwnd) and size == (self.width, self.height):
+                CUS_LOGGER.info("游戏窗口已恢复，继续运行")
+                return size
+        size = get_client_size(self.hwnd)
+        CUS_LOGGER.warning(
+            "等了 %d 秒窗口仍未恢复（当前 %sx%s）", int(self.RESTORE_TIMEOUT), *size)
+        return size
 
     def close(self):
         """释放 GDI 资源，可重复调用。"""
