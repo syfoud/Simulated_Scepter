@@ -536,6 +536,11 @@ class SimulatedCurrency(CurrencyUtils):
                 silent_time = time.time ()
                 shot_saved = False
                 continue
+            # 没有任何动作命中时才做"卡死自愈"：重叠界面里标题被盖住，
+            # 靠标题触发的动作用永远不会跑，只能在这里兜。
+            if self.recover_broken_protagonist_panel():
+                silent_time = time.time()
+                continue
             # 无人命中超过10秒时记录整屏文字并留一张截图；战斗中长时间无触发属正常，跳过
             if time.time() - silent_time > 10:
                 silent_time = time.time()
