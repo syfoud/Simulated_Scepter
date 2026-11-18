@@ -540,11 +540,15 @@ class CurrencyInteractionTests(unittest.TestCase):
         manager.reset_mock()
 
         self.assertEqual(currency.choose_tea_break_option(), 1)
-        currency.click_box.assert_called_once_with([1151, 460, 1423, 490])
+        # 点击横坐标固定落在行内右侧空白区，纵向跟随候选行
+        clicked = currency.click_box.call_args.args[0]
+        self.assertEqual(clicked[0], SimulatedCurrency.TEA_OPTION_CLICK_X)
+        self.assertEqual((clicked[1], clicked[3]), (460, 490))
 
         # 下一次换成第二条候选（第一条可能点是气泡/说明，没反应）
         currency.choose_tea_break_option()
-        self.assertEqual(currency.click_box.call_args.args[0], [1151, 620, 1423, 650])
+        clicked = currency.click_box.call_args.args[0]
+        self.assertEqual((clicked[1], clicked[3]), (620, 650))
 
     @patch("core.currency.automation.key_mouse_manager")
     def test_tea_option_attempt_counter_wraps(self, manager):

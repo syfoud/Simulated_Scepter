@@ -1878,6 +1878,8 @@ class SimulatedCurrency(CurrencyUtils):
     # 选项右侧的「确认」：纵向位置跟着被选中那一行走（实测 y 460~703 都可能出现），
     # 所以不锁高度，只锁右侧这条竖带；左下角是真按钮（点它的识别框中心）
     TEA_CONFIRM_BOX = [1600, 400, 1900, 820]
+    # 选项行内右侧空白区的横坐标（标题文字止于 x≈1377，行块右边约 1840）
+    TEA_OPTION_CLICK_X = 1520
     TEA_CONFIRM_TIMEOUT = 1.2      # 等「确认」按钮渲染出来的上限
     TEA_CONFIRM_STEP = 0.15
     TEA_REWARD_BOX = [860, 175, 1060, 220]     # 「领取茶歇奖励」
@@ -1913,6 +1915,8 @@ class SimulatedCurrency(CurrencyUtils):
             item for item in self.ts.find_with_box(self.TEA_OPTIONS_BOX, redundancy=30)
             if item["raw_text"].strip()
             and "返回" not in item["raw_text"]
+            # 「获得1个【三月七】。」这类是描述行，点它会弹角色详情
+            and not item["raw_text"].strip().startswith("获得")
             and len(item["raw_text"].strip()) <= 15
         ]
         if not options:
@@ -1926,7 +1930,11 @@ class SimulatedCurrency(CurrencyUtils):
         if self.tea_option_attempt >= len(options) * 2:
             self.tea_option_attempt = 0
         CUS_LOGGER.info("尝试茶歇选项（第 %d 次）：%s", attempt + 1, item["raw_text"])
-        self.click_box(item["box"])
+        # 点在行内右侧空白区，避免正好压在文字上触发详情
+        self.click_box([
+            self.TEA_OPTION_CLICK_X, item["box"][1],
+            self.TEA_OPTION_CLICK_X + 1, item["box"][3],
+        ])
         key_mouse_manager.wait()
         return 1
 
