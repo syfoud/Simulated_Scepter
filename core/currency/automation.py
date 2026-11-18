@@ -187,6 +187,8 @@ class SimulatedCurrency(CurrencyUtils):
     PIONEER_STEP_GAP = 0.9
     # 物品详情面板左上角的「消耗品」标签（实测约 [849,318,900,337]）
     ITEM_DETAIL_LABEL_BOX = [800, 300, 980, 355]
+    # 「备战席已满，请出售角色或提升等级」红条（实测约 [905,528,1350,562]）
+    BENCH_FULL_BOX = [740, 505, 1200, 558]   # 红条实测 [783,522,1147,545]
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
     # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
@@ -1715,6 +1717,15 @@ class SimulatedCurrency(CurrencyUtils):
     # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
     PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
     PROTAGONIST_REPLACE_CONFIRM_POSITION = (1189, 671)
+
+    def restart_on_bench_full (self):
+        """备战席已满且无法出战：这一局直接退出重开，不去卖角色。"""
+        if self.exit_requested:
+            return 0
+        CUS_LOGGER.warning("备战席已满，无法出战，本局直接退出重开")
+        self.exit_requested = True
+        self.update_state("exit")
+        return 1
 
     def dismiss_item_detail (self):
         """关掉误触打开的物品详情面板（界面上只有「消耗品」说明框）。"""
