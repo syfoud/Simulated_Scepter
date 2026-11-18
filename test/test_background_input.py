@@ -259,6 +259,10 @@ class BackgroundMouseTests(unittest.TestCase):
         self.get_cursor = self.enterContext(patch(
             "tool.background_input.win32api.GetCursorPos",
             side_effect=lambda: self.cursor["pos"]))
+        # 借光标现在走 move_cursor（内部 SendInput），测试里直接接到同一个状态上
+        self.move_cursor = self.enterContext(patch(
+            "tool.background_input.move_cursor",
+            side_effect=lambda x, y, **_: self.cursor.__setitem__("pos", (int(x), int(y)))))
 
     def make_mouse(self):
         from tool.background_input import BackgroundMouse
@@ -279,10 +283,9 @@ class BackgroundMouseTests(unittest.TestCase):
 
         messages = [call.args[1] for call in self.send.call_args_list]
         self.assertEqual(messages, [WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP])
-        # 先挪到目标，最后放回原处
-        positions = [call.args[0] for call in self.set_cursor.call_args_list]
-        self.assertEqual(positions[0], (120, 230))
-        self.assertEqual(positions[-1], (777, 775))
+        # 借光标走 move_cursor（内部 SendInput），归位仍用 SetCursorPos
+        self.assertEqual(self.move_cursor.call_args.args[:2], (120, 230))
+        self.assertEqual(self.set_cursor.call_args.args[0], (777, 775))
 
     def test_drag_presses_moves_and_releases(self):
         from tool.background_input import WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE
