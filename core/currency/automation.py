@@ -177,7 +177,7 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
     PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
     BROKEN_PANEL_ESC_GAP = 1.2
-    OVERLAP_CHECK_GAP = 2.5        # 卡死自愈的最小检查间隔，避免每帧 OCR 刷屏
+    OVERLAP_CHECK_GAP = 5.0        # 卡死自愈的最小检查间隔，避免每帧 OCR 刷屏
     MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
     MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
@@ -1864,10 +1864,13 @@ class SimulatedCurrency(CurrencyUtils):
             return 0
         self._overlap_checked_at = now
 
-        if not self.has_text(self.PROTAGONIST_BANNER_BOX,
-                             "尚未选择主角角色和光环"):
+        if not self.click_text(text="尚未选择主角角色和光环",
+                               box=self.PROTAGONIST_BANNER_BOX,
+                               click=False, allow_fail=True, warning=False):
             return 0
-        if self.has_text(self.PROTAGONIST_TITLE_BOX, "主角光环"):
+        if self.click_text(text="主角光环",
+                           box=self.PROTAGONIST_TITLE_BOX,
+                           click=False, allow_fail=True, warning=False):
             return 0
 
         CUS_LOGGER.warning(
@@ -1881,13 +1884,6 @@ class SimulatedCurrency(CurrencyUtils):
         # 这里**不**推进到 exit：那会让「开始退出」再按一轮 ESC，把刚弹出来的确认框搅掉。
         # 确认框交给「重开2」（已去掉状态门槛）点「放弃并结算」。
         return 1
-
-    def has_text (self, box, text):
-        """静默判断某个区域里有没有这段文字（不打日志、不截屏之外的副作用）。"""
-        try:
-            return text in merge_text(self.ts.find_with_box(box, redundancy=30))
-        except Exception:
-            return False
 
     def select_protagonist (self):
         """4.7 新 UI「选择主角」：点按钮 → 等面板 → 拖第一个角色 → 选右侧光环 → 确认。
