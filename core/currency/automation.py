@@ -11,7 +11,14 @@ from core.currency.affix_stats import AffixSampler
 from core.currency.envirs import ENVIR_NAMES
 from core.currency.textmatch import best_match, similar
 from core.currency.investment_selection import choose_fallback_investment
-from core.currency.strategies import exit_plane_for, match_name
+from core.currency.strategies import (
+    PEPE_DEPENDENT_STRATEGIES,
+    exit_plane_for,
+    match_name,
+    pepe_keep_checked,
+    pepe_left,
+    pepe_on_field,
+)
 from core.currency.strategy_stats import StrategySampler
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
@@ -153,6 +160,21 @@ class SimulatedCurrency(CurrencyUtils):
     DIFFICULTY_ENTER_BOX = [1550, 930, 1800, 1000]
     DIFFICULTY_DOWN_POSITION = (960, 844)
     DIFFICULTY_START_POSITION = (1692, 965)     # 难度页右下角的「开始对局」
+    # 连点这么多次「出战」都没进战斗就认定本局没法打（前台没人），退局重开
+    BATTLE_CLICK_WINDOW = 60.0      # 上面那个"连点"的时间窗：中间隔久了不算连点
+    BATTLE_FEWER_PROMPT_BOX = [911, 590, 1059, 617]   # 「本局不再提示」文字框
+    # 看门狗：同一动作在窗口内重复到这个次数、且状态一直没推进，判定卡死。
+    # 阈值 40 远大于「选择主角」最多 25 次的正常等待，也大于剧情连续推对话的次数。
+    # 主判据：多久没有任何"真正的推进"就判卡死（战斗最长两三分钟，取 7 分钟）
+    WATCHDOG_NO_PROGRESS = 420.0
+    # 辅助判据：同一动作在窗口内重复太多次也算卡死
+    WATCHDOG_WINDOW = 600.0
+    WATCHDOG_REPEATS = 40
+    # 出现这些动作说明一局真的在往前走，看门狗计数清零
+    WATCHDOG_PROGRESS_ACTIONS = (
+        "战斗结束后", "选择投资策略", "选择投资环境", "重开2", "重开",
+        "本场对局首领点击下一步", "前往结算",
+    )
     DIFFICULTY_START_ATTEMPTS = 3               # 点了没离开难度页时的重试次数
     DIFFICULTY_LEAVE_TIMEOUT = 1.2              # 每次点击后等界面切换的时间
     DIFFICULTY_LEAVE_STEP = 0.2
@@ -177,6 +199,7 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
     PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
     BROKEN_PANEL_ESC_GAP = 1.2
+    OVERLAP_CHECK_GAP = 5.0        # 卡死自愈的最小检查间隔（click_text 会记 info，别太密）
     MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
     MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
@@ -260,6 +283,7 @@ class SimulatedCurrency(CurrencyUtils):
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
+        self.pepe_on_field = False
         # 退出失败重试计数（连续失败到上限就停手）
         self.exit_attempts = 0
 
@@ -304,6 +328,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.strategy_avoid = currency_settings["strategy_avoid"]
         self.auto_exit_plane = currency_settings["auto_exit_plane"]
         self.auto_clear_targets = currency_settings["auto_clear_targets"]
+        self.pepe_plane_boost = currency_settings["pepe_plane_boost"]
         # 配了目标策略就是在收集策略：这种跑法不该被"等词缀"卡住（低难度本来就没词缀）
         self.collecting_strategies = bool(self.strategy_targets)
         if self.strategy_targets:
@@ -535,6 +560,16 @@ class SimulatedCurrency(CurrencyUtils):
             if name:
                 silent_time = time.time ()
                 shot_saved = False
+                if self._watchdog_hit(name):
+                    continue
+                continue
+            # 没有任何动作命中时才做"卡死自愈"：重叠界面里标题被盖住，
+            # 靠标题触发的动作用永远不会跑，只能在这里兜。
+            if self.recover_broken_protagonist_panel():
+                silent_time = time.time()
+                continue
+            if self._watchdog_idle():
+                silent_time = time.time ()
                 continue
             # 无人命中超过10秒时记录整屏文字并留一张截图；战斗中长时间无触发属正常，跳过
             if time.time() - silent_time > 10:
@@ -828,6 +863,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.prior_environment_found = False
         self.exit_requested = False
         self.exit_started = False
+        # 佩佩特化是"本局"状态：上一把拿到过佩佩，不能带到下一把
+        self.pepe_on_field = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
@@ -1163,6 +1200,26 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info(
             "第 %s 面已选过 %d 次策略", plane, self.plane_strategy_count[plane])
 
+        # 佩佩被带走（阿兰接走佩佩…）：立刻取消特化，别白白多打两面
+        if getattr(self, "pepe_on_field", False) and pepe_left(selected_text, *texts):
+            CUS_LOGGER.warning("本屏选中了「会让佩佩离开」的策略，佩佩特化取消")
+            self.pepe_on_field = False
+
+        # 佩佩特化：第一位面拿到「佩佩在场」的策略，就把本局打到第三面终局
+        if (
+            self.auto_exit_plane
+            and getattr(self, "pepe_plane_boost", False)
+            and any(item in self.strategy_targets for item in PEPE_DEPENDENT_STRATEGIES)
+            and plane < 3
+            and pepe_on_field(selected_text)
+        ):
+            if not getattr(self, "pepe_on_field", False):
+                # 不限定第 1 面：第 2 面拿到佩佩同样算"已在场"，只要还没到终局面就继续打
+                CUS_LOGGER.info(
+                    "第 %s 面拿到「%s」：佩佩已在场，本局打到第 3 面终局（等孪生姵姵）",
+                    plane, selected_text)
+            self.pepe_on_field = True
+
         hits = self.strategy_sampler.record(
             plane, texts, selected_text, targets=self.strategy_targets)
         if hits:
@@ -1171,6 +1228,98 @@ class SimulatedCurrency(CurrencyUtils):
         self._refresh_auto_exit_plane()
 
         return 1
+
+    def _watchdog_hit (self, action_name, now=None):
+        """同一动作重复太多次且状态没变 → 判卡死，退局重开。返回 True 表示已触发。
+
+        Args:
+            action_name: 本帧命中的动作名。
+            now: 注入时间戳（回放日志验证用），默认取当前单调时钟。
+        """
+        if now is None:
+            now = time.monotonic()
+        history = getattr(self, "_action_history", None)
+        if history is None:
+            history = self._action_history = []
+            self._watchdog_progress_at = now
+
+        # 真正的推进到了：记账并清零
+        if action_name in self.WATCHDOG_PROGRESS_ACTIONS:
+            self._watchdog_progress_at = now
+            history.clear()
+            return False
+
+        # 主判据：太久没有任何推进（一场战斗最长两三分钟，7 分钟没动静一定是卡死）。
+        # 回放实测：卡死时一轮循环约 10 秒，180 秒内同一动作只有约 21 次，
+        # 光看重复次数永远到不了阈值。
+        idle = now - self._watchdog_progress_at
+        if idle >= self.WATCHDOG_NO_PROGRESS:
+            self._watchdog_restart(f"当前动作「{action_name}」", idle, now)
+            return True
+        history.append((now, action_name))
+        # 只保留窗口内的记录
+        cutoff = now - self.WATCHDOG_WINDOW
+        while history and history[0][0] < cutoff:
+            history.pop(0)
+        repeats = sum(1 for _, name in history if name == action_name)
+        if repeats < self.WATCHDOG_REPEATS:
+            return False
+
+        CUS_LOGGER.warning(
+            "看门狗：动作「%s」在 %d 秒内触发了 %d 次，状态一直停在 %s —— 判定卡死，退局重开",
+            action_name, int(self.WATCHDOG_WINDOW), repeats, self.state)
+        history.clear()
+        self.battle_click_attempts = 0
+        self.exit_requested = True
+        self.update_state("exit")
+        return True
+
+    def _watchdog_restart (self, where, idle, now=None):
+        """判卡死，退局重开。"""
+        CUS_LOGGER.warning(
+            "看门狗：已经 %d 秒没有任何推进（%s，状态=%s），判定卡死，退局重开",
+            int(idle), where, self.state)
+        self._watchdog_progress_at = time.monotonic() if now is None else now
+        self._action_history = []
+        self.battle_click_attempts = 0
+        self.exit_requested = True
+        # 退出流程可能已经 once 过、或停在"退出已开始"的假状态：一起复位，让它真能重来
+        self.exit_started = False
+        self.exit_attempts = 0
+        self.update_state("exit")
+
+    def _watchdog_idle (self, now=None):
+        """整屏一个动作都没命中时也走一遍超时判定。"""
+        if now is None:
+            now = time.monotonic()
+        last = getattr(self, "_watchdog_progress_at", None)
+        if last is None:
+            self._watchdog_progress_at = now
+            return False
+        idle = now - last
+        if idle < self.WATCHDOG_NO_PROGRESS:
+            return False
+        self._watchdog_restart("整屏没有任何动作命中", idle, now)
+        return True
+
+    def _recent_battle_clicks (self, now=None):
+        """最近 60 秒内的出战点击次数（更早的不算，避免把"点几下又去补位"算成连点）。"""
+        now = time.monotonic() if now is None else now
+        return sum(1 for stamp in getattr(self, "_battle_click_stamps", [])
+                   if now - stamp <= self.BATTLE_CLICK_WINDOW)
+
+    def _remember_battle_click (self, now=None):
+        """记一次出战点击。"""
+        now = time.monotonic() if now is None else now
+        stamps = [stamp for stamp in getattr(self, "_battle_click_stamps", [])
+                  if now - stamp <= self.BATTLE_CLICK_WINDOW]
+        stamps.append(now)
+        self._battle_click_stamps = stamps
+
+    def reset_battle_clicks (self):
+        """有明确进展（补位成功、打完一场）时清零，别把中间的进展算成"连点无效"。"""
+        self._battle_click_stamps = []
+        self.battle_click_attempts = 0
 
     def read_team_count(self):
         """读取上阵人数及人数上限；OCR 暂未识别完整时返回 None。
@@ -1454,7 +1603,25 @@ class SimulatedCurrency(CurrencyUtils):
             )
             if not moves:
                 if front_occupied == 0:
-                    CUS_LOGGER.debug("前台尚无角色，继续等待备战")
+                    # 前台空着但没有任何可拖的动作：要么还没识别稳，要么台上角色全是
+                    # "后台"角标（角标不允许进前台）。后者等下去也没用，直接退局重开。
+                    front_capable = [
+                        slot for slot in slots
+                        if slot.kind == "character" and "front" in slot.areas
+                        and slot.template not in blocked
+                    ]
+                    # 手上根本没人（刚进 1-1、备战栏还没刷出来）时不能判无解，继续等
+                    has_any_piece = bool(sources) or bool(deployed)
+                    if not front_capable and has_any_piece:
+                        CUS_LOGGER.warning(
+                            "前台没人、且没有角色允许上阵前台（角标限制），本局退局重开")
+                        self.battle_click_attempts = 0
+                        self.exit_requested = True
+                        self.update_state("exit")
+                        return 0
+                    CUS_LOGGER.debug(
+                        "前台尚无角色，继续等待备战（备战角色=%d，场上=%d）",
+                        len(sources), len(deployed))
                     return 0
                 self.update_state("battle_ready")
                 CUS_LOGGER.info("阵容已就位，可以出战！")
@@ -1465,9 +1632,12 @@ class SimulatedCurrency(CurrencyUtils):
                 blocked.add(sources[move.source])
                 continue
             after_slots, outgoing, verified = result
+            if not verified:
+                return 0
+            # 拖拽落地并核对通过 = 明确进展：把"连点出战"的计数清掉，
+            # 否则补位过程中的几次出战点击会被误算成"连点无效"。
+            self.reset_battle_clicks()
             if outgoing is None:
-                if not verified:
-                    return 0
                 continue
             incoming = next(slot.template for slot in slots if slot.index == move.source)
             priority = self.front_priority if move.area == "front" else self.back_priority
@@ -1548,8 +1718,17 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.info("已请求退出，跳过出战")
             self.update_state("currency_main")
             return 0
+        # 先处理「人数未达上限」确认框：它就是拦着不让开战的那道门，
+        # 点掉它再点出战才有意义；这一步不算一次"出战尝试"。
+        if self.click_text(text="本局不再提示", box=self.BATTLE_FEWER_PROMPT_BOX,
+                           click=False, allow_fail=True, warning=False):
+            CUS_LOGGER.info("出战被「人数未达上限」提示框拦着，先点确认")
+            key_mouse_manager.click_point(*self.BATTLE_FEWER_CONFIRM_POSITION)
+            key_mouse_manager.wait()
+            return 1
+
         # 连续点了好几次还没进战斗，说明有东西挡着：把整屏文字打出来，免得到现场猜
-        self.battle_click_attempts = getattr(self, "battle_click_attempts", 0) + 1
+        self.battle_click_attempts = self._recent_battle_clicks() + 1
         if self.battle_click_attempts == 3:
             try:
                 self.ts.forward(self.get_screen())
@@ -1562,6 +1741,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
+        self._remember_battle_click()
         self.update_state("startbattle")
         return 1
 
@@ -1717,7 +1897,7 @@ class SimulatedCurrency(CurrencyUtils):
         return False
 
     def reset_battle_click_attempts (self):
-        self.battle_click_attempts = 0
+        self.reset_battle_clicks()
 
     def handle_battle_finished(self):
         self.battle_click_attempts = 0
@@ -1849,17 +2029,22 @@ class SimulatedCurrency(CurrencyUtils):
 
         判定用「底部红条在、顶部标题不在」这组签名：正常的选主角面板两者都在，
         商店把标题盖住时只剩底下的「尚未选择主角角色和光环」。
+
+        这条只在"整屏没有任何动作命中"时才被调用，而且**限频 + 静默识别**：
+        否则战斗里每帧两次 OCR，日志会被「请求/响应」刷满。
         """
-        self.get_screen()
-        banner = self.click_text(text="尚未选择主角角色和光环",
-                                 box=self.PROTAGONIST_BANNER_BOX,
-                                 click=False, allow_fail=True)
-        # 用短词「主角光环」判断标题在不在：长句一旦 OCR 掉字就会被误判成"标题缺失"，
-        # 那会误触发 ESC 把正常的一局退出掉
-        title = self.click_text(text="主角光环",
-                                box=self.PROTAGONIST_TITLE_BOX,
-                                click=False, allow_fail=True)
-        if not banner or title:
+        now = time.monotonic()
+        if now - getattr(self, "_overlap_checked_at", 0.0) < self.OVERLAP_CHECK_GAP:
+            return 0
+        self._overlap_checked_at = now
+
+        if not self.click_text(text="尚未选择主角角色和光环",
+                               box=self.PROTAGONIST_BANNER_BOX,
+                               click=False, allow_fail=True, warning=False):
+            return 0
+        if self.click_text(text="主角光环",
+                           box=self.PROTAGONIST_TITLE_BOX,
+                           click=False, allow_fail=True, warning=False):
             return 0
 
         CUS_LOGGER.warning(
@@ -1870,6 +2055,8 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
         self.exit_requested = True
+        # 这里**不**推进到 exit：那会让「开始退出」再按一轮 ESC，把刚弹出来的确认框搅掉。
+        # 确认框交给「重开2」（已去掉状态门槛）点「放弃并结算」。
         return 1
 
     def select_protagonist (self):
@@ -1878,6 +2065,10 @@ class SimulatedCurrency(CurrencyUtils):
         面板出现在第一位面和第二位面首领之前的备战界面，按钮就压在「出战」的位置上，
         不处理的话主循环等不到「出战」文字会一直空转。
         """
+
+        # 先排掉"商店把标题盖住"的偶发重叠：那种情况下拖拽落点全错，只能 ESC 重开。
+        if self.recover_broken_protagonist_panel():
+            return 1
         # 主循环每帧都刷过截图，这里直接用当前帧（自己抓会依赖 _stop 等运行时状态）
         if self.click_text(text="选择一个角色获得主角光环",
                            box=self.PROTAGONIST_TITLE_BOX, click=False, allow_fail=True):
@@ -2067,6 +2258,9 @@ class SimulatedCurrency(CurrencyUtils):
             return False
         if not chosen or chosen not in self.strategy_targets:
             return False
+        if pepe_keep_checked(chosen):
+            CUS_LOGGER.info("「%s」属于佩佩系列，保留勾选（不清掉）", chosen)
+            return False
         self.strategy_targets = [name for name in self.strategy_targets if name != chosen]
         CUS_LOGGER.info("已自动取消勾选：%s（剩余目标 %d 条）", chosen, len(self.strategy_targets))
         self.persist_strategy_targets()
@@ -2124,6 +2318,12 @@ class SimulatedCurrency(CurrencyUtils):
             return
         if not self.strategy_targets:
             self.exit_plane = self.set_exit_plane
+            return
+        if getattr(self, "pepe_on_field", False):
+            # 佩佩已在场：孪生姵姵只在第 2~3 面出现，直接打到终局把策略数量吃满
+            if self.exit_plane != 3:
+                CUS_LOGGER.info("佩佩在场：退出位面推到第 3 面（终局）")
+            self.exit_plane = 3
             return
         plane = exit_plane_for(self.strategy_targets, self.strategy_sampler.collected)
         if plane != self.exit_plane:

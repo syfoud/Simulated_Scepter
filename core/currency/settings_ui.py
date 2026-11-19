@@ -50,6 +50,7 @@ class SettingsDialog(BaseDialog):
         ui.Currency_strategy_avoid_edit.setText("、".join(self.strategy_avoid))
         ui.Currency_auto_exit_plane_checkbox.setChecked(settings["auto_exit_plane"])
         ui.Currency_auto_clear_targets_checkbox.setChecked(settings["auto_clear_targets"])
+        ui.Currency_pepe_plane_boost_checkbox.setChecked(settings.get("pepe_plane_boost", False))
         ui.Currency_auto_exit_plane_checkbox.toggled.connect(self._sync_exit_plane_widgets)
         self._sync_exit_plane_widgets(settings["auto_exit_plane"])
 
@@ -94,6 +95,7 @@ class SettingsDialog(BaseDialog):
             "strategy_avoid": list(self.strategy_avoid),
             "auto_exit_plane": ui.Currency_auto_exit_plane_checkbox.isChecked(),
             "auto_clear_targets": ui.Currency_auto_clear_targets_checkbox.isChecked(),
+            "pepe_plane_boost": ui.Currency_pepe_plane_boost_checkbox.isChecked(),
             "max_runs": ui.Currency_max_runs_spin.value(),
             "gather_mode": ui.Currency_gather_mode_checkbox.isChecked(),
         }, path=self.path)
