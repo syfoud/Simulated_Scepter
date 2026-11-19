@@ -177,6 +177,7 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_TITLE_BOX = [700, 55, 1230, 120]
     PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
     BROKEN_PANEL_ESC_GAP = 1.2
+    OVERLAP_CHECK_GAP = 5.0        # 卡死自愈的最小检查间隔，避免每帧 OCR 刷屏
     MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
     MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
@@ -535,6 +536,11 @@ class SimulatedCurrency(CurrencyUtils):
             if name:
                 silent_time = time.time ()
                 shot_saved = False
+                continue
+            # 没有任何动作命中时才做"卡死自愈"：重叠界面里标题被盖住，
+            # 靠标题触发的动作用永远不会跑，只能在这里兜。
+            if self.recover_broken_protagonist_panel():
+                silent_time = time.time()
                 continue
             # 无人命中超过10秒时记录整屏文字并留一张截图；战斗中长时间无触发属正常，跳过
             if time.time() - silent_time > 10:
@@ -1849,17 +1855,22 @@ class SimulatedCurrency(CurrencyUtils):
 
         判定用「底部红条在、顶部标题不在」这组签名：正常的选主角面板两者都在，
         商店把标题盖住时只剩底下的「尚未选择主角角色和光环」。
+
+        这条只在"整屏没有任何动作命中"时才被调用，而且**限频 + 静默识别**：
+        否则战斗里每帧两次 OCR，日志会被「请求/响应」刷满。
         """
-        self.get_screen()
-        banner = self.click_text(text="尚未选择主角角色和光环",
-                                 box=self.PROTAGONIST_BANNER_BOX,
-                                 click=False, allow_fail=True)
-        # 用短词「主角光环」判断标题在不在：长句一旦 OCR 掉字就会被误判成"标题缺失"，
-        # 那会误触发 ESC 把正常的一局退出掉
-        title = self.click_text(text="主角光环",
-                                box=self.PROTAGONIST_TITLE_BOX,
-                                click=False, allow_fail=True)
-        if not banner or title:
+        now = time.monotonic()
+        if now - getattr(self, "_overlap_checked_at", 0.0) < self.OVERLAP_CHECK_GAP:
+            return 0
+        self._overlap_checked_at = now
+
+        if not self.click_text(text="尚未选择主角角色和光环",
+                               box=self.PROTAGONIST_BANNER_BOX,
+                               click=False, allow_fail=True, warning=False):
+            return 0
+        if self.click_text(text="主角光环",
+                           box=self.PROTAGONIST_TITLE_BOX,
+                           click=False, allow_fail=True, warning=False):
             return 0
 
         CUS_LOGGER.warning(
@@ -1870,6 +1881,8 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.press("esc")
         key_mouse_manager.wait()
         self.exit_requested = True
+        # 这里**不**推进到 exit：那会让「开始退出」再按一轮 ESC，把刚弹出来的确认框搅掉。
+        # 确认框交给「重开2」（已去掉状态门槛）点「放弃并结算」。
         return 1
 
     def select_protagonist (self):
@@ -1878,6 +1891,10 @@ class SimulatedCurrency(CurrencyUtils):
         面板出现在第一位面和第二位面首领之前的备战界面，按钮就压在「出战」的位置上，
         不处理的话主循环等不到「出战」文字会一直空转。
         """
+
+        # 先排掉"商店把标题盖住"的偶发重叠：那种情况下拖拽落点全错，只能 ESC 重开。
+        if self.recover_broken_protagonist_panel():
+            return 1
         # 主循环每帧都刷过截图，这里直接用当前帧（自己抓会依赖 _stop 等运行时状态）
         if self.click_text(text="选择一个角色获得主角光环",
                            box=self.PROTAGONIST_TITLE_BOX, click=False, allow_fail=True):
