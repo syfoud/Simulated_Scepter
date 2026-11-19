@@ -263,7 +263,6 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         # 是否已开始退出
         self.exit_started = False
-        self.battle_in_progress = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
@@ -1574,8 +1573,8 @@ class SimulatedCurrency(CurrencyUtils):
 
         key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
-        self.battle_in_progress = True      # 点过出战就当自己在战斗里，直到见到结算
-        self.update_state("startbattle")
+        # 进战斗是状态机上的一个真实状态，不再另起一个标记
+        self.update_state("battle")
         return 1
 
     def handle_1_1_reward(self):
@@ -1648,16 +1647,17 @@ class SimulatedCurrency(CurrencyUtils):
     def _in_battle_likely (self):
         """当前是否（很可能）在战斗里。
 
-        `battle_in_progress` 只是"点过出战"的痕迹，会漏清（实测一局里连喊 65 次
-        "在战斗中"、其实人站在备战界面不动）。所以先看备战界面这个**反向证据**：
-        看到「备战阶段」就把痕迹清掉，绝不再拿它当战斗证据。
+        只认状态机 + 现场证据，不维护第二份记忆：
+        「备战阶段」是反向证据，看到它就把状态机拉回 startbattle；
+        否则看状态是不是 battle，再看屏幕上有没有战斗界面独有文字。
         """
         if self._on_prepare_screen():
-            self.battle_in_progress = False
+            if getattr(self, "state", None) == "battle":
+                self.update_state("startbattle")
             return False
-        if getattr(self, "battle_in_progress", False):
-            return True
-        return self.is_battle_started() or self.in_battle_screen()
+        return (getattr(self, "state", None) == "battle"
+                or self.is_battle_started()
+                or self.in_battle_screen())
 
 
     def exit(self):
@@ -1743,7 +1743,6 @@ class SimulatedCurrency(CurrencyUtils):
 
     def handle_battle_finished(self):
         self.battle_click_attempts = 0
-        self.battle_in_progress = False
         if self.exit_requested:
             self.update_state("exit")
         else:
