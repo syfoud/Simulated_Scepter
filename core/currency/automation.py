@@ -11,7 +11,14 @@ from core.currency.affix_stats import AffixSampler
 from core.currency.envirs import ENVIR_NAMES
 from core.currency.textmatch import best_match, similar
 from core.currency.investment_selection import choose_fallback_investment
-from core.currency.strategies import exit_plane_for, match_name
+from core.currency.strategies import (
+    PEPE_DEPENDENT_STRATEGIES,
+    exit_plane_for,
+    match_name,
+    pepe_keep_checked,
+    pepe_left,
+    pepe_on_field,
+)
 from core.currency.strategy_stats import StrategySampler
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
@@ -258,6 +265,8 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         # 是否已开始退出
         self.exit_started = False
+        # 佩佩特化是"本局"状态：上一把拿到过佩佩，不能带到下一把
+        self.pepe_on_field = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
@@ -305,6 +314,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.strategy_avoid = currency_settings["strategy_avoid"]
         self.auto_exit_plane = currency_settings["auto_exit_plane"]
         self.auto_clear_targets = currency_settings["auto_clear_targets"]
+        self.pepe_plane_boost = currency_settings["pepe_plane_boost"]
         # 配了目标策略就是在收集策略：这种跑法不该被"等词缀"卡住（低难度本来就没词缀）
         self.collecting_strategies = bool(self.strategy_targets)
         if self.strategy_targets:
@@ -1168,6 +1178,25 @@ class SimulatedCurrency(CurrencyUtils):
         self.plane_strategy_count[plane] = self.plane_strategy_count.get(plane, 0) + 1
         CUS_LOGGER.info(
             "第 %s 面已选过 %d 次策略", plane, self.plane_strategy_count[plane])
+
+        # 佩佩被带走（阿兰接走佩佩…）：立刻取消特化，别白白多打两面
+        if getattr(self, "pepe_on_field", False) and pepe_left(selected_text, *texts):
+            CUS_LOGGER.warning("本屏选中了「会让佩佩离开」的策略，佩佩特化取消")
+            self.pepe_on_field = False
+
+        # 佩佩特化：还没到终局面就拿到佩佩，就把本局打到第 3 面终局（孪生姵姵只在 2~3 面出现）
+        if (
+            self.auto_exit_plane
+            and getattr(self, "pepe_plane_boost", False)
+            and any(item in self.strategy_targets for item in PEPE_DEPENDENT_STRATEGIES)
+            and plane < 3
+            and pepe_on_field(selected_text)
+        ):
+            if not getattr(self, "pepe_on_field", False):
+                CUS_LOGGER.info(
+                    "第 %s 面拿到「%s」：佩佩已在场，本局打到第 3 面终局（等孪生姵姵）",
+                    plane, selected_text)
+            self.pepe_on_field = True
 
         hits = self.strategy_sampler.record(
             plane, texts, selected_text, targets=self.strategy_targets)
@@ -2084,6 +2113,9 @@ class SimulatedCurrency(CurrencyUtils):
             return False
         if not chosen or chosen not in self.strategy_targets:
             return False
+        if pepe_keep_checked(chosen):
+            CUS_LOGGER.info("「%s」属于佩佩系列，保留勾选（不清掉）", chosen)
+            return False
         self.strategy_targets = [name for name in self.strategy_targets if name != chosen]
         CUS_LOGGER.info("已自动取消勾选：%s（剩余目标 %d 条）", chosen, len(self.strategy_targets))
         self.persist_strategy_targets()
@@ -2141,6 +2173,12 @@ class SimulatedCurrency(CurrencyUtils):
             return
         if not self.strategy_targets:
             self.exit_plane = self.set_exit_plane
+            return
+        if getattr(self, "pepe_on_field", False):
+            # 佩佩已在场：孪生姵姵只在第 2~3 面出现，直接打到终局把策略数量吃满
+            if self.exit_plane != 3:
+                CUS_LOGGER.info("佩佩在场：退出位面推到第 3 面（终局）")
+            self.exit_plane = 3
             return
         plane = exit_plane_for(self.strategy_targets, self.strategy_sampler.collected)
         if plane != self.exit_plane:
