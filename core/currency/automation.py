@@ -181,6 +181,8 @@ class SimulatedCurrency(CurrencyUtils):
     # 退出确认框「放弃并结算」：实测文字框 [707,729,832,757]，原来写 [707,728,831,756]
     # 比文字还小 1 像素，包含判定永远不通过 —— 退出流程会一直认为"还没到确认页"。
     EXIT_CONFIRM_BOX = [690, 715, 860, 775]
+    # 备战界面顶部「备战阶段 2-1」（实测 [433,37,508,56]），用来判断"已经不在战斗里"
+    PREPARE_STAGE_BOX = [380, 20, 560, 90]
     MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
     MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
@@ -1638,8 +1640,21 @@ class SimulatedCurrency(CurrencyUtils):
 
         return False
 
+    def _on_prepare_screen (self):
+        """备战界面特征（顶部「备战阶段」）——看到它就说明**不在**战斗里。"""
+        return self.click_text(text="备战阶段", box=self.PREPARE_STAGE_BOX,
+                               click=False, allow_fail=True, warning=False)
+
     def _in_battle_likely (self):
-        """当前是否（很可能）在战斗里：点过出战还没见到结算，或者屏幕上就是战斗界面。"""
+        """当前是否（很可能）在战斗里。
+
+        `battle_in_progress` 只是"点过出战"的痕迹，会漏清（实测一局里连喊 65 次
+        "在战斗中"、其实人站在备战界面不动）。所以先看备战界面这个**反向证据**：
+        看到「备战阶段」就把痕迹清掉，绝不再拿它当战斗证据。
+        """
+        if self._on_prepare_screen():
+            self.battle_in_progress = False
+            return False
         if getattr(self, "battle_in_progress", False):
             return True
         return self.is_battle_started() or self.in_battle_screen()
