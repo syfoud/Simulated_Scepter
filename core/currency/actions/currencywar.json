@@ -718,14 +718,25 @@
         ]
     },
     {
-        "name": "开始退出",
+        "name": "重开3",
         "trigger": {
-            "condition": "exit",
-            "once": true,
-            "state_only": true
+            "text": "下一步",
+            "box": [
+                880,
+                850,
+                1040,
+                940
+            ],
+            "interval": 2,
+            "redundancy": 30
         },
         "actions": [
-            "exit"
+            {
+                "position": [
+                    960,
+                    897
+                ]
+            }
         ]
     },
     {
@@ -746,28 +757,6 @@
                 "position": [
                     769,
                     742
-                ]
-            }
-        ]
-    },
-    {
-        "name": "重开3",
-        "trigger": {
-            "text": "下一步",
-            "box": [
-                921,
-                881,
-                998,
-                912
-            ],
-            "interval": 2,
-            "redundancy": 30
-        },
-        "actions": [
-            {
-                "position": [
-                    960,
-                    897
                 ]
             }
         ]
@@ -814,6 +803,17 @@
                     898
                 ]
             }
+        ]
+    },
+    {
+        "name": "开始退出",
+        "trigger": {
+            "condition": "exit",
+            "state_only": true,
+            "interval": 3
+        },
+        "actions": [
+            "exit"
         ]
     },
     {

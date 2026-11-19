@@ -178,6 +178,9 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
     BROKEN_PANEL_ESC_GAP = 1.2
     OVERLAP_CHECK_GAP = 5.0        # 卡死自愈的最小检查间隔，避免每帧 OCR 刷屏
+    # 退出确认框「放弃并结算」：实测文字框 [707,729,832,757]，原来写 [707,728,831,756]
+    # 比文字还小 1 像素，包含判定永远不通过 —— 退出流程会一直认为"还没到确认页"。
+    EXIT_CONFIRM_BOX = [690, 715, 860, 775]
     MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
     MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
@@ -258,6 +261,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_requested = False
         # 是否已开始退出
         self.exit_started = False
+        self.battle_in_progress = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
@@ -1568,6 +1572,7 @@ class SimulatedCurrency(CurrencyUtils):
 
         key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
+        self.battle_in_progress = True      # 点过出战就当自己在战斗里，直到见到结算
         self.update_state("startbattle")
         return 1
 
@@ -1617,17 +1622,27 @@ class SimulatedCurrency(CurrencyUtils):
         return 1
 
     def is_battle_started(self):
-        '''用于检测是否处于战斗状态，返回bool值'''
+        '''是否处于战斗状态。
+
+        只认战斗界面独有的「自动战斗」按钮：备战/商店界面上有「持续伤害」这类玩法标签，
+        只认「伤害」会在普通界面上误判成"在战斗里"，退出流程就会去按 ESC、点撤退，一顿乱点。
+        '''
         if self.click_text(
-            text="伤害",
-            box=[1793, 209, 1833, 231],
+            text="自动战斗",
+            box=self.BATTLE_HUD_BOX,
             click=False,
             allow_fail=True,
         ):
-            CUS_LOGGER.debug("检测到已进入战斗")
+            CUS_LOGGER.debug("检测到已进入战斗（自动战斗按钮在）")
             return True
 
         return False
+
+    def _in_battle_likely (self):
+        """当前是否（很可能）在战斗里：点过出战还没见到结算，或者屏幕上就是战斗界面。"""
+        if getattr(self, "battle_in_progress", False):
+            return True
+        return self.is_battle_started() or self.in_battle_screen()
 
 
     def exit(self):
@@ -1643,7 +1658,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.ts.forward(self.get_screen())
         if self.click_text(
             text="放弃并结算",
-            box=[707, 728, 831, 756],
+            box=self.EXIT_CONFIRM_BOX,
             click=False,
             allow_fail=True,
         ):
@@ -1652,26 +1667,12 @@ class SimulatedCurrency(CurrencyUtils):
             self.exit_attempts = 0
             return 1
 
-        # 虽然正常情况下exit的时候不会在战斗状态，但是万一呢
-        if self.is_battle_started():
-            CUS_LOGGER.debug("当前处于战斗中，按 ESC 并点击撤退")
-            key_mouse_manager.press("esc")
-            key_mouse_manager.wait()
-            key_mouse_manager.click_point(1223, 985) # 点击撤退
-            key_mouse_manager.wait()
-            self.ts.forward(self.get_screen())
-
-            if self.click_text(
-                text="放弃并结算",
-                box=[707, 728, 831, 756],
-                click=False,
-                allow_fail=True,
-            ):
-                CUS_LOGGER.debug("检测到退出页面")
-                self.exit_started = True
-                self.exit_attempts = 0
-                return 1
-            return self._exit_failed("战斗内没能进入放弃并结算页面")
+        # 战斗中按 ESC 只会弹暂停菜单，永远不会出现「放弃并结算」确认框。
+        # 以前这里按 ESC 再点一个固定"撤退"坐标，点空之后就退化成一路按 ESC（实机抽风）。
+        # 现在只要怀疑在战斗中就不按 ESC，等这场打完再继续退（自动战斗开着）。
+        if self._in_battle_likely():
+            CUS_LOGGER.info("当前在战斗中，等这场打完再退出（战斗中按 ESC 无效）")
+            return 0
 
         max_attempts = 15
         timeout = 6
@@ -1689,7 +1690,7 @@ class SimulatedCurrency(CurrencyUtils):
 
             if self.click_text(
                 text="放弃并结算",
-                box=[707, 728, 831, 756],
+                box=self.EXIT_CONFIRM_BOX,
                 click=False,
                 allow_fail=True,
             ):
@@ -1698,7 +1699,7 @@ class SimulatedCurrency(CurrencyUtils):
                 return 1
 
             # 战斗中按 ESC 是无效动作：先等战斗结束（结算画面由「战斗结束后」动作负责）
-            if self.in_battle_screen():
+            if self._in_battle_likely():
                 CUS_LOGGER.info("还在战斗界面，等战斗结束后再退出")
                 return 0
 
@@ -1727,6 +1728,7 @@ class SimulatedCurrency(CurrencyUtils):
 
     def handle_battle_finished(self):
         self.battle_click_attempts = 0
+        self.battle_in_progress = False
         if self.exit_requested:
             self.update_state("exit")
         else:
