@@ -51,23 +51,6 @@
         ]
     },
     {
-        "name": "修复重叠界面",
-        "trigger": {
-            "text": "尚未选择主角角色和光环",
-            "box": [
-                700,
-                845,
-                1260,
-                940
-            ],
-            "interval": 3,
-            "redundancy": 30
-        },
-        "actions": [
-            "recover_broken_protagonist_panel"
-        ]
-    },
-    {
         "name": "货币战争外",
         "trigger": {
             "text": "货币战争",
@@ -735,48 +718,14 @@
         ]
     },
     {
-        "name": "开始退出",
-        "trigger": {
-            "condition": "exit",
-            "once": true,
-            "state_only": true
-        },
-        "actions": [
-            "exit"
-        ]
-    },
-    {
-        "name": "重开2",
-        "trigger": {
-            "text": "放弃并结算",
-            "box": [
-                707,
-                728,
-                831,
-                756
-            ],
-            "interval": 2,
-            "redundancy": 30,
-            "condition": "exit"
-        },
-        "actions": [
-            {
-                "position": [
-                    769,
-                    742
-                ]
-            }
-        ]
-    },
-    {
         "name": "重开3",
         "trigger": {
             "text": "下一步",
             "box": [
-                921,
-                881,
-                998,
-                912
+                880,
+                850,
+                1040,
+                940
             ],
             "interval": 2,
             "redundancy": 30
@@ -786,6 +735,28 @@
                 "position": [
                     960,
                     897
+                ]
+            }
+        ]
+    },
+    {
+        "name": "重开2",
+        "trigger": {
+            "text": "放弃并结算",
+            "box": [
+                690,
+                715,
+                860,
+                775
+            ],
+            "interval": 2,
+            "redundancy": 30
+        },
+        "actions": [
+            {
+                "position": [
+                    769,
+                    742
                 ]
             }
         ]
@@ -832,6 +803,17 @@
                     898
                 ]
             }
+        ]
+    },
+    {
+        "name": "开始退出",
+        "trigger": {
+            "condition": "exit",
+            "state_only": true,
+            "interval": 3
+        },
+        "actions": [
+            "exit"
         ]
     },
     {
