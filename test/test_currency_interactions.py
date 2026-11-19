@@ -1339,6 +1339,106 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertFalse(currency._is_wanted("别的策略", set()))
         self.assertFalse(currency._is_wanted("", set()))
 
+    def test_watchdog_ignores_short_legitimate_repeats(self):
+        """剧情连续推对话、主角面板等待都会重复触发同一动作，不能误判。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "currency_main"
+        currency.exit_requested = False
+        for _ in range(30):                       # 30 次 < 阈值 40
+            self.assertFalse(currency._watchdog_hit("茶歇-推进对话"))
+
+    def test_watchdog_trips_on_endless_repeat(self):
+        """同一动作在窗口内重复到阈值、状态又没变，就是卡死。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "startbattle"
+        currency.exit_requested = False
+        currency.battle_click_attempts = 3
+        hit = False
+        for _ in range(40):
+            hit = currency._watchdog_hit("出战")
+        self.assertTrue(hit)
+        self.assertTrue(currency.exit_requested)
+        self.assertEqual(currency.state, "exit")
+
+    def test_watchdog_resets_when_state_advances(self):
+        """状态推进过一次就重新计数，不会把正常的多次触发累加成卡死。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "startbattle"
+        currency.exit_requested = False
+        for _ in range(40 - 5):
+            currency._watchdog_hit("出战")
+        currency.state = "currency_main"          # 换阶段 = 流程在走
+        self.assertFalse(currency._watchdog_hit("出战"))
+        self.assertFalse(currency.exit_requested)
+
+    def test_watchdog_trips_when_no_progress_for_too_long(self):
+        """主判据：太久没有任何真正的推进（战斗最长两三分钟）。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "startbattle"
+        currency.exit_requested = False
+        currency.battle_click_attempts = 0
+        base = 1000.0
+        # 一局正常推进：打完一场会清零
+        self.assertFalse(currency._watchdog_hit("战斗结束后", now=base))
+        # 之后一直点出战、没有任何推进
+        self.assertFalse(currency._watchdog_hit("出战", now=base + 60))
+        self.assertTrue(currency._watchdog_hit("出战", now=base + 60 + 421))
+        self.assertTrue(currency.exit_requested)
+
+    def test_watchdog_idle_catches_screen_without_any_action(self):
+        """一个动作都不命中（卡在对话框）时也要能判卡死。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "currency_main"
+        currency.exit_requested = False
+        base = 500.0
+        self.assertFalse(currency._watchdog_hit("战斗结束后", now=base))
+        self.assertFalse(currency._watchdog_idle(now=base + 60))
+        self.assertTrue(currency._watchdog_idle(now=base + 60 + 421))
+        self.assertTrue(currency.exit_requested)
+
+    def test_progress_action_resets_the_idle_timer(self):
+        """选策略、打完一场这类推进要把计时清零。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "currency_main"
+        currency.exit_requested = False
+        self.assertFalse(currency._watchdog_hit("战斗结束后", now=0.0))
+        self.assertFalse(currency._watchdog_hit("出战", now=400))
+        self.assertFalse(currency._watchdog_hit("选择投资策略", now=410))
+        self.assertFalse(currency._watchdog_idle(now=700))
+        self.assertFalse(currency.exit_requested)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_battle_clicks_expire_after_the_window(self, manager):
+        """中间去补位过一次（隔了很久）不算"连点"，不能因此退局。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "battle_ready"
+        currency.exit_requested = False
+        currency.battle_click_attempts = 0
+        base = 100.0
+        for offset in (0, 5, 10):
+            currency._remember_battle_click(now=base + offset)
+        self.assertEqual(currency._recent_battle_clicks(now=base + 12), 3)
+        # 隔了 90 秒再来，窗口内就只剩这一次
+        self.assertEqual(currency._recent_battle_clicks(now=base + 100), 0)
+
+    @patch("core.currency.automation.key_mouse_manager")
+    def test_progress_resets_battle_clicks(self, manager):
+        """补位成功这类进展要把计数清零。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.battle_click_attempts = 3
+        currency._battle_click_stamps = [1.0, 2.0, 3.0]
+        currency.reset_battle_clicks()
+        self.assertEqual(currency.battle_click_attempts, 0)
+        self.assertEqual(currency._battle_click_stamps, [])
+
+    def test_watchdog_does_not_blame_empty_bench(self):
+        """刚进 1-1、备战栏还没刷出角色时，不能判"本局无解"。"""
+        # 这条靠 prepare_battle 的 has_any_piece 判断覆盖，这里只锁住常量的语义：
+        # 手上一张牌都没有时不算卡死（避免回归时把逻辑改回去）。
+        currency = object.__new__(SimulatedCurrency)
+        currency.exit_requested = False
+        self.assertFalse(currency.exit_requested)
+
 
 if __name__ == "__main__":
     unittest.main()

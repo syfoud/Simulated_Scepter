@@ -34,6 +34,9 @@ MATCH_MARGIN = 4
 MATCH_SCALE = 0.4
 # 同一角色的比对分数；不同角色实测不超过 0.65，同一角色位移或缩放后仍在 0.95 以上。
 MATCH_THRESHOLD = 0.9
+# 空位（格子占位图形）单独用更松的阈值：同一个空位在不同位面/配色下得分差很大
+# （实测 0.65~0.98），而格子里有角色时得分是负数，所以 0.6 足够分开。
+AREA_MATCH_THRESHOLD = 0.6
 # 卡片右上角的角标：有两枚亮色笔画的黑色圆角框；漏识别角标不能作为道具证据。
 # templates/badges/ 下按角标图形保存模板（front=前台、back=后台、both=前后台都能放），
 # 目录里新增模板即可参与匹配；还没收录的新图形再用下面的形状规则兜底。
@@ -478,7 +481,7 @@ class BattlePreparation:
                 search = frame[max(0, top - MATCH_MARGIN):min(height, bottom + MATCH_MARGIN),
                                max(0, left - MATCH_MARGIN):min(width, right + MATCH_MARGIN)]
                 score = match_score(search, self.area_tiles[area][index])
-                if score >= MATCH_THRESHOLD:
+                if score >= AREA_MATCH_THRESHOLD:
                     vacancies[area].append(index)
         return vacancies
 
