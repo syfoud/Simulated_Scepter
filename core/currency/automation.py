@@ -11,7 +11,7 @@ from core.currency.affix_stats import AffixSampler
 from core.currency.envirs import ENVIR_NAMES
 from core.currency.textmatch import best_match, similar
 from core.currency.investment_selection import choose_fallback_investment
-from core.currency.strategies import exit_plane_for, match_name
+from core.currency.strategies import exit_plane_for, match_name, normalize_name
 from core.currency.strategy_stats import StrategySampler
 from core.currency.investment_state import InvestmentSelectionTracker, SelectionKind
 from core.currency.preparation import (
@@ -1850,6 +1850,14 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("已关闭「开拓商店」")
         return 1
 
+    def _box_text (self, box):
+        """静默读某个框里的文字（OCR 糊了也不报错，识别不到就返回空串）。"""
+        try:
+            self.ts.forward(self.get_screen())
+            return normalize_name(merge_text(self.ts.find_with_box(box, redundancy=30)))
+        except Exception:
+            return ""
+
     def recover_broken_protagonist_panel (self):
         """游戏偶发 bug：商店与「选择主角」界面叠在一起时，先 ESC 关商店再 ESC 重开。
 
@@ -1864,13 +1872,18 @@ class SimulatedCurrency(CurrencyUtils):
             return 0
         self._overlap_checked_at = now
 
+        # 红条 OCR 经常糊（实测「尚未选据主角色和%环」）：精确优先，糊了用关键词兜底
         if not self.click_text(text="尚未选择主角角色和光环",
                                box=self.PROTAGONIST_BANNER_BOX,
                                click=False, allow_fail=True, warning=False):
-            return 0
+            banner = self._box_text(self.PROTAGONIST_BANNER_BOX)
+            if not any(word in banner for word in ("尚未", "光环", "主角角色")):
+                return 0
         if self.click_text(text="主角光环",
                            box=self.PROTAGONIST_TITLE_BOX,
                            click=False, allow_fail=True, warning=False):
+            return 0
+        if "主角光环" in self._box_text(self.PROTAGONIST_TITLE_BOX):
             return 0
 
         CUS_LOGGER.warning(
