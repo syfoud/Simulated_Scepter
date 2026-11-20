@@ -1339,6 +1339,29 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertFalse(currency._is_wanted("别的策略", set()))
         self.assertFalse(currency._is_wanted("", set()))
 
+    def test_pepe_goal_clears_the_whole_series(self):
+        """拿到「孪生姵姵」相当于这个系列收工：佩佩相关目标一并取消勾选。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.auto_clear_targets = True
+        currency.strategy_targets = ["孪生姵姵", "佩佩驾到", "溜佩佩", "军火贸易"]
+        currency.pepe_on_field = True
+        currency.persist_strategy_targets = lambda: None
+
+        self.assertTrue(currency.auto_clear_target("孪生姵姵"))
+        self.assertEqual(currency.strategy_targets, ["军火贸易"])
+        self.assertFalse(currency.pepe_on_field)          # 目标达成，不用再打第 3 面
+
+    def test_pepe_carrier_stays_checked_until_goal(self):
+        """还没拿到最终策略时，佩佩载体仍然保留勾选。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.auto_clear_targets = True
+        currency.strategy_targets = ["孪生姵姵", "溜佩佩"]
+        currency.pepe_on_field = True
+        currency.persist_strategy_targets = lambda: None
+
+        self.assertFalse(currency.auto_clear_target("溜佩佩"))
+        self.assertEqual(currency.strategy_targets, ["孪生姵姵", "溜佩佩"])
+
 
 if __name__ == "__main__":
     unittest.main()

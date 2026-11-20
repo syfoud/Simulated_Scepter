@@ -367,6 +367,18 @@ def pepe_left(*texts):
 PEPE_KEEP_CHECKED = ("孪生姵姵", "佩佩驾到", "溜佩佩", "溜佩佩+")
 
 
+def pepe_goal_reached(name):
+    """这条是不是「最终目标」策略（孪生姵姵）——拿到就意味着这个系列可以收工了。
+
+    名字里那个「姵」是生僻字，OCR 大概率读成「佩」，所以比较前先把 姵 统一成 佩。
+    """
+    def canon(text):
+        return normalize_name(text or "").replace("姵", "佩")
+
+    target = canon(name)
+    return any(target == canon(item) for item in PEPE_DEPENDENT_STRATEGIES)
+
+
 def pepe_keep_checked(name):
     """这条命中的目标策略要不要保留勾选（不清掉）。"""
     return normalize_name(name) in {normalize_name(item) for item in PEPE_KEEP_CHECKED}

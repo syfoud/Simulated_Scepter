@@ -15,6 +15,7 @@ from core.currency.strategies import (
     PEPE_DEPENDENT_STRATEGIES,
     exit_plane_for,
     match_name,
+    pepe_goal_reached,
     pepe_keep_checked,
     pepe_left,
     pepe_on_field,
@@ -2113,6 +2114,18 @@ class SimulatedCurrency(CurrencyUtils):
             return False
         if not chosen or chosen not in self.strategy_targets:
             return False
+        if pepe_goal_reached(chosen):
+            # 最终目标到手：佩佩系列整体收工，不用再盯着它们
+            cleared = [name for name in self.strategy_targets if pepe_keep_checked(name)]
+            if cleared:
+                self.strategy_targets = [
+                    name for name in self.strategy_targets if not pepe_keep_checked(name)]
+                CUS_LOGGER.info(
+                    "已拿到「%s」，佩佩系列一并取消勾选：%s（剩余目标 %d 条）",
+                    chosen, "、".join(cleared), len(self.strategy_targets))
+                self.persist_strategy_targets()
+            self.pepe_on_field = False
+            return True
         if pepe_keep_checked(chosen):
             CUS_LOGGER.info("「%s」属于佩佩系列，保留勾选（不清掉）", chosen)
             return False
