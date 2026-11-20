@@ -244,6 +244,14 @@ class CurrencyWarActionsTest(unittest.TestCase):
             checked += 1
         self.assertGreaterEqual(checked, 10)
 
+    def test_entering_a_run_clears_exit_state(self):
+        """进对局的动作用 set_state 把状态从 exit 拉回来，否则「退出按ESC」会在入口页反复按 ESC。"""
+        names = {"开始货币战争", "切换超频博弈", "进入超频博弈", "重开最终"}
+        for name in names:
+            action = next(a for a in self.actions if a["name"] == name)
+            self.assertIn({"set_state": "currency_main"}, action["actions"],
+                          f"{name} 没把状态从 exit 拉回来")
+
 
 if __name__ == "__main__":
     unittest.main()

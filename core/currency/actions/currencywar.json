@@ -206,7 +206,10 @@
             "redundancy": 30
         },
         "actions": [
-            "enter_battle_mode"
+            "enter_battle_mode",
+            {
+                "set_state": "currency_main"
+            }
         ]
     },
     {
@@ -223,7 +226,10 @@
             "redundancy": 30
         },
         "actions": [
-            "enter_battle_mode"
+            "enter_battle_mode",
+            {
+                "set_state": "currency_main"
+            }
         ]
     },
     {
@@ -240,7 +246,10 @@
             "redundancy": 30
         },
         "actions": [
-            "enter_battle_mode"
+            "enter_battle_mode",
+            {
+                "set_state": "currency_main"
+            }
         ]
     },
     {
@@ -802,6 +811,9 @@
                     958,
                     898
                 ]
+            },
+            {
+                "set_state": "currency_main"
             }
         ]
     },
