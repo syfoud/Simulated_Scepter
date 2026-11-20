@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import QMenu, QSystemTrayIcon
 from route import PATHS
 from tool import EXTRA
 from tool.gui.appearance import apply_appearance
+from tool.gui.wheel_guard import install_wheel_guard
 from tool.scripts.createicon import create_qt_icon
 from tool.settings import ensure_settings, update_settings
 
@@ -20,6 +21,8 @@ class QMainWindowLoadUI(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
+        # 在主窗口和后续所有弹窗创建前安装全局滚轮策略。
+        install_wheel_guard()
         apply_appearance()
         self.opt = None
 
