@@ -684,7 +684,9 @@ class SimulatedCurrency(CurrencyUtils):
         want_char = "超" if want_overclock else "标"
         card = self.MODE_CARD_POSITIONS["overclock" if want_overclock else "standard"]
 
-        for attempt in range(3):
+        # 一次调用只做一件事，判断交给下一帧（动作 interval: 1，天然每秒重试）。
+        # 原来 for×3 + 每轮 sleep 等模式切过去，主状态机整段时间动不了。
+        if True:
             text = self.read_mode_button()
             CUS_LOGGER.debug("右下角按钮：%r", text)
 
@@ -711,40 +713,17 @@ class SimulatedCurrency(CurrencyUtils):
                     key_mouse_manager.wait()
                     self.update_state("difficulty_select")
                     return 1
-                CUS_LOGGER.info("切换到「%s」（第 %d 次）",
-                                "超频博弈" if want_overclock else "标准博弈", attempt + 1)
+                CUS_LOGGER.info("点击模式卡切换到「%s」",
+                                "超频博弈" if want_overclock else "标准博弈")
                 key_mouse_manager.click_point(*card)
                 key_mouse_manager.wait()
-                # 后台模式下捕获帧会滞后：点完立刻读还是旧文字，会误判"没切过去"连点三次。
-                # 所以轮询等按钮文字真的变过来。
-                if self.wait_mode_switched(want_char):
-                    CUS_LOGGER.info("模式已切到「%s」",
-                                    "超频博弈" if want_overclock else "标准博弈")
-                    key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
-                                                  box=self.BATTLE_MODE_BUTTON_BOX)
-                    key_mouse_manager.wait()
-                    self.update_state("difficulty_select")
-                    return 1
-                continue
+                # 点完立刻返回：下一帧再看按钮文字变没变，不在这里轮询等待
+                return 1
 
             # 按钮文字没读到或不是这几种：宁可什么都不点，也别把点打到攻略/图例上
             CUS_LOGGER.warning("认不出右下角按钮（%r），本轮不点击任何位置", text)
             return 0
 
-        CUS_LOGGER.warning("三次都没切到目标模式，先不动，等下一轮")
-        return 0
-
-    def wait_mode_switched (self, want_char, timeout=None, step=None):
-        """轮询等右下角按钮文字变成目标模式（后台捕获帧滞后，点完要等）。"""
-        timeout = self.MODE_SWITCH_TIMEOUT if timeout is None else timeout
-        step = self.MODE_SWITCH_STEP if step is None else step
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            time.sleep(step)
-            text = self.read_mode_button()
-            if want_char in text:
-                return True
-        return False
 
     def select_top_difficulty (self):
         """最高职级（A8-20）：有「返回最高职级」就点它切过去，没有说明已经是。"""
@@ -848,6 +827,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.affixes_recorded = False
         self.protagonist_picks = 0
         self.protagonist_drag_failures = 0
+        self.protagonist_drag_attempts = 0
         self.battle_click_attempts = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
@@ -1934,18 +1914,20 @@ class SimulatedCurrency(CurrencyUtils):
             return 1
 
 
-        # 起点选择：默认第一个角色；第二次改拖第二个；连试两次都没成说明那些位置是空的，
-        # 改从后台第一个角色拖（前台 2 号位可能压根没站人）。
-        failures = getattr(self, "protagonist_drag_failures", 0)
-        if failures >= 2:
+        # 起点选择：默认第一个角色；第二次改拖第二个；同一个位置拖两次没成，
+        # 就改从后台第一个角色拖（前台 2 号位可能压根没站人）。
+        # 失败次数按"真的拖了几次"记：拖拽失败后面板会关，靠"面板还开着"判断失败会永远记不到。
+        attempts = getattr(self, "protagonist_drag_attempts", 0) + 1
+        self.protagonist_drag_attempts = attempts
+        if attempts >= 3:
             start, end = self.PROTAGONIST_FALLBACK_DRAG
-            CUS_LOGGER.info("选择主角：前两次没拖动，改从后台第一个角色拖（第 %d 次尝试）", failures + 1)
+            CUS_LOGGER.info("选择主角：同一个位置拖了 %d 次没成，改从后台第一个角色拖", attempts - 1)
         elif getattr(self, "protagonist_picks", 0) >= 1:
             start, end = self.PROTAGONIST_SECOND_DRAG
-            CUS_LOGGER.info("选择主角：拖第 2 个角色")
+            CUS_LOGGER.info("选择主角：拖第 2 个角色（第 %d 次尝试）", attempts)
         else:
             start, end = self.PROTAGONIST_DRAG
-            CUS_LOGGER.info("选择主角：拖第 1 个角色")
+            CUS_LOGGER.info("选择主角：拖第 1 个角色（第 %d 次尝试）", attempts)
         key_mouse_manager.drag_point(start[0], start[1], end[0], end[1])
         key_mouse_manager.wait()
 
@@ -1971,6 +1953,7 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.wait()
         self.protagonist_picks = getattr(self, "protagonist_picks", 0) + 1
         self.protagonist_drag_failures = 0
+        self.protagonist_drag_attempts = 0
         self.protagonist_done_at = time.monotonic()
         CUS_LOGGER.info("主角已选择（本局第 %d 次）", self.protagonist_picks)
         return 1
