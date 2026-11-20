@@ -1,103 +1,65 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import cv2
 import numpy as np
 
 from tool.GLOBAL import factor
 from tool.log import CUS_LOGGER
 from tool.utils.image_tool import find_image_in_folder
-from tool.utils.minimap_util import (
-    create_circle,
-    draw_circle,
-    group_points,
-    image_size,
-    inrange,
-    remove_border,
-    subtract_blur,
-)
+from tool.utils.minimap_util import subtract_blur
 
-radius_item = (5, 7)
-AIM_ENEMY_LUMA_MIN = 184
-AIM_ENEMY_RED_MIN = 200
-AIM_ENEMY_EDGE_MIN = 18
-AIM_ENEMY_PRIMARY_RADII = (29, 32)
-AIM_ENEMY_LARGE_RADII = (35, 38, 41, 44)
-AIM_ENEMY_EDGE_RADII = (17, 20, 23, 26)
-AIM_ENEMY_PEAK_MIN = 52
-AIM_ENEMY_LARGE_PEAK_MIN = 68
-AIM_ENEMY_EDGE_PEAK_MIN = 36
-AIM_ENEMY_HUD_PEAK_MIN = 100
+# 物品瞄准标记（开发中，尚未实机验证）是白色十字 + 中心小圆环，外圈青色光晕。
+ITEM_WHITE_MIN = 140
+ITEM_CYAN_GLOW_MIN = 25           # 青色光晕：min(B, G) - R 的下限
+ITEM_CENTER_RADIUS = (5, 16)      # 中心小圆环的半径范围
+ITEM_GLOW_COVERAGE_MIN = 0.20     # 标记中心附近青色光晕覆盖率下限
+ITEM_WHITE_ARM_MIN = 3            # 十字的四个方向至少要有几个方向存在白色臂
+
+# 敌人准星由白色圆环、四个向内箭头和中心白点组成，外圈带红色光晕，
+# 同一时刻屏幕上最多只有一个（角色一次只能锁定一个敌人）。
+# 准星刚出现时直径很大，随后快速收缩到固定直径（约 28~30 像素半径），
+# 因此用霍夫圆在 [24, 64] 像素半径内取候选，再按白色圆环覆盖率与中心红色光晕校验。
+# 半径下限 24 用于排除黄色墙面格纹等小圆形误检。
+AIM_ENEMY_WHITE_MIN = 140         # 白色准星像素三通道最小值的下限
+AIM_ENEMY_RED_GLOW_MIN = 50       # 红色光晕：R - G 的下限，排除黄/金色光晕
+AIM_ENEMY_RING_BAND = 2           # 圆环半径容差，单位像素
+AIM_ENEMY_RING_COVERAGE_MIN = 0.75
+AIM_ENEMY_CENTER_RED_MIN = 60
+AIM_ENEMY_RED_RING_MIN = 0.80     # 红色圆环的角度覆盖率下限，排除只有白/黄图案的候选
+AIM_ENEMY_HOUGH_DP = 1.0
+AIM_ENEMY_HOUGH_PARAM1 = 80
+AIM_ENEMY_HOUGH_PARAM2 = 16
+AIM_ENEMY_HOUGH_MIN_DIST = 20
+AIM_ENEMY_MIN_RADIUS = 24
+AIM_ENEMY_MAX_RADIUS = 64
+AIM_ENEMY_RED_CONTOUR_MIN = 60      # 红色连通块的 R-G 下限；低于此值的红晕不参与初筛
+AIM_ENEMY_CONTOUR_AREA_MIN = 300    # 过小的红色连通块（文字/粒子）直接丢弃
+AIM_ENEMY_CONTOUR_TOPK = 6          # 只对最大的几个红色连通块做裁剪霍夫，控制耗时
+AIM_ENEMY_CROP_HALF = 110           # 裁剪霍夫的半边长；220×220 覆盖半径 64 的准星并留出余量
+AIM_ENEMY_RIGHT_STRIP_LEFT = 1600   # 右侧窄条左边界；主 ROI 右边界 1635，重叠 35 px 避免漏接
+AIM_ENEMY_RIGHT_COVERAGE_MIN = 0.70  # 右侧准星叠在 HUD 上，白环会被吃掉一部分，阈值比主检测略松
+AIM_ENEMY_RIGHT_CENTER_RED_MIN = 60
 AIM_ENEMY_ROI_TOP = 95
 AIM_ENEMY_ROI_BOTTOM = 125
 AIM_ENEMY_ROI_LEFT = 255
 AIM_ENEMY_ROI_RIGHT = 285
-AIM_ENEMY_EDGE_CENTER_WIDTH = 40
 AIM_ENEMY_SIGN_HALF_SPAN = 200
 AIM_ENEMY_SIGN_HALF_WIDTH = 5
 AIM_ENEMY_SIGN_HORIZONTAL_MIN = 0.45
 AIM_ENEMY_SIGN_VERTICAL_MAX = 0.20
-AIM_ENEMY_DIM_X_RANGE = (500, 1500)
-AIM_ENEMY_DIM_Y_RANGE = (95, 500)
-AIM_ENEMY_DIM_SCALE = 0.5
-AIM_ENEMY_DIM_PATCH_RADIUS = 60
-AIM_ENEMY_DIM_CENTER_RED_MIN = 135
-AIM_ENEMY_DIM_CENTER_RED_STD_MAX = 2.0
-AIM_ENEMY_DIM_OUTER_LUMA_STD_MAX = 16.5
-AIM_ENEMY_DIM_FAR_RED_STD_MIN = 10.5
+
 mask_interact = find_image_in_folder('gray_image/', 'MASK_MAP_INTERACT')
-circles_enemy = {
-    radius: create_circle(radius - 1, radius)
-    for radius in set(
-        AIM_ENEMY_PRIMARY_RADII + AIM_ENEMY_LARGE_RADII +
-        AIM_ENEMY_EDGE_RADII
-    )
-}
-_dim_axis = np.arange(-AIM_ENEMY_DIM_PATCH_RADIUS,
-                      AIM_ENEMY_DIM_PATCH_RADIUS + 1)
-_dim_x, _dim_y = np.meshgrid(_dim_axis, _dim_axis)
-_dim_distance = np.sqrt(_dim_x * _dim_x + _dim_y * _dim_y)
-circle_item = create_circle(*radius_item)
+mask_interact_roi = mask_interact[
+    AIM_ENEMY_ROI_TOP:-AIM_ENEMY_ROI_BOTTOM, AIM_ENEMY_ROI_LEFT:-AIM_ENEMY_ROI_RIGHT
+]
 event_mask = (find_image_in_folder("gray_image/",'MASK_MAP_INTERACT_BLACK') > 70)[:497]
 
-
-def _best_enemy_ring_response(
-        feature, radii, center_x_range=None, center_y_range=None):
-    width, height = image_size(feature)
-    points = inrange(feature.copy(), lower=AIM_ENEMY_EDGE_MIN)
-    best_score = 0
-    best_center = None
-    best_response = np.zeros((height, width), dtype=np.uint8)
-
-    for radius in radii:
-        safe = points
-        if safe.shape[0]:
-            safe = safe[
-                (safe[:, 0] >= radius) & (safe[:, 0] < width - radius) &
-                (safe[:, 1] >= radius) & (safe[:, 1] < height - radius)
-            ]
-        draw = np.zeros((height, width), dtype=np.uint8)
-        draw_circle(draw, circles_enemy[radius], safe)
-        response = cv2.multiply(draw, 4)
-        response = subtract_blur(response, 3)
-
-        if center_x_range is not None:
-            x_min, x_max = center_x_range
-            response[:, :x_min] = 0
-            response[:, x_max:] = 0
-        if center_y_range is not None:
-            y_min, y_max = center_y_range
-            response[:y_min, :] = 0
-            response[y_max:, :] = 0
-
-        _, score, _, center = cv2.minMaxLoc(response)
-        if score > best_score:
-            best_score = score
-            best_center = center
-            best_response = response
-
-    return best_response, best_score, best_center, points.shape[0]
+_ANGLES = np.deg2rad(np.arange(72) * 5.0)
+_RING_OFFSETS = range(-AIM_ENEMY_RING_BAND, AIM_ENEMY_RING_BAND + 1)
 
 
 def _is_horizontal_red_scenery(red_pixels, center):
-    """Reject long red signs which can contain a circular decoration."""
+    """判断候选点是否落在大面积横向红色招牌上，用于排除红色背景误检。"""
     if center is None:
         return False
     x, y = center
@@ -120,197 +82,307 @@ def _is_horizontal_red_scenery(red_pixels, center):
     )
 
 
-def _find_dim_enemy_circle(luma, red):
-    """Find the low-contrast animation phase of the same circular marker."""
-    x_min, x_max = AIM_ENEMY_DIM_X_RANGE
-    y_min, y_max = AIM_ENEMY_DIM_Y_RANGE
-    if luma.shape[0] < y_max or luma.shape[1] < x_max:
-        return None
+def _enemy_masks(image):
+    """构造准星检测区域内的白色准星掩膜、红色光晕掩膜与红色色度图。
 
-    roi = luma[y_min:y_max, x_min:x_max]
-    roi = cv2.resize(
-        roi, None, fx=AIM_ENEMY_DIM_SCALE, fy=AIM_ENEMY_DIM_SCALE,
-        interpolation=cv2.INTER_AREA,
+    Args:
+        image: BGR 截图（1920x1080）。
+
+    Returns:
+        (white, glow, redness)：三者都是准星 ROI 裁剪后的图像（坐标相对 ROI 左上角），
+        white 为白色准星像素（三通道都亮且是局部亮线），glow 为膨胀后的红色光晕，
+        redness 为红色色度（R 与 G 之差），用于校验准星中心是否在红光里；
+        用 R-G 而不是 R-(G+B)/2 可以排除黄/金色光晕与黄色墙面图案。
+    """
+    roi = image[
+        AIM_ENEMY_ROI_TOP:-AIM_ENEMY_ROI_BOTTOM,
+        AIM_ENEMY_ROI_LEFT:-AIM_ENEMY_ROI_RIGHT,
+    ]
+    b, g, r = cv2.split(roi)
+    b = b.astype(np.int16)
+    g = g.astype(np.int16)
+    r = r.astype(np.int16)
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+
+    min_channel = np.minimum(np.minimum(b, g), r)
+    white = cv2.bitwise_and(
+        (min_channel > AIM_ENEMY_WHITE_MIN).astype(np.uint8) * 255,
+        subtract_blur(gray, 3, negative=False),
     )
-    roi = cv2.GaussianBlur(roi, (3, 3), 0.8)
+    white = cv2.bitwise_and(white, mask_interact_roi)
+
+    redness = r - g
+    glow = cv2.dilate(
+        (redness > AIM_ENEMY_RED_GLOW_MIN).astype(np.uint8) * 255,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+    )
+    return white, glow, redness
+
+
+def _ring_coverage(white, center, radius, threshold=0):
+    """返回白色准星像素沿候选圆环的角度覆盖率（0~1）。"""
+    x, y = center
+    height, width = white.shape
+    covered = np.zeros(len(_ANGLES), dtype=bool)
+    for offset in _RING_OFFSETS:
+        sample_x = np.rint(x + (radius + offset) * np.cos(_ANGLES)).astype(np.int32)
+        sample_y = np.rint(y + (radius + offset) * np.sin(_ANGLES)).astype(np.int32)
+        inside = (
+            (sample_x >= 0) & (sample_x < width) &
+            (sample_y >= 0) & (sample_y < height)
+        )
+        hits = np.zeros(len(_ANGLES), dtype=bool)
+        hits[inside] = white[sample_y[inside], sample_x[inside]] > threshold
+        covered |= hits
+    return float(covered.mean())
+
+
+def _center_redness(redness, center, radius):
+    """返回候选准星中心小圆内 R-G 的均值。"""
+    x, y = center
+    inner = max(3, int(radius * 0.25))
+    height, width = redness.shape
+    y0, y1 = max(0, y - inner), min(height, y + inner + 1)
+    x0, x1 = max(0, x - inner), min(width, x + inner + 1)
+    return float(redness[y0:y1, x0:x1].mean())
+
+
+def _hough_in_crop(white, center, half=AIM_ENEMY_CROP_HALF):
+    """只在候选中心附近 220×220 的原分辨率白环上跑霍夫，避免全帧霍夫的开销。"""
+    height, width = white.shape
+    x0 = max(0, min(width - 2 * half, int(round(center[0])) - half))
+    y0 = max(0, min(height - 2 * half, int(round(center[1])) - half))
+    crop = white[y0:y0 + 2 * half, x0:x0 + 2 * half]
+    if crop.shape[0] != 2 * half or crop.shape[1] != 2 * half:
+        return []
     circles = cv2.HoughCircles(
-        roi, cv2.HOUGH_GRADIENT_ALT, dp=1.5, minDist=8,
-        param1=150, param2=0.75, minRadius=7, maxRadius=22,
+        crop, cv2.HOUGH_GRADIENT,
+        dp=AIM_ENEMY_HOUGH_DP,
+        minDist=AIM_ENEMY_HOUGH_MIN_DIST,
+        param1=AIM_ENEMY_HOUGH_PARAM1,
+        param2=AIM_ENEMY_HOUGH_PARAM2,
+        minRadius=AIM_ENEMY_MIN_RADIUS,
+        maxRadius=AIM_ENEMY_MAX_RADIUS,
     )
     if circles is None:
-        return None
+        return []
+    return [
+        (int(round(raw_x)) + x0, int(round(raw_y)) + y0, int(round(raw_radius)))
+        for raw_x, raw_y, raw_radius in circles[0]
+    ]
 
-    patch_radius = AIM_ENEMY_DIM_PATCH_RADIUS
-    height, width = luma.shape
-    for circle_x, circle_y, circle_radius in circles[0]:
-        x = int(round(circle_x / AIM_ENEMY_DIM_SCALE + x_min))
-        y = int(round(circle_y / AIM_ENEMY_DIM_SCALE + y_min))
-        radius = float(circle_radius / AIM_ENEMY_DIM_SCALE)
-        if (x < patch_radius or x + patch_radius >= width or
-                y < patch_radius or y + patch_radius >= height):
+
+def _contour_candidates(redness, glow, white, coverage_min, center_red_min, offset):
+    """连通块初筛：红色连通块 -> 粗中心 -> 220×220 裁剪霍夫 -> 白环/红环/中心红校验。"""
+    red_mask = (redness > AIM_ENEMY_RED_CONTOUR_MIN).astype(np.uint8) * 255
+    red_mask = cv2.morphologyEx(
+        red_mask, cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+    )
+    contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:AIM_ENEMY_CONTOUR_TOPK]
+
+    candidates = []
+    for contour in contours:
+        if cv2.contourArea(contour) < AIM_ENEMY_CONTOUR_AREA_MIN:
             continue
-
-        luma_patch = luma[
-            y - patch_radius:y + patch_radius + 1,
-            x - patch_radius:x + patch_radius + 1,
-        ]
-        red_patch = red[
-            y - patch_radius:y + patch_radius + 1,
-            x - patch_radius:x + patch_radius + 1,
-        ]
-        center_mask = _dim_distance < 0.5 * radius
-        outer_mask = (
-            (_dim_distance >= 1.15 * radius) &
-            (_dim_distance < 1.7 * radius)
-        )
-        far_mask = (
-            (_dim_distance >= 1.7 * radius) &
-            (_dim_distance < 2.3 * radius)
-        )
-        center_red = red_patch[center_mask]
-        if (
-            center_red.mean() >= AIM_ENEMY_DIM_CENTER_RED_MIN and
-            center_red.std() <= AIM_ENEMY_DIM_CENTER_RED_STD_MAX and
-            luma_patch[outer_mask].std() <= AIM_ENEMY_DIM_OUTER_LUMA_STD_MAX and
-            red_patch[far_mask].std() > AIM_ENEMY_DIM_FAR_RED_STD_MIN
+        (rough_x, rough_y), rough_radius = cv2.minEnclosingCircle(contour)
+        if rough_radius < AIM_ENEMY_MIN_RADIUS:
+            continue
+        circles = _hough_in_crop(white, (rough_x, rough_y))
+        # 红晕块可能由多个特效合并而成，中心未必落在准星上；交给后面的白环/红环校验判断，
+        # 这里只按“离粗中心近”排序，并放宽到 100 px，避免漏掉被红饰拉偏的准星。
+        circles.sort(key=lambda c: (c[0] - rough_x) ** 2 + (c[1] - rough_y) ** 2)
+        for x, y, radius in circles[:5]:
+            if (x - rough_x) ** 2 + (y - rough_y) ** 2 > 100 ** 2:
+                continue
+            if not (AIM_ENEMY_MIN_RADIUS <= radius <= AIM_ENEMY_MAX_RADIUS):
+                continue
+            if _is_horizontal_red_scenery(glow, (x, y)):
+                continue
+            coverage = 0.0
+            best_radius = radius
+            for candidate_radius in range(
+                max(AIM_ENEMY_MIN_RADIUS, radius - 2),
+                min(AIM_ENEMY_MAX_RADIUS, radius + 2) + 1,
+            ):
+                current = _ring_coverage(white, (x, y), candidate_radius)
+                if current > coverage:
+                    coverage, best_radius = current, candidate_radius
+            if coverage < coverage_min:
+                continue
+            red_coverage = 0.0
+            for candidate_radius in range(
+                max(AIM_ENEMY_MIN_RADIUS, best_radius - 2),
+                min(AIM_ENEMY_MAX_RADIUS, best_radius + 2) + 1,
+            ):
+                red_coverage = max(
+                    red_coverage,
+                    _ring_coverage(redness, (x, y), candidate_radius, 40),
+                )
+            if red_coverage < AIM_ENEMY_RED_RING_MIN:
+                continue
+            center_red = _center_redness(redness, (x, y), best_radius)
+            if center_red < center_red_min:
+                continue
+            candidates.append({
+                "center": (x + offset[0], y + offset[1]),
+                "radius": best_radius,
+                "coverage": coverage,
+                "center_red": center_red,
+            })
+    candidates.sort(key=lambda candidate: -candidate["coverage"])
+    deduped = []
+    for candidate in candidates:
+        cx, cy = candidate["center"]
+        if all(
+            (cx - ox) ** 2 + (cy - oy) ** 2 > 20 ** 2
+            for ox, oy in (item["center"] for item in deduped)
         ):
-            return x, y
-    return None
+            deduped.append(candidate)
+    return deduped
 
 
-def predict_enemy(h, v):
-    width, height = image_size(v)
-    dim_luma = h.copy()
-    dim_red = v.copy()
+def _right_masks(image):
+    """右侧窄条（x≥1600）的白环/红晕掩膜。
 
-    # 获取白色圆形 `y`
-    y = subtract_blur(h, 3, negative=False)
-    cv2.inRange(h, AIM_ENEMY_LUMA_MIN, 255, dst=h)
-    cv2.bitwise_and(y, h, dst=y)
-    # 获取红色光晕 `v`
-    cv2.inRange(v, AIM_ENEMY_RED_MIN, 255, dst=v)
-    red_pixels = v.copy()
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    cv2.dilate(v, kernel, dst=v)
-    # Keep an unmasked copy for markers partially hidden beneath the side HUD.
-    cv2.bitwise_and(y, v, dst=y)
-    side_feature = y.copy()
-    side_feature[-AIM_ENEMY_ROI_BOTTOM:, :] = 0
-
-    # Match both radii observed in the manually labelled screenshots.
-    primary_feature = cv2.bitwise_and(y, mask_interact)
-    primary_feature[:AIM_ENEMY_ROI_TOP, :] = 0
-    primary_feature[-AIM_ENEMY_ROI_BOTTOM:, :] = 0
-    primary_feature[:, :AIM_ENEMY_ROI_LEFT] = 0
-    primary_feature[:, -AIM_ENEMY_ROI_RIGHT:] = 0
-    draw_enemy, score, center, point_count = _best_enemy_ring_response(
-        primary_feature, AIM_ENEMY_PRIMARY_RADII
+    右侧准星会叠在队伍 HUD 上，不能套 mask_interact：该掩膜不覆盖队伍 HUD，
+    套上会把准星白环整片抹掉。
+    """
+    roi = image[
+        AIM_ENEMY_ROI_TOP:-AIM_ENEMY_ROI_BOTTOM,
+        AIM_ENEMY_RIGHT_STRIP_LEFT:,
+    ]
+    b, g, r = cv2.split(roi)
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    min_channel = np.minimum(np.minimum(b, g), r)
+    white = cv2.bitwise_and(
+        (min_channel > AIM_ENEMY_WHITE_MIN).astype(np.uint8) * 255,
+        subtract_blur(gray, 3, negative=False),
     )
-    if point_count > 1000:
-        CUS_LOGGER.warning(f"AimDetector.predict_enemy() 绘制点过多: {point_count}")
-    if (score >= AIM_ENEMY_PEAK_MIN and
-            not _is_horizontal_red_scenery(red_pixels, center)):
-        return draw_enemy, np.array([center])
-
-    large_draw, large_score, large_center, _ = _best_enemy_ring_response(
-        primary_feature, AIM_ENEMY_LARGE_RADII
+    redness = r.astype(np.int16) - g.astype(np.int16)
+    glow = cv2.dilate(
+        (redness > AIM_ENEMY_RED_GLOW_MIN).astype(np.uint8) * 255,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
     )
-    if (large_score >= AIM_ENEMY_LARGE_PEAK_MIN and
-            not _is_horizontal_red_scenery(red_pixels, large_center)):
-        return large_draw, np.array([large_center])
+    return white, glow, redness
 
-    # The party HUD masks a wide strip on the right. A strong peak in that
-    # strip is still reliable, but needs a separately calibrated threshold.
-    hud_radii = tuple(sorted(set(
-        AIM_ENEMY_PRIMARY_RADII + AIM_ENEMY_LARGE_RADII +
-        AIM_ENEMY_EDGE_RADII
-    )))
-    hud_span = AIM_ENEMY_ROI_RIGHT + 2 * max(hud_radii)
-    hud_draw, hud_score, hud_center, _ = _best_enemy_ring_response(
-        side_feature[:, -hud_span:], hud_radii,
-        center_x_range=(hud_span - AIM_ENEMY_ROI_RIGHT, hud_span),
-        center_y_range=(0, height - AIM_ENEMY_ROI_BOTTOM),
+
+def enemy_candidates(image):
+    """返回敌人准星候选点：红色连通块初筛 + 220×220 裁剪霍夫 + 白环/中心红校验。"""
+    white, glow, redness = _enemy_masks(image)
+    return _contour_candidates(
+        redness, glow, white,
+        AIM_ENEMY_RING_COVERAGE_MIN,
+        AIM_ENEMY_CENTER_RED_MIN,
+        (AIM_ENEMY_ROI_LEFT, AIM_ENEMY_ROI_TOP),
     )
-    if hud_score >= AIM_ENEMY_HUD_PEAK_MIN:
-        full_hud_draw = np.zeros((height, width), dtype=np.uint8)
-        full_hud_draw[:, -hud_span:] = hud_draw
-        hud_center = (hud_center[0] + width - hud_span, hud_center[1])
-        return full_hud_draw, np.array([hud_center])
 
-    # A target may be clipped beneath a side HUD. Only allow the circle center
-    # in the outermost 40 px and use a separately calibrated peak threshold.
-    edge_span = AIM_ENEMY_EDGE_CENTER_WIDTH + 2 * max(AIM_ENEMY_EDGE_RADII)
-    left_draw, left_score, left_center, _ = _best_enemy_ring_response(
-        side_feature[:, :edge_span], AIM_ENEMY_EDGE_RADII,
-        center_x_range=(0, AIM_ENEMY_EDGE_CENTER_WIDTH + 1),
-        center_y_range=(0, height - AIM_ENEMY_ROI_BOTTOM),
+
+def predict_right(image):
+    """检测右侧 HUD 区域的准星，返回全屏坐标；没有则 None。"""
+    white, glow, redness = _right_masks(image)
+    candidates = _contour_candidates(
+        redness, glow, white,
+        AIM_ENEMY_RIGHT_COVERAGE_MIN,
+        AIM_ENEMY_RIGHT_CENTER_RED_MIN,
+        (AIM_ENEMY_RIGHT_STRIP_LEFT, AIM_ENEMY_ROI_TOP),
     )
-    right_draw, right_score, right_center, _ = _best_enemy_ring_response(
-        side_feature[:, -edge_span:], AIM_ENEMY_EDGE_RADII,
-        center_x_range=(edge_span - AIM_ENEMY_EDGE_CENTER_WIDTH, edge_span),
-        center_y_range=(0, height - AIM_ENEMY_ROI_BOTTOM),
+    if not candidates:
+        return None
+    x, y = candidates[0]["center"]
+    return int(x), int(y)
+
+
+def predict_enemy(image):
+    """检测敌人瞄准准星。
+
+    Args:
+        image: BGR 截图（1920x1080）。
+
+    Returns:
+        (draw, points)：draw 是只画出选中圆环的示意图；points 是选中中心组成的数组，
+        没有检测到时为空数组。
+    """
+    candidates = enemy_candidates(image)
+    draw = np.zeros(image.shape[:2], dtype=np.uint8)
+    if not candidates:
+        return draw, np.array([])
+    best = candidates[0]
+    cv2.circle(draw, best["center"], best["radius"], 255, 2)
+    return draw, np.array([best["center"]])
+
+
+def predict_item(image):
+    """检测物品瞄准标记（开发中，尚未实机验证）。
+
+    物品瞄准标记是白色十字 + 中心小圆环，外圈青色光晕；与敌人红晕准星区分开。
+    返回 (draw, points)：draw 是只画出检测结果的白图，points 是标记中心数组（可能为空）。
+
+    Args:
+        image: BGR 截图（1920x1080）。
+    """
+    height, width = image.shape[:2]
+    b, g, r = cv2.split(image)
+    b = b.astype(np.int16)
+    g = g.astype(np.int16)
+    r = r.astype(np.int16)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    min_channel = np.minimum(np.minimum(b, g), r)
+    white = cv2.bitwise_and(
+        (min_channel > ITEM_WHITE_MIN).astype(np.uint8) * 255,
+        subtract_blur(gray, 9, negative=False),
     )
-    if right_score > left_score:
-        edge_draw, edge_score = right_draw, right_score
-        edge_center = (right_center[0] + width - edge_span, right_center[1])
-        edge_offset = width - edge_span
-    else:
-        edge_draw, edge_score, edge_center = left_draw, left_score, left_center
-        edge_offset = 0
-    if edge_score >= AIM_ENEMY_EDGE_PEAK_MIN:
-        full_edge_draw = np.zeros((height, width), dtype=np.uint8)
-        full_edge_draw[:, edge_offset:edge_offset + edge_span] = edge_draw
-        return full_edge_draw, np.array([edge_center])
+    white = cv2.bitwise_and(white, mask_interact)
 
-    dim_center = _find_dim_enemy_circle(dim_luma, dim_red)
-    if dim_center is not None:
-        dim_draw = np.zeros((height, width), dtype=np.uint8)
-        cv2.circle(dim_draw, dim_center, 3, 255, -1)
-        return dim_draw, np.array([dim_center])
-    return draw_enemy, np.array([])
+    cyanness = np.minimum(b, g) - r
+    glow = cv2.dilate(
+        (cyanness > ITEM_CYAN_GLOW_MIN).astype(np.uint8) * 255,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
+    )
+    feature = cv2.bitwise_and(white, glow)
 
-
-def predict_item(v):
-    min_radius, max_radius = radius_item
-    width, height = image_size(v)
-
-    # 获取白色圆形 `y`
-    y = subtract_blur(v, 9)
-    white = cv2.inRange(v, 112, 144)
-    cv2.bitwise_and(y, white, dst=y)
-    # 获取青色光晕 `v`
-    cv2.inRange(v, 0, 84, dst=v)
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    cv2.dilate(v, kernel, dst=v)
-
-    # 去除噪声，只保留青色圆形
-    cv2.bitwise_and(y, v, dst=y)
-    # 去除游戏UI
-    cv2.bitwise_and(y, mask_interact, dst=y)
-    # 去除边缘上的点，否则 draw_circle() 会溢出
-    remove_border(y, max_radius)
-
-    # 获取所有像素
-    points = inrange(y, lower=18)
-    # print(points.shape)
-    if points.shape[0] > 1000:
-        CUS_LOGGER.debug(f"AimDetector.predict_item() 绘制点过多: {points.shape}")
-    # 绘制圆形
+    circles = cv2.HoughCircles(
+        feature,
+        cv2.HOUGH_GRADIENT,
+        dp=1.0,
+        minDist=30,
+        param1=80,
+        param2=10,
+        minRadius=ITEM_CENTER_RADIUS[0],
+        maxRadius=ITEM_CENTER_RADIUS[1],
+    )
+    candidates = []
+    if circles is not None:
+        for raw_x, raw_y, _raw_radius in circles[0]:
+            x, y = int(round(raw_x)), int(round(raw_y))
+            y0, y1 = max(0, y - 40), min(height, y + 41)
+            x0, x1 = max(0, x - 40), min(width, x + 41)
+            glow_coverage = float((glow[y0:y1, x0:x1] > 0).mean())
+            if glow_coverage < ITEM_GLOW_COVERAGE_MIN:
+                continue
+            arms = 0
+            for angle in (0, 90, 180, 270):
+                radians = np.deg2rad(angle)
+                for distance in range(12, 42, 2):
+                    sample_x = int(round(x + distance * np.cos(radians)))
+                    sample_y = int(round(y + distance * np.sin(radians)))
+                    if (0 <= sample_y < height and 0 <= sample_x < width
+                            and white[sample_y, sample_x] > 0):
+                        arms += 1
+                        break
+            if arms < ITEM_WHITE_ARM_MIN:
+                continue
+            candidates.append((glow_coverage, x, y))
+    candidates.sort(key=lambda candidate: -candidate[0])
+    points = np.array([(x, y) for _coverage, x, y in candidates])
     draw = np.zeros((height, width), dtype=np.uint8)
-    draw_circle(draw, circle_item, points)
-    draw = subtract_blur(draw, 5)
-    draw_item = cv2.multiply(draw, 4)
+    for _coverage, x, y in candidates:
+        cv2.circle(draw, (x, y), 40, 255, 2)
+    return draw, points
 
-    # 寻找峰值
-    points = inrange(draw_item, lower=18)
-    points=group_points(points,10)
-    if points.shape[0] > 3:
-        CUS_LOGGER.debug(f'AimDetector.predict_item() 峰值过多: {points.shape}')
-    points_item = points
-    # print(points)
-    return draw_item,points_item
+
 def aimed_enemy(points_enemy) -> tuple[int, int] | None:
     if points_enemy is None:
         return None
@@ -337,38 +409,60 @@ def aimed_item(points_item) -> tuple[int, int] | None:
     except IndexError:
         return None
 
-def predict(image, enemy=True, item=True, debug=False):
-    """
-    在图像上预测 `瞄准`，耗时约 10.0~10.5ms。
+_AIM_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="aim")
 
-    参数:
-        image:
-        enemy: True 表示预测敌人
-        item: True 表示预测物品
-        show_log:
-        debug: True 表示显示 AimDetector 图像
-    """
 
+def _predict_main(image, item):
+    """主 ROI 检测（敌人准星 + 可选的物品标记），不负责右侧窄条与调试显示。"""
     draw_item = None
     draw_enemy = None
     points_item = None
     points_enemy = None
-    # 1.5~2.0ms
-    yuv = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
-    v = yuv[:, :, 2]
-    h = yuv[:, :, 0]
-    # 4.0~4.5ms
-    if enemy:
-        draw_enemy,points_enemy =predict_enemy(h.copy(), v.copy())
-    # 3.0~3.5ms
+    draw_enemy, points_enemy = predict_enemy(image)
     if item:
-        draw_item,points_item =predict_item(v.copy())
+        draw_item, points_item = predict_item(image)
     kv = {'enemy': aimed_enemy(points_enemy), 'item': aimed_item(points_item)}
     if kv['enemy'] is not None or kv['item'] is not None:
         CUS_LOGGER.info(f'{factor}恍惚间看见了宇宙的「毁灭」: {kv}')
+    return kv, draw_enemy, draw_item
+
+
+def predict(image, enemy=True, item=True, debug=False):
+    """预测敌人准星（主 ROI + 右侧窄条并行）与可选物品标记。
+
+    主检测和右侧检测各占一个线程：右侧准星可能落在主 ROI 之外，但串行 fallback
+    会让 95% 的负样本帧多等一次右侧检测；并行时墙钟只取两者较大值。
+    主检测命中优先，主检测漏检时才等待并使用右侧结果。
+    """
+    if not enemy:
+        kv, draw_enemy, draw_item = _predict_main(image, item)
+        if debug:
+            show_aim(draw_enemy, draw_item)
+        return kv
+
+    main_future = _AIM_EXECUTOR.submit(_predict_main, image, item)
+    right_future = _AIM_EXECUTOR.submit(predict_right, image)
+    kv, draw_enemy, draw_item = main_future.result()
+    if kv['enemy'] is not None:
+        if debug:
+            show_aim(draw_enemy, draw_item)
+        return kv
+
+    try:
+        right_point = right_future.result()
+    except Exception as exc:  # 右侧检测失败不能影响主检测结果
+        CUS_LOGGER.warning(f"右侧准星检测失败：{exc}")
+        right_point = None
+    if right_point is not None:
+        kv['enemy'] = right_point
+        CUS_LOGGER.info(f'{factor}恍惚间看见了宇宙的「毁灭」: {kv}')
+        if debug and draw_enemy is not None:
+            cv2.circle(draw_enemy, right_point, 40, 255, 2)
     if debug:
-        show_aim(draw_enemy,draw_item)
+        show_aim(draw_enemy, draw_item)
     return kv
+
+
 def show_aim(draw_enemy,draw_item):
     if draw_enemy is None:
         if draw_item is None:
