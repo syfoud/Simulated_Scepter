@@ -666,8 +666,14 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
 
-    def read_mode_button (self):
-        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。"""
+    def read_mode_button (self, fresh=True):
+        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。
+
+        `fresh=True` 时先抓一帧新画面再识别：模式切换靠"刚点完有没有生效"判断，
+        用缓存帧会读到上一步的文字（实测因此重复点入口按钮，把一局送进标准模式）。
+        """
+        if fresh:
+            self.ts.forward(self.get_screen())
         try:
             return merge_text(self.ts.find_with_box(
                 self.BATTLE_MODE_BUTTON_BOX, redundancy=30))
@@ -1889,12 +1895,11 @@ class SimulatedCurrency(CurrencyUtils):
         self._overlap_checked_at = now
 
         # 红条 OCR 经常糊（实测「尚未选据主角色和%环」）：精确优先，糊了用关键词兜底
-        if not self.click_text(text="尚未选择主角角色和光环",
-                               box=self.PROTAGONIST_BANNER_BOX,
-                               click=False, allow_fail=True, warning=False):
-            banner = self._box_text(self.PROTAGONIST_BANNER_BOX)
-            if not any(word in banner for word in ("尚未", "光环", "主角角色")):
-                return 0
+        # 红条 OCR 经常糊，只认稳定关键词；这里静默读：判定在选主角面板期间几乎每帧都跑，
+        # 用 click_text 会刷满「请求：尚未选择主角角色和光环响应：…」（实测一局 194 条）
+        banner = self._box_text(self.PROTAGONIST_BANNER_BOX)
+        if not any(word in banner for word in ("尚未", "光环", "主角角色")):
+            return 0
         if self.click_text(text="主角光环",
                            box=self.PROTAGONIST_TITLE_BOX,
                            click=False, allow_fail=True, warning=False):
