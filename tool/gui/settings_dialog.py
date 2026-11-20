@@ -11,10 +11,13 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from tool.gui.wheel_guard import install_wheel_guard
+
 
 class SettingsDialog(QDialog):
     def __init__(self, title, parent=None):
         super().__init__(parent)
+        install_wheel_guard()
         self.setWindowTitle(title)
         self.setWindowFlag(Qt.WindowContextHelpButtonHint, False)
         if parent is not None:
