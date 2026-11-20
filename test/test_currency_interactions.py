@@ -441,7 +441,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.click_text = _protagonist_click_text()
         manager.reset_mock()
 
-        self.assertEqual(currency.select_protagonist(), 1)
+        self.assertEqual(currency.select_protagonist(), 1)      # 第一帧：点按钮
+        self.assertEqual(currency.select_protagonist(), 1)      # 第二帧：面板已开，拖拽
 
         calls = manager.mock_calls
         # 第一次点击是「选择主角」按钮（中心 1816,750）
@@ -466,10 +467,10 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.click_text = Mock(return_value=False)
         manager.reset_mock()
 
-        self.assertEqual(currency.select_protagonist(), 0)
+        # 面板没出现只点一次按钮就返回，等主循环下一帧重试（不再在动作里阻塞等待）
+        self.assertEqual(currency.select_protagonist(), 1)
 
         manager.drag_point.assert_not_called()
-        # 只点了「选择主角」按钮，没有后续动作
         self.assertEqual(manager.click_point.call_count, 1)
 
     @patch("core.currency.automation.time.sleep")

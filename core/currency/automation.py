@@ -1812,8 +1812,6 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_FALLBACK_DRAG = ((709, 750), (964, 441))
     PROTAGONIST_AURA_POSITION = (1501, 502)
     PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
-    PROTAGONIST_WAIT_ATTEMPTS = 25
-    PROTAGONIST_WAIT_INTERVAL = 0.4
     # 第二次选主角时该角色已有光环，点光环会弹「是否替换该角色原有光环？」（实测 OCR 框）
     # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
     PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
@@ -1929,23 +1927,12 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.click_point(
                 (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
             key_mouse_manager.wait()
+            # 点完按钮立刻返回，面板出现与否交给主循环下一帧判断。
+            # 原来在这里 sleep 最多 10 秒等面板，整段时间主状态机动不了，
+            # 挡路弹窗也就永远点不掉（弹窗 + 主角光环同时出现时会卡死）。
+            CUS_LOGGER.debug("已点击「选择主角」，面板出现后下一帧再处理")
+            return 1
 
-        for attempt in range(self.PROTAGONIST_WAIT_ATTEMPTS):
-            if self.click_text(
-                text="选择一个角色获得主角光环",
-                box=self.PROTAGONIST_TITLE_BOX,
-                click=False,
-                allow_fail=True,
-            ):
-                break
-            CUS_LOGGER.debug(
-                "选择主角面板还没出现（第 %d/%d 次等待）",
-                attempt + 1, self.PROTAGONIST_WAIT_ATTEMPTS,
-            )
-            time.sleep(self.PROTAGONIST_WAIT_INTERVAL)
-        else:
-            CUS_LOGGER.warning("选择主角面板没等到，交给下一轮重试")
-            return 0
 
         # 起点选择：默认第一个角色；第二次改拖第二个；连试两次都没成说明那些位置是空的，
         # 改从后台第一个角色拖（前台 2 号位可能压根没站人）。
