@@ -1362,6 +1362,15 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertFalse(currency.auto_clear_target("溜佩佩"))
         self.assertEqual(currency.strategy_targets, ["孪生姵姵", "溜佩佩"])
 
+    def test_pepe_environment_also_counts_as_pepe(self):
+        """「三星佩佩 / 粗星佩佩」这类环境直接把佩佩送到场上，等同拿到佩佩。"""
+        from core.currency.strategies import pepe_env_on_field
+
+        self.assertTrue(pepe_env_on_field(["三星佩佩"]))
+        self.assertTrue(pepe_env_on_field(["蓝海", "粗星佩佩", "二手市场"]))
+        self.assertFalse(pepe_env_on_field(["蓝海", "二手市场"]))
+        self.assertFalse(pepe_env_on_field(None))
+
 
 if __name__ == "__main__":
     unittest.main()

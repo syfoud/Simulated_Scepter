@@ -367,6 +367,22 @@ def pepe_left(*texts):
 PEPE_KEEP_CHECKED = ("孪生姵姵", "佩佩驾到", "溜佩佩", "溜佩佩+")
 
 
+# 「投资环境」里也会直接把佩佩送到场上：三星佩佩 / 粗星佩佩。
+# 拿到这类环境等同于拿到了佩佩，孪生姵姵的前置条件同样满足。
+PEPE_ENVIRONMENTS = ("三星佩佩", "粗星佩佩")
+
+
+def pepe_env_on_field(texts):
+    """本屏出现的环境里有没有直接给佩佩的。"""
+    for text in texts or ():
+        if not text:
+            continue
+        normalized = normalize_name(text)
+        if any(normalize_name(name) in normalized for name in PEPE_ENVIRONMENTS):
+            return True
+    return False
+
+
 def pepe_goal_reached(name):
     """这条是不是「最终目标」策略（孪生姵姵）——拿到就意味着这个系列可以收工了。
 

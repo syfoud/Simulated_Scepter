@@ -15,6 +15,7 @@ from core.currency.strategies import (
     PEPE_DEPENDENT_STRATEGIES,
     exit_plane_for,
     match_name,
+    pepe_env_on_field,
     pepe_goal_reached,
     pepe_keep_checked,
     pepe_left,
@@ -937,6 +938,20 @@ class SimulatedCurrency(CurrencyUtils):
             centers.append((cx, cy))
 
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
+        # 选到「三星佩佩 / 粗星佩佩」这类环境，等于佩佩已经到场：和"选到佩佩策略"一样立标记
+        if (
+            getattr(self, "auto_exit_plane", False)
+            and getattr(self, "pepe_plane_boost", False)
+            and any(item in getattr(self, "strategy_targets", [])
+                    for item in PEPE_DEPENDENT_STRATEGIES)
+            and pepe_env_on_field([selected_text])
+        ):
+            if not getattr(self, "pepe_on_field", False):
+                CUS_LOGGER.info(
+                    "投资环境「%s」直接给了佩佩：本局打到第 3 面终局（等孪生姵姵）",
+                    selected_text)
+            self.pepe_on_field = True
+
         key_mouse_manager.click_point(*centers[selected_idx], box=boxes[selected_idx])
         key_mouse_manager.wait()
 
