@@ -262,12 +262,10 @@ class SimulatedCurrency(CurrencyUtils):
         # 是否需要退出
         self.exit_requested = False
         # 是否已开始退出
-        self.exit_started = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
         # 退出失败重试计数（连续失败到上限就停手）
-        self.exit_attempts = 0
 
         priority = load_currency_settings()["priority"]
 
@@ -844,12 +842,10 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_plane = self.set_exit_plane
         self.prior_environment_found = False
         self.exit_requested = False
-        self.exit_started = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
         # 退出失败重试计数（连续失败到上限就停手）
-        self.exit_attempts = 0
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
@@ -1650,6 +1646,18 @@ class SimulatedCurrency(CurrencyUtils):
         return self.click_text(text="备战阶段", box=self.PREPARE_STAGE_BOX,
                                click=False, allow_fail=True, warning=False)
 
+    def update_state (self, state):
+        """战斗中请求退出要等这场打完。
+
+        否则 JSON 里 condition=exit 的「退出按ESC」会在战斗界面里疯狂按 ESC
+        （战斗中 ESC 只会弹暂停菜单，永远等不到确认框）。
+        """
+        if state == "exit" and getattr(self, "state", None) == "battle":
+            self.exit_requested = True
+            CUS_LOGGER.info("战斗中请求退出：等这场打完再进退出流程")
+            return
+        super().update_state(state)
+
     def _in_battle_likely (self):
         """当前是否（很可能）在战斗里。
 
@@ -1666,72 +1674,6 @@ class SimulatedCurrency(CurrencyUtils):
                 or self.in_battle_screen())
 
 
-    def exit(self):
-        """执行当前货币战争对局的统一退出流程。"""
-
-        if self.exit_started:
-            self.exit_attempts = 0
-            return 1
-
-        CUS_LOGGER.info("执行货币战争退出流程")
-
-        # 先检查是否已经进入“放弃并结算”页面
-        self.ts.forward(self.get_screen())
-        if self.click_text(
-            text="放弃并结算",
-            box=self.EXIT_CONFIRM_BOX,
-            click=False,
-            allow_fail=True,
-        ):
-            CUS_LOGGER.debug("检测到退出页面")
-            self.exit_started = True
-            self.exit_attempts = 0
-            return 1
-
-        # 战斗中按 ESC 只会弹暂停菜单，永远不会出现「放弃并结算」确认框。
-        # 以前这里按 ESC 再点一个固定"撤退"坐标，点空之后就退化成一路按 ESC（实机抽风）。
-        # 现在只要怀疑在战斗中就不按 ESC，等这场打完再继续退（自动战斗开着）。
-        if self._in_battle_likely():
-            CUS_LOGGER.info("当前在战斗中，等这场打完再退出（战斗中按 ESC 无效）")
-            return 0
-
-        max_attempts = 15
-        timeout = 6
-        deadline = time.monotonic() + timeout
-
-        for attempt in range(max_attempts):
-            if time.monotonic() >= deadline:
-                break
-
-            if self._stop:
-                CUS_LOGGER.info("检测到停止标志，提前退出检测终止")
-                return 0
-
-            self.ts.forward(self.get_screen())
-
-            if self.click_text(
-                text="放弃并结算",
-                box=self.EXIT_CONFIRM_BOX,
-                click=False,
-                allow_fail=True,
-            ):
-                CUS_LOGGER.debug("检测到退出页面")
-                self.exit_started = True
-                return 1
-
-            # 战斗中按 ESC 是无效动作：先等战斗结束（结算画面由「战斗结束后」动作负责）
-            if self._in_battle_likely():
-                CUS_LOGGER.info("还在战斗界面，等战斗结束后再退出")
-                return 0
-
-            CUS_LOGGER.debug(
-                f"未检测到退出页面，第 {attempt + 1}/{max_attempts} 次按 ESC"
-            )
-
-            key_mouse_manager.press("esc")
-            key_mouse_manager.wait()
-
-        return self._exit_failed("按 ESC 后没能进入放弃并结算页面")
 
     def in_battle_screen (self):
         """当前是不是还在战斗里（战斗界面按 ESC 没用，得等结算）。"""
@@ -2084,26 +2026,6 @@ class SimulatedCurrency(CurrencyUtils):
 
     EXIT_MAX_ATTEMPTS = 3
     EXIT_ACTION_NAME = "开始退出"
-    def _exit_failed(self, reason):
-        """退出没成功：解开「开始退出」的 once 锁存，让下一帧还能再试。
-
-        引擎里命中即锁存，不主动解锁的话这条动作本轮再也不会被调用——
-        日志写着"下一轮重试"却永远不重试，玩家看到的就是卡死。
-        连续失败到上限后停手，避免在错误界面上反复连按 ESC。
-        """
-        self.exit_attempts += 1
-        if self.exit_attempts < self.EXIT_MAX_ATTEMPTS:
-            self.latched_events.discard(self.EXIT_ACTION_NAME)
-            CUS_LOGGER.warning(
-                "%s，第 %d/%d 次退出未完成，下一帧重试",
-                reason, self.exit_attempts, self.EXIT_MAX_ATTEMPTS,
-            )
-        else:
-            CUS_LOGGER.warning(
-                "%s，已连续 %d 次退出失败，本轮停止重试（游戏可能停在非预期界面）",
-                reason, self.exit_attempts,
-            )
-        return 0
 
     STAGE_BOXES = ([430, 48, 515, 100], [250, 85, 330, 135])
     STAGE_UPSCALE = 3           # 原尺寸 OCR 会漏字，放大三倍才稳

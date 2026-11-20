@@ -806,14 +806,16 @@
         ]
     },
     {
-        "name": "开始退出",
+        "name": "退出按ESC",
         "trigger": {
             "condition": "exit",
             "state_only": true,
-            "interval": 3
+            "interval": 2
         },
         "actions": [
-            "exit"
+            {
+                "press": "esc"
+            }
         ]
     },
     {
