@@ -441,7 +441,8 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.click_text = _protagonist_click_text()
         manager.reset_mock()
 
-        self.assertEqual(currency.select_protagonist(), 1)
+        self.assertEqual(currency.select_protagonist(), 1)      # 第一帧：点按钮
+        self.assertEqual(currency.select_protagonist(), 1)      # 第二帧：面板已开，拖拽
 
         calls = manager.mock_calls
         # 第一次点击是「选择主角」按钮（中心 1816,750）
@@ -466,10 +467,10 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.click_text = Mock(return_value=False)
         manager.reset_mock()
 
-        self.assertEqual(currency.select_protagonist(), 0)
+        # 面板没出现只点一次按钮就返回，等主循环下一帧重试（不再在动作里阻塞等待）
+        self.assertEqual(currency.select_protagonist(), 1)
 
         manager.drag_point.assert_not_called()
-        # 只点了「选择主角」按钮，没有后续动作
         self.assertEqual(manager.click_point.call_count, 1)
 
     @patch("core.currency.automation.time.sleep")
@@ -1290,13 +1291,13 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.ts.find_with_box.return_value = []
         currency.click_text = Mock(return_value=True)     # 面板已打开
         currency.protagonist_picks = 5
-        currency.protagonist_drag_failures = 2
+        currency.protagonist_drag_attempts = 2       # 同一位置已经拖了两次没成
         manager.reset_mock()
 
         self.assertEqual(currency.select_protagonist(), 1)
 
         self.assertIn(call.drag_point(709, 750, 964, 441), manager.mock_calls)
-        self.assertEqual(currency.protagonist_drag_failures, 0)   # 选完清零
+        self.assertEqual(currency.protagonist_drag_attempts, 0)   # 选完清零
 
     @patch("core.currency.automation.key_mouse_manager")
     def test_prepare_battle_dismisses_front_empty_warning_first(self, manager):
