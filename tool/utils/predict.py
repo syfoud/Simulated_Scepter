@@ -93,9 +93,10 @@ def _enemy_masks(image):
         image: BGR 截图（1920x1080）。
 
     Returns:
-        (white, glow, redness)：三者都是准星 ROI 裁剪后的图像（坐标相对 ROI 左上角），
-        white 为白色准星像素（三通道都亮且是局部亮线），glow 为膨胀后的红色光晕，
-        redness 为红色色度（R 与 G 之差），用于校验准星中心是否在红光里；
+        (white, glow, redness, yellowness)：四者都是准星 ROI 裁剪后的图像
+        （坐标相对 ROI 左上角）。white 为白色准星像素（三通道都亮且是局部亮线），
+        glow 为膨胀后的红色光晕，redness 为红色色度（R 与 G 之差），
+        yellowness 为黄色色度（G 与 B 之差），用于排除中心发黄的金色招牌/花纹。
         用 R-G 而不是 R-(G+B)/2 可以排除黄/金色光晕与黄色墙面图案。
     """
     roi = image[
@@ -278,7 +279,7 @@ def _contour_candidates(
 
 
 def _right_masks(image):
-    """右侧窄条（x≥1600）的白环/红晕掩膜。
+    """右侧窄条（x≥1600）的白环/红晕/黄色色度掩膜。
 
     右侧准星会叠在队伍 HUD 上，不能套 mask_interact：该掩膜不覆盖队伍 HUD，
     套上会把准星白环整片抹掉。
