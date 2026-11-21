@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 
 import numpy as np
 from collections import Counter
@@ -1311,6 +1312,46 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertFalse(currency._is_wanted("大裁员", {"大裁员"}))
         self.assertFalse(currency._is_wanted("别的策略", set()))
         self.assertFalse(currency._is_wanted("", set()))
+
+    def test_prepare_battle_releases_battle_state(self):
+        """备战界面读到「出战」就说明不在战斗里：状态必须从 battle 收回来。
+
+        否则「battle」会一直挂着，退出请求被延迟、永远进不了 exit ——
+        实机每 3 秒刷一遍「战斗中请求退出」死循环。
+        """
+        currency = object.__new__(SimulatedCurrency)
+        currency.state = "battle"
+        currency.exit_requested = True
+        currency.set_exit_plane = 1        # 万一走到 reset_run_state 也不炸
+        currency.prior_environment_found = False
+        currency.exit_started = False
+        currency.current_plane = None
+        currency.plane_strategy_count = {}
+        currency.exit_attempts = 0
+        currency.envir_selected = False
+        currency.affix_incomplete_rounds = 0
+        currency.affixes_recorded = False
+        currency.protagonist_picks = 0
+        currency.protagonist_drag_failures = 0
+        currency.battle_click_attempts = 0
+        currency.has_fresh = False
+        currency.run_history = SimpleNamespace(start_run=lambda: None)
+        currency.stop = False
+        currency._stop = False
+        calls = []
+        currency.update_state = lambda value: calls.append(value)
+        currency.get_screen = Mock(return_value="frame")
+        currency.ts = Mock()
+        currency.ts.find_with_box.return_value = []
+        currency.click_text = Mock(return_value=False)
+
+        # 只验证状态收尾这一段：把后面的依赖挡掉
+        currency._maybe_exit_by_stage = Mock(return_value=True)
+        currency.preparation = Mock()
+
+        currency.prepare_battle()
+
+        self.assertEqual(calls[:2], ["startbattle", "exit"])
 
 
 if __name__ == "__main__":

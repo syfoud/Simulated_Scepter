@@ -1403,6 +1403,15 @@ class SimulatedCurrency(CurrencyUtils):
         if self._stop:
             CUS_LOGGER.debug("出战前准备：已停止，跳过")
             return 0
+        if self.state == "battle":
+            # 能读到「出战」并走到这里，就说明人已经在备战界面 —— 战斗早结束了。
+            # 状态机必须在这里收尾，否则 battle 会一直挂着：下一段「退出」请求被延迟、
+            # 永远进不了 exit（实机就是每 3 秒刷一遍「战斗中请求退出」的死循环）。
+            CUS_LOGGER.info("已回到备战界面，把状态从 battle 拉回 startbattle")
+            self.update_state("startbattle")
+            if self.exit_requested:
+                # 战斗期间被延迟的退出请求，现在补上（状态不是 battle 了，会真正进 exit）
+                self.update_state("exit")
         if self.exit_requested and self.state != "exit":
             # 状态机没在退出流程里，标志却是 True：一定是上一局漏清的，别拿它卡住整局
             CUS_LOGGER.warning("退出标志与状态不符（state=%s），复位后继续", self.state)
@@ -1604,27 +1613,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.update_state("exit")
         return 1
 
-    def is_battle_started(self):
-        '''是否处于战斗状态。
 
-        只认战斗界面独有的「自动战斗」按钮：备战/商店界面上有「持续伤害」这类玩法标签，
-        只认「伤害」会在普通界面上误判成"在战斗里"，退出流程就会去按 ESC、点撤退，一顿乱点。
-        '''
-        if self.click_text(
-            text="自动战斗",
-            box=self.BATTLE_HUD_BOX,
-            click=False,
-            allow_fail=True,
-        ):
-            CUS_LOGGER.debug("检测到已进入战斗（自动战斗按钮在）")
-            return True
-
-        return False
-
-    def _on_prepare_screen (self):
-        """备战界面特征（顶部「备战阶段」）——看到它就说明**不在**战斗里。"""
-        return self.click_text(text="备战阶段", box=self.PREPARE_STAGE_BOX,
-                               click=False, allow_fail=True, warning=False)
 
     def update_state (self, state):
         """战斗中请求退出要等这场打完。
@@ -1638,36 +1627,8 @@ class SimulatedCurrency(CurrencyUtils):
             return
         super().update_state(state)
 
-    def _in_battle_likely (self):
-        """当前是否（很可能）在战斗里。
-
-        只认状态机 + 现场证据，不维护第二份记忆：
-        「备战阶段」是反向证据，看到它就把状态机拉回 startbattle；
-        否则看状态是不是 battle，再看屏幕上有没有战斗界面独有文字。
-        """
-        if self._on_prepare_screen():
-            if getattr(self, "state", None) == "battle":
-                self.update_state("startbattle")
-            return False
-        return (getattr(self, "state", None) == "battle"
-                or self.is_battle_started()
-                or self.in_battle_screen())
 
 
-
-    def in_battle_screen (self):
-        """当前是不是还在战斗里（战斗界面按 ESC 没用，得等结算）。"""
-        for text, box in (
-            ("自动战斗", self.BATTLE_HUD_BOX),
-            ("挑战成功", self.BATTLE_HUD_BOX),
-            ("战斗结束", self.BATTLE_HUD_BOX),
-        ):
-            if self.click_text(text=text, box=box, click=False, allow_fail=True):
-                return True
-        return False
-
-    def reset_battle_click_attempts (self):
-        self.battle_click_attempts = 0
 
     def handle_battle_finished(self):
         self.battle_click_attempts = 0
