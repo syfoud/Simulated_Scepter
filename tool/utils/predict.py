@@ -55,7 +55,10 @@ mask_interact_roi = mask_interact[
 event_mask = (find_image_in_folder("gray_image/",'MASK_MAP_INTERACT_BLACK') > 70)[:497]
 
 _ANGLES = np.deg2rad(np.arange(72) * 5.0)
+_ANGLES_COS = np.cos(_ANGLES)
+_ANGLES_SIN = np.sin(_ANGLES)
 _RING_OFFSETS = range(-AIM_ENEMY_RING_BAND, AIM_ENEMY_RING_BAND + 1)
+_RING_OFFSETS_ARR = np.asarray(tuple(_RING_OFFSETS), dtype=np.float64)
 
 
 def _is_horizontal_red_scenery(red_pixels, center):
@@ -120,21 +123,26 @@ def _enemy_masks(image):
 
 
 def _ring_coverage(white, center, radius, threshold=0):
-    """返回白色准星像素沿候选圆环的角度覆盖率（0~1）。"""
+    """返回白色准星像素沿候选圆环的角度覆盖率（0~1）。
+
+    一次性算完 5 个半径偏移 × 72 个角度；逐偏移的 Python 循环在候选多时
+    会成为主要耗时。
+    """
     x, y = center
     height, width = white.shape
-    covered = np.zeros(len(_ANGLES), dtype=bool)
-    for offset in _RING_OFFSETS:
-        sample_x = np.rint(x + (radius + offset) * np.cos(_ANGLES)).astype(np.int32)
-        sample_y = np.rint(y + (radius + offset) * np.sin(_ANGLES)).astype(np.int32)
-        inside = (
-            (sample_x >= 0) & (sample_x < width) &
-            (sample_y >= 0) & (sample_y < height)
-        )
-        hits = np.zeros(len(_ANGLES), dtype=bool)
-        hits[inside] = white[sample_y[inside], sample_x[inside]] > threshold
-        covered |= hits
-    return float(covered.mean())
+    sample_x = np.rint(
+        x + (_RING_OFFSETS_ARR[:, None] + radius) * _ANGLES_COS[None, :]
+    ).astype(np.int32)
+    sample_y = np.rint(
+        y + (_RING_OFFSETS_ARR[:, None] + radius) * _ANGLES_SIN[None, :]
+    ).astype(np.int32)
+    inside = (
+        (sample_x >= 0) & (sample_x < width) & (sample_y >= 0) & (sample_y < height)
+    )
+    clipped_x = np.clip(sample_x, 0, width - 1)
+    clipped_y = np.clip(sample_y, 0, height - 1)
+    hits = (white[clipped_y, clipped_x] > threshold) & inside
+    return float(hits.any(axis=0).mean())
 
 
 def _center_redness(redness, center, radius):
@@ -209,7 +217,12 @@ def _contour_candidates(redness, glow, white, coverage_min, center_red_min, offs
                 current = _ring_coverage(white, (x, y), candidate_radius)
                 if current > coverage:
                     coverage, best_radius = current, candidate_radius
-            if coverage < coverage_min:
+            # 大准星的白色箭头间距更大、覆盖率天然偏低（常见 0.65~0.72）；
+            # 半径 ≥40 时单独放宽，避免它们被和 HUD 小图标用同一阈值卡掉。
+            effective_coverage_min = coverage_min
+            if best_radius >= 40:
+                effective_coverage_min = max(0.65, coverage_min - 0.10)
+            if coverage < effective_coverage_min:
                 continue
             red_coverage = 0.0
             for candidate_radius in range(
