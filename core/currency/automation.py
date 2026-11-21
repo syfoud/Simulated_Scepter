@@ -181,6 +181,8 @@ class SimulatedCurrency(CurrencyUtils):
     # 退出确认框「放弃并结算」：实测文字框 [707,729,832,757]，原来写 [707,728,831,756]
     # 比文字还小 1 像素，包含判定永远不通过 —— 退出流程会一直认为"还没到确认页"。
     EXIT_CONFIRM_BOX = [690, 715, 860, 775]
+    # 备战界面顶部「备战阶段 2-1」（实测 [433,37,508,56]），用来判断"已经不在战斗里"
+    PREPARE_STAGE_BOX = [380, 20, 560, 90]
     MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
     MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
@@ -260,13 +262,10 @@ class SimulatedCurrency(CurrencyUtils):
         # 是否需要退出
         self.exit_requested = False
         # 是否已开始退出
-        self.exit_started = False
-        self.battle_in_progress = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
         # 退出失败重试计数（连续失败到上限就停手）
-        self.exit_attempts = 0
 
         priority = load_currency_settings()["priority"]
 
@@ -665,8 +664,14 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
 
-    def read_mode_button (self):
-        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。"""
+    def read_mode_button (self, fresh=True):
+        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。
+
+        `fresh=True` 时先抓一帧新画面再识别：模式切换靠"刚点完有没有生效"判断，
+        用缓存帧会读到上一步的文字（实测因此重复点入口按钮，把一局送进标准模式）。
+        """
+        if fresh:
+            self.ts.forward(self.get_screen())
         try:
             return merge_text(self.ts.find_with_box(
                 self.BATTLE_MODE_BUTTON_BOX, redundancy=30))
@@ -816,12 +821,10 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_plane = self.set_exit_plane
         self.prior_environment_found = False
         self.exit_requested = False
-        self.exit_started = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
         # 退出失败重试计数（连续失败到上限就停手）
-        self.exit_attempts = 0
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
@@ -1552,8 +1555,8 @@ class SimulatedCurrency(CurrencyUtils):
 
         key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
-        self.battle_in_progress = True      # 点过出战就当自己在战斗里，直到见到结算
-        self.update_state("startbattle")
+        # 进战斗是状态机上的一个真实状态，不再另起一个标记
+        self.update_state("battle")
         return 1
 
     def handle_1_1_reward(self):
@@ -1618,79 +1621,39 @@ class SimulatedCurrency(CurrencyUtils):
 
         return False
 
+    def _on_prepare_screen (self):
+        """备战界面特征（顶部「备战阶段」）——看到它就说明**不在**战斗里。"""
+        return self.click_text(text="备战阶段", box=self.PREPARE_STAGE_BOX,
+                               click=False, allow_fail=True, warning=False)
+
+    def update_state (self, state):
+        """战斗中请求退出要等这场打完。
+
+        否则 JSON 里 condition=exit 的「退出按ESC」会在战斗界面里疯狂按 ESC
+        （战斗中 ESC 只会弹暂停菜单，永远等不到确认框）。
+        """
+        if state == "exit" and getattr(self, "state", None) == "battle":
+            self.exit_requested = True
+            CUS_LOGGER.info("战斗中请求退出：等这场打完再进退出流程")
+            return
+        super().update_state(state)
+
     def _in_battle_likely (self):
-        """当前是否（很可能）在战斗里：点过出战还没见到结算，或者屏幕上就是战斗界面。"""
-        if getattr(self, "battle_in_progress", False):
-            return True
-        return self.is_battle_started() or self.in_battle_screen()
+        """当前是否（很可能）在战斗里。
+
+        只认状态机 + 现场证据，不维护第二份记忆：
+        「备战阶段」是反向证据，看到它就把状态机拉回 startbattle；
+        否则看状态是不是 battle，再看屏幕上有没有战斗界面独有文字。
+        """
+        if self._on_prepare_screen():
+            if getattr(self, "state", None) == "battle":
+                self.update_state("startbattle")
+            return False
+        return (getattr(self, "state", None) == "battle"
+                or self.is_battle_started()
+                or self.in_battle_screen())
 
 
-    def exit(self):
-        """执行当前货币战争对局的统一退出流程。"""
-
-        if self.exit_started:
-            self.exit_attempts = 0
-            return 1
-
-        CUS_LOGGER.info("执行货币战争退出流程")
-
-        # 先检查是否已经进入“放弃并结算”页面
-        self.ts.forward(self.get_screen())
-        if self.click_text(
-            text="放弃并结算",
-            box=self.EXIT_CONFIRM_BOX,
-            click=False,
-            allow_fail=True,
-        ):
-            CUS_LOGGER.debug("检测到退出页面")
-            self.exit_started = True
-            self.exit_attempts = 0
-            return 1
-
-        # 战斗中按 ESC 只会弹暂停菜单，永远不会出现「放弃并结算」确认框。
-        # 以前这里按 ESC 再点一个固定"撤退"坐标，点空之后就退化成一路按 ESC（实机抽风）。
-        # 现在只要怀疑在战斗中就不按 ESC，等这场打完再继续退（自动战斗开着）。
-        if self._in_battle_likely():
-            CUS_LOGGER.info("当前在战斗中，等这场打完再退出（战斗中按 ESC 无效）")
-            return 0
-
-        max_attempts = 15
-        timeout = 6
-        deadline = time.monotonic() + timeout
-
-        for attempt in range(max_attempts):
-            if time.monotonic() >= deadline:
-                break
-
-            if self._stop:
-                CUS_LOGGER.info("检测到停止标志，提前退出检测终止")
-                return 0
-
-            self.ts.forward(self.get_screen())
-
-            if self.click_text(
-                text="放弃并结算",
-                box=self.EXIT_CONFIRM_BOX,
-                click=False,
-                allow_fail=True,
-            ):
-                CUS_LOGGER.debug("检测到退出页面")
-                self.exit_started = True
-                return 1
-
-            # 战斗中按 ESC 是无效动作：先等战斗结束（结算画面由「战斗结束后」动作负责）
-            if self._in_battle_likely():
-                CUS_LOGGER.info("还在战斗界面，等战斗结束后再退出")
-                return 0
-
-            CUS_LOGGER.debug(
-                f"未检测到退出页面，第 {attempt + 1}/{max_attempts} 次按 ESC"
-            )
-
-            key_mouse_manager.press("esc")
-            key_mouse_manager.wait()
-
-        return self._exit_failed("按 ESC 后没能进入放弃并结算页面")
 
     def in_battle_screen (self):
         """当前是不是还在战斗里（战斗界面按 ESC 没用，得等结算）。"""
@@ -1708,7 +1671,6 @@ class SimulatedCurrency(CurrencyUtils):
 
     def handle_battle_finished(self):
         self.battle_click_attempts = 0
-        self.battle_in_progress = False
         if self.exit_requested:
             self.update_state("exit")
         else:
@@ -1853,12 +1815,11 @@ class SimulatedCurrency(CurrencyUtils):
         self._overlap_checked_at = now
 
         # 红条 OCR 经常糊（实测「尚未选据主角色和%环」）：精确优先，糊了用关键词兜底
-        if not self.click_text(text="尚未选择主角角色和光环",
-                               box=self.PROTAGONIST_BANNER_BOX,
-                               click=False, allow_fail=True, warning=False):
-            banner = self._box_text(self.PROTAGONIST_BANNER_BOX)
-            if not any(word in banner for word in ("尚未", "光环", "主角角色")):
-                return 0
+        # 红条 OCR 经常糊，只认稳定关键词；这里静默读：判定在选主角面板期间几乎每帧都跑，
+        # 用 click_text 会刷满「请求：尚未选择主角角色和光环响应：…」（实测一局 194 条）
+        banner = self._box_text(self.PROTAGONIST_BANNER_BOX)
+        if not any(word in banner for word in ("尚未", "光环", "主角角色")):
+            return 0
         if self.click_text(text="主角光环",
                            box=self.PROTAGONIST_TITLE_BOX,
                            click=False, allow_fail=True, warning=False):
@@ -2035,26 +1996,6 @@ class SimulatedCurrency(CurrencyUtils):
 
     EXIT_MAX_ATTEMPTS = 3
     EXIT_ACTION_NAME = "开始退出"
-    def _exit_failed(self, reason):
-        """退出没成功：解开「开始退出」的 once 锁存，让下一帧还能再试。
-
-        引擎里命中即锁存，不主动解锁的话这条动作本轮再也不会被调用——
-        日志写着"下一轮重试"却永远不重试，玩家看到的就是卡死。
-        连续失败到上限后停手，避免在错误界面上反复连按 ESC。
-        """
-        self.exit_attempts += 1
-        if self.exit_attempts < self.EXIT_MAX_ATTEMPTS:
-            self.latched_events.discard(self.EXIT_ACTION_NAME)
-            CUS_LOGGER.warning(
-                "%s，第 %d/%d 次退出未完成，下一帧重试",
-                reason, self.exit_attempts, self.EXIT_MAX_ATTEMPTS,
-            )
-        else:
-            CUS_LOGGER.warning(
-                "%s，已连续 %d 次退出失败，本轮停止重试（游戏可能停在非预期界面）",
-                reason, self.exit_attempts,
-            )
-        return 0
 
     STAGE_BOXES = ([430, 48, 515, 100], [250, 85, 330, 135])
     STAGE_UPSCALE = 3           # 原尺寸 OCR 会漏字，放大三倍才稳

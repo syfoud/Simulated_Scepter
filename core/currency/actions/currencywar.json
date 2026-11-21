@@ -60,7 +60,8 @@
                 1351,
                 621
             ],
-            "redundancy": 30
+            "redundancy": 30,
+            "interval": 2
         },
         "actions": [
             {
@@ -100,7 +101,8 @@
                 192,
                 359
             ],
-            "redundancy": 30
+            "redundancy": 30,
+            "interval": 2
         },
         "actions": [
             {
@@ -118,7 +120,8 @@
                 1043,
                 554
             ],
-            "redundancy": 30
+            "redundancy": 30,
+            "interval": 2
         },
         "actions": [
             {
@@ -139,7 +142,8 @@
                 1067,
                 864
             ],
-            "redundancy": 30
+            "redundancy": 30,
+            "interval": 2
         },
         "actions": [
             {
@@ -160,7 +164,8 @@
                 1012,
                 1033
             ],
-            "redundancy": 30
+            "redundancy": 30,
+            "interval": 2
         },
         "actions": [
             {
@@ -181,7 +186,8 @@
                 944,
                 1743,
                 976
-            ]
+            ],
+            "interval": 2
         },
         "actions": [
             {
@@ -206,7 +212,10 @@
             "redundancy": 30
         },
         "actions": [
-            "enter_battle_mode"
+            "enter_battle_mode",
+            {
+                "set_state": "currency_main"
+            }
         ]
     },
     {
@@ -223,7 +232,10 @@
             "redundancy": 30
         },
         "actions": [
-            "enter_battle_mode"
+            "enter_battle_mode",
+            {
+                "set_state": "currency_main"
+            }
         ]
     },
     {
@@ -240,7 +252,10 @@
             "redundancy": 30
         },
         "actions": [
-            "enter_battle_mode"
+            "enter_battle_mode",
+            {
+                "set_state": "currency_main"
+            }
         ]
     },
     {
@@ -617,26 +632,6 @@
         ]
     },
     {
-        "name": "战斗中",
-        "trigger": {
-            "text": "伤害",
-            "box": [
-                1793,
-                209,
-                1833,
-                231
-            ],
-            "interval": 3,
-            "redundancy": 30,
-            "condition": "currency_main"
-        },
-        "actions": [
-            {
-                "set_state": "startbattle"
-            }
-        ]
-    },
-    {
         "name": "战斗结束后",
         "trigger": {
             "text": "继续挑战",
@@ -681,7 +676,8 @@
                 203,
                 98
             ],
-            "redundancy": 30
+            "redundancy": 30,
+            "interval": 2
         },
         "actions": [
             {
@@ -706,7 +702,8 @@
                 66
             ],
             "redundancy": 30,
-            "condition": "goto_currency"
+            "condition": "goto_currency",
+            "interval": 2
         },
         "actions": [
             {
@@ -802,18 +799,23 @@
                     958,
                     898
                 ]
+            },
+            {
+                "set_state": "currency_main"
             }
         ]
     },
     {
-        "name": "开始退出",
+        "name": "退出按ESC",
         "trigger": {
             "condition": "exit",
             "state_only": true,
-            "interval": 3
+            "interval": 2
         },
         "actions": [
-            "exit"
+            {
+                "press": "esc"
+            }
         ]
     },
     {

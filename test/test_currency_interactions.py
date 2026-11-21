@@ -581,55 +581,27 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.click_box.assert_not_called()
 
 
-    @staticmethod
-    def _exit_currency(can_see_page):
+    def test_exit_is_driven_by_json_action(self):
+        """退出流程交给动作表：ESC 由「退出按ESC」按条件触发，内核不再自己跑循环。"""
+        import json
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parent.parent / "core" / "currency" / "actions" / "currencywar.json"
+        actions = json.loads(path.read_text(encoding="utf-8"))
+        action = next(a for a in actions if a["name"] == "退出按ESC")
+        self.assertEqual(action["trigger"].get("condition"), "exit")
+        self.assertTrue(action["trigger"].get("state_only"))
+        self.assertEqual(action["actions"], [{"press": "esc"}])
+        self.assertFalse(hasattr(SimulatedCurrency, "exit"))
+
+    def test_exit_request_in_battle_is_deferred(self):
+        """战斗里请求退出不能立刻进 exit，否则 JSON 的 ESC 动作会在战斗界面狂按。"""
         currency = object.__new__(SimulatedCurrency)
-        currency.get_screen = Mock(return_value="frame")
-        currency.ts = Mock()
-        currency.click_text = Mock(side_effect=can_see_page)
-        currency.is_battle_started = Mock(return_value=False)
-        currency.latched_events = set()
-        currency.exit_started = False
-        currency.exit_attempts = 0
-        currency._stop = False
-        return currency
-
-    @patch("core.currency.automation.time.monotonic", side_effect=[0] * 200)
-    @patch("core.currency.automation.time.sleep")
-    @patch("core.currency.automation.key_mouse_manager")
-    def test_exit_success_marks_started(self, _manager, _sleep, _mono):
-        currency = self._exit_currency(lambda **kwargs: True)
-
-        self.assertEqual(currency.exit(), 1)
-        self.assertTrue(currency.exit_started)
-        self.assertEqual(currency.exit_attempts, 0)
-
-    @patch("core.currency.automation.time.monotonic", side_effect=[0] * 200)
-    @patch("core.currency.automation.time.sleep")
-    @patch("core.currency.automation.key_mouse_manager")
-    def test_exit_failure_unlatches_so_it_can_retry(self, _manager, _sleep, _mono):
-        """「开始退出」带 once 锁存，失败必须解锁，否则下一帧永远不会再调 exit()。"""
-        currency = self._exit_currency(lambda **kwargs: False)
-        currency.latched_events.add(SimulatedCurrency.EXIT_ACTION_NAME)
-
-        self.assertEqual(currency.exit(), 0)
-
-        self.assertNotIn(SimulatedCurrency.EXIT_ACTION_NAME, currency.latched_events)
-        self.assertEqual(currency.exit_attempts, 1)
-
-    @patch("core.currency.automation.time.monotonic", side_effect=[0] * 200)
-    @patch("core.currency.automation.time.sleep")
-    @patch("core.currency.automation.key_mouse_manager")
-    def test_exit_stops_retrying_after_limit(self, _manager, _sleep, _mono):
-        currency = self._exit_currency(lambda **kwargs: False)
-        currency.exit_attempts = SimulatedCurrency.EXIT_MAX_ATTEMPTS - 1
-        currency.latched_events.add(SimulatedCurrency.EXIT_ACTION_NAME)
-
-        self.assertEqual(currency.exit(), 0)
-
-        # 到上限就不再解锁，避免在错误界面上反复连按 ESC
-        self.assertIn(SimulatedCurrency.EXIT_ACTION_NAME, currency.latched_events)
-
+        currency.state = "battle"
+        currency.exit_requested = False
+        SimulatedCurrency.update_state(currency, "exit")
+        self.assertEqual(currency.state, "battle")      # 状态没变
+        self.assertTrue(currency.exit_requested)        # 但记下了退出请求
 
     @staticmethod
     def _stage_currency(stage_text, exit_plane=1, counts=None):
