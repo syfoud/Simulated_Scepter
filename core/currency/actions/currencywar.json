@@ -10,7 +10,8 @@
                 558
             ],
             "interval": 3,
-            "redundancy": 30
+            "redundancy": 30,
+            "once": true
         },
         "actions": [
             "restart_on_bench_full"
