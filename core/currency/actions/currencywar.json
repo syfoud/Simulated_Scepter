@@ -1,23 +1,5 @@
 [
     {
-        "name": "备战席已满退局",
-        "trigger": {
-            "text": "备战席已满",
-            "box": [
-                740,
-                505,
-                1200,
-                558
-            ],
-            "interval": 3,
-            "redundancy": 30,
-            "once": true
-        },
-        "actions": [
-            "restart_on_bench_full"
-        ]
-    },
-    {
         "name": "关闭物品详情",
         "trigger": {
             "text": "消耗品",
