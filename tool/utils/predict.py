@@ -25,6 +25,7 @@ AIM_ENEMY_RED_GLOW_MIN = 50       # 红色光晕：R - G 的下限，排除黄/�
 AIM_ENEMY_RING_BAND = 2           # 圆环半径容差，单位像素
 AIM_ENEMY_RING_COVERAGE_MIN = 0.75
 AIM_ENEMY_CENTER_RED_MIN = 60
+AIM_ENEMY_CENTER_YELLOW_MAX = 30      # 中心 G-B 上限：金色招牌/花纹的中心发黄（G-B 高），红准星中心 G、B 都低
 AIM_ENEMY_RED_RING_MIN = 0.80     # 红色圆环的角度覆盖率下限，排除只有白/黄图案的候选
 AIM_ENEMY_HOUGH_DP = 1.0
 AIM_ENEMY_HOUGH_PARAM1 = 80
@@ -115,11 +116,12 @@ def _enemy_masks(image):
     white = cv2.bitwise_and(white, mask_interact_roi)
 
     redness = r - g
+    yellowness = g - b
     glow = cv2.dilate(
         (redness > AIM_ENEMY_RED_GLOW_MIN).astype(np.uint8) * 255,
         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
     )
-    return white, glow, redness
+    return white, glow, redness, yellowness
 
 
 def _ring_coverage(white, center, radius, threshold=0):
@@ -155,6 +157,16 @@ def _center_redness(redness, center, radius):
     return float(redness[y0:y1, x0:x1].mean())
 
 
+def _center_yellowness(yellowness, center, radius):
+    """返回候选准星中心小圆内 G-B 的均值；金色招牌/花纹会明显高于红准星。"""
+    x, y = center
+    inner = max(3, int(radius * 0.25))
+    height, width = yellowness.shape
+    y0, y1 = max(0, y - inner), min(height, y + inner + 1)
+    x0, x1 = max(0, x - inner), min(width, x + inner + 1)
+    return float(yellowness[y0:y1, x0:x1].mean())
+
+
 def _hough_in_crop(white, center, half=AIM_ENEMY_CROP_HALF):
     """只在候选中心附近 220×220 的原分辨率白环上跑霍夫，避免全帧霍夫的开销。"""
     height, width = white.shape
@@ -180,7 +192,10 @@ def _hough_in_crop(white, center, half=AIM_ENEMY_CROP_HALF):
     ]
 
 
-def _contour_candidates(redness, glow, white, coverage_min, center_red_min, offset):
+def _contour_candidates(
+    redness, glow, white, yellowness, coverage_min, center_red_min, offset,
+    apply_gold_filter=True,
+):
     """连通块初筛：红色连通块 -> 粗中心 -> 220×220 裁剪霍夫 -> 白环/红环/中心红校验。"""
     red_mask = (redness > AIM_ENEMY_RED_CONTOUR_MIN).astype(np.uint8) * 255
     red_mask = cv2.morphologyEx(
@@ -238,6 +253,12 @@ def _contour_candidates(redness, glow, white, coverage_min, center_red_min, offs
             center_red = _center_redness(redness, (x, y), best_radius)
             if center_red < center_red_min:
                 continue
+            if (
+                apply_gold_filter
+                and _center_yellowness(yellowness, (x, y), best_radius)
+                >= AIM_ENEMY_CENTER_YELLOW_MAX
+            ):
+                continue
             candidates.append({
                 "center": (x + offset[0], y + offset[1]),
                 "radius": best_radius,
@@ -274,18 +295,19 @@ def _right_masks(image):
         subtract_blur(gray, 3, negative=False),
     )
     redness = r.astype(np.int16) - g.astype(np.int16)
+    yellowness = g.astype(np.int16) - b.astype(np.int16)
     glow = cv2.dilate(
         (redness > AIM_ENEMY_RED_GLOW_MIN).astype(np.uint8) * 255,
         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)),
     )
-    return white, glow, redness
+    return white, glow, redness, yellowness
 
 
 def enemy_candidates(image):
     """返回敌人准星候选点：红色连通块初筛 + 220×220 裁剪霍夫 + 白环/中心红校验。"""
-    white, glow, redness = _enemy_masks(image)
+    white, glow, redness, yellowness = _enemy_masks(image)
     return _contour_candidates(
-        redness, glow, white,
+        redness, glow, white, yellowness,
         AIM_ENEMY_RING_COVERAGE_MIN,
         AIM_ENEMY_CENTER_RED_MIN,
         (AIM_ENEMY_ROI_LEFT, AIM_ENEMY_ROI_TOP),
@@ -294,12 +316,13 @@ def enemy_candidates(image):
 
 def predict_right(image):
     """检测右侧 HUD 区域的准星，返回全屏坐标；没有则 None。"""
-    white, glow, redness = _right_masks(image)
+    white, glow, redness, yellowness = _right_masks(image)
     candidates = _contour_candidates(
-        redness, glow, white,
+        redness, glow, white, yellowness,
         AIM_ENEMY_RIGHT_COVERAGE_MIN,
         AIM_ENEMY_RIGHT_CENTER_RED_MIN,
         (AIM_ENEMY_RIGHT_STRIP_LEFT, AIM_ENEMY_ROI_TOP),
+        apply_gold_filter=False,
     )
     if not candidates:
         return None

@@ -59,6 +59,16 @@ class CenterRednessTest(unittest.TestCase):
         self.assertLess(aim._center_redness(redness, (60, 60), 40), 10)
 
 
+class CenterYellownessTest(unittest.TestCase):
+    def test_gold_center_is_yellow(self):
+        yellowness = np.full((120, 120), 80, dtype=np.int16)
+        self.assertGreaterEqual(aim._center_yellowness(yellowness, (60, 60), 40), 30)
+
+    def test_red_center_is_not_yellow(self):
+        yellowness = np.full((120, 120), -10, dtype=np.int16)
+        self.assertLess(aim._center_yellowness(yellowness, (60, 60), 40), 30)
+
+
 class SceneryRejectTest(unittest.TestCase):
     def test_horizontal_red_bar_is_rejected(self):
         glow = np.zeros((401, 401), dtype=np.uint8)
