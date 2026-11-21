@@ -1613,27 +1613,7 @@ class SimulatedCurrency(CurrencyUtils):
         self.update_state("exit")
         return 1
 
-    def is_battle_started(self):
-        '''是否处于战斗状态。
 
-        只认战斗界面独有的「自动战斗」按钮：备战/商店界面上有「持续伤害」这类玩法标签，
-        只认「伤害」会在普通界面上误判成"在战斗里"，退出流程就会去按 ESC、点撤退，一顿乱点。
-        '''
-        if self.click_text(
-            text="自动战斗",
-            box=self.BATTLE_HUD_BOX,
-            click=False,
-            allow_fail=True,
-        ):
-            CUS_LOGGER.debug("检测到已进入战斗（自动战斗按钮在）")
-            return True
-
-        return False
-
-    def _on_prepare_screen (self):
-        """备战界面特征（顶部「备战阶段」）——看到它就说明**不在**战斗里。"""
-        return self.click_text(text="备战阶段", box=self.PREPARE_STAGE_BOX,
-                               click=False, allow_fail=True, warning=False)
 
     def update_state (self, state):
         """战斗中请求退出要等这场打完。
@@ -1648,19 +1628,7 @@ class SimulatedCurrency(CurrencyUtils):
         super().update_state(state)
 
 
-    def in_battle_screen (self):
-        """当前是不是还在战斗里（战斗界面按 ESC 没用，得等结算）。"""
-        for text, box in (
-            ("自动战斗", self.BATTLE_HUD_BOX),
-            ("挑战成功", self.BATTLE_HUD_BOX),
-            ("战斗结束", self.BATTLE_HUD_BOX),
-        ):
-            if self.click_text(text=text, box=box, click=False, allow_fail=True):
-                return True
-        return False
 
-    def reset_battle_click_attempts (self):
-        self.battle_click_attempts = 0
 
     def handle_battle_finished(self):
         self.battle_click_attempts = 0
