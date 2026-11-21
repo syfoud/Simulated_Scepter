@@ -110,7 +110,9 @@ class StateKernel:
                 interval = trigger.get("interval")
                 if interval and self.action_history and self.action_history[-1] == name:
                     if time.time() - self.action_time < interval:
-                        return name, 1
+                        # 冷却期内不能占住整帧：否则触发词常驻的动作会把后面的动作全部饿死
+                        # （实测备战界面的「备战席已满」横幅让整局卡了 8 小时）。
+                        continue
                 CUS_LOGGER.debug("%s触发并执行指令%s，条件：%s", factor, name,
                                  trigger.get("text") or trigger.get("photo") or "state_only")
                 result = None

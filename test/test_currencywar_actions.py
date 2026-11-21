@@ -53,7 +53,8 @@ class CurrencyWarActionsTest(unittest.TestCase):
             once_names,
             # 「啊哈大悦」不在这里：它去掉 once 了，点不掉时下一轮还要能重点
             # 「开始退出」不在这里：退出没成功要能重试（实测 once 之后再也退不出去）
-            {"盛会之星", "领航员", "命运圣杯祈愿试炼", "独家代言"},
+            # 「备战席已满退局」也在这里：触发词是常驻横幅，once 保证一局只退一次
+            {"盛会之星", "领航员", "命运圣杯祈愿试炼", "独家代言", "备战席已满退局"},
         )
 
     def test_item_detail_confirms_selection_before_escape(self):
@@ -251,6 +252,44 @@ class CurrencyWarActionsTest(unittest.TestCase):
             action = next(a for a in self.actions if a["name"] == name)
             self.assertIn({"set_state": "currency_main"}, action["actions"],
                           f"{name} 没把状态从 exit 拉回来")
+
+    def test_interval_cooldown_does_not_eat_the_frame(self):
+        """interval 冷却中的动作不能吃掉整帧，否则常驻触发词会饿死后面的动作。
+
+        实机：备战界面的「备战席已满」横幅让排在最前面的动作每帧占满，整局卡了 8 小时。
+        """
+        import time as _time
+
+        from core.common.engine import StateKernel
+
+        class Kernel:
+            def __init__(self):
+                self.action_history = ["甲"]
+                self.action_time = _time.time()      # 刚跑过，还在冷却
+                self.latched_events = set()
+                self.state = "exit"
+                self.ts = type("T", (), {
+                    "find_with_box": lambda *a, **k: [
+                        {"raw_text": "备战席已满", "box": [1, 1, 2, 2]}],
+                })()
+
+            def get_screen(self):
+                return None
+
+            def do_action(self, step):
+                return 1
+
+            def static_completed(self, name, result):
+                pass
+
+        groups = {
+            "甲": [{"name": "甲", "trigger": {"text": "备战席已满", "interval": 30,
+                                             "box": [0, 0, 1920, 1080]}, "actions": ["x"]}],
+            "乙": [{"name": "乙", "trigger": {"text": "备战席已满",
+                                             "box": [0, 0, 1920, 1080]}, "actions": ["y"]}],
+        }
+        name, _ = StateKernel.match_actions(Kernel(), json_file=groups, skip_check=True)
+        self.assertEqual(name, "乙")             # 甲在冷却，乙照样能跑
 
 
 if __name__ == "__main__":
