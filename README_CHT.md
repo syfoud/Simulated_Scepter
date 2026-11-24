@@ -6,7 +6,7 @@
 
 《崩壞：星穹鐵道》的寰宇蝗災極難成就自動助手，一鍵自動化助力完成。
 ![模擬宇宙](doc/insect.png)
-![模擬宇宙](doc/warrior.png)
+![image](doc/iron_blood.png)
  軟體基於圖像識別，不支援任何非綠色作弊功能（如抓包，逆向）。
 
 
@@ -50,89 +50,138 @@
 
 # 功能 | Function
 
-## 智能擇路  
+## 智能擇路
 
 ![image](doc/select.png)
 
-## 精準索敵  
+## 精準索敵
 
 ![image](doc/battle.png)
 
 ## 鐵血戰士
 ![image](doc/iron_blood.png)
 
-## 彈指一揮(絕讚測試中)
+## 貨幣戰爭
+
+獨立的貨幣戰爭模組，用於自動收集投資策略、投資環境、開局詞綴等圖鑑
+
+## 彈指一揮(測試中)
 ![image](doc/finger_snap.png)
 
 ## 進階功能
 
-### 影片錄製  
+### 影片錄製
 
-以愛的名義，她將逝去的一切盡數珍藏。。。直到時間的盡頭
+以愛的名義，她將逝去的一切盡數珍藏...直到時間的盡頭
 ![image](doc/end.png)
 至少，這樣的結局足夠溫柔
-### 提前輪迴  
 
-若此世無法帶來拯救，那就為它帶來毀滅。。。（極低機率達成40殺則立即重開）
+### 提前輪迴
+
+若此世無法帶來拯救，那就為它帶來毀滅...（極低機率達成40殺則立即重開）
 ![image](doc/retry.png)
+
 ## 地圖頻率分析
-```plaintext
-sqlite3 user/backup/map_visits.db "SELECT * FROM map_visits ORDER BY visit_count DESC;"
+
+對應 `user/backup/map_visits.db`。包含['map_id', 'visit_count']兩欄。
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/map_visits.db').execute('SELECT * FROM map_visits ORDER BY visit_count DESC;'))))"
 ```
 
 ## 節點日誌查詢
-```plaintext
-sqlite3 user/backup/node_log.db "SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
+
+對應 `user/backup/node_log.db`。包含['id', 'created_at', 'data']三欄。
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/node_log.db').execute(\"SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```
 
 ## 事件日誌查詢(emergency)
-```plaintext
-sqlite3 user/backup/emergency.db "SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
-sqlite3 user/backup/emergency.db "DELETE FROM node_log;"
+
+對應 `user/backup/emergency.db`。包含['id', 'created_at', 'data']三欄。
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/emergency.db').execute(\"SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```
 
 ## 解除安裝
 
-資料夾全部刪除即可
+刪除整個資料夾即可
 ![image](doc/delete.png)
-然後。。。就走向明天吧
+然後...就走向明天吧
 
 
 ----------------------------------------------------------------------------------------------
 
 ## 相容性
 
-只支援1080p及以上螢幕(x>=1920,視窗化或全螢幕)，關閉hdr，文字語言選擇簡體中文，遊戲介面不能有任何遮擋,需置於前台。
+只支援1920x1080及以上螢幕，關閉hdr。
+遊戲本體解析度必須為1920x1080（視窗化和全螢幕都可），渲染精度至少1.0
+文字語言選擇簡體中文，遊戲介面不能有任何遮擋，需置於前台。
 
-由於onnxruntime環境，電腦環境需注意win10版本是否大於等於2004，win11預設支援 ，同時建議具有2G以上顯存運行本軟體
+由於onnxruntime環境，電腦環境需注意win10版本是否大於等於2004，win11預設支援，同時建議具有2G以上顯存運行本軟體。
 
 下載解壓目錄不允許有中文路徑！！
-# 下載 | Download 
-方法一：直接下載打包好的發行版（推薦）* ![](https://img.shields.io/badge/QQ%201群[開發意向優先]-1072802257-4e4c97)* ![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
 
-方法二：自行下載原始碼本地部署，沒接觸過python的，請忽視下述教程，可以直接前往交流群下載相關資源
+# 下載 | Download
 
-**快速部署**
+**方法一：直接下載打包好的版本（推薦）**
 
-```plaintext
+- QQ群檔案/模擬權杖程式&密鑰/SimSce-v1.x.x.zip
+  - ![](https://img.shields.io/badge/QQ%201群-1072802257-4e4c97)
+![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
+  - 這是群內發行版（穩定版），相對較為穩定，bug較少。但不包含最新功能和bug修復內容。
+- Github：[Release](https://github.com/syfoud/Simulated_Scepter/releases) ，最新版本Release - Assets - SimSce-v1.x.x.zip
+  - 這是最新打包測試版，更新頻繁，相對不穩定，bug較多。包含最新更新內容，可從同頁面中查看更新詳情。
+
+
+**方法二：自行下載原始碼本地部署**
+
+沒接觸過 Python 和 Git 的，請忽視下述教程，直接前往交流群下載相關資源。
+
+1. 首先 git clone 本專案或 Download Zip 並解壓。
+2. 開啟程式所在資料夾，選取上方網址列，輸入 cmd 並按 Enter。
+3. （安裝過 uv 的跳過本步驟）依序執行以下三條命令以安裝 uv：
+```cmd
+powershell -ExecutionPolicy ByPass -c "iex (iwr -useb https://astral.sh/uv/install.ps1)"
+set Path=%USERPROFILE%\.local\bin;%Path%
 uv sync
+```
+4. 輸入以下命令開啟程式（`uv run` 通常會自動補齊依賴，即 `uv sync`）。
+```cmd
 uv run new_gui.py
 ```
+5. 未來想再次啟動程式時，重複第 2、4 步。
 
-若預設的清華源無法使用，會依序嘗試清華、阿里雲、中科大和 PyPI 官方源，某個源下載失敗就自動換下一個，全部失敗才報錯停止。
 
-```plaintext
-powershell -ExecutionPolicy Bypass -File scripts/uv_fallback.ps1
+**啟動後自動運行任務**
+
+可以透過指定參數，在啟動時運行設定中的內核和腳本，並指定等待時間。
+```powershell
+uv run new_gui.py --start-task --engine:ironblood --file:insect.json --start-delay:10
 ```
 
-指令碼預設執行 `uv sync`；也可以換成其它 uv 命令，例如 `powershell -ExecutionPolicy Bypass -File scripts/uv_fallback.ps1 -Executable uvx -Arguments 'ruff check .'`。
+內核 `--engine:`、腳本 `--file:` 和延遲參數 `--start-delay:` 均為可選項；未使用內核與腳本選項時，預設使用設定檔中的參數；延遲參數未設定時預設等待 5 秒。選項名必須小寫，內核 ID 與腳本名不區分大小寫。
+
+預設內核為 `IronBlood`、預設腳本為 `core/any_fate/actions/insect.json`（內核 ID 與腳本名均不區分大小寫，也可以只寫裸檔案名）。啟動參數填寫錯誤時會彈窗提醒，程式仍會正常開啟，但本次不會執行自動任務。
+
+**Rust 採樣加速彈指一揮節點圖分析**
+
+先安裝 Rust stable 工具鏈，再執行：
+
+```plaintext
+uv run python scripts/build_countdown_native.py
+```
+
+首次部署或修改 Rust 原始碼後執行一次即可；正式打包時會自動編譯並包含動態庫。
+
 ----------------------------------------------------------------------------------------------
 
 # 相關配置建議
 
-一號位角色建議順序為白厄、黃泉、銀狼LV.999、其它遠程平a角色,其餘序號使用角色任意，隊伍需至少3人方能正常運行腳本
+內核按 `core/<模組>/` 組織，運行入口與齒輪設定視窗透過 `module.ini` 動態發現。模組獨立保存程式碼、設定和 UI；新增設定項無需修改主視窗。目錄、繼承關係及舊設定遷移見[內核模組與獨立設定介面](docs/development/内核配置界面.md)。
 
-請注意！！！！！ 開始運行/開始校準之後就不要移動遊戲視窗了！避免腳本錯誤的執行！！要移動請先按f5停止自動化！
+- 一號位建議：白厄、黃泉、銀狼 LV.999 等能夠秒殺小怪的角色（尚未適配姬子·啟行），或遠程角色；
+- 二號位建議：托帕、銀狼 LV.999 等抓豬成功率較高的角色；
+- 其餘位置任意。推薦使用可以增加秘技點的角色（白厄、姬子·啟行）以及開局回血的生存位（例如 丹恒·騰荒 +「我們是地火」光錐）。
 
 ### 校準
 
@@ -142,32 +191,29 @@ powershell -ExecutionPolicy Bypass -File scripts/uv_fallback.ps1
 
 改變滑鼠dpi可能會影響校準值，此時需要重新校準。
 
+**請注意：開始運行/開始校準之後不要移動遊戲視窗，避免腳本執行動作過程中出現錯誤。要移動請先按end停止自動化。**
+
 ## GUI使用方法
 
 **第一次運行**
 
-按照下述系統設定配圖調整自己的系統設定，在遊戲中設定「自動沿用戰鬥設定」，在寰宇蝗災介面的毀滅的配隊中選好隊伍角色
+調整自己的系統設定，在遊戲中設定「自動沿用戰鬥設定」，在寰宇蝗災介面的毀滅的配隊中選好隊伍角色
 
 **運行權杖**
 
-點擊」擢升鐵血戰士「運行
+點擊「擢升鐵血戰士」運行
 
-注意！！！！！ 開始運行/開始校準之後就不要移動遊戲視窗了！要移動請先停止自動化！
+**運行貨幣戰爭**
 
-F5/『停止任務』按鈕停止運行。
-
-**系統設定**
-
-![畫質](doc/config.png)
-
-
+在「貨幣戰爭設定」頁面選擇退出位面並儲存，然後點擊「貨幣戰爭自動收集」運行。
 
 ----------------------------------------------------------------------------------------------
 
 # 開發交流-玩家社群-助力毀滅 | Destruction
-* 包含本權杖系統穩定發行版.
-* ![](https://img.shields.io/badge/QQ%201群[開發意向優先]-1072802257-4e4c97)
+- 包含本權杖系統穩定發行版.
+- ![](https://img.shields.io/badge/QQ%201群-1072802257-4e4c97)
 ![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
+
 ----------------------------------------------------------------------------------------------
 
 # 支援開發 | Star or Buy Coffee

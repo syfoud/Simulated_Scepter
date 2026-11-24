@@ -6,8 +6,8 @@ This software is open-sourced under the [AGPL 3.0 License](https://github.com/sy
 
 An automated assistant for the ultra-difficult achievement in the Swarm Disaster of "Honkai: Star Rail", providing one-click automation to help you complete it.
 ![Simulated Universe](doc/insect.png)
-![Simulated Universe](doc/warrior.png)
-The software is based on image recognition and does not support any non-legitimate cheating functions (such as packet capture, reverse engineering).
+![image](doc/iron_blood.png)
+ The software is based on image recognition and does not support any non-legitimate cheating functions (such as packet capture, reverse engineering).
 
 
 ----------------------------------------------------------------------------------------------
@@ -50,45 +50,56 @@ The act of downloading, installing, or using this software by users constitutes 
 
 # Features | Function
 
-## Intelligent Path Selection  
+## Intelligent Path Selection
 
 ![image](doc/select.png)
 
-## Precise Target Locking  
+## Precise Target Locking
 
 ![image](doc/battle.png)
 
 ## Iron Warrior
 ![image](doc/iron_blood.png)
 
+## Currency War
+
+A standalone Currency War module that automatically collects the compendium entries for investment strategies, investment environments, opening affixes, and more.
+
 ## Finger Snap (In Testing)
 ![image](doc/finger_snap.png)
 
 ## Advanced Features
 
-### Video Recording  
+### Video Recording
 
 In the name of love, she treasures everything that has passed away... until the end of time
 ![image](doc/end.png)
 At least, such an ending is gentle enough
-### Early Reincarnation  
 
-If this world cannot bring salvation, then bring it destruction... (restart immediately if there is an extremely low probability of achieving 40 kills)
+### Early Reincarnation
+
+If this world cannot bring salvation, then bring it destruction... (if 40 kills are achieved, which is extremely unlikely, restart immediately)
 ![image](doc/retry.png)
+
 ## Map Frequency Analysis
-```plaintext
-sqlite3 user/backup/map_visits.db "SELECT * FROM map_visits ORDER BY visit_count DESC;"
+
+Corresponds to `user/backup/map_visits.db`, with the two columns ['map_id', 'visit_count'].
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/map_visits.db').execute('SELECT * FROM map_visits ORDER BY visit_count DESC;'))))"
 ```
 
 ## Node Log Query
-```plaintext
-sqlite3 user/backup/node_log.db "SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
+
+Corresponds to `user/backup/node_log.db`, with the three columns ['id', 'created_at', 'data'].
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/node_log.db').execute(\"SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```
 
 ## Event Log Query (emergency)
-```plaintext
-sqlite3 user/backup/emergency.db "SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
-sqlite3 user/backup/emergency.db "DELETE FROM node_log;"
+
+Corresponds to `user/backup/emergency.db`, with the three columns ['id', 'created_at', 'data'].
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/emergency.db').execute(\"SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```
 
 ## Uninstall
@@ -102,37 +113,75 @@ Then... walk towards tomorrow
 
 ## Compatibility
 
-Only supports 1080p and above screens (x>=1920, windowed or fullscreen), HDR disabled, text language set to Simplified Chinese, game interface must not have any obstructions, and must be in the foreground.
+Only supports 1920x1080 and above screens, with HDR disabled.
+The game resolution must be 1920x1080 (windowed or fullscreen), and the render quality must be at least 1.0
+Set the text language to Simplified Chinese. The game window must not be obstructed and must stay in the foreground.
 
-Due to the onnxruntime environment, please ensure Windows 10 version is greater than or equal to 2004 (Windows 11 is supported by default). It is recommended to have more than 2GB of VRAM to run this software.
+Due to the onnxruntime environment, please ensure Windows 10 is version 2004 or later (Windows 11 is supported by default). More than 2 GB of VRAM is recommended.
 
-The download and extraction directory cannot contain a Chinese path!!
-# Download | Download 
-Method 1: Directly download the packaged release version (recommended) * ![](https://img.shields.io/badge/QQ%20Group%201[Dev%20Intent%20Priority]-1072802257-4e4c97)* ![](https://img.shields.io/badge/QQ%20Group%202-870863632-4e4c97)
+The download and extraction directory must not contain Chinese characters in its path!!
 
-Method 2: Download the source code and deploy locally. If you have no experience with Python, please ignore the following tutorial and go directly to the QQ group to download related resources.
+# Download | Download
 
-**Quick Deployment**
+**Method 1: Download the packaged build (recommended)**
 
-```plaintext
+- QQ group files / Simulated Scepter program & key / SimSce-v1.x.x.zip
+  - ![](https://img.shields.io/badge/QQ%201群-1072802257-4e4c97)
+![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
+  - This is the in-group release (stable version). It is relatively stable and has fewer bugs, but it does not include the latest features and bug fixes.
+- GitHub: [Release](https://github.com/syfoud/Simulated_Scepter/releases), latest release - Assets - SimSce-v1.x.x.zip
+  - This is the latest packaged test build. It is updated frequently, is relatively unstable, and has more bugs. It includes the latest updates, whose details can be found on the same page.
+
+
+**Method 2: Download the source code and deploy locally**
+
+If you have no experience with Python or Git, ignore the tutorial below and download the resources from the community group instead.
+
+1. First, git clone this project, or Download Zip and extract it.
+2. Open the program folder, select the address bar at the top, type cmd and press Enter.
+3. (Skip this step if uv is already installed.) Run the following three commands in order to install uv:
+```cmd
+powershell -ExecutionPolicy ByPass -c "iex (iwr -useb https://astral.sh/uv/install.ps1)"
+set Path=%USERPROFILE%\.local\bin;%Path%
 uv sync
+```
+4. Run the following command to start the program (`uv run` normally installs missing dependencies automatically, i.e. `uv sync`).
+```cmd
 uv run new_gui.py
 ```
+5. To start the program again later, repeat steps 2 and 4.
 
-If the default Tsinghua mirror is unavailable, it tries Tsinghua, Aliyun, USTC and the official PyPI index in order, moving to the next one when a download fails, and only stops with an error when every mirror has failed.
 
-```plaintext
-powershell -ExecutionPolicy Bypass -File scripts/uv_fallback.ps1
+**Run a task automatically on startup**
+
+You can pass arguments to run the engine and script from the configuration when the program starts, together with a wait time.
+```powershell
+uv run new_gui.py --start-task --engine:ironblood --file:insect.json --start-delay:10
 ```
 
-The script runs `uv sync` by default; other uv commands work too, e.g. `powershell -ExecutionPolicy Bypass -File scripts/uv_fallback.ps1 -Executable uvx -Arguments 'ruff check .'`.
+The engine (`--engine:`), script (`--file:`) and delay (`--start-delay:`) arguments are all optional. Without the engine and script options, the values in the settings file are used; without the delay option, the program waits 5 seconds by default. Option names must be lowercase, while engine IDs and script names are case-insensitive.
+
+The default engine is `IronBlood` and the default script is `core/any_fate/actions/insect.json` (engine IDs and script names are case-insensitive, and a bare file name is also accepted). If the startup arguments are invalid, a dialog reminds you; the program still opens normally but does not run a task this time.
+
+**Rust-accelerated node graph analysis for Finger Snap**
+
+Install the Rust stable toolchain first, then run:
+
+```plaintext
+uv run python scripts/build_countdown_native.py
+```
+
+Run it once on first deployment or after modifying the Rust source; official builds compile and bundle the dynamic library automatically.
+
 ----------------------------------------------------------------------------------------------
 
 # Configuration Recommendations
 
-It is recommended to place characters in the first slot in the following order: Bai'e, Huangquan, Silver Wolf LV.999, or other ranged basic attack characters. Characters in other slots can be arbitrary. The team needs at least 3 members for the script to run properly.
+Engines are organized under `core/<module>/`; the run entry point and the gear settings window are discovered dynamically through `module.ini`. Each module keeps its own code, configuration and UI, so new settings do not require changes to the main window. See [Engine modules and standalone settings UI](docs/development/内核配置界面.md) for the directory layout, inheritance and legacy configuration migration.
 
-PLEASE NOTE!!!!! Do not move the game window after starting execution/calibration! Avoid incorrect script execution!! If you need to move it, press F5 to stop automation first!
+- Slot 1: characters that can instantly kill small enemies, such as Phainon, Acheron and Silver Wolf LV.999 (Himeko • Nova is not supported yet), or ranged characters.
+- Slot 2: characters with a high success rate at catching Warp Trotters, such as Topaz and Silver Wolf LV.999.
+- Other slots: any character. Characters that increase Technique Points (Phainon, Himeko • Nova) and a sustain slot that heals at the start of the battle (for example Dan Heng • Permansor Terrae with the "We Are Wildfire" Light Cone) are recommended.
 
 ### Calibration
 
@@ -142,32 +191,29 @@ Enter the game, teleport your character to Herta's Office, then click the calibr
 
 Changing mouse DPI may affect the calibration value, requiring recalibration at that time.
 
-## GUI Usage Instructions
+**Note: Do not move the game window after starting the run/calibration, otherwise the script may perform actions incorrectly. To move it, press end to stop the automation first.**
+
+## GUI Usage
 
 **First Run**
 
-Adjust your system settings according to the system configuration images below. In the game, set "Automatically Apply Battle Settings", and select your team characters in the Destruction lineup on the Swarm Disaster interface.
+Adjust your system settings. In the game, enable "Apply Battle Settings Automatically", and select your team characters in the Destruction lineup on the Swarm Disaster screen.
 
-**Run Scepter**
+**Run the Scepter**
 
 Click "Promote Iron Warrior" to run.
 
-NOTE!!!!! Do not move the game window after starting execution/calibration! If you need to move it, stop automation first!
+**Run Currency War**
 
-Press F5 or the "Stop Task" button to stop execution.
-
-**System Settings**
-
-![Graphics Quality](doc/config.png)
-
-
+On the "Currency War Settings" page, select the exit plane and save, then click "Currency War Auto Collection" to run.
 
 ----------------------------------------------------------------------------------------------
 
-# Development Communication - Player Community - Aid Destruction | Destruction
-* Contains stable releases of this Scepter system.
-* ![](https://img.shields.io/badge/QQ%20Group%201[Dev%20Intent%20Priority]-1072802257-4e4c97)
-![](https://img.shields.io/badge/QQ%20Group%202-870863632-4e4c97)
+# Development Chat - Player Community - Aid Destruction | Destruction
+- Contains stable releases of this Scepter system.
+- ![](https://img.shields.io/badge/QQ%201群-1072802257-4e4c97)
+![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
+
 ----------------------------------------------------------------------------------------------
 
 # Support Development | Star or Buy Coffee

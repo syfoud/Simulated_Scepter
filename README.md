@@ -6,7 +6,7 @@
 
 《崩坏:星穹铁道》的寰宇蝗灾极难成就自动助手，一键自动化助力完成。
 ![模拟宇宙](doc/insect.png)
-![模拟宇宙](doc/warrior.png)
+![image](doc/iron_blood.png)
  软件基于图像识别，不支持任何非绿色作弊功能（如抓包，逆向）。
 
 
@@ -63,79 +63,94 @@
 
 ## 货币战争
 
-独立的货币战争模块，用于自动收集投资策略
+独立的货币战争模块，用于自动收集投资策略、投资环境、开局词缀等图鉴
 
-## 弹指一挥(绝赞测试中)
+## 弹指一挥(测试中)
 ![image](doc/finger_snap.png)
 
 ## 进阶功能
 
 ### 视频录制
 
-以爱的名义，她将逝去的一切尽数珍藏。。。直到时间的尽头
+以爱的名义，她将逝去的一切尽数珍藏...直到时间的尽头
 ![image](doc/end.png)
 至少，这样的结局足够温柔
+
 ### 提前轮回
 
-若此世无法带来拯救，那就为它带来毁灭。。。（极低概率实现40杀则立即重开）
+若此世无法带来拯救，那就为它带来毁灭...（极低概率实现40杀则立即重开）
 ![image](doc/retry.png)
+
 ## 地图频率分析
-```plaintext
-sqlite3 user/backup/map_visits.db "SELECT * FROM map_visits ORDER BY visit_count DESC;"
+
+对应 `user/backup/map_visits.db`。包含['map_id', 'visit_count']两列。
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/map_visits.db').execute('SELECT * FROM map_visits ORDER BY visit_count DESC;'))))"
 ```
 
 ## 节点日志查询
-```plaintext
-sqlite3 user/backup/node_log.db "SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
+
+对应`user/backup/node_log.db`。包含['id', 'created_at', 'data']三列。
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/node_log.db').execute(\"SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```
 
 ## 事件日志查询(emergency)
-```plaintext
-sqlite3 user/backup/emergency.db "SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;"
-sqlite3 user/backup/emergency.db "DELETE FROM node_log;"
+
+对应`user/backup/emergency.db`。包含['id', 'created_at', 'data']三列。
+```cmd
+python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/emergency.db').execute(\"SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```
 
 ## 卸载
 
-文件夹全部删除即可
+删除整个文件夹即可
 ![image](doc/delete.png)
-然后。。。就走向明天吧
+然后...就走向明天吧
 
 
 ----------------------------------------------------------------------------------------------
 
 ## 兼容性
 
-只支持1080p及以上屏幕(x>=1920,窗口化或全屏幕)，关闭hdr，文本语言选择简体中文，游戏界面不能有任何遮挡,需置于前台。
+只支持1920x1080及以上屏幕，关闭hdr。
+游戏本体分辨率必须为1920x1080（窗口化和全屏都可），渲染精度至少1.0
+文本语言选择简体中文，游戏界面不能有任何遮挡，需置于前台。
 
-由于onnxruntime环境，电脑环境需注意win10版本是否大于等于2004，win11默认支持 ，同时建议具有2G以上显存运行本软件
+由于onnxruntime环境，电脑环境需注意win10版本是否大于等于2004，win11默认支持，同时建议具有2G以上显存运行本软件。
 
 下载解压目录不允许有中文路径！！
+
 # 下载 | Download
-方法一：直接下载打包好的发行版（推荐）* ![](https://img.shields.io/badge/QQ%201群[开发意向优先]-1072802257-4e4c97)* ![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
 
-方法二：自行下载源码本地部署，没接触过python的，请忽视下述教程，可以直接前往交流群下载相关资源
+**方法一：直接下载打包好的版本（推荐）**
 
-**配置环境**
+- QQ群文件/模拟权杖程序&密钥/SimSce-v1.x.x.zip
+  - ![](https://img.shields.io/badge/QQ%201群-1072802257-4e4c97)
+![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
+  - 这是群内发行版（稳定版），相对较为稳定，bug较少。但不包含最新功能和bug修复内容。
+- Github：[Release](https://github.com/syfoud/Simulated_Scepter/releases) ，最新版本Release - Assets - SimSce-v1.x.x.zip
+  - 这是最新打包测试版，更新频繁，相对不稳定，bug较多。包含最新更新内容，可从同页面中查看更新详情。
 
-```plaintext
+
+**方法二：自行下载源码本地部署**
+
+没接触过 Python 和 Git 的，请忽视下述教程，直接前往交流群下载相关资源。
+
+1. 首先git clone本项目或Download Zip并解压。
+2. 打开程序所在文件夹，选中上方地址栏，输入cmd并回车。
+3. （安装过uv的跳过本步骤）依次执行以下三条命令以安装uv：
+```cmd
+powershell -ExecutionPolicy ByPass -c "iex (iwr -useb https://astral.sh/uv/install.ps1)"
+set Path=%USERPROFILE%\.local\bin;%Path%
 uv sync
 ```
-上条指令如因网络问题不可用，也可以换成其它 uv 命令，例如 `powershell -ExecutionPolicy Bypass -File scripts/uv_fallback.ps1 -Executable uvx -Arguments 'ruff check .'`。
-
-Rust 采样加速：先安装 Rust stable 工具链，再执行：
-
-```plaintext
-uv run python scripts/build_countdown_native.py
-```
-
-首次部署或修改 Rust 源码后执行一次即可；正式打包时会自动编译并包含动态库。
-
-**启动权杖**
-
-```plaintext
+4. 输入以下命令打开程序（ `uv run` 通常会自动补齐依赖，即 `uv sync` )。
+```cmd
 uv run new_gui.py
 ```
+5. 未来想再次启动程序时，重复第 2、4 步。
+
 
 **启动后自动运行任务**
 
@@ -148,15 +163,25 @@ uv run new_gui.py --start-task --engine:ironblood --file:insect.json --start-del
 
 默认内核为 `IronBlood`、默认脚本为 `core/any_fate/actions/insect.json`（内核 ID 与脚本名均不区分大小写，也可以只写裸文件名）。启动参数填写错误时会弹窗提醒，程序仍会正常打开，但本次不会执行自动任务。
 
+**Rust 采样加速弹指一挥节点图分析**
+
+先安装 Rust stable 工具链，再执行：
+
+```plaintext
+uv run python scripts/build_countdown_native.py
+```
+
+首次部署或修改 Rust 源码后执行一次即可；正式打包时会自动编译并包含动态库。
+
 ----------------------------------------------------------------------------------------------
 
 # 相关配置建议
 
 内核按 `core/<模块>/` 组织，运行入口与齿轮配置窗口通过 `module.ini` 动态发现。模块独立保存代码、配置和 UI；新增配置项无需修改主窗口。目录、继承关系及旧配置迁移见[内核模块与独立配置界面](docs/development/内核配置界面.md)。
 
-一号位角色建议顺序为白厄、黄泉、银狼LV.999、其它远程平a角色,其余序号使用角色任意，队伍需至少3人方能正常运行脚本
-
-请注意！！！！！ 开始运行/开始校准之后就不要移动游戏窗口了！避免脚本错误的执行！！要移动请先按f5停止自动化！
+- 一号位建议：白厄、黄泉、银狼 LV.999 等能够秒杀小怪的角色（尚未适配姬子·启行），或远程角色；
+- 二号位建议：托帕、银狼 LV.999 等抓猪成功率较高的角色；
+- 其余位置任意。推荐使用可以增加秘技点的角色（白厄、姬子·启行）以及开局回血的生存位（例如 丹恒·腾荒 +「我们是地火」光锥）。
 
 ### 校准
 
@@ -166,11 +191,13 @@ uv run new_gui.py --start-task --engine:ironblood --file:insect.json --start-del
 
 改变鼠标dpi可能会影响校准值，此时需要重新校准。
 
+**请注意：开始运行/开始校准之后不要移动游戏窗口，避免脚本执行动作过程中出现错误。要移动请先按end停止自动化。**
+
 ## GUI使用方法
 
 **第一次运行**
 
-按照下述系统设置配图调整自己的系统设置，在游戏中设置“自动沿用战斗设置”，在寰宇蝗灾界面的毁灭的配队中选好队伍角色
+调整自己的系统设置，在游戏中设置“自动沿用战斗设置”，在寰宇蝗灾界面的毁灭的配队中选好队伍角色
 
 **运行权杖**
 
@@ -180,22 +207,13 @@ uv run new_gui.py --start-task --engine:ironblood --file:insect.json --start-del
 
 在“货币战争设置”页面选择退出位面并保存，然后点击“货币战争自动收集”运行。
 
-注意！！！！！ 开始运行/开始校准之后就不要移动游戏窗口了！要移动请先停止自动化！
-
-F5/‘停止任务’按钮停止运行。
-
-**系统设置**
-
-![画质](doc/config.png)
-
-
-
 ----------------------------------------------------------------------------------------------
 
 # 开发交流-玩家社区-助力毁灭 | Destruction
-* 包含本权杖系统稳定发行版.
-* ![](https://img.shields.io/badge/QQ%201群[开发意向优先]-1072802257-4e4c97)
+- 包含本权杖系统稳定发行版.
+- ![](https://img.shields.io/badge/QQ%201群-1072802257-4e4c97)
 ![](https://img.shields.io/badge/QQ%202群-870863632-4e4c97)
+
 ----------------------------------------------------------------------------------------------
 
 # 支持开发 | Star or Buy Coffee
