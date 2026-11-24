@@ -88,16 +88,9 @@
 python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/map_visits.db').execute('SELECT * FROM map_visits ORDER BY visit_count DESC;'))))"
 ```
 
-## 節點日誌查詢
+## 突發事件日誌查詢
 
-對應 `user/backup/node_log.db`。包含['id', 'created_at', 'data']三欄。
-```cmd
-python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/node_log.db').execute(\"SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
-```
-
-## 事件日誌查詢(emergency)
-
-對應 `user/backup/emergency.db`。包含['id', 'created_at', 'data']三欄。
+用於記錄突發事件時的輪迴數、對應`user/backup/emergency.db`。包含['id', 'created_at', 'data']三列，其中 'data' 包含 'self.count' 'self.node_count' 'event_name' 'self.plane_floor' 四項。
 ```cmd
 python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/emergency.db').execute(\"SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```

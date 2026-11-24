@@ -88,16 +88,9 @@ Corresponds to `user/backup/map_visits.db`, with the two columns ['map_id', 'vis
 python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/map_visits.db').execute('SELECT * FROM map_visits ORDER BY visit_count DESC;'))))"
 ```
 
-## Node Log Query
+## Emergency Event Log Query
 
-Corresponds to `user/backup/node_log.db`, with the three columns ['id', 'created_at', 'data'].
-```cmd
-python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/node_log.db').execute(\"SELECT id, created_at, json_extract(data, '$.area') AS area, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
-```
-
-## Event Log Query (emergency)
-
-Corresponds to `user/backup/emergency.db`, with the three columns ['id', 'created_at', 'data'].
+Used to record the cycle count at the time an emergency event occurs; corresponds to `user/backup/emergency.db`. It contains three columns—'id', 'created_at', and 'data'—where the 'data' column includes four fields: 'self.count', 'self.node_count', 'event_name', and 'self.plane_floor'.
 ```cmd
 python -c "import sqlite3; print('\n'.join(map(str, sqlite3.connect('user/backup/emergency.db').execute(\"SELECT id, created_at, json_extract(data, '$.count') AS count, json_extract(data, '$.node_count') AS node_count, json_extract(data, '$.event') AS event, json_extract(data, '$.plane_floor') AS plane_floor FROM node_log ORDER BY id DESC;\"))))"
 ```

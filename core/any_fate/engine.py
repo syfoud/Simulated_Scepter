@@ -1599,28 +1599,6 @@ class AnyFateUniverse(FateUtils):
                 self.ruanmei2 = True#本轮遭遇「阮·梅（其二）」，本轮视频将保留
             if any(isinstance(ev, dict) and "超验" in ev.get("raw_text", "") for ev in event_name):
                 self.chaoyan_seen = True#本轮进过「超验之镜」（事件/奖励共用，不可重复），后续奖励遇战权重降为0.2
-            if self.area!="" and self.area!="休整" and len(event_name)!=0:
-                try:
-                    db_file = os.path.join(PATHS["backup"], "node_log.db")
-                    os.makedirs(PATHS["backup"], exist_ok=True)
-                    conn = sqlite3.connect(db_file)
-                    cursor = conn.cursor()
-                    cursor.execute('''CREATE TABLE IF NOT EXISTS node_log (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        created_at TEXT DEFAULT (datetime('now','localtime')),
-                        data TEXT
-                    )''')
-                    data = {
-                        "area": self.area,
-                        "event": event_name,
-                        "plane_floor": self.plane_floor,
-                    }
-                    cursor.execute('INSERT INTO node_log (data) VALUES (?)',
-                                   (json.dumps(data, ensure_ascii=False),))
-                    conn.commit()
-                    conn.close()
-                except Exception as e:
-                    CUS_LOGGER.error(f"写入节点日志失败: {e}")
 
     def emergency(self):
         self.nodes = None # 清除地图缓存
