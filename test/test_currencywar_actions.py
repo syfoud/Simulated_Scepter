@@ -52,7 +52,8 @@ class CurrencyWarActionsTest(unittest.TestCase):
         self.assertEqual(
             once_names,
             # 「啊哈大悦」不在这里：它去掉 once 了，点不掉时下一轮还要能重点
-            {"盛会之星", "领航员", "命运圣杯祈愿试炼", "独家代言", "开始退出"},
+            # 「开始退出」不在这里：退出没成功要能重试（实测 once 之后再也退不出去）
+            {"盛会之星", "领航员", "命运圣杯祈愿试炼", "独家代言"},
         )
 
     def test_item_detail_confirms_selection_before_escape(self):
@@ -242,6 +243,14 @@ class CurrencyWarActionsTest(unittest.TestCase):
             self.assertNotRegex(text, r"\d", action["name"])
             checked += 1
         self.assertGreaterEqual(checked, 10)
+
+    def test_entering_a_run_clears_exit_state(self):
+        """进对局的动作用 set_state 把状态从 exit 拉回来，否则「退出按ESC」会在入口页反复按 ESC。"""
+        names = {"开始货币战争", "切换超频博弈", "进入超频博弈", "重开最终"}
+        for name in names:
+            action = next(a for a in self.actions if a["name"] == name)
+            self.assertIn({"set_state": "currency_main"}, action["actions"],
+                          f"{name} 没把状态从 exit 拉回来")
 
 
 if __name__ == "__main__":

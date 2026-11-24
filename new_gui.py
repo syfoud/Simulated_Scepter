@@ -1839,6 +1839,9 @@ class MainWindow(QMainWindowLog):
 """
 
 def main(show):
+    # 自提权（runas）启动的实例 cwd 会被重置为 C:\Windows\System32，统一切回项目根目录，
+    # 使相对路径与直接以管理员身份启动时一致。
+    os.chdir(PATHS["root"])
     # 打包版不支持启动参数，避免双击或外部启动参数触发误导性提示。
     startup_args = (
         parse_startup_args([])
@@ -1932,6 +1935,7 @@ def main(show):
             print(f"异常退出，进程已结束,退出代码:{e.code}")
             input("按Enter键退出...")
 if __name__ == "__main__":
-    fault_log_file = open("logs/crash_dump.txt", "w", encoding="utf-8")
+    # 自提权实例的 cwd 是 C:\Windows\System32，崩溃转储按项目 logs 目录解析，不依赖启动目录。
+    fault_log_file = open(os.path.join(PATHS["logs"], "crash_dump.txt"), "w", encoding="utf-8")
     faulthandler.enable(file=fault_log_file)
     main(1)

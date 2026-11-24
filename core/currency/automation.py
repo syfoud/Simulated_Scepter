@@ -15,6 +15,7 @@ from core.currency.strategies import (
     PEPE_DEPENDENT_STRATEGIES,
     exit_plane_for,
     match_name,
+    normalize_name,
     pepe_env_on_field,
     pepe_goal_reached,
     pepe_keep_checked,
@@ -187,6 +188,11 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_BANNER_BOX = [700, 845, 1260, 940]   # 红条实测 [832,883,1071,906]，框要包得住整行
     BROKEN_PANEL_ESC_GAP = 1.2
     OVERLAP_CHECK_GAP = 5.0        # 卡死自愈的最小检查间隔，避免每帧 OCR 刷屏
+    # 退出确认框「放弃并结算」：实测文字框 [707,729,832,757]，原来写 [707,728,831,756]
+    # 比文字还小 1 像素，包含判定永远不通过 —— 退出流程会一直认为"还没到确认页"。
+    EXIT_CONFIRM_BOX = [690, 715, 860, 775]
+    # 备战界面顶部「备战阶段 2-1」（实测 [433,37,508,56]），用来判断"已经不在战斗里"
+    PREPARE_STAGE_BOX = [380, 20, 560, 90]
     MODE_SWITCH_TIMEOUT = 2.0      # 点完模式卡后等按钮文字变化的上限
     MODE_SWITCH_STEP = 0.2
     # 战斗界面上的固定文字（右下角/中央都能看到其中至少一个）
@@ -266,14 +272,12 @@ class SimulatedCurrency(CurrencyUtils):
         # 是否需要退出
         self.exit_requested = False
         # 是否已开始退出
-        self.exit_started = False
         # 佩佩特化是"本局"状态：上一把拿到过佩佩，不能带到下一把
         self.pepe_on_field = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
         # 退出失败重试计数（连续失败到上限就停手）
-        self.exit_attempts = 0
 
         priority = load_currency_settings()["priority"]
 
@@ -673,8 +677,14 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.warning("达到向下选择上限，仍未识别到难度1；停止点击并等待下一轮识别")
         return False
 
-    def read_mode_button (self):
-        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。"""
+    def read_mode_button (self, fresh=True):
+        """读右下角按钮的文字（入口页「开始「货币战争」」/ 模式页「进入XX博弈」/ 难度页「开始对局」）。
+
+        `fresh=True` 时先抓一帧新画面再识别：模式切换靠"刚点完有没有生效"判断，
+        用缓存帧会读到上一步的文字（实测因此重复点入口按钮，把一局送进标准模式）。
+        """
+        if fresh:
+            self.ts.forward(self.get_screen())
         try:
             return merge_text(self.ts.find_with_box(
                 self.BATTLE_MODE_BUTTON_BOX, redundancy=30))
@@ -692,7 +702,9 @@ class SimulatedCurrency(CurrencyUtils):
         want_char = "超" if want_overclock else "标"
         card = self.MODE_CARD_POSITIONS["overclock" if want_overclock else "standard"]
 
-        for attempt in range(3):
+        # 一次调用只做一件事，判断交给下一帧（动作 interval: 1，天然每秒重试）。
+        # 原来 for×3 + 每轮 sleep 等模式切过去，主状态机整段时间动不了。
+        if True:
             text = self.read_mode_button()
             CUS_LOGGER.debug("右下角按钮：%r", text)
 
@@ -719,40 +731,17 @@ class SimulatedCurrency(CurrencyUtils):
                     key_mouse_manager.wait()
                     self.update_state("difficulty_select")
                     return 1
-                CUS_LOGGER.info("切换到「%s」（第 %d 次）",
-                                "超频博弈" if want_overclock else "标准博弈", attempt + 1)
+                CUS_LOGGER.info("点击模式卡切换到「%s」",
+                                "超频博弈" if want_overclock else "标准博弈")
                 key_mouse_manager.click_point(*card)
                 key_mouse_manager.wait()
-                # 后台模式下捕获帧会滞后：点完立刻读还是旧文字，会误判"没切过去"连点三次。
-                # 所以轮询等按钮文字真的变过来。
-                if self.wait_mode_switched(want_char):
-                    CUS_LOGGER.info("模式已切到「%s」",
-                                    "超频博弈" if want_overclock else "标准博弈")
-                    key_mouse_manager.click_point(*self.MODE_ENTER_POSITION,
-                                                  box=self.BATTLE_MODE_BUTTON_BOX)
-                    key_mouse_manager.wait()
-                    self.update_state("difficulty_select")
-                    return 1
-                continue
+                # 点完立刻返回：下一帧再看按钮文字变没变，不在这里轮询等待
+                return 1
 
             # 按钮文字没读到或不是这几种：宁可什么都不点，也别把点打到攻略/图例上
             CUS_LOGGER.warning("认不出右下角按钮（%r），本轮不点击任何位置", text)
             return 0
 
-        CUS_LOGGER.warning("三次都没切到目标模式，先不动，等下一轮")
-        return 0
-
-    def wait_mode_switched (self, want_char, timeout=None, step=None):
-        """轮询等右下角按钮文字变成目标模式（后台捕获帧滞后，点完要等）。"""
-        timeout = self.MODE_SWITCH_TIMEOUT if timeout is None else timeout
-        step = self.MODE_SWITCH_STEP if step is None else step
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            time.sleep(step)
-            text = self.read_mode_button()
-            if want_char in text:
-                return True
-        return False
 
     def select_top_difficulty (self):
         """最高职级（A8-20）：有「返回最高职级」就点它切过去，没有说明已经是。"""
@@ -845,17 +834,16 @@ class SimulatedCurrency(CurrencyUtils):
         self.exit_plane = self.set_exit_plane
         self.prior_environment_found = False
         self.exit_requested = False
-        self.exit_started = False
         # 4.7 起策略不再按"每面固定一次"来数：记录每面实际出现过几次策略选择
         self.current_plane = None
         self.plane_strategy_count = {}
         # 退出失败重试计数（连续失败到上限就停手）
-        self.exit_attempts = 0
         self.envir_selected = False
         self.affix_incomplete_rounds = 0
         self.affixes_recorded = False
         self.protagonist_picks = 0
         self.protagonist_drag_failures = 0
+        self.protagonist_drag_attempts = 0
         self.battle_click_attempts = 0
         # 刷新额度按对局计：上一局无论刷没刷出必选，本局都要重新给一次。
         self.has_fresh = False
@@ -940,13 +928,13 @@ class SimulatedCurrency(CurrencyUtils):
         selected_text = texts[selected_idx] if selected_idx < len(texts) else ""
         # 选到「三星佩佩 / 粗星佩佩」这类环境，等于佩佩已经到场：和"选到佩佩策略"一样立标记
         if (
-            getattr(self, "auto_exit_plane", False)
-            and getattr(self, "pepe_plane_boost", False)
-            and any(item in getattr(self, "strategy_targets", [])
+            self.auto_exit_plane
+            and self.pepe_plane_boost
+            and any(item in self.strategy_targets
                     for item in PEPE_DEPENDENT_STRATEGIES)
             and pepe_env_on_field([selected_text])
         ):
-            if not getattr(self, "pepe_on_field", False):
+            if not self.pepe_on_field:
                 CUS_LOGGER.info(
                     "投资环境「%s」直接给了佩佩：本局打到第 3 面终局（等孪生姵姵）",
                     selected_text)
@@ -1196,19 +1184,19 @@ class SimulatedCurrency(CurrencyUtils):
             "第 %s 面已选过 %d 次策略", plane, self.plane_strategy_count[plane])
 
         # 佩佩被带走（阿兰接走佩佩…）：立刻取消特化，别白白多打两面
-        if getattr(self, "pepe_on_field", False) and pepe_left(selected_text, *texts):
+        if self.pepe_on_field and pepe_left(selected_text, *texts):
             CUS_LOGGER.warning("本屏选中了「会让佩佩离开」的策略，佩佩特化取消")
             self.pepe_on_field = False
 
         # 佩佩特化：还没到终局面就拿到佩佩，就把本局打到第 3 面终局（孪生姵姵只在 2~3 面出现）
         if (
             self.auto_exit_plane
-            and getattr(self, "pepe_plane_boost", False)
+            and self.pepe_plane_boost
             and any(item in self.strategy_targets for item in PEPE_DEPENDENT_STRATEGIES)
             and plane < 3
             and pepe_on_field(selected_text)
         ):
-            if not getattr(self, "pepe_on_field", False):
+            if not self.pepe_on_field:
                 CUS_LOGGER.info(
                     "第 %s 面拿到「%s」：佩佩已在场，本局打到第 3 面终局（等孪生姵姵）",
                     plane, selected_text)
@@ -1461,6 +1449,15 @@ class SimulatedCurrency(CurrencyUtils):
         if self._stop:
             CUS_LOGGER.debug("出战前准备：已停止，跳过")
             return 0
+        if self.state == "battle":
+            # 能读到「出战」并走到这里，就说明人已经在备战界面 —— 战斗早结束了。
+            # 状态机必须在这里收尾，否则 battle 会一直挂着：下一段「退出」请求被延迟、
+            # 永远进不了 exit（实机就是每 3 秒刷一遍「战斗中请求退出」的死循环）。
+            CUS_LOGGER.info("已回到备战界面，把状态从 battle 拉回 startbattle")
+            self.update_state("startbattle")
+            if self.exit_requested:
+                # 战斗期间被延迟的退出请求，现在补上（状态不是 battle 了，会真正进 exit）
+                self.update_state("exit")
         if self.exit_requested and self.state != "exit":
             # 状态机没在退出流程里，标志却是 True：一定是上一局漏清的，别拿它卡住整局
             CUS_LOGGER.warning("退出标志与状态不符（state=%s），复位后继续", self.state)
@@ -1613,7 +1610,8 @@ class SimulatedCurrency(CurrencyUtils):
 
         key_mouse_manager.click_point(1818, 750)
         key_mouse_manager.wait()
-        self.update_state("startbattle")
+        # 进战斗是状态机上的一个真实状态，不再另起一个标记
+        self.update_state("battle")
         return 1
 
     def handle_1_1_reward(self):
@@ -1661,114 +1659,22 @@ class SimulatedCurrency(CurrencyUtils):
         self.update_state("exit")
         return 1
 
-    def is_battle_started(self):
-        '''用于检测是否处于战斗状态，返回bool值'''
-        if self.click_text(
-            text="伤害",
-            box=[1793, 209, 1833, 231],
-            click=False,
-            allow_fail=True,
-        ):
-            CUS_LOGGER.debug("检测到已进入战斗")
-            return True
-
-        return False
 
 
-    def exit(self):
-        """执行当前货币战争对局的统一退出流程。"""
+    def update_state (self, state):
+        """战斗中请求退出要等这场打完。
 
-        if self.exit_started:
-            self.exit_attempts = 0
-            return 1
+        否则 JSON 里 condition=exit 的「退出按ESC」会在战斗界面里疯狂按 ESC
+        （战斗中 ESC 只会弹暂停菜单，永远等不到确认框）。
+        """
+        if state == "exit" and getattr(self, "state", None) == "battle":
+            self.exit_requested = True
+            CUS_LOGGER.info("战斗中请求退出：等这场打完再进退出流程")
+            return
+        super().update_state(state)
 
-        CUS_LOGGER.info("执行货币战争退出流程")
 
-        # 先检查是否已经进入“放弃并结算”页面
-        self.ts.forward(self.get_screen())
-        if self.click_text(
-            text="放弃并结算",
-            box=[707, 728, 831, 756],
-            click=False,
-            allow_fail=True,
-        ):
-            CUS_LOGGER.debug("检测到退出页面")
-            self.exit_started = True
-            self.exit_attempts = 0
-            return 1
 
-        # 虽然正常情况下exit的时候不会在战斗状态，但是万一呢
-        if self.is_battle_started():
-            CUS_LOGGER.debug("当前处于战斗中，按 ESC 并点击撤退")
-            key_mouse_manager.press("esc")
-            key_mouse_manager.wait()
-            key_mouse_manager.click_point(1223, 985) # 点击撤退
-            key_mouse_manager.wait()
-            self.ts.forward(self.get_screen())
-
-            if self.click_text(
-                text="放弃并结算",
-                box=[707, 728, 831, 756],
-                click=False,
-                allow_fail=True,
-            ):
-                CUS_LOGGER.debug("检测到退出页面")
-                self.exit_started = True
-                self.exit_attempts = 0
-                return 1
-            return self._exit_failed("战斗内没能进入放弃并结算页面")
-
-        max_attempts = 15
-        timeout = 6
-        deadline = time.monotonic() + timeout
-
-        for attempt in range(max_attempts):
-            if time.monotonic() >= deadline:
-                break
-
-            if self._stop:
-                CUS_LOGGER.info("检测到停止标志，提前退出检测终止")
-                return 0
-
-            self.ts.forward(self.get_screen())
-
-            if self.click_text(
-                text="放弃并结算",
-                box=[707, 728, 831, 756],
-                click=False,
-                allow_fail=True,
-            ):
-                CUS_LOGGER.debug("检测到退出页面")
-                self.exit_started = True
-                return 1
-
-            # 战斗中按 ESC 是无效动作：先等战斗结束（结算画面由「战斗结束后」动作负责）
-            if self.in_battle_screen():
-                CUS_LOGGER.info("还在战斗界面，等战斗结束后再退出")
-                return 0
-
-            CUS_LOGGER.debug(
-                f"未检测到退出页面，第 {attempt + 1}/{max_attempts} 次按 ESC"
-            )
-
-            key_mouse_manager.press("esc")
-            key_mouse_manager.wait()
-
-        return self._exit_failed("按 ESC 后没能进入放弃并结算页面")
-
-    def in_battle_screen (self):
-        """当前是不是还在战斗里（战斗界面按 ESC 没用，得等结算）。"""
-        for text, box in (
-            ("自动战斗", self.BATTLE_HUD_BOX),
-            ("挑战成功", self.BATTLE_HUD_BOX),
-            ("战斗结束", self.BATTLE_HUD_BOX),
-        ):
-            if self.click_text(text=text, box=box, click=False, allow_fail=True):
-                return True
-        return False
-
-    def reset_battle_click_attempts (self):
-        self.battle_click_attempts = 0
 
     def handle_battle_finished(self):
         self.battle_click_attempts = 0
@@ -1855,8 +1761,6 @@ class SimulatedCurrency(CurrencyUtils):
     PROTAGONIST_FALLBACK_DRAG = ((709, 750), (964, 441))
     PROTAGONIST_AURA_POSITION = (1501, 502)
     PROTAGONIST_CONFIRM_BOX = [941, 938, 995, 968]
-    PROTAGONIST_WAIT_ATTEMPTS = 25
-    PROTAGONIST_WAIT_INTERVAL = 0.4
     # 第二次选主角时该角色已有光环，点光环会弹「是否替换该角色原有光环？」（实测 OCR 框）
     # 框贴太紧 OCR 会整行读空（实测过），左右上下都留余量
     PROTAGONIST_REPLACE_TITLE_BOX = [760, 468, 1180, 548]
@@ -1895,6 +1799,14 @@ class SimulatedCurrency(CurrencyUtils):
         CUS_LOGGER.info("已关闭「开拓商店」")
         return 1
 
+    def _box_text (self, box):
+        """静默读某个框里的文字（OCR 糊了也不报错，识别不到就返回空串）。"""
+        try:
+            self.ts.forward(self.get_screen())
+            return normalize_name(merge_text(self.ts.find_with_box(box, redundancy=30)))
+        except Exception:
+            return ""
+
     def recover_broken_protagonist_panel (self):
         """游戏偶发 bug：商店与「选择主角」界面叠在一起时，先 ESC 关商店再 ESC 重开。
 
@@ -1909,13 +1821,17 @@ class SimulatedCurrency(CurrencyUtils):
             return 0
         self._overlap_checked_at = now
 
-        if not self.click_text(text="尚未选择主角角色和光环",
-                               box=self.PROTAGONIST_BANNER_BOX,
-                               click=False, allow_fail=True, warning=False):
+        # 红条 OCR 经常糊（实测「尚未选据主角色和%环」）：精确优先，糊了用关键词兜底
+        # 红条 OCR 经常糊，只认稳定关键词；这里静默读：判定在选主角面板期间几乎每帧都跑，
+        # 用 click_text 会刷满「请求：尚未选择主角角色和光环响应：…」（实测一局 194 条）
+        banner = self._box_text(self.PROTAGONIST_BANNER_BOX)
+        if not any(word in banner for word in ("尚未", "光环", "主角角色")):
             return 0
         if self.click_text(text="主角光环",
                            box=self.PROTAGONIST_TITLE_BOX,
                            click=False, allow_fail=True, warning=False):
+            return 0
+        if "主角光环" in self._box_text(self.PROTAGONIST_TITLE_BOX):
             return 0
 
         CUS_LOGGER.warning(
@@ -1959,36 +1875,27 @@ class SimulatedCurrency(CurrencyUtils):
             key_mouse_manager.click_point(
                 (box[0] + box[2]) // 2, (box[1] + box[3]) // 2, box=box)
             key_mouse_manager.wait()
+            # 点完按钮立刻返回，面板出现与否交给主循环下一帧判断。
+            # 原来在这里 sleep 最多 10 秒等面板，整段时间主状态机动不了，
+            # 挡路弹窗也就永远点不掉（弹窗 + 主角光环同时出现时会卡死）。
+            CUS_LOGGER.debug("已点击「选择主角」，面板出现后下一帧再处理")
+            return 1
 
-        for attempt in range(self.PROTAGONIST_WAIT_ATTEMPTS):
-            if self.click_text(
-                text="选择一个角色获得主角光环",
-                box=self.PROTAGONIST_TITLE_BOX,
-                click=False,
-                allow_fail=True,
-            ):
-                break
-            CUS_LOGGER.debug(
-                "选择主角面板还没出现（第 %d/%d 次等待）",
-                attempt + 1, self.PROTAGONIST_WAIT_ATTEMPTS,
-            )
-            time.sleep(self.PROTAGONIST_WAIT_INTERVAL)
-        else:
-            CUS_LOGGER.warning("选择主角面板没等到，交给下一轮重试")
-            return 0
 
-        # 起点选择：默认第一个角色；第二次改拖第二个；连试两次都没成说明那些位置是空的，
-        # 改从后台第一个角色拖（前台 2 号位可能压根没站人）。
-        failures = getattr(self, "protagonist_drag_failures", 0)
-        if failures >= 2:
+        # 起点选择：默认第一个角色；第二次改拖第二个；同一个位置拖两次没成，
+        # 就改从后台第一个角色拖（前台 2 号位可能压根没站人）。
+        # 失败次数按"真的拖了几次"记：拖拽失败后面板会关，靠"面板还开着"判断失败会永远记不到。
+        attempts = getattr(self, "protagonist_drag_attempts", 0) + 1
+        self.protagonist_drag_attempts = attempts
+        if attempts >= 3:
             start, end = self.PROTAGONIST_FALLBACK_DRAG
-            CUS_LOGGER.info("选择主角：前两次没拖动，改从后台第一个角色拖（第 %d 次尝试）", failures + 1)
+            CUS_LOGGER.info("选择主角：同一个位置拖了 %d 次没成，改从后台第一个角色拖", attempts - 1)
         elif getattr(self, "protagonist_picks", 0) >= 1:
             start, end = self.PROTAGONIST_SECOND_DRAG
-            CUS_LOGGER.info("选择主角：拖第 2 个角色")
+            CUS_LOGGER.info("选择主角：拖第 2 个角色（第 %d 次尝试）", attempts)
         else:
             start, end = self.PROTAGONIST_DRAG
-            CUS_LOGGER.info("选择主角：拖第 1 个角色")
+            CUS_LOGGER.info("选择主角：拖第 1 个角色（第 %d 次尝试）", attempts)
         key_mouse_manager.drag_point(start[0], start[1], end[0], end[1])
         key_mouse_manager.wait()
 
@@ -2014,6 +1921,7 @@ class SimulatedCurrency(CurrencyUtils):
         key_mouse_manager.wait()
         self.protagonist_picks = getattr(self, "protagonist_picks", 0) + 1
         self.protagonist_drag_failures = 0
+        self.protagonist_drag_attempts = 0
         self.protagonist_done_at = time.monotonic()
         CUS_LOGGER.info("主角已选择（本局第 %d 次）", self.protagonist_picks)
         return 1
@@ -2095,26 +2003,6 @@ class SimulatedCurrency(CurrencyUtils):
 
     EXIT_MAX_ATTEMPTS = 3
     EXIT_ACTION_NAME = "开始退出"
-    def _exit_failed(self, reason):
-        """退出没成功：解开「开始退出」的 once 锁存，让下一帧还能再试。
-
-        引擎里命中即锁存，不主动解锁的话这条动作本轮再也不会被调用——
-        日志写着"下一轮重试"却永远不重试，玩家看到的就是卡死。
-        连续失败到上限后停手，避免在错误界面上反复连按 ESC。
-        """
-        self.exit_attempts += 1
-        if self.exit_attempts < self.EXIT_MAX_ATTEMPTS:
-            self.latched_events.discard(self.EXIT_ACTION_NAME)
-            CUS_LOGGER.warning(
-                "%s，第 %d/%d 次退出未完成，下一帧重试",
-                reason, self.exit_attempts, self.EXIT_MAX_ATTEMPTS,
-            )
-        else:
-            CUS_LOGGER.warning(
-                "%s，已连续 %d 次退出失败，本轮停止重试（游戏可能停在非预期界面）",
-                reason, self.exit_attempts,
-            )
-        return 0
 
     STAGE_BOXES = ([430, 48, 515, 100], [250, 85, 330, 135])
     STAGE_UPSCALE = 3           # 原尺寸 OCR 会漏字，放大三倍才稳
@@ -2202,7 +2090,7 @@ class SimulatedCurrency(CurrencyUtils):
         if not self.strategy_targets:
             self.exit_plane = self.set_exit_plane
             return
-        if getattr(self, "pepe_on_field", False):
+        if self.pepe_on_field:
             # 佩佩已在场：孪生姵姵只在第 2~3 面出现，直接打到终局把策略数量吃满
             if self.exit_plane != 3:
                 CUS_LOGGER.info("佩佩在场：退出位面推到第 3 面（终局）")

@@ -59,6 +59,7 @@ class SettingsDialog(BaseDialog):
         ui.Currency_affix_targets_btn.clicked.connect(self.open_affix_targets)
         ui.Currency_strategy_targets_btn.clicked.connect(self.open_strategy_targets)
         ui.Currency_strategy_avoid_btn.clicked.connect(self.open_strategy_avoid)
+        self._sync_target_buttons()
 
     def _sync_exit_plane_widgets(self, auto):
         """勾了「按目标策略自动决定退出位面」后，上面两个手选退出位面就没意义了，直接禁用。"""
@@ -74,12 +75,26 @@ class SettingsDialog(BaseDialog):
     def open_deployment(self):
         DeploymentDialog(self).exec_()
 
+    def _sync_target_buttons(self):
+        """把已选数量写进按钮，让人一眼看出"点了能改什么、现在选了几个"。"""
+        pairs = (
+            ("Currency_affix_targets_btn", "选择词缀…", self.affix_targets),
+            ("Currency_strategy_targets_btn", "选择目标策略…", self.strategy_targets),
+            ("Currency_strategy_avoid_btn", "选择负面策略…", self.strategy_avoid),
+        )
+        for name, base, chosen in pairs:
+            button = getattr(self.section, name, None)
+            if button is None:
+                continue
+            button.setText(f"{base}（已选 {len(chosen)}）" if chosen else base)
+
     def open_affix_targets(self):
         """三列勾选目标词缀；取消时保持原选择。"""
         dialog = AffixSelectDialog(self.affix_targets, self)
         if dialog.exec_() != dialog.Accepted:
             return
         self.affix_targets = dialog.selected_affixes()
+        self._sync_target_buttons()
         self.section.Currency_affix_targets_edit.setText("、".join(self.affix_targets))
 
     def persist(self):
@@ -109,6 +124,7 @@ class SettingsDialog(BaseDialog):
         if dialog.exec_() != dialog.Accepted:
             return
         self.strategy_targets = dialog.selected_strategies()
+        self._sync_target_buttons()
         self.section.Currency_strategy_targets_edit.setText("、".join(self.strategy_targets))
 
     def open_strategy_avoid(self):
@@ -121,5 +137,6 @@ class SettingsDialog(BaseDialog):
         if dialog.exec_() != dialog.Accepted:
             return
         self.strategy_avoid = dialog.selected_strategies()
+        self._sync_target_buttons()
         self.section.Currency_strategy_avoid_edit.setText("、".join(self.strategy_avoid))
 
