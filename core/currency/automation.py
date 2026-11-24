@@ -197,6 +197,8 @@ class SimulatedCurrency(CurrencyUtils):
     ITEM_DETAIL_LABEL_BOX = [800, 300, 980, 355]
     # 「备战席已满，请出售角色或提升等级」红条（实测约 [905,528,1350,562]）
     BENCH_FULL_BOX = [740, 505, 1200, 558]   # 红条实测 [783,522,1147,545]
+    # 「选择装备」面板第一张卡的中心（实测卡片 [617,110,867,338]）
+    EQUIPMENT_CARD_POSITION = (745, 215)
     # 左上角「超频博弈」标签页；标准博弈不需要切标签，直接点上面的按钮
     # 「从师」面板：卡片数量会变（3~4 张），卡片整体居中，所以固定坐标会飘。
     # 改成用卡名那一行当锚点：取最左边的名字，点它上方 90px（= 卡身）。
@@ -1909,6 +1911,19 @@ class SimulatedCurrency(CurrencyUtils):
                 text="确认", box=self.TEA_CONFIRM_BOX, click=False, allow_fail=True))
         except Exception:
             return False
+
+    def choose_equipment (self):
+        """「选择装备」面板（棱彩策略「独家代言」的效果）：点第一张卡拿走它。
+
+        这张面板会一直挡在备战界面上，不选就不消失；卡片位置固定，所以直接点卡片本体
+        （实测 4.7 第一张卡 [617,110,867,338]，中心约 745,215）。
+
+        不点「查看详情」——那是详情弹层，按了只会多弹一个面板。
+        """
+        CUS_LOGGER.info("「选择装备」面板：选第一张装备")
+        key_mouse_manager.click_point(*self.EQUIPMENT_CARD_POSITION)
+        key_mouse_manager.wait()
+        return 1
 
     def choose_tea_break_option (self):
         """茶歇对话的选项：轮流点候选，选中后由「茶歇-确认奖励」去点确认。
