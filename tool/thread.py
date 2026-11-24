@@ -40,6 +40,9 @@ class ThreadWithException(threading.Thread):
 
         # 额外参数
         self.return_value = None  # 用于获取函数返回值
+        # 线程日志在子线程里打印，创建时先记下调用方，异常日志才能定位到创建者
+        from tool.log import get_caller_location
+        self._caller = get_caller_location()
 
     def run(self):
         try:
@@ -53,7 +56,7 @@ class ThreadWithException(threading.Thread):
             _, log_emitter = get_logger()
             err_msg = traceback.format_exc()
             log_emitter.show_error_signal.emit(f"任务执行器的子线程中发生错误 - {self.name}", err_msg)
-            CUS_LOGGER.error(err_msg)
+            CUS_LOGGER.error(err_msg, extra={'caller': self._caller})
         finally:
             CUS_LOGGER, _ = get_logger()
             if self.is_print:
@@ -73,8 +76,9 @@ class ThreadWithException(threading.Thread):
         try:
             return self.return_value
         except Exception:
+            from tool.log import get_caller_location
             CUS_LOGGER, _ = get_logger()
-            CUS_LOGGER.error(Exception)
+            CUS_LOGGER.error(Exception, extra={'caller': get_caller_location()})
             return None
 
     def raise_exception(self):
