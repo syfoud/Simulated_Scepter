@@ -53,6 +53,7 @@ class CurrencyWarActionsTest(unittest.TestCase):
             once_names,
             # 「啊哈大悦」不在这里：它去掉 once 了，点不掉时下一轮还要能重点
             # 「开始退出」不在这里：退出没成功要能重试（实测 once 之后再也退不出去）
+            # 「备战席已满退局」已从动作表移除：改由 start_battle 在点出战前按状态判断
             {"盛会之星", "领航员", "命运圣杯祈愿试炼", "独家代言"},
         )
 

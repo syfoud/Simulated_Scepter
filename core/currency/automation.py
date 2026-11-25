@@ -1596,6 +1596,12 @@ class SimulatedCurrency(CurrencyUtils):
             CUS_LOGGER.info("已请求退出，跳过出战")
             self.update_state("currency_main")
             return 0
+        # 点出战之前先看有没有「备战席已满」红条：它在就说明这一局打不了（出战按钮被禁用）。
+        # 这条红条会被中间的退出确认框挡住，但右下角的「出战」按钮不会——
+        # 所以判定放在"要点出战"这一刻，而不是靠动作表里一条常驻触发。
+        if self._bench_full_blocked():
+            return self.restart_on_bench_full()
+
         # 连续点了好几次还没进战斗，说明有东西挡着：把整屏文字打出来，免得到现场猜
         self.battle_click_attempts = getattr(self, "battle_click_attempts", 0) + 1
         if self.battle_click_attempts == 3:
