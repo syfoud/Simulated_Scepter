@@ -519,24 +519,23 @@
         ]
     },
     {
-        "name": "独家代言",
+        "name": "选择装备",
         "trigger": {
-            "text": "查看详情",
+            "text": "选择装备",
             "box": [
-                625,
-                329,
-                1008,
-                356
+                940,
+                5,
+                1120,
+                70
             ],
             "interval": 2,
-            "redundancy": 30,
-            "once": true
+            "redundancy": 30
         },
         "actions": [
             {
                 "position": [
-                    809,
-                    210
+                    745,
+                    215
                 ]
             }
         ]
