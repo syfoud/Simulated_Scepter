@@ -20,6 +20,8 @@ DEFAULT_GATHER_MODE = False
 DEFAULT_MAX_RUNS = 0
 DEFAULT_AUTO_EXIT_PLANE = False
 DEFAULT_AUTO_CLEAR_TARGETS = False
+# 「拿到佩佩就打到第 3 面终局」：默认关闭，需要时在货币战争设置里打开
+DEFAULT_PEPE_PLANE_BOOST = False
 
 
 PRIORITY_KEYS = (
@@ -119,6 +121,10 @@ def normalize_currency_settings(values=None):
     if not isinstance(auto_clear_targets, bool):
         auto_clear_targets = DEFAULT_AUTO_CLEAR_TARGETS
 
+    pepe_plane_boost = values.get("pepe_plane_boost", DEFAULT_PEPE_PLANE_BOOST)
+    if not isinstance(pepe_plane_boost, bool):
+        pepe_plane_boost = DEFAULT_PEPE_PLANE_BOOST
+
     gamemode = str(values.get("gamemode", DEFAULT_GAMEMODE)).strip().lower()
     if gamemode not in GAMEMODES:
         gamemode = DEFAULT_GAMEMODE
@@ -147,6 +153,7 @@ def normalize_currency_settings(values=None):
         "strategy_avoid": strategy_avoid,
         "auto_exit_plane": auto_exit_plane,
         "auto_clear_targets": auto_clear_targets,
+        "pepe_plane_boost": pepe_plane_boost,
         "exit_after_plane": exit_plane,
         "exit_if_no_prior": exit_if_no_prior,
         "prior_exit_plane": prior_exit_plane,

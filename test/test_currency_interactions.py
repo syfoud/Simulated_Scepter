@@ -33,6 +33,11 @@ class CurrencyInteractionTests(unittest.TestCase):
         currency.has_fresh = False
         currency.envir_seen = set()
         currency.gather_mode = False
+        # 下面几个是 __init__ 里声明的字段，替身不走 __init__ 时要自己补
+        currency.auto_exit_plane = False
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.ts = Mock()
         currency.get_screen = Mock(return_value=object())
         currency.ENVIR_BOXES = [
@@ -198,6 +203,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_blank_prompt_clicks_detected_text_and_exits_after_envir(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -227,6 +236,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_blank_prompt_does_nothing_when_text_missing(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -515,6 +528,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_blank_prompt_clicks_the_detected_text_wherever_it_is(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -532,6 +549,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_tea_option_clicks_candidates_in_turn(self, manager):
         """选项区混着气泡和说明：轮流点不同候选，避免死盯同一条无效文本。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -556,6 +577,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_tea_option_attempt_counter_wraps(self, manager):
         """轮完一圈要回到第一条，不能无限往下数。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -572,6 +597,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_tea_option_gives_up_when_nothing_recognised(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [{"raw_text": "返回", "box": [1147, 713, 1203, 742]}]
@@ -663,6 +692,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_hack_effect_picks_rightmost_option_then_confirms(self, manager):
         """银狼面板的选项名字会变，按位置取最右边那张，再点确认选择。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -686,6 +719,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_hack_effect_falls_back_to_fixed_position(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -702,6 +739,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_hack_effect_reports_failure_when_confirm_not_found(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -718,6 +759,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_clara_enhance_clicks_above_leftmost_detail(self, manager):
         """选项数量会变，用「详情」按钮当锚点：点最左那个详情正上方 60px。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -739,6 +784,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_clara_enhance_falls_back_without_detail_anchor(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -753,6 +802,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_clara_enhance_reports_failure_when_confirm_missing(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -766,6 +819,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_dragon_bond_clicks_above_leftmost_detail(self, manager):
         """四张卡位置固定，但仍用「详情」锚点，避免以后重排点空。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -786,6 +843,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_dragon_bond_falls_back_without_detail_anchor(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -800,6 +861,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_dragon_bond_reports_failure_when_confirm_missing(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -841,6 +906,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_ranger_hero_clicks_above_leftmost_detail(self, manager):
         """巡海游侠四张卡位置固定，仍用「详情」锚点，避免重排点空。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -861,6 +930,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_ranger_hero_falls_back_without_detail_anchor(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -875,6 +948,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_ranger_hero_reports_failure_when_confirm_missing(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -888,6 +965,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_beast_panel_clicks_above_leftmost_detail(self, manager):
         """三张宽卡，用「详情」锚点：点最左详情正上方 60px 再确认。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -908,6 +989,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_beast_panel_falls_back_without_detail_anchor(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -922,6 +1007,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_beast_panel_reports_failure_when_confirm_missing(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -935,6 +1024,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_card_picker_uses_leftmost_detail_anchor(self, manager):
         """通用方法：点最左「详情」正上方 60px，再点确认。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -955,6 +1048,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     @patch("core.currency.automation.key_mouse_manager")
     def test_card_picker_falls_back_and_can_fail(self, manager):
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = []
@@ -985,6 +1082,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_card_picker_clicks_both_cards_when_count_is_two(self, manager):
         """梦境交织要选两个角色：最左两张卡都要点，再确认。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.ts.find_with_box.return_value = [
@@ -1295,6 +1396,10 @@ class CurrencyInteractionTests(unittest.TestCase):
     def test_pair_strategy_layout_is_detected_by_label(self, manager):
         """「一个选择 + 两个都带走」版式靠标签识别，不能把普通三卡也当过去。"""
         currency = object.__new__(SimulatedCurrency)
+        currency.auto_exit_plane = False        # __init__ 里设的字段，替身手动补
+        currency.pepe_plane_boost = False
+        currency.pepe_on_field = False
+        currency.strategy_targets = []
         currency.get_screen = Mock(return_value="frame")
         currency.ts = Mock()
         currency.click_text = Mock(return_value=True)
@@ -1312,6 +1417,38 @@ class CurrencyInteractionTests(unittest.TestCase):
         self.assertFalse(currency._is_wanted("大裁员", {"大裁员"}))
         self.assertFalse(currency._is_wanted("别的策略", set()))
         self.assertFalse(currency._is_wanted("", set()))
+
+    def test_pepe_goal_clears_the_whole_series(self):
+        """拿到「孪生姵姵」相当于这个系列收工：佩佩相关目标一并取消勾选。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.auto_clear_targets = True
+        currency.strategy_targets = ["孪生姵姵", "佩佩驾到", "溜佩佩", "军火贸易"]
+        currency.pepe_on_field = True
+        currency.persist_strategy_targets = lambda: None
+
+        self.assertTrue(currency.auto_clear_target("孪生姵姵"))
+        self.assertEqual(currency.strategy_targets, ["军火贸易"])
+        self.assertFalse(currency.pepe_on_field)          # 目标达成，不用再打第 3 面
+
+    def test_pepe_carrier_stays_checked_until_goal(self):
+        """还没拿到最终策略时，佩佩载体仍然保留勾选。"""
+        currency = object.__new__(SimulatedCurrency)
+        currency.auto_clear_targets = True
+        currency.strategy_targets = ["孪生姵姵", "溜佩佩"]
+        currency.pepe_on_field = True
+        currency.persist_strategy_targets = lambda: None
+
+        self.assertFalse(currency.auto_clear_target("溜佩佩"))
+        self.assertEqual(currency.strategy_targets, ["孪生姵姵", "溜佩佩"])
+
+    def test_pepe_environment_also_counts_as_pepe(self):
+        """「三星佩佩 / 粗星佩佩」这类环境直接把佩佩送到场上，等同拿到佩佩。"""
+        from core.currency.strategies import pepe_env_on_field
+
+        self.assertTrue(pepe_env_on_field(["三星佩佩"]))
+        self.assertTrue(pepe_env_on_field(["蓝海", "粗星佩佩", "二手市场"]))
+        self.assertFalse(pepe_env_on_field(["蓝海", "二手市场"]))
+        self.assertFalse(pepe_env_on_field(None))
 
     def test_prepare_battle_releases_battle_state(self):
         """备战界面读到「出战」就说明不在战斗里：状态必须从 battle 收回来。

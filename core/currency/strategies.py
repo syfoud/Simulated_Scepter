@@ -340,6 +340,71 @@ def exit_plane_for(targets, collected):
     return max(min_plane_of(name) for name in pending)
 
 
+# 「佩佩在场」相关策略：拿到其中任意一条，场上就有佩佩了（孪生姵姵的前置条件）。
+# 名字来自解包名单；「孪生姵姵」本身是目标，不算在内。
+PEPE_FIELD_STRATEGIES = ("溜佩佩", "溜佩佩+", "佩佩客串", "佩佩驾到")
+# 依赖「佩佩在场」才能出现的策略（位面 2~3）
+PEPE_DEPENDENT_STRATEGIES = ("孪生姵姵",)
+
+
+# 「佩佩被带走」的关键词：这条策略会让佩佩离开，对刷孪生姵姵是绝对负面。
+# 名字不在 298 条名单里（实测 OCR 到的是说明文字「阿兰接走佩佩们并留下所有装备」），
+# 所以按关键词兜，命中就不再走佩佩特化。
+PEPE_LEAVE_KEYWORDS = ("阿兰", "接走佩佩")
+
+
+def pepe_left(*texts):
+    """本屏是否出现了会让佩佩离开的策略。"""
+    for text in texts:
+        normalized = normalize_name(text or "")
+        if any(normalize_name(word) in normalized for word in PEPE_LEAVE_KEYWORDS):
+            return True
+    return False
+
+
+# 「自动取消勾选」不动的佩佩策略：这些都是刷孪生姵姵要一直盯着的。
+# 注意「佩佩客串」不在里面——它是负面，照常按常规逻辑清掉。
+PEPE_KEEP_CHECKED = ("孪生姵姵", "佩佩驾到", "溜佩佩", "溜佩佩+")
+
+
+# 「投资环境」里也会直接把佩佩送到场上：三星佩佩 / 粗星佩佩。
+# 拿到这类环境等同于拿到了佩佩，孪生姵姵的前置条件同样满足。
+PEPE_ENVIRONMENTS = ("三星佩佩", "粗星佩佩")
+
+
+def pepe_env_on_field(texts):
+    """本屏出现的环境里有没有直接给佩佩的。"""
+    for text in texts or ():
+        if not text:
+            continue
+        normalized = normalize_name(text)
+        if any(normalize_name(name) in normalized for name in PEPE_ENVIRONMENTS):
+            return True
+    return False
+
+
+def pepe_goal_reached(name):
+    """这条是不是「最终目标」策略（孪生姵姵）——拿到就意味着这个系列可以收工了。
+
+    名字里那个「姵」是生僻字，OCR 大概率读成「佩」，所以比较前先把 姵 统一成 佩。
+    """
+    def canon(text):
+        return normalize_name(text or "").replace("姵", "佩")
+
+    target = canon(name)
+    return any(target == canon(item) for item in PEPE_DEPENDENT_STRATEGIES)
+
+
+def pepe_keep_checked(name):
+    """这条命中的目标策略要不要保留勾选（不清掉）。"""
+    return normalize_name(name) in {normalize_name(item) for item in PEPE_KEEP_CHECKED}
+
+
+def pepe_on_field(name):
+    """这条策略拿到的同时，场上是否已经有佩佩。"""
+    return normalize_name(name) in {normalize_name(item) for item in PEPE_FIELD_STRATEGIES}
+
+
 _SEPARATORS = re.compile(r"[•·・‧\s\-—_]+")
 
 
