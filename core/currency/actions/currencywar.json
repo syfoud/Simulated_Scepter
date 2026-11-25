@@ -532,7 +532,12 @@
             "redundancy": 30
         },
         "actions": [
-            "choose_equipment"
+            {
+                "position": [
+                    745,
+                    215
+                ]
+            }
         ]
     },
     {
