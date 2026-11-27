@@ -851,5 +851,140 @@
         "actions": [
             "finish_relic"
         ]
+    },
+    {
+        "name": "重同步生存索引",
+        "trigger": {
+            "text": "生存索引",
+            "box": [
+                101,
+                63,
+                203,
+                99
+            ]
+        },
+        "actions": [
+            {
+                "set_state": "relic_index"
+            }
+        ]
+    },
+    {
+        "name": "重同步内圈列表",
+        "trigger": {
+            "text": "位面饰品快速提取",
+            "box": [
+                900,
+                317,
+                1189,
+                354
+            ]
+        },
+        "actions": [
+            {
+                "set_state": "relic_list"
+            }
+        ]
+    },
+    {
+        "name": "重同步外圈列表",
+        "trigger": {
+            "photo": "relic",
+            "pos": {
+                "x": 324,
+                "y": 828
+            },
+            "threshold": 0.99
+        },
+        "actions": [
+            {
+                "set_state": "relic_list"
+            }
+        ]
+    },
+    {
+        "name": "重同步内圈准备页",
+        "trigger": {
+            "text": "位面饰品提取",
+            "box": [
+                101,
+                43,
+                251,
+                74
+            ]
+        },
+        "actions": [
+            {
+                "set_state": "relic_prepare"
+            }
+        ]
+    },
+    {
+        "name": "重同步外圈准备页",
+        "trigger": {
+            "text": "侵蚀隧洞",
+            "box": [
+                102,
+                48,
+                204,
+                84
+            ]
+        },
+        "actions": [
+            {
+                "set_state": "relic_prepare"
+            }
+        ]
+    },
+    {
+        "name": "重同步队伍页",
+        "trigger": {
+            "text": "队伍",
+            "box": [
+                103,
+                39,
+                145,
+                65
+            ]
+        },
+        "actions": [
+            {
+                "set_state": "relic_team"
+            }
+        ]
+    },
+    {
+        "name": "重同步支援列表",
+        "trigger": {
+            "text": "支援列表",
+            "box": [
+                248,
+                74,
+                348,
+                103
+            ]
+        },
+        "actions": [
+            {
+                "set_state": "relic_support_list"
+            }
+        ]
+    },
+    {
+        "name": "重同步支援角色",
+        "trigger": {
+            "text": "支援角色",
+            "box": [
+                384,
+                76,
+                472,
+                103
+            ]
+        },
+        "actions": [
+            {
+                "set_state": "relic_support_list"
+            }
+        ]
     }
 ]
