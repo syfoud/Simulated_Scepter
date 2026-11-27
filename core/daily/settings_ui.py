@@ -1,4 +1,4 @@
-"""日常遗器本的配置窗口：运行模式、副本、次数、支援、秘技顺序与收尾开关。"""
+"""日常内核的配置窗口：运行模式、副本、次数、支援、秘技顺序与收尾开关。"""
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -266,7 +266,7 @@ class RelicSelectSection(QGroupBox):
 
 
 class SettingsDialog(BaseDialog):
-    """日常遗器本的独立配置窗口。"""
+    """日常内核的独立配置窗口。"""
 
     def __init__(self, parent=None):
         super().__init__("日常内核配置", parent)
@@ -285,12 +285,12 @@ class SettingsDialog(BaseDialog):
 
 
 class DailyRelicSection(QWidget):
-    """日常遗器本主配置区：运行模式 + 内圈/外圈页签 + 收尾开关。"""
+    """日常内核主配置区：运行模式 + 内圈/外圈页签 + 收尾开关。"""
 
     def __init__(self, data, parent=None):
         super().__init__(parent)
 
-        header = QLabel("日常遗器本")
+        header = QLabel("日常任务")
         font = QFont()
         font.setBold(True)
         font.setPointSize(font.pointSize() + 2)

@@ -41,12 +41,50 @@ TAB_LINE_BOX = [101, 63, 203, 99]
 # 指南页顶部页签的落点：左起第一个是「每日实训」（带红点角标），第二个是「生存索引」。
 # 两张截图实测：每日实训页时第一个页签高亮 x 298~430，生存索引页时第二个高亮 x 417~549。
 TAB_DAILY = [364, 215]
+# 第二个页签是「生存索引」：换分类、刷新列表时都要点它。
+TAB_INDEX = [483, 215]
 # 手机页面右下角「指南」图标的位置（真实坐标，供点指南与判断手机页面用）。
 GUIDE_ICON_BOX = [1319, 784, 1364, 809]
 
 # 消耗品列表的格子中心：列 x、行 y（数量标签在格子底部，实测列距 133、行距 157）。
 SNACK_GRID_X = (158, 291, 424)
 SNACK_GRID_Y = (168, 325, 482, 639, 796)
+# 页面 → 状态：认出哪一页就把状态校正到哪一位。页面锚点统一放在内核里，
+# 脚本只写 state_only，不再把这些坐标各写一份。顺序按「越具体越靠前」排，
+# 因为「星际和平指南」标题在指南系的所有子页都会出现，只能放最后。
+# 各状态的先后次序：只允许「往前跳」，不允许回退。
+STAGE_ORDER = {
+    "relic_entry": 0,
+    "relic_guide": 1,
+    "relic_index": 2,
+    "relic_refresh": 2,
+    "relic_refresh_back": 2,
+    "relic_list": 3,
+    "relic_prepare": 4,
+    "relic_challenge": 5,
+    "relic_outer_challenge": 5,
+    "relic_team": 5,
+    "relic_support_list": 6,
+    "relic_support_outer": 6,
+    "relic_team_start": 7,
+    "relic_skill": 8,
+    "relic_approach": 9,
+    "relic_done": 10,
+}
+# 页面锚点 → 该页面对应的状态：认出比当前更靠后的页面时直接跳过去。
+PAGE_ANCHORS = (
+    ("relic_guide", "星际和平指南", [103, 39, 221, 66]),
+    ("relic_index", "生存索引", [101, 63, 203, 99]),
+    ("relic_list", "位面饰品快速提取", [900, 317, 1189, 354]),
+    ("relic_prepare", "位面饰品提取", [101, 43, 251, 74]),
+    ("relic_prepare", "侵蚀隧洞", [102, 48, 204, 84]),
+    ("relic_team", "队伍", [103, 39, 145, 65]),
+    ("relic_support_list", "支援列表", [248, 74, 348, 103]),
+    ("relic_support_list", "支援角色", [384, 76, 472, 103]),
+    # 副本内的战斗场景：左上角是「差分宇宙」。认出它就说明已经在副本里了，
+    # 内外圈共用这一个锚点，直接用接敌流程继续，不必退回入口重找。
+    ("relic_skill", "差分宇宙", [57, 14, 148, 42]),
+)
 # 运行模式 → 左侧菜单里要点击的分类名。
 MODULE_CATEGORY = {"inner": "饰品提取", "outer": "侵蚀隧洞"}
 # 支援角色页「替换几号位」四个位置的落框，按号位顺序；两边的页面布局不同：
@@ -178,6 +216,22 @@ class DailyKernel(ScriptKernel):
         self.esc_time = now
         return True
 
+    def back_out(self):
+        """入口阶段的兜底退回：画面其实已经到更靠后的页面时，先按当前页面推进，别按 ESC。
+
+        顺序很关键——状态机每轮只执行第一个命中事件，而本方法所在的兜底事件靠 state_only 触发，
+        永远会命中；因此先让 fast_forward 判一次：只要画面已经在更靠后的页面，就把状态跳过去，
+        这一轮不再按 ESC；确实还停在未知界面时才退回上一级。
+        """
+        if self._stopped():
+            return
+        before = self.state
+        self.fast_forward()
+        if self.state != before:
+            return
+        if self.press_esc():
+            self._log_once("back_out", "没认出已知界面，按 ESC 退回上一级（当前 %s）", self.state)
+
     def open_guide(self):
         """在大世界按「星际和平指南」键打开指南页，跳过手机页面。
 
@@ -279,17 +333,23 @@ class DailyKernel(ScriptKernel):
                    for item in self.ts.find_with_box(box=box, redundancy=20))
 
     def _click_text_in(self, text, box):
-        """在区域里认出文字就点它，认不到就点区域中心。
+        """在区域里认出文字才点它；认不到就什么都不做，绝不点区域中心。
+
+        盲点区域中心会落到框里其它按钮或角色卡上（准备页的支援入口框就压在队伍卡位上方），
+        一旦点错会把队伍里的角色下掉，所以这里只认字、不兜底。
 
         Args:
             text: 要识别的文字。
             box: 识别区域 [左, 上, 右, 下]。
+
+        Returns:
+            True 表示认到并点了一次。
         """
-        for item in self.ts.find_with_box(box=box, redundancy=20):
-            if text in clean_text(item["raw_text"]):
-                self.click_box(item["box"])
-                return
-        self.click_box(box)
+        found = self._match_box(text, box)
+        if found is None:
+            return False
+        self.click_box(found)
+        return True
 
     def run_static(self, *args, **kwargs):
         """每轮记录一次状态机结果，识别不到时明确提示是加载中或未知页面。"""
@@ -306,6 +366,33 @@ class DailyKernel(ScriptKernel):
         return name, result
 
 
+    def fast_forward(self):
+        """画面已经走到更靠后的页面时，直接跳到那一页继续推进，绝不回退。
+
+        典型场景：已经手动打开正确的副本准备页，而状态还停在找副本/选分类——
+        这时按准备页继续走，不必从头再来。过渡帧里旧页面锚点还在、新页面还没画出来时
+        本方法只会原地不动（目标状态次序不更靠后就不动），不会把状态倒回上一级。
+        收尾链按固定线性流程执行，这里不参与。
+        """
+        if self._stopped() or self.state.startswith("reward_"):
+            return
+        best_state, best_stage = None, STAGE_ORDER.get(self.state, 0)
+        for state, text, box in PAGE_ANCHORS:
+            if STAGE_ORDER[state] <= best_stage:
+                continue
+            if self._text_visible(text, box):
+                best_state, best_stage = state, STAGE_ORDER[state]
+        # 外圈副本列表没有文字锚点，用画面上的副本图标认。
+        if STAGE_ORDER["relic_list"] > best_stage and self.check("relic", 324, 828, threshold=0.99):
+            best_state, best_stage = "relic_list", STAGE_ORDER["relic_list"]
+        if best_state is None:
+            return
+        if best_state == "relic_skill" and STAGE_ORDER.get(self.state, 0) < STAGE_ORDER["relic_prepare"]:
+            # 一开局人就已经站在副本里：不知道是哪个副本，但继续接敌比退回入口更合理。
+            CUS_LOGGER.warning("未知内圈副本（当前状态 %s），按已进入副本直接开始接敌流程", self.state)
+        CUS_LOGGER.debug("画面已到 %s，状态从 %s 直接推进过去", best_state, self.state)
+        self.update_state(best_state)
+
     def select_category(self):
         """点击配置的副本分类；分类不在左侧菜单可见范围时滚动一屏。
 
@@ -313,6 +400,11 @@ class DailyKernel(ScriptKernel):
             RuntimeError: 菜单滚到底仍看不到配置的分类。
         """
         if self._stopped():
+            return
+        # 不在生存索引页时不动：刷新列表途中停在实训页签的话，先点回生存索引页签。
+        if not self._text_visible("生存索引", TAB_LINE_BOX):
+            if self._text_visible("每日实训", TAB_LINE_BOX):
+                self.click_position(TAB_INDEX)
             return
         target = MODULE_CATEGORY[self._module()]
         box = [240, 270, 700, 890]
@@ -372,7 +464,7 @@ class DailyKernel(ScriptKernel):
             return
         named = [item for item, match in zip(items, texts) if self._name_matches(name, match)]
         if named and not any(name in match for match in texts):
-            CUS_LOGGER.debug("副本名与配置有一字误差，按 %s 处理：%s", name, texts)
+            self._log_once("name_fuzzy", "副本名与配置有一字误差，按 %s 处理：%s", name, texts)
         if not named:
             self._log_once("list_miss", "副本列表没找到 %s，本帧识别到：%s", name, texts)
             # 滚动后列表位置会变，之前记下的落框作废。
@@ -385,7 +477,7 @@ class DailyKernel(ScriptKernel):
                 return
             # 每次滚 8 格，滚完下一轮再判断一次副本名，命中就停；
             # 方向按配置里录入的先后顺序判断（目标在可见副本下方就向下滚）。
-            ticks = self._list_ticks(module, name, texts)
+            ticks = self._list_ticks(name, texts)
             self._scroll_once(box, (1358, 698), ticks, texts, f"副本列表滚到底仍找不到：{name}")
             return
         name_box = named[0]["box"]
@@ -408,7 +500,7 @@ class DailyKernel(ScriptKernel):
             self.click_box(enter_box)
             self.update_state("relic_prepare")
             return
-        CUS_LOGGER.debug("已识别到副本 %s，但没找到同一行的「进入」，本轮不动作", name)
+        self._log_once("enter_miss", "已识别到副本 %s，但没找到同一行的「进入」，本轮不动作", name)
 
     def prepare_page(self):
         """准备页：确认是配置的副本，调好挑战次数，再按配置推进到支援或挑战。
@@ -424,7 +516,7 @@ class DailyKernel(ScriptKernel):
             "inner": ([1505, 51, 1597, 78], [1600, 857, 1711, 883], [1447, 882, 1497, 911]),
             "outer": ([1640, 53, 1739, 80], [1491, 850, 1601, 879], [1223, 876, 1276, 906]),
         }[module]
-        loaded = self._dungeon_name_visible(module)
+        loaded = self._dungeon_name_visible()
         if loaded is None:
             return
         if loaded is False:
@@ -466,9 +558,11 @@ class DailyKernel(ScriptKernel):
         if not self._support_on():
             self.update_state("relic_challenge")
             return
-        # 内圈支援入口在准备页右下角，点开后由状态机识别支援列表。
+        # 内圈支援入口在准备页右下角；认不到入口就等下一轮，不盲点。
         self.support_phase = 0
-        self._click_text_in("支援", [688, 739, 878, 912])
+        if not self._click_text_in("支援", [688, 739, 878, 912]):
+            self._log_once("support_entry_miss", "准备页还没认出「支援」入口，等界面刷新")
+            return
         self.update_state("relic_support_list")
 
     def pick_support_slot(self):
@@ -599,10 +693,6 @@ class DailyKernel(ScriptKernel):
         self.list_settle = 0
         self.count_target = None
         self.update_state("relic_done")
-
-
-
-
 
 
 
@@ -825,10 +915,8 @@ class DailyKernel(ScriptKernel):
 
     def finish_task(self):
         """结束本次任务：停止状态机，由运行入口释放截图与输入资源。"""
-        CUS_LOGGER.info("日常遗器本任务完成")
+        CUS_LOGGER.info("日常任务完成")
         self.stop()
-
-
 
     def goto_index(self):
         """指南页切到「生存索引」页签；页签已经是生存索引就不再点。
@@ -840,11 +928,8 @@ class DailyKernel(ScriptKernel):
             return
         # 指南窗口左上角第二行是当前页签，实测 生存索引 [101,63,203,99]。
         if not self._text_visible("生存索引", TAB_LINE_BOX):
-            # 指南页第二个页签就是「生存索引」。
-            self.click_position([483, 215])
+            self.click_position(TAB_INDEX)
         self.update_state("relic_index")
-
-
 
 
 
@@ -868,11 +953,10 @@ class DailyKernel(ScriptKernel):
                                            padded[index + len(name)])
                    for index in range(len(padded) - len(name)))
 
-    def _list_ticks(self, module, name, texts):
+    def _list_ticks(self, name, texts):
         """按录入顺序判断目标副本在可见副本的上方还是下方。
 
         Args:
-            module: 运行模式，决定用内圈还是外圈的副本清单。
             name: 配置的副本短名。
             texts: 本帧列表区域识别到的文字。
 
@@ -881,6 +965,7 @@ class DailyKernel(ScriptKernel):
         """
         if self.list_direction is not None:
             return self.list_direction
+        module = self._module()
         order = [item.split("-", 1)[0] for item, _ in (INNER_TARGETS if module == "inner" else OUTER_TARGETS)]
         target = next((index for index, item in enumerate(order) if item.startswith(name)), None)
         visible = [index for index, item in enumerate(order)
@@ -891,24 +976,21 @@ class DailyKernel(ScriptKernel):
         self.list_direction = -8 if nearest < target else 8
         return self.list_direction
 
-    def _dungeon_name_visible(self, module):
+    def _dungeon_name_visible(self):
         """读取准备页中央的副本名，判断是否是配置的那个副本。
 
         只有认到完整的「副本名|难度」那一行且名字对不上时才判定走错副本；
         认到的是别的东西或还没渲染出来时返回 None，避免把正确的准备页踢掉。
 
-        Args:
-            module: 运行模式，决定副本名区域的坐标。
-
         Returns:
             True 是配置的副本；False 明确是别的副本；None 无法判断。
         """
-        box = {"inner": [500, 105, 1100, 150], "outer": [1209, 124, 1496, 155]}[module]
+        box = {"inner": [500, 105, 1100, 150], "outer": [1209, 124, 1496, 155]}[self._module()]
         texts = [clean_text(item["raw_text"])
                  for item in self.ts.find_with_box(box=box, redundancy=20)]
         if not texts:
             return None
-        name = str(self.config[module]).split("-", 1)[0]
+        name = str(self.config[self._module()]).split("-", 1)[0]
         if any(self._name_matches(name, text) for text in texts):
             return True
         if any("难度" in text for text in texts):
