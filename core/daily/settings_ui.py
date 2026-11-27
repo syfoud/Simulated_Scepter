@@ -276,7 +276,7 @@ class SettingsDialog(BaseDialog):
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(0)
 
-        data = load_module_settings(__file__).get("daily_relic", {})
+        data = load_module_settings(__file__)["daily_relic"]
         self.section = DailyRelicSection(data, self)
         self.content_layout.addWidget(self.section)
 

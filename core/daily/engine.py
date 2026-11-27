@@ -36,13 +36,13 @@ MENU_ITEMS = (
     "侵蚀隧洞",
     "历战余响",
 )
+# 指南窗口左上角第二行是当前页签，实测三处判断都落在这个区域里（生存索引/每日实训）。
+TAB_LINE_BOX = [101, 63, 203, 99]
 # 指南页顶部页签的落点：左起第一个是「每日实训」（带红点角标），第二个是「生存索引」。
 # 两张截图实测：每日实训页时第一个页签高亮 x 298~430，生存索引页时第二个高亮 x 417~549。
 TAB_DAILY = [364, 215]
 # 手机页面右下角「指南」图标的位置（真实坐标，供点指南与判断手机页面用）。
 GUIDE_ICON_BOX = [1319, 784, 1364, 809]
-# 委托页左上角标题区域；比实测框略放宽，OCR 框会小幅抖动。
-COMMISSION_TITLE_BOX = [90, 40, 200, 100]
 
 # 消耗品列表的格子中心：列 x、行 y（数量标签在格子底部，实测列距 133、行距 157）。
 SNACK_GRID_X = (158, 291, 424)
@@ -64,7 +64,7 @@ class DailyKernel(ScriptKernel):
 
     def __init__(self):
         super().__init__()
-        self.config = load_module_settings(__file__).get("daily_relic", {})
+        self.config = load_module_settings(__file__)["daily_relic"]
         self._validate_config()
         # 本张挑战在准备页设定的次数；None 表示还没按配置与开拓力算过。
         self.count_target = None
@@ -93,8 +93,6 @@ class DailyKernel(ScriptKernel):
         self.attack_time = None
         # 委托页连续没认出可领奖励的帧数，用于区分「没奖励」与「页面还没渲染」。
         self.commission_misses = 0
-        # 委托页已经按下的 ESC 次数。
-        self.esc_count = 0
         # 每日实训已点击「领取」的次数与上一次落框，避免对同一张卡片连点。
         self.claim_clicks = 0
         self.claimed_box = None
@@ -686,12 +684,11 @@ class DailyKernel(ScriptKernel):
         if self._stopped():
             return
         if self._text_visible("指南", GUIDE_ICON_BOX):
-            self.esc_count = 0
             self.update_state("reward_phone_guide")
             return
         if self.press_esc():
-            self.esc_count += 1
-            CUS_LOGGER.debug("委托页按第 %s 次 ESC 退回上一级", self.esc_count)
+            # 一次 ESC 只关掉获得物品提示，要再按一次才退委托页，所以这里会连着按。
+            self._log_once("commission_esc", "委托页按 ESC 退回上一级")
 
     def open_reward_guide(self):
         """手机页面点「指南」；认不到入口就等，不盲点也不跳过。"""
@@ -709,7 +706,7 @@ class DailyKernel(ScriptKernel):
         """指南页切到「每日实训」页签；页签已经是每日实训就不再点。"""
         if self._stopped():
             return
-        if not self._text_visible("每日实训", [101, 63, 203, 99]):
+        if not self._text_visible("每日实训", TAB_LINE_BOX):
             self.click_position(TAB_DAILY)
             key_mouse_manager.wait()
         self.update_state("reward_training")
@@ -722,7 +719,7 @@ class DailyKernel(ScriptKernel):
         if self._stopped():
             return
         # 页签行实测 每日实训 [104,66,203,94]。
-        if not self._text_visible("每日实训", [101, 63, 203, 99]):
+        if not self._text_visible("每日实训", TAB_LINE_BOX):
             self._log_once("training_miss", "还没到每日实训页，点页签等它出来")
             self.click_position(TAB_DAILY)
             key_mouse_manager.wait()
@@ -842,7 +839,7 @@ class DailyKernel(ScriptKernel):
         if self._stopped():
             return
         # 指南窗口左上角第二行是当前页签，实测 生存索引 [101,63,203,99]。
-        if not self._text_visible("生存索引", [101, 63, 203, 99]):
+        if not self._text_visible("生存索引", TAB_LINE_BOX):
             # 指南页第二个页签就是「生存索引」。
             self.click_position([483, 215])
         self.update_state("relic_index")
