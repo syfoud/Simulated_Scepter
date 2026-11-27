@@ -1,4 +1,4 @@
-"""日常内核配置界面：日常遗器本的模式、副本、次数、支援与秘技。"""
+"""日常遗器本的配置窗口：运行模式、副本、次数、支援、秘技顺序与收尾开关。"""
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -19,16 +19,18 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from core.daily.relic_targets import INNER_TARGETS, OUTER_TARGETS
+from core.daily_relic.targets import (
+    INNER_TARGETS,
+    OUTER_TARGETS,
+    RUNS_CHOICES,
+    SUPPORT_ROLE_CHOICES,
+    SUPPORT_SLOT_CHOICES,
+)
 from tool.gui.settings_dialog import SettingsDialog as BaseDialog
 from tool.storage import load_module_settings, save_json_values
 
-RUNS_CHOICES = (1, 2, 3, 4, 5, 6)
-SLOT_CHOICES = (1, 2, 3, 4)
-
-
 class RunsSection(QGroupBox):
-    """挑战次数区：1~6 单选 + 自动判断开关。"""
+    """挑战次数区：1~6 单选 + 按开拓力自动推算开关。"""
 
     def __init__(self, auto, runs, parent=None):
         super().__init__("挑战次数", parent)
@@ -64,7 +66,11 @@ class RunsSection(QGroupBox):
             button.setEnabled(not auto)
 
     def collect(self):
-        """返回 (auto, runs)，供保存层写入模块配置。"""
+        """收集挑战次数区的选择。
+
+        Returns:
+            (是否按开拓力自动推算, 手动选择时使用的次数)。
+        """
         return self.auto_check.isChecked(), self.group.checkedButton().property("runs")
 
 
@@ -79,7 +85,7 @@ class SupportSection(QGroupBox):
         self.group = QButtonGroup(self)
         row = QHBoxLayout()
         row.addWidget(QLabel("替换位置："))
-        for choice in SLOT_CHOICES:
+        for choice in SUPPORT_SLOT_CHOICES:
             button = QRadioButton(f"{choice}号位")
             button.setProperty("slot", choice)
             self.group.addButton(button)
@@ -105,8 +111,51 @@ class SupportSection(QGroupBox):
             button.setEnabled(enabled)
 
     def collect(self):
-        """返回 (是否开启支援, 替换槽位)。"""
+        """收集支援区的选择。
+
+        Returns:
+            (是否开启支援, 支援角色要替换的槽位)。
+        """
         return self.check.isChecked(), self.group.checkedButton().property("slot")
+
+
+class SupportPickSection(QGroupBox):
+    """支援角色区：用列表里第几个支援角色，以及是否只挑好友；内外圈各有一份。"""
+
+    def __init__(self, index, friend_only, parent=None):
+        super().__init__("支援角色", parent)
+        self.group = QButtonGroup(self)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("列表第几个："))
+        for choice in SUPPORT_ROLE_CHOICES:
+            button = QRadioButton(str(choice))
+            button.setProperty("index", choice)
+            self.group.addButton(button)
+            row.addWidget(button)
+        row.addStretch(1)
+
+        selected = next(
+            (button for button in self.group.buttons()
+             if button.property("index") == index),
+            None,
+        )
+        (selected or self.group.buttons()[0]).setChecked(True)
+
+        self.friend_check = QCheckBox("仅好友支援")
+        self.friend_check.setChecked(bool(friend_only))
+
+        layout = QVBoxLayout(self)
+        layout.addLayout(row)
+        layout.addWidget(self.friend_check)
+
+    def collect(self):
+        """收集支援角色区的选择。
+
+        Returns:
+            (支援角色列表里用第几个角色, 是否只挑好友支援)。
+        """
+        return self.group.checkedButton().property("index"), self.friend_check.isChecked()
 
 
 class SkillOrderSection(QGroupBox):
@@ -116,10 +165,9 @@ class SkillOrderSection(QGroupBox):
         super().__init__("秘技顺序", parent)
 
         hint = QLabel(
-            "按队伍槽位输入 1~4 的顺序，例如 1342 表示先按 1 号位施放秘技，"
-            "再按 3、4、2 号位。数字不可重复，留空表示不释放秘技。"
-            "「释放延迟」是按下 E 后到切换下一名角色的等待时间；"
-            "「切换间隔」是切到新角色到按下 E 的等待时间。"
+            "按队伍槽位输入 1~4 的顺序，例如 1342 表示依次用 1、3、4、2 号位施放秘技。"
+            "数字不可重复，留空表示不释放秘技。「释放延迟」是放完秘技到切下一名角色的等待，"
+            "「切换间隔」是切到新角色到按秘技的等待。"
         )
         hint.setWordWrap(True)
 
@@ -128,7 +176,7 @@ class SkillOrderSection(QGroupBox):
         self.input.setPlaceholderText("例如：1342；留空表示不释放")
 
         self.delay_input = QDoubleSpinBox()
-        self.delay_input.setRange(0.1, 2.0)
+        self.delay_input.setRange(0.1, 3.0)
         self.delay_input.setSingleStep(0.1)
         self.delay_input.setValue(float(delay))
 
@@ -150,16 +198,17 @@ class SkillOrderSection(QGroupBox):
         layout.addLayout(form)
 
     def collect(self):
-        """返回 (秘技顺序, 释放延迟, 切换间隔)。
+        """收集秘技顺序与释放节奏。
 
-        秘技顺序为字符串；非法输入由保存层拦截。延迟单位为秒。
+        Returns:
+            (1~4 号位的释放顺序, 释放延迟秒, 切换间隔秒)；顺序留空表示不释放秘技。
 
         Raises:
-            ValueError: 秘技顺序包含 1~4 以外的字符或有重复数字。
+            ValueError: 秘技顺序包含 1~4 以外的字符，或有重复数字。
         """
         raw = self.input.text().strip()
         if raw:
-            if not all(c in "1234" for c in raw):
+            if not all(char in "1234" for char in raw):
                 raise ValueError("秘技顺序只能包含 1/2/3/4")
             if len(set(raw)) != len(raw):
                 raise ValueError("秘技顺序不能有重复数字")
@@ -167,7 +216,7 @@ class SkillOrderSection(QGroupBox):
 
 
 class RelicSelectSection(QGroupBox):
-    """副本选择区：下拉选择，下方显示所选副本的位置/掉落。"""
+    """副本选择区：下拉选择，下方显示所选副本的位置或掉落。"""
 
     def __init__(self, targets, selected, parent=None):
         super().__init__("副本选择", parent)
@@ -181,8 +230,7 @@ class RelicSelectSection(QGroupBox):
         for name, detail in targets:
             self.combo.addItem(name, name)
             self.details[name] = detail
-            index = self.combo.count() - 1
-            self.combo.setItemData(index, detail, Qt.ToolTipRole)
+            self.combo.setItemData(self.combo.count() - 1, detail, Qt.ToolTipRole)
 
         self.detail_label = QLabel()
         self.detail_label.setWordWrap(True)
@@ -209,12 +257,35 @@ class RelicSelectSection(QGroupBox):
         self.combo.setToolTip(detail)
 
     def collect(self):
-        """返回当前选中的副本名。"""
+        """收集副本选择区的选择。
+
+        Returns:
+            下拉框当前选中的副本展示名。
+        """
         return self.combo.currentData()
 
 
-class DailyRelicSection(QWidget):
-    """日常遗器本主配置区：运行模式 + 内圈/外圈页签。"""
+class SettingsDialog(BaseDialog):
+    """日常遗器本的独立配置窗口。"""
+
+    def __init__(self, parent=None):
+        super().__init__("日常遗器本配置", parent)
+        scroll = self.findChild(QScrollArea)
+        if scroll is not None:
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+        self.content_layout.setSpacing(0)
+
+        data = load_module_settings(__file__)
+        self.section = RelicSection(data, self)
+        self.content_layout.addWidget(self.section)
+
+    def persist(self):
+        save_json_values(__file__, self.section.collect())
+
+
+class RelicSection(QWidget):
+    """日常遗器本主配置区：运行模式 + 内圈/外圈页签 + 收尾开关。"""
 
     def __init__(self, data, parent=None):
         super().__init__(parent)
@@ -241,26 +312,32 @@ class DailyRelicSection(QWidget):
         self.inner_list = RelicSelectSection(INNER_TARGETS, data.get("inner"))
         self.inner_support = SupportSection(
             data.get("inner_support", False), data.get("inner_support_slot", 1))
+        self.inner_pick = SupportPickSection(
+            data.get("inner_support_index", 1), data.get("inner_support_friend", False))
         self.inner_runs = RunsSection(
             data.get("inner_auto", False), data.get("inner_runs", RUNS_CHOICES[0]))
         self.inner_skill = SkillOrderSection(
             data.get("inner_skill_order", ""),
             data.get("inner_skill_delay", 1.5),
-            data.get("inner_skill_switch_delay", 0.3),
-        )
+            data.get("inner_skill_switch_delay", 0.3))
 
         self.outer_list = RelicSelectSection(OUTER_TARGETS, data.get("outer"))
         self.outer_support = SupportSection(
             data.get("outer_support", False), data.get("outer_support_slot", 1))
+        self.outer_pick = SupportPickSection(
+            data.get("outer_support_index", 1), data.get("outer_support_friend", False))
         self.outer_runs = RunsSection(
             data.get("outer_auto", False), data.get("outer_runs", RUNS_CHOICES[0]))
 
+        self.reward_check = QCheckBox("刷完后领取委托与每日实训奖励（进度卡在 400 时合成奇巧零食）")
+        self.reward_check.setChecked(bool(data.get("daily_reward", True)))
+
         self.tabs = QTabWidget(self)
         self.tabs.addTab(self._build_panel([
-            self.inner_list, self.inner_support, self.inner_runs, self.inner_skill,
+            self.inner_list, self.inner_support, self.inner_pick, self.inner_runs, self.inner_skill,
         ]), "内圈设置")
         self.tabs.addTab(self._build_panel([
-            self.outer_list, self.outer_support, self.outer_runs,
+            self.outer_list, self.outer_support, self.outer_pick, self.outer_runs,
         ]), "外圈设置")
 
         layout = QVBoxLayout(self)
@@ -270,6 +347,7 @@ class DailyRelicSection(QWidget):
         layout.addWidget(hint)
         layout.addLayout(mode_row)
         layout.addWidget(self.tabs, 1)
+        layout.addWidget(self.reward_check)
 
         self._select_mode(data.get("module", "inner"))
 
@@ -286,7 +364,6 @@ class DailyRelicSection(QWidget):
         return panel
 
     def _select_mode(self, module):
-        """按模块名恢复顶部模式单选。"""
         for button in self.mode_group.buttons():
             if button.property("module") == module:
                 button.setChecked(True)
@@ -294,12 +371,21 @@ class DailyRelicSection(QWidget):
         self.mode_group.buttons()[0].setChecked(True)
 
     def collect(self):
-        """收集当前选择，返回可写入 daily_relic 配置段的字典。"""
+        """收集整个配置页的选择。
+
+        Returns:
+            可直接写入模块配置的扁平字典，键名与 config/default.json 一致。
+
+        Raises:
+            ValueError: 秘技顺序输入不合法。
+        """
         inner_support, inner_slot = self.inner_support.collect()
+        inner_index, inner_friend = self.inner_pick.collect()
         outer_support, outer_slot = self.outer_support.collect()
+        outer_index, outer_friend = self.outer_pick.collect()
         inner_auto, inner_runs = self.inner_runs.collect()
         outer_auto, outer_runs = self.outer_runs.collect()
-        skill_order, skill_delay, skill_switch = self.inner_skill.collect()
+        skill_order, skill_delay, skill_switch_delay = self.inner_skill.collect()
         return {
             "module": self.mode_group.checkedButton().property("module"),
             "inner": self.inner_list.collect(),
@@ -310,28 +396,14 @@ class DailyRelicSection(QWidget):
             "outer_runs": outer_runs,
             "inner_skill_order": skill_order,
             "inner_skill_delay": skill_delay,
-            "inner_skill_switch_delay": skill_switch,
+            "inner_skill_switch_delay": skill_switch_delay,
             "inner_support": inner_support,
             "outer_support": outer_support,
             "inner_support_slot": inner_slot,
+            "inner_support_index": inner_index,
+            "inner_support_friend": inner_friend,
             "outer_support_slot": outer_slot,
+            "outer_support_index": outer_index,
+            "outer_support_friend": outer_friend,
+            "daily_reward": self.reward_check.isChecked(),
         }
-
-
-class SettingsDialog(BaseDialog):
-    """日常内核的独立配置窗口。"""
-
-    def __init__(self, parent=None):
-        super().__init__("日常内核配置", parent)
-        # 整页按单列排版，宽度自适应窗口；这里兜底关掉外层横向滚动条。
-        scroll = self.findChild(QScrollArea)
-        if scroll is not None:
-            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.content_layout.setContentsMargins(0, 0, 0, 0)
-        self.content_layout.setSpacing(0)
-        data = load_module_settings(__file__).get("daily_relic", {})
-        self.section = DailyRelicSection(data, self)
-        self.content_layout.addWidget(self.section)
-
-    def persist(self):
-        save_json_values(__file__, {"daily_relic": self.section.collect()})
