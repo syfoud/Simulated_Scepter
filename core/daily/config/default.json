@@ -1,18 +1,23 @@
 {
     "daily_relic": {
-        "module": "inner",
-        "inner": "虫虫来袭",
-        "outer": "密伶之径-生研院",
-        "inner_auto": false,
-        "inner_runs": 1,
-        "outer_auto": false,
-        "outer_runs": 1,
+        "module": "outer",
+        "inner": "浴火钢心",
+        "outer": "霜风之径-收容舱段",
+        "inner_auto": true,
+        "inner_runs": 6,
+        "outer_auto": true,
+        "outer_runs": 6,
         "inner_skill_order": "",
         "inner_skill_delay": 1.5,
         "inner_skill_switch_delay": 0.3,
-        "inner_support": false,
-        "outer_support": false,
-        "inner_support_slot": 1,
-        "outer_support_slot": 1
+        "inner_support": true,
+        "outer_support": true,
+        "inner_support_slot": 4,
+        "outer_support_slot": 4,
+        "inner_support_index": 1,
+        "inner_support_friend": true,
+        "outer_support_index": 1,
+        "outer_support_friend": true,
+        "daily_reward": true
     }
 }

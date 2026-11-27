@@ -1,62 +1,187 @@
 [
     {
-        "name": "进入生存索引",
+        "name": "启动时已在生存索引",
         "trigger": {
-            "text": "每日实训",
+            "condition": "relic_entry",
+            "text": "生存索引",
             "box": [
-                103,
-                65,
+                101,
+                63,
                 203,
-                93
-            ]
+                99
+            ],
+            "once": true
         },
         "actions": [
             {
-                "position": [
-                    482,
-                    215
-                ]
+                "set_state": "relic_index"
             }
         ]
     },
     {
-        "name": "进入目标内圈副本",
+        "name": "启动时已在内圈副本列表",
         "trigger": {
+            "condition": "relic_entry",
             "text": "位面饰品快速提取",
             "box": [
                 900,
                 317,
                 1189,
                 354
-            ]
+            ],
+            "once": true
         },
         "actions": [
-            "enter_relic_dungeon"
+            {
+                "set_state": "relic_list"
+            }
         ]
     },
     {
-        "name": "进入目标外圈副本",
+        "name": "启动时已在外圈副本列表",
         "trigger": {
+            "condition": "relic_entry",
             "photo": "relic",
             "pos": {
                 "x": 324,
                 "y": 828
             },
-            "threshold": 0.99,
-            "box": [
-                260,
-                675,
-                282,
-                878
-            ]
+            "threshold": 0.9,
+            "once": true
         },
         "actions": [
-            "enter_relic_dungeon"
+            {
+                "set_state": "relic_list"
+            }
         ]
     },
     {
-        "name": "选择副本分类",
+        "name": "启动时已在指南页",
         "trigger": {
+            "condition": "relic_entry",
+            "text": "星际和平指南",
+            "box": [
+                103,
+                39,
+                221,
+                66
+            ],
+            "once": true
+        },
+        "actions": [
+            {
+                "set_state": "relic_guide"
+            }
+        ]
+    },
+    {
+        "name": "刷新后切回分类",
+        "trigger": {
+            "condition": "relic_refresh_back",
+            "state_only": true
+        },
+        "actions": [
+            "select_category"
+        ]
+    },
+    {
+        "name": "进入未被接受时重试",
+        "trigger": {
+            "condition": "relic_prepare",
+            "text": "位面饰品快速提取",
+            "box": [
+                900,
+                317,
+                1189,
+                354
+            ],
+            "interval": 3
+        },
+        "actions": [
+            "enter_dungeon"
+        ]
+    },
+    {
+        "name": "大世界",
+        "trigger": {
+            "condition": "relic_entry",
+            "photo": "smartphone",
+            "pos": {
+                "x": 32,
+                "y": 67
+            },
+            "threshold": 0.96
+        },
+        "actions": [
+            "open_guide"
+        ]
+    },
+    {
+        "name": "入口手机页面点指南",
+        "trigger": {
+            "condition": "relic_entry",
+            "text": "指南",
+            "box": [
+                1319,
+                784,
+                1364,
+                809
+            ],
+            "interval": 3
+        },
+        "actions": [
+            "click_guide"
+        ]
+    },
+    {
+        "name": "指南页等待中回手机页面",
+        "trigger": {
+            "condition": "relic_guide",
+            "text": "指南",
+            "box": [
+                1319,
+                784,
+                1364,
+                809
+            ],
+            "interval": 3
+        },
+        "actions": [
+            "click_guide"
+        ]
+    },
+    {
+        "name": "指南页面",
+        "trigger": {
+            "condition": "relic_guide",
+            "text": "星际和平指南",
+            "box": [
+                103,
+                39,
+                221,
+                66
+            ],
+            "interval": 2
+        },
+        "actions": [
+            "goto_index"
+        ]
+    },
+    {
+        "name": "指南页重试",
+        "trigger": {
+            "condition": "relic_guide",
+            "state_only": true,
+            "interval": 5
+        },
+        "actions": [
+            "retry_guide"
+        ]
+    },
+    {
+        "name": "生存索引刷新",
+        "trigger": {
+            "condition": "relic_refresh",
             "text": "生存索引",
             "box": [
                 101,
@@ -66,84 +191,292 @@
             ]
         },
         "actions": [
-            "select_relic_category"
+            {
+                "position": [
+                    364,
+                    215
+                ]
+            },
+            {
+                "set_state": "relic_refresh_back"
+            }
         ]
     },
     {
-        "name": "开始内圈挑战",
+        "name": "刷新时退回生存索引",
         "trigger": {
+            "condition": "relic_refresh",
+            "state_only": true,
+            "interval": 5
+        },
+        "actions": [
+            "press_esc"
+        ]
+    },
+    {
+        "name": "生存索引",
+        "trigger": {
+            "condition": "relic_index",
+            "text": "生存索引",
+            "box": [
+                101,
+                63,
+                203,
+                99
+            ]
+        },
+        "actions": [
+            "select_category"
+        ]
+    },
+    {
+        "name": "退回入口",
+        "trigger": {
+            "condition": "relic_entry",
+            "state_only": true,
+            "interval": 5
+        },
+        "actions": [
+            "press_esc"
+        ]
+    },
+    {
+        "name": "内圈副本列表",
+        "trigger": {
+            "condition": "relic_list",
+            "text": "位面饰品快速提取",
+            "box": [
+                900,
+                317,
+                1189,
+                354
+            ]
+        },
+        "actions": [
+            "enter_dungeon"
+        ]
+    },
+    {
+        "name": "外圈副本列表",
+        "trigger": {
+            "condition": "relic_list",
+            "photo": "relic",
+            "pos": {
+                "x": 324,
+                "y": 828
+            },
+            "threshold": 0.99
+        },
+        "actions": [
+            "enter_dungeon"
+        ]
+    },
+    {
+        "name": "定位副本",
+        "trigger": {
+            "condition": "relic_list",
+            "state_only": true
+        },
+        "actions": [
+            "enter_dungeon"
+        ]
+    },
+    {
+        "name": "内圈准备页",
+        "trigger": {
+            "condition": "relic_prepare",
+            "text": "位面饰品提取",
+            "box": [
+                101,
+                43,
+                251,
+                74
+            ]
+        },
+        "actions": [
+            "prepare_page"
+        ]
+    },
+    {
+        "name": "外圈准备页",
+        "trigger": {
+            "condition": "relic_prepare",
+            "text": "侵蚀隧洞",
+            "box": [
+                102,
+                48,
+                204,
+                84
+            ]
+        },
+        "actions": [
+            "prepare_page"
+        ]
+    },
+    {
+        "name": "内圈开始挑战",
+        "trigger": {
+            "condition": "relic_challenge",
             "text": "开始挑战",
             "box": [
                 1656,
                 968,
                 1759,
                 1000
-            ]
+            ],
+            "interval": 2
         },
         "actions": [
-            "apply_support",
             {
+                "text": "开始挑战",
                 "box": [
                     1656,
                     968,
                     1759,
                     1000
-                ],
-                "text": "开始挑战"
+                ]
+            },
+            {
+                "set_state": "relic_skill"
             }
         ]
     },
     {
-        "name": "开始外圈挑战",
+        "name": "外圈挑战",
         "trigger": {
+            "condition": "relic_outer_challenge",
             "text": "挑战",
             "box": [
                 1616,
                 967,
                 1673,
                 1002
-            ]
+            ],
+            "interval": 2
         },
         "actions": [
             {
+                "text": "挑战",
                 "box": [
                     1616,
                     967,
                     1673,
                     1002
-                ],
-                "text": "挑战"
+                ]
+            },
+            {
+                "set_state": "relic_team"
             }
         ]
     },
     {
-        "name": "备战支援界面",
+        "name": "外圈队伍页",
         "trigger": {
+            "condition": "relic_team",
+            "text": "队伍",
+            "box": [
+                103,
+                39,
+                145,
+                65
+            ]
+        },
+        "actions": [
+            "team_page"
+        ]
+    },
+    {
+        "name": "内圈支援列表",
+        "trigger": {
+            "condition": "relic_support_list",
+            "text": "支援列表",
+            "box": [
+                248,
+                74,
+                348,
+                103
+            ]
+        },
+        "actions": [
+            "pick_support_slot"
+        ]
+    },
+    {
+        "name": "外圈支援角色",
+        "trigger": {
+            "condition": "relic_support_list",
+            "text": "支援角色",
+            "box": [
+                384,
+                76,
+                472,
+                103
+            ]
+        },
+        "actions": [
+            "pick_support_slot"
+        ]
+    },
+    {
+        "name": "确认外圈支援",
+        "trigger": {
+            "condition": "relic_support_outer",
+            "text": "确认",
+            "box": [
+                1656,
+                973,
+                1713,
+                1008
+            ],
+            "interval": 2
+        },
+        "actions": [
+            {
+                "text": "确认",
+                "box": [
+                    1656,
+                    973,
+                    1713,
+                    1008
+                ]
+            },
+            {
+                "set_state": "relic_team_start"
+            }
+        ]
+    },
+    {
+        "name": "外圈开始挑战",
+        "trigger": {
+            "condition": "relic_team_start",
             "text": "开始挑战",
             "box": [
                 1623,
                 967,
                 1727,
                 999
-            ]
+            ],
+            "interval": 2
         },
         "actions": [
-            "apply_support",
             {
+                "text": "开始挑战",
                 "box": [
                     1623,
                     967,
                     1727,
                     999
-                ],
-                "text": "开始挑战"
+                ]
+            },
+            {
+                "set_state": "relic_approach"
             }
         ]
     },
     {
-        "name": "释放秘技并接敌",
+        "name": "释放秘技",
         "trigger": {
-            "once": true,
+            "condition": "relic_skill",
             "text": "差分宇宙",
             "box": [
                 57,
@@ -153,7 +486,22 @@
             ]
         },
         "actions": [
-            "release_secret_skills",
+            "release_skill"
+        ]
+    },
+    {
+        "name": "接近敌人",
+        "trigger": {
+            "condition": "relic_approach",
+            "text": "差分宇宙",
+            "box": [
+                57,
+                14,
+                148,
+                42
+            ]
+        },
+        "actions": [
             "approach_enemy"
         ]
     },
@@ -162,16 +510,14 @@
         "trigger": {
             "photo": "auto_battle",
             "pos": {
-                "x": 23,
-                "y": 969
+                "x": 21,
+                "y": 919
             },
-            "threshold": 0.925
+            "threshold": 0.9,
+            "interval": 2
         },
         "actions": [
-            {
-                "press": "V",
-                "time": 0
-            }
+            "auto_battle"
         ]
     },
     {
@@ -179,40 +525,30 @@
         "trigger": {
             "text": "退出关卡",
             "box": [
-                665,
-                960,
-                765,
-                988
-            ]
+                662,
+                954,
+                767,
+                990
+            ],
+            "interval": 2
         },
         "actions": [
             {
+                "text": "退出关卡",
                 "box": [
                     662,
                     954,
                     767,
                     990
-                ],
-                "text": "退出关卡"
+                ]
             },
-            {
-                "set_state": "finish_relic"
-            }
+            "count_run"
         ]
     },
     {
-        "name": "完成刷遗器",
+        "name": "打开手机菜单",
         "trigger": {
-            "condition": "finish_relic",
-            "state_only": true
-        },
-        "actions": [
-            "esc_end"
-        ]
-    },
-    {
-        "name": "大世界",
-        "trigger": {
+            "condition": "reward_phone",
             "photo": "smartphone",
             "pos": {
                 "x": 32,
@@ -222,9 +558,298 @@
         },
         "actions": [
             {
-                "press": "f4",
+                "press": "esc",
                 "time": 0
+            },
+            {
+                "set_state": "reward_phone_page"
             }
+        ]
+    },
+    {
+        "name": "退回大世界",
+        "trigger": {
+            "condition": "reward_phone",
+            "state_only": true,
+            "interval": 5
+        },
+        "actions": [
+            "press_esc"
+        ]
+    },
+    {
+        "name": "手机页面打开委托",
+        "trigger": {
+            "condition": "reward_phone_page",
+            "state_only": true
+        },
+        "actions": [
+            "open_commission_page"
+        ]
+    },
+    {
+        "name": "委托领取奖励",
+        "trigger": {
+            "condition": "reward_commission",
+            "state_only": true
+        },
+        "actions": [
+            "claim_commission"
+        ]
+    },
+    {
+        "name": "关闭获得物品提示",
+        "trigger": {
+            "condition": "reward_got_close",
+            "state_only": true
+        },
+        "actions": [
+            "close_commission_page"
+        ]
+    },
+    {
+        "name": "手机页面打开指南",
+        "trigger": {
+            "condition": "reward_phone_guide",
+            "state_only": true
+        },
+        "actions": [
+            "open_reward_guide"
+        ]
+    },
+    {
+        "name": "指南页面切每日实训",
+        "trigger": {
+            "condition": "reward_guide",
+            "text": "星际和平指南",
+            "box": [
+                103,
+                39,
+                221,
+                66
+            ],
+            "interval": 2
+        },
+        "actions": [
+            "goto_training"
+        ]
+    },
+    {
+        "name": "每日实训领奖与进度",
+        "trigger": {
+            "condition": "reward_training",
+            "state_only": true
+        },
+        "actions": [
+            "claim_training"
+        ]
+    },
+    {
+        "name": "每日实训收尾",
+        "trigger": {
+            "condition": "reward_done",
+            "state_only": true
+        },
+        "actions": [
+            "finish_task"
+        ]
+    },
+    {
+        "name": "打开万能合成",
+        "trigger": {
+            "condition": "reward_snack",
+            "text": "万能合成",
+            "box": [
+                970,
+                478,
+                1203,
+                512
+            ],
+            "interval": 2
+        },
+        "actions": [
+            {
+                "text": "万能合成",
+                "box": [
+                    970,
+                    478,
+                    1203,
+                    512
+                ]
+            },
+            {
+                "set_state": "reward_craft"
+            }
+        ]
+    },
+    {
+        "name": "前往消耗品合成",
+        "trigger": {
+            "condition": "reward_craft",
+            "text": "前往",
+            "box": [
+                1081,
+                811,
+                1133,
+                841
+            ],
+            "interval": 2
+        },
+        "actions": [
+            {
+                "text": "前往",
+                "box": [
+                    1081,
+                    811,
+                    1133,
+                    841
+                ]
+            },
+            {
+                "set_state": "reward_consumable"
+            }
+        ]
+    },
+    {
+        "name": "查找奇巧零食",
+        "trigger": {
+            "condition": "reward_consumable",
+            "text": "消耗品合成",
+            "box": [
+                103,
+                65,
+                229,
+                97
+            ]
+        },
+        "actions": [
+            "find_snack"
+        ]
+    },
+    {
+        "name": "合成奇巧零食",
+        "trigger": {
+            "condition": "reward_snack_ready",
+            "text": "合成",
+            "box": [
+                1157,
+                965,
+                1213,
+                1000
+            ],
+            "interval": 2
+        },
+        "actions": [
+            {
+                "text": "合成",
+                "box": [
+                    1157,
+                    965,
+                    1213,
+                    1000
+                ]
+            },
+            {
+                "set_state": "reward_snack_confirm"
+            }
+        ]
+    },
+    {
+        "name": "确认合成",
+        "trigger": {
+            "condition": "reward_snack_confirm",
+            "text": "确认",
+            "box": [
+                1160,
+                683,
+                1212,
+                714
+            ],
+            "interval": 2
+        },
+        "actions": [
+            {
+                "text": "确认",
+                "box": [
+                    1160,
+                    683,
+                    1212,
+                    714
+                ]
+            },
+            {
+                "set_state": "reward_snack_close"
+            }
+        ]
+    },
+    {
+        "name": "关闭合成结果",
+        "trigger": {
+            "condition": "reward_snack_close",
+            "text": "点击空白处关闭",
+            "box": [
+                875,
+                775,
+                1045,
+                806
+            ],
+            "interval": 2
+        },
+        "actions": [
+            {
+                "text": "点击空白处关闭",
+                "box": [
+                    875,
+                    775,
+                    1045,
+                    806
+                ]
+            },
+            {
+                "set_state": "reward_snack_back"
+            }
+        ]
+    },
+    {
+        "name": "退出消耗品合成",
+        "trigger": {
+            "condition": "reward_snack_back",
+            "state_only": true
+        },
+        "actions": [
+            {
+                "press": "esc",
+                "time": 0
+            },
+            {
+                "set_state": "reward_snack_home"
+            }
+        ]
+    },
+    {
+        "name": "回到每日实训",
+        "trigger": {
+            "condition": "reward_snack_home",
+            "state_only": true
+        },
+        "actions": [
+            {
+                "press": "esc",
+                "time": 0
+            },
+            {
+                "set_state": "reward_training"
+            }
+        ]
+    },
+    {
+        "name": "遗器本收尾",
+        "trigger": {
+            "condition": "relic_done",
+            "state_only": true
+        },
+        "actions": [
+            "finish_relic"
         ]
     }
 ]
