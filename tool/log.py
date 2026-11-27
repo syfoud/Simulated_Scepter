@@ -56,6 +56,69 @@ def current_log_file() -> str:
     return timed_log_filename()
 
 
+# pathname 到显示路径的映射只取决于项目根目录，运行期不会变化，可以直接缓存。
+_relative_path_cache = {}
+
+
+def _relative_source_path(pathname: str) -> str:
+    """把源码路径转成相对项目根目录的路径，项目外路径只保留文件名。
+
+    日志里的位置需要区分不同路径下的同名文件，
+    因此统一以项目根目录为基准并改用正斜杠；虚拟环境、标准库等外部路径
+    仍然只显示文件名，避免日志里出现一长串 ``..``。
+    """
+    cached = _relative_path_cache.get(pathname)
+    if cached is not None:
+        return cached
+    if pathname.startswith("<") and pathname.endswith(">"):
+        result = pathname
+    else:
+        try:
+            relative = os.path.relpath(pathname, PATHS["root"])
+        except ValueError:
+            # Windows 下不同盘符无法计算相对路径
+            result = os.path.basename(pathname)
+        else:
+            if relative == os.pardir or relative.startswith(os.pardir + os.sep):
+                result = os.path.basename(pathname)
+            else:
+                result = relative.replace(os.sep, "/")
+    _relative_path_cache[pathname] = result
+    return result
+
+
+def get_caller_location() -> str:
+    """返回调用本函数的代码所在文件之外第一层调用位置。
+
+    供工具层函数记录“是谁调用了这次操作”：同文件内的辅助函数会被跳过，
+    所以返回的是工具模块之外的真实调用方，形如 ``core/any_fate/engine.py:123``；
+    整个调用栈都找不到外部文件时返回 ``unknown``。
+    """
+    frame = sys._getframe(1)
+    origin = os.path.normcase(os.path.abspath(frame.f_code.co_filename))
+    while frame is not None:
+        filename = frame.f_code.co_filename
+        if (not filename.startswith("<")
+                and os.path.normcase(os.path.abspath(filename)) != origin):
+            return f"{_relative_source_path(filename)}:{frame.f_lineno}"
+        frame = frame.f_back
+    return "unknown"
+
+
+class CusLogFormatter(Formatter):
+    """文件日志的 Formatter：输出相对路径，并追加可选的调用者位置。
+
+    调用方可通过 ``extra={"caller": ...}`` 传入调用位置；没有该字段时不追加。
+    控制台和 UI 的 Formatter 不读取这两个字段，因此保持原样。
+    """
+
+    def format(self, record):
+        record.relpath = _relative_source_path(record.pathname)
+        caller = getattr(record, "caller", None)
+        record.caller_suffix = f"，调用者[{caller}]" if caller and caller != "unknown" else ""
+        return super().format(record)
+
+
 class LogEmitter(QObject):
     """用于跨线程发送日志信号的Qt对象"""
     show_error_signal = pyqtSignal(str, str)  # (标题, 内容)
@@ -193,8 +256,11 @@ class CusLogger(logging.Logger):
         keywords = ["property", "widget", "push", "layout"]
         keyword_filter = KeywordFilter(keywords)
 
-        logging_format = "%(levelname)s [%(asctime)s] [%(filename)s:%(lineno)d] %(message)s"
-        formatter = Formatter(logging_format)
+        logging_format = (
+            "%(levelname)s [%(asctime)s] [%(relpath)s:%(lineno)d] "
+            "%(message)s%(caller_suffix)s"
+        )
+        formatter = CusLogFormatter(logging_format)
 
         # --------- 常规日志文件处理器 ---------
 
@@ -216,9 +282,9 @@ class CusLogger(logging.Logger):
             encoding='utf-8'
         )
         error_file_handler.setLevel(logging.ERROR)
-        error_file_handler.setFormatter(logging.Formatter(
+        error_file_handler.setFormatter(CusLogFormatter(
             '%(asctime)s - %(levelname)s - %(pathname)s:%(lineno)d\n'
-            '>> %(message)s'
+            '>> %(message)s%(caller_suffix)s'
         ))
         self.addHandler(error_file_handler)
 
@@ -230,9 +296,9 @@ class CusLogger(logging.Logger):
             encoding='utf-8'
         )
         critical_file_handler.setLevel(logging.CRITICAL)
-        critical_file_handler.setFormatter(logging.Formatter(
+        critical_file_handler.setFormatter(CusLogFormatter(
             '%(asctime)s - %(levelname)s - %(pathname)s:%(lineno)d\n'
-            '>> %(message)s'
+            '>> %(message)s%(caller_suffix)s'
         ))
         self.addHandler(critical_file_handler)
 
@@ -294,8 +360,9 @@ pyqt_file_handler = FileHandler(
     encoding="utf-8"
 )
 pyqt_file_handler.setFormatter(
-    Formatter(
-        "%(levelname)s [%(asctime)s] [%(filename)s:%(lineno)d] %(message)s"
+    CusLogFormatter(
+        "%(levelname)s [%(asctime)s] [%(relpath)s:%(lineno)d] "
+        "%(message)s%(caller_suffix)s"
     )
 )
 pyqt_logger.addHandler(pyqt_file_handler)

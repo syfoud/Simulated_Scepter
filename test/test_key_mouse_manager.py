@@ -181,6 +181,26 @@ class KeyMouseBoundaryTests(unittest.TestCase):
         self.click_at(215, 896)
         self.assertNotIn("'box'", str(self.logger.debug.call_args))
 
+    def test_operation_log_records_caller_location(self):
+        """入队时记录业务调用方，worker 线程里的执行日志才有 caller。
+
+        “执行操作”是在 worker 线程打印的，调用栈里只有 _worker，
+        因此调用位置必须在 _enqueue 时捕获；这里从测试文件发起点击来验证。
+        """
+        self.click_at(215, 896)
+        extra = self.logger.debug.call_args.kwargs.get("extra")
+        self.assertIsNotNone(extra)
+        caller = extra.get("caller", "")
+        self.assertTrue(caller.startswith("test/test_key_mouse_manager.py:"), caller)
+        self.assertNotIn("_caller", str(self.logger.debug.call_args))
+
+    def test_out_of_range_warning_records_caller_location(self):
+        """越界警告同样带调用方，且原有坐标参数位置不变。"""
+        self.click_at(INCIDENT_X, INCIDENT_Y)
+        extra = self.logger.warning.call_args.kwargs.get("extra")
+        self.assertIsNotNone(extra)
+        self.assertTrue(extra["caller"].startswith("test/test_key_mouse_manager.py:"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from route import PATHS
-from tool.log import CUS_LOGGER
+from tool.log import CUS_LOGGER, get_caller_location
 from tool.utils.image_tool import find_image_in_folder
 
 ROLL_COUNT_REGION = (1660, 707, 1700, 740)
@@ -87,7 +87,8 @@ def _match_action_count_in_region(or_image, region, count_name, threshold=0.9,
     """
     x1, y1, x2, y2 = region
     if or_image is None or or_image.shape[0] < y2 or or_image.shape[1] < x2:
-        CUS_LOGGER.warning(f"{count_name}次数识别失败：截图尺寸不足，无法裁剪指定区域")
+        CUS_LOGGER.warning(f"{count_name}次数识别失败：截图尺寸不足，无法裁剪指定区域",
+                           extra={'caller': get_caller_location()})
         return None
 
     crop = or_image[y1:y2, x1:x2].copy()
@@ -116,10 +117,12 @@ def _match_action_count_in_region(or_image, region, count_name, threshold=0.9,
     save_path = _save_unmatched_roll_count(crop, unmatched_dir)
     if save_path:
         CUS_LOGGER.warning(
-            f"未识别{count_name}次数（最高相似度 {best_score:.3f}），样本已保存至 {save_path}"
+            f"未识别{count_name}次数（最高相似度 {best_score:.3f}），样本已保存至 {save_path}",
+            extra={'caller': get_caller_location()}
         )
     else:
-        CUS_LOGGER.warning(f"未识别{count_name}次数，且样本保存失败")
+        CUS_LOGGER.warning(f"未识别{count_name}次数，且样本保存失败",
+                           extra={'caller': get_caller_location()})
     return None
 
 

@@ -3,7 +3,7 @@ import numpy as np
 from scipy import signal
 
 from tool.GLOBAL import factor
-from tool.log import CUS_LOGGER
+from tool.log import CUS_LOGGER, get_caller_location
 from tool.utils.image_tool import find_image_in_folder
 from tool.utils.minimap_util import (
     DIRECTION_ARROW_COLOR,
@@ -118,7 +118,7 @@ def update_direction(or_image=None, minimap=None):
         area = area_limit(area, (0, 0, *image_size(image)))
     except (IndexError, ImageNotSupported):
         # 战斗界面、黑屏、加载动画会整块盖住小地图，蓝色箭头缺失属于可恢复的画面失效
-        CUS_LOGGER.warning('小地图上没有方向箭头')
+        CUS_LOGGER.warning('小地图上没有方向箭头', extra={'caller': get_caller_location()})
         return None
 
     image = crop(image, area=area, copy=False)
@@ -453,7 +453,8 @@ class PositionPredict:
             if show_result:
                 self.draw_position_on_map()
         else:
-            CUS_LOGGER.warning(f"{factor}未想起任何相似的命运抉择...（未找到匹配的大地图）")
+            CUS_LOGGER.warning(f"{factor}未想起任何相似的命运抉择...（未找到匹配的大地图）",
+                               extra={'caller': get_caller_location()})
 
         return best_match
     def update_minimap_data(self,image=None,rotation_minimap=None, direction_minimap=None):
@@ -464,7 +465,8 @@ class PositionPredict:
         try:
             self.direction = update_direction(minimap=direction_minimap)
         except Exception as e:
-            CUS_LOGGER.error(f"{factor}无法更新当前方向: {e}")
+            CUS_LOGGER.error(f"{factor}无法更新当前方向: {e}",
+                             extra={'caller': get_caller_location()})
             self.direction = None
             return self.rotation, self.direction
         if self.direction is None:

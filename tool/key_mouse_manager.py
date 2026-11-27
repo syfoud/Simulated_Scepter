@@ -7,7 +7,7 @@ import win32api
 import win32con
 
 from tool.background_input import BackgroundKeyboard
-from tool.log import CUS_LOGGER
+from tool.log import CUS_LOGGER, get_caller_location
 from tool.thread import ThreadWithException
 
 # 程序目前仅支持 1920x1080 这一种游戏分辨率；
@@ -74,11 +74,11 @@ def is_valid_key_name(name):
     return _normalize_key_name(str(name)) in _ALLOWED_KEY_NAMES
 
 
-def _warn_once(key, message):
+def _warn_once(key, message, caller=None):
     if key in _warned_keys:
         return
     _warned_keys.add(key)
-    CUS_LOGGER.warning(message)
+    CUS_LOGGER.warning(message, extra={'caller': caller})
 
 
 def _load_game_keys():
@@ -90,12 +90,14 @@ def _load_game_keys():
     try:
         defaults = (load_default_settings() or {}).get("game_keys") or {}
     except Exception as error:
-        CUS_LOGGER.error(f"读取默认键位配置失败，本轮按键将按逻辑名原样下发：{error}")
+        CUS_LOGGER.error(f"读取默认键位配置失败，本轮按键将按逻辑名原样下发：{error}",
+                         extra={'caller': get_caller_location()})
         defaults = {}
     try:
         user = (load_settings() or {}).get("game_keys") or {}
     except Exception as error:
-        CUS_LOGGER.error(f"读取用户键位配置失败，本轮按键使用默认键位：{error}")
+        CUS_LOGGER.error(f"读取用户键位配置失败，本轮按键使用默认键位：{error}",
+                         extra={'caller': get_caller_location()})
         user = {}
 
     default_keys = {str(name): _normalize_key_name(str(value)) for name, value in defaults.items()}
@@ -104,7 +106,8 @@ def _load_game_keys():
         value = user.get(name)
         value = _normalize_key_name(str(value)) if value else default_value
         if value not in _ALLOWED_KEY_NAMES:
-            _warn_once(name, f"键位配置中 {name} 的值 {value!r} 不合法，已回退为默认键 {default_value}")
+            _warn_once(name, f"键位配置中 {name} 的值 {value!r} 不合法，已回退为默认键 {default_value}",
+                       caller=get_caller_location())
             value = default_value
         merged[name] = value
 
@@ -231,7 +234,7 @@ class KeyMouseManager:
         """
         启动键鼠管理器线程
         """
-        CUS_LOGGER.info("启动键鼠管理器线程")
+        CUS_LOGGER.info("启动键鼠管理器线程", extra={'caller': get_caller_location()})
         if not self.running:
             self.running = True
             with self.queue_lock:
@@ -244,7 +247,7 @@ class KeyMouseManager:
         """
         停止键鼠管理器线程
         """
-        CUS_LOGGER.info("停止键鼠管理器线程")
+        CUS_LOGGER.info("停止键鼠管理器线程", extra={'caller': get_caller_location()})
         self.running = False
         if self.worker_thread and self.worker_thread.is_alive():
             # 发送停止信号
@@ -260,7 +263,7 @@ class KeyMouseManager:
         """
         清除当前键鼠管理器线程所有操作
         """
-        CUS_LOGGER.debug("清除当前所有操作")
+        CUS_LOGGER.debug("清除当前所有操作", extra={'caller': get_caller_location()})
         if self.worker_thread and self.worker_thread.is_alive():
             with self.queue_lock:
                 self.operation_queue.clear()  # 清空队列中的所有操作
@@ -291,7 +294,7 @@ class KeyMouseManager:
                 time.sleep(0.01)
         CUS_LOGGER.info("键鼠管理器线程已停止")
 
-    def _game_point(self, op_type, x, y):
+    def _game_point(self, op_type, x, y, caller=None):
         """
         把 1920x1080 像素坐标换算成屏幕坐标，并确认落点在游戏窗口内
 
@@ -303,6 +306,7 @@ class KeyMouseManager:
             op_type: 操作名称，用于日志
             x: 请求的 x 像素坐标
             y: 请求的 y 像素坐标
+            caller: 入队时的调用位置，只用于日志
 
         Returns:
             (actual_x, actual_y): 游戏窗口内的屏幕坐标；越界时返回None
@@ -315,7 +319,8 @@ class KeyMouseManager:
             CUS_LOGGER.warning(
                 "%s原本要落在游戏窗口(%s, %s)-(%s, %s)内，请求坐标(%s, %s)换算为屏幕坐标(%s, %s)已越界，跳过本次操作",
                 op_type, self.x0, self.y0, self.x1, self.y1,
-                x, y, actual_x, actual_y
+                x, y, actual_x, actual_y,
+                extra={'caller': caller}
             )
         return None
 
@@ -326,17 +331,20 @@ class KeyMouseManager:
         Args:
             operation: 操作字典，包含操作类型和参数
         """
+        caller = operation.get('_caller')
+        display = {key: value for key, value in operation.items() if key != '_caller'}
         op_type = operation['type']
-        CUS_LOGGER.debug(f"执行操作{operation}，当前队列长度{len(self.operation_queue)}")
+        CUS_LOGGER.debug(f"执行操作{display}，当前队列长度{len(self.operation_queue)}",
+                         extra={'caller': caller})
         if op_type in ('keyDown', 'keyUp', 'press'):
             self._key_operation(op_type, operation)
 
         elif op_type == 'click':
             x, y = operation['x'], operation['y']
-            if self._background_mouse_blocked("点击"):
+            if self._background_mouse_blocked("点击", caller):
                 return
             # 转换坐标，并确认落点在游戏窗口内
-            point = self._game_point("点击", x, y)
+            point = self._game_point("点击", x, y, caller)
             if point is None:
                 return
             win32api.SetCursorPos(point)
@@ -345,17 +353,17 @@ class KeyMouseManager:
         elif op_type == 'turn':
             degrees = operation['degrees']
             fine = operation.get('fine', 1)
-            if self._background_mouse_blocked("转视角"):
+            if self._background_mouse_blocked("转视角", caller):
                 return
-            self._direct_turn(degrees, fine)
+            self._direct_turn(degrees, fine, caller)
 
         elif op_type == 'scroll':
             x, y = operation['x'], operation['y']
             direct = operation['direct']
-            if self._background_mouse_blocked("滚轮"):
+            if self._background_mouse_blocked("滚轮", caller):
                 return
             # 转换坐标，并确认落点在游戏窗口内
-            point = self._game_point("滚轮", x, y)
+            point = self._game_point("滚轮", x, y, caller)
             if point is None:
                 return
             win32api.SetCursorPos(point)
@@ -370,11 +378,11 @@ class KeyMouseManager:
             start_x, start_y = operation['start_x'], operation['start_y']
             end_x, end_y = operation['end_x'], operation['end_y']
             duration = operation.get('duration', 0.4)
-            if self._background_mouse_blocked("拖动"):
+            if self._background_mouse_blocked("拖动", caller):
                 return
             # 转换坐标，并确认起止点都在游戏窗口内
-            start = self._game_point("拖拽起点", start_x, start_y)
-            end = self._game_point("拖拽终点", end_x, end_y)
+            start = self._game_point("拖拽起点", start_x, start_y, caller)
+            end = self._game_point("拖拽终点", end_x, end_y, caller)
             if start is None or end is None:
                 return
             win32api.SetCursorPos(start)
@@ -394,7 +402,8 @@ class KeyMouseManager:
         key = resolve_key(operation['key'])
         if self.background is not None:
             if not self.background.supports(key):
-                _warn_once(f"后台按键:{key}", f"后台模式暂不支持按键 {key!r}，本次按键已跳过")
+                _warn_once(f"后台按键:{key}", f"后台模式暂不支持按键 {key!r}，本次按键已跳过",
+                           caller=operation.get('_caller'))
                 return
             if op_type == 'keyDown':
                 self.background.key_down(key)
@@ -414,14 +423,15 @@ class KeyMouseManager:
                 self._sleep(duration)
             pyautogui.keyUp(key)
 
-    def _background_mouse_blocked(self, action):
+    def _background_mouse_blocked(self, action, caller=None):
         """后台模式下鼠标仍走前台通道：游戏不在前台时操作会落到别的窗口，直接跳过。"""
         if self.background is None or self.background.game_is_foreground():
             return False
-        _warn_once(f"后台鼠标:{action}", f"后台模式暂不支持鼠标{action}，游戏不在前台，本次操作已跳过")
+        _warn_once(f"后台鼠标:{action}", f"后台模式暂不支持鼠标{action}，游戏不在前台，本次操作已跳过",
+                   caller=caller)
         return True
 
-    def _direct_turn(self, degrees, fine=1):
+    def _direct_turn(self, degrees, fine=1, caller=None):
         """
         直接执行视角转动，不通过队列
 
@@ -431,6 +441,7 @@ class KeyMouseManager:
         Args:
             degrees: 转动角度，单位为度；正数向右转（俯视顺时针），负数向左转
             fine: 精细度控制参数，越大单段转动的角度上限越小、越慢
+            caller: 入队时的调用位置，只用于记录日志
         """
         if degrees > 30 // fine:
             step = 30 // fine
@@ -439,11 +450,12 @@ class KeyMouseManager:
         else:
             step = degrees
         dx = int(16.5 * step * self.multi * self.scale)
-        CUS_LOGGER.debug(f"旋转{degrees}°，精度{fine},移动距离{dx}，倍率{self.multi}，缩放比{self.scale}")
+        CUS_LOGGER.debug(f"旋转{degrees}°，精度{fine},移动距离{dx}，倍率{self.multi}，缩放比{self.scale}",
+                         extra={'caller': caller})
         win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, dx, 0)  # 进行视角移动
         self._sleep(0.05 * fine)
         if degrees != step:
-            self._direct_turn(degrees - step, fine)
+            self._direct_turn(degrees - step, fine, caller)
 
     def _sleep(self, duration):
         """
@@ -482,7 +494,10 @@ class KeyMouseManager:
 
             # 如果还有剩余时间，将其作为sleep操作插入队首
             if remaining > 0.01:
-                CUS_LOGGER.debug(f"强制操作{operation}，剩余睡眠时间{remaining}秒")
+                caller = operation.get('_caller')
+                display = {key: value for key, value in operation.items() if key != '_caller'}
+                CUS_LOGGER.debug(f"强制操作{display}，剩余睡眠时间{remaining}秒",
+                                 extra={'caller': caller})
                 sleep_operation = {
                     'type': 'sleep',
                     'duration': remaining
@@ -508,8 +523,9 @@ class KeyMouseManager:
         强制操作插到队首，并抢在可中断的 sleep 之前执行。
 
         Args:
-            operation: 操作字典，需自带 force 字段
+            operation: 操作字典，需自带 force 字段；入队时补充 _caller 供执行日志使用
         """
+        operation['_caller'] = get_caller_location()
         if operation['force']:
             self._handle_force_operation(operation)
         else:

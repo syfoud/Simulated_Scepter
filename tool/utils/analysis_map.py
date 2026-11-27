@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from route import PATHS
-from tool.log import CUS_LOGGER
+from tool.log import CUS_LOGGER, get_caller_location
 from tool.utils.image_tool import find_image_in_folder
 from core.common.config import load_runtime_settings
 
@@ -543,7 +543,7 @@ def compute_start_point_from_crop(image, mode=2, th=0.85, return_details=False, 
                 }
             return center
 
-        CUS_LOGGER.warning('角色起始位置：所有槽位均无有效匹配')
+        CUS_LOGGER.warning('角色起始位置：所有槽位均无有效匹配', extra={'caller': get_caller_location()})
         return (None, None) if return_details else None
 
     # mode == 3：中途打开地图界面，头像位于画面中下方，沿用原有灰度 + 掩码流程
@@ -664,7 +664,7 @@ def detect_corner_markers(color_image, matches, mode=2, marker_defs=None, max_di
     for mdef in marker_defs:
         tpl = find_image_in_folder('', mdef['name'])
         if tpl is None:
-            CUS_LOGGER.warning(f'[角标检测] 无法从缓存加载模板: {mdef["name"]}')
+            CUS_LOGGER.warning(f'[角标检测] 无法从缓存加载模板: {mdef["name"]}', extra={'caller': get_caller_location()})
             continue
         if scale != 1.0:
             tpl = cv2.resize(tpl, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -771,7 +771,7 @@ def display_matches(image, matches, path=None, highlight_idx=None, save_path=Non
         alt_path: 备选路径（如替换后的新路径），用不同颜色绘制
     """
     if image is None:
-        CUS_LOGGER.error('没有图像可显示')
+        CUS_LOGGER.error('没有图像可显示', extra={'caller': get_caller_location()})
         return
     vis = image.copy()
     font_path = PATHS["font"] + '/手书体.ttf'

@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from tool.log import CUS_LOGGER
+from tool.log import CUS_LOGGER, get_caller_location
 
 # 全局图像缓存字典，支持嵌套结构
 _image_cache: dict = {}
@@ -119,10 +119,12 @@ def load_all_images_from_directory(directory_path: str = None) -> dict[str, bool
                         success_count += 1
                     else:
                         results_dict[key] = False
-                        CUS_LOGGER.warning(f"无法加载图像记忆切片: {key}")
+                        CUS_LOGGER.warning(f"无法加载图像记忆切片: {key}",
+                                           extra={'caller': get_caller_location()})
                 except Exception as e:
                     results_dict[key] = False
-                    CUS_LOGGER.error(f"加载图像记忆切片时出错 {key}: {str(e)}")
+                    CUS_LOGGER.error(f"加载图像记忆切片时出错 {key}: {str(e)}",
+                                     extra={'caller': get_caller_location()})
         return success_count
 
     results = {}
@@ -172,7 +174,8 @@ def find_image_in_folder(folder_path: str, image_identifier: str, search_subfold
             if part and part in current_dict:
                 current_dict = current_dict[part]
             else:
-                CUS_LOGGER.warning(f"指定的图像记忆切片文件夹不存在: {folder_path}")
+                CUS_LOGGER.warning(f"指定的图像记忆切片文件夹不存在: {folder_path}",
+                                   extra={'caller': get_caller_location()})
                 return None
     else:
         # 空路径，使用根目录
@@ -224,7 +227,7 @@ def find_image_in_folder(folder_path: str, image_identifier: str, search_subfold
     if search_subfolders:
         warning_msg += "及其子文件夹"
     warning_msg += f"中未找到图像: {image_identifier}"
-    CUS_LOGGER.warning(warning_msg)
+    CUS_LOGGER.warning(warning_msg, extra={'caller': get_caller_location()})
     return None
 
 
@@ -283,10 +286,12 @@ def find_image_by_name(image_identifier: str) -> np.ndarray | None:
     result = search_image(_image_cache)
     if result is None:
         # 缓存中未找到，尝试从磁盘加载
-        CUS_LOGGER.warning(f"未在记忆切片缓存中找到 {image_identifier}，尝试从磁盘加载...")
+        CUS_LOGGER.warning(f"未在记忆切片缓存中找到 {image_identifier}，尝试从磁盘加载...",
+                           extra={'caller': get_caller_location()})
         result = _load_image_from_disk(image_identifier)
         if result is None:
-            CUS_LOGGER.error(f"磁盘中未找到图像记忆切片: {image_identifier}")
+            CUS_LOGGER.error(f"磁盘中未找到图像记忆切片: {image_identifier}",
+                             extra={'caller': get_caller_location()})
 
     return result
 
@@ -308,7 +313,8 @@ def _load_image_path(path):
         return image.copy()
     except (OSError, ValueError, cv2.error) as error:
         _path_cache.pop(path, None)
-        CUS_LOGGER.error("加载图像记忆切片失败 %s：%s", path, error)
+        CUS_LOGGER.error("加载图像记忆切片失败 %s：%s", path, error,
+                         extra={'caller': get_caller_location()})
         return None
 
 
@@ -325,7 +331,8 @@ def _load_image_from_disk(image_identifier: str) -> np.ndarray | None:
     global _image_cache, _image_directory
 
     if not _image_directory:
-        CUS_LOGGER.error("记忆切片查询失败，图像目录未初始化")
+        CUS_LOGGER.error("记忆切片查询失败，图像目录未初始化",
+                         extra={'caller': get_caller_location()})
         return None
 
     # 分离文件名和扩展名
@@ -398,9 +405,11 @@ def _load_image_from_disk(image_identifier: str) -> np.ndarray | None:
                 CUS_LOGGER.info(f"成功从磁盘加载图像记忆切片: {image_identifier} -> {relative_path}")
                 return image.copy()
             else:
-                CUS_LOGGER.error(f"无法加载图像记忆切片: {file_path}")
+                CUS_LOGGER.error(f"无法加载图像记忆切片: {file_path}",
+                                 extra={'caller': get_caller_location()})
         except Exception as e:
-            CUS_LOGGER.error(f"加载图像记忆切片时出错 {file_path}: {str(e)}")
+            CUS_LOGGER.error(f"加载图像记忆切片时出错 {file_path}: {str(e)}",
+                             extra={'caller': get_caller_location()})
 
     return None
 
