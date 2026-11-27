@@ -1,5 +1,5 @@
 import threading
 
-VERSION="1.5.63"
+VERSION="1.5.64"
 FILE_LOCK = threading.RLock()
 
