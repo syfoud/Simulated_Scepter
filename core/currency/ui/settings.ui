@@ -67,7 +67,7 @@
         <item>
          <widget class="QPushButton" name="Currency_affix_targets_btn">
           <property name="text">
-           <string>选择…</string>
+           <string>选择词缀…</string>
           </property>
          </widget>
         </item>
@@ -87,6 +87,62 @@
         </property>
        </widget>
       </item>
+      <item row="6" column="0">
+       <widget class="QLabel" name="Currency_strategy_targets_label">
+        <property name="text">
+         <string>目标投资策略（优先选，实时决定退出位面）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="6" column="1">
+       <layout class="QHBoxLayout" name="Currency_strategy_targets_layout">
+        <item>
+         <widget class="QLineEdit" name="Currency_strategy_targets_edit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+          <property name="placeholderText">
+           <string>点击右侧「选择」勾选</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="Currency_strategy_targets_btn">
+          <property name="text">
+           <string>选择目标策略…</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="7" column="0">
+       <widget class="QLabel" name="Currency_strategy_avoid_label">
+        <property name="text">
+         <string>负面投资策略（绝不选，如跨局继承/清场类）：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <layout class="QHBoxLayout" name="Currency_strategy_avoid_layout">
+        <item>
+         <widget class="QLineEdit" name="Currency_strategy_avoid_edit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+          <property name="placeholderText">
+           <string>点击右侧「选择」勾选</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="Currency_strategy_avoid_btn">
+          <property name="text">
+           <string>选择负面策略…</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
     </layout>
    </item>
    <item>
@@ -100,6 +156,51 @@
     <widget class="QCheckBox" name="Currency_gather_mode_checkbox">
      <property name="text">
       <string>开局词缀收集模式（走到词缀界面就记录并重开）</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="Currency_auto_clear_targets_checkbox">
+     <property name="text">
+      <string>刷到目标策略后自动取消勾选（避免它一直压过未解锁图标）</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="Currency_auto_exit_plane_checkbox">
+     <property name="text">
+      <string>按目标策略自动决定退出位面（目标全收完后自动降面，避免空转）</string>
+     </property>
+     <property name="toolTip">
+      <string>佩佩特化：目标里勾了「孪生姵姵」时，只要第 1 面拿到「佩佩驾到 / 佩佩客串 / 溜佩佩」之一，
+本局会自动打到第 3 面终局（孪生姵姵只出现在第 2~3 面，需要场上有佩佩）；
+中途若选到「阿兰接走佩佩」这类会让佩佩离开的策略，特化自动取消，不会再空打。</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="Currency_pepe_plane_boost_checkbox">
+     <property name="text">
+      <string>佩佩特化（默认关）：拿到佩佩就打到第 3 面终局，等「孪生姵姵」</string>
+     </property>
+     <property name="toolTip">
+      <string>开启后：目标里有「孪生姵姵」、且在到达终局面之前拿到「佩佩驾到 / 溜佩佩(±)」，
+本局会自动打到第 3 面（孪生姵姵只在第 2~3 面出现，需要场上有佩佩）。
+中途选到「阿兰接走佩佩」这类让佩佩离开的策略会取消特化。
+另外：佩佩系列策略不会被「自动取消勾选」清掉（「佩佩客串」是负面，照常清）。</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="Currency_pepe_hint_label">
+     <property name="text">
+      <string>佩佩特化是独立开关：关掉时完全按普通目标策略走，不影响其他收集。</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">color: #8a8a8a;</string>
      </property>
     </widget>
    </item>

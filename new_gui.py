@@ -745,6 +745,7 @@ class MainWindow(QMainWindowLog):
         self.recording_keep_long_run_checkbox.setChecked(data.get("recording_keep_long_run", False))
         self.recording_keep_long_run_threshold_input.setText(str(data.get("recording_keep_long_run_threshold", 1.2)))
         self.recording_label_checkbox.setChecked(data.get("record_add_label", False))
+        self.debug_overlay_checkbox.setChecked(data.get("debug_overlay", False))
         for label, value in CAPTURE_BACKEND_CHOICES:
             self.capture_backend_combo.addItem(label, value)
         capture_index = self.capture_backend_combo.findData(data.get("capture_backend", "auto"))
@@ -1005,7 +1006,8 @@ class MainWindow(QMainWindowLog):
         self.debug_group.setVisible(debug_enabled)
         for widget in (self.recording_keep_long_run_checkbox,
                        self.recording_keep_long_run_threshold_input,
-                       self.recording_label_checkbox):
+                       self.recording_label_checkbox,
+                       self.debug_overlay_checkbox):
             widget.setEnabled(debug_enabled)
 
 
@@ -1564,6 +1566,7 @@ class MainWindow(QMainWindowLog):
                 "recording_keep_long_run": self.recording_keep_long_run_checkbox.isChecked(),
                 "recording_keep_long_run_threshold": float(self.recording_keep_long_run_threshold_input.text()),
                 "record_add_label": self.recording_label_checkbox.isChecked(),
+                "debug_overlay": self.debug_overlay_checkbox.isChecked(),
             })
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, "保存失败", f"通用设置无法保存：{error}")
@@ -1662,8 +1665,10 @@ class MainWindow(QMainWindowLog):
     def show_debug_match(self, name, box):
         """把状态机命中的状态与位置画到游戏窗口上方的调试遮罩。
 
-        只有全局调试模式打开时状态机才会发出这个信号，遮罩窗口在首次命中时才创建。
+        遮罩会干扰识别，只有全局调试模式打开且用户勾选识别遮罩开关时才显示，窗口在首次显示时创建。
         """
+        if not self.opt.get("debug_overlay", False):
+            return
         if self.debug_overlay is None:
             self.debug_overlay = DebugOverlay()
         self.debug_overlay.add_mark(name, box)
@@ -1834,6 +1839,9 @@ class MainWindow(QMainWindowLog):
 """
 
 def main(show):
+    # 自提权（runas）启动的实例 cwd 会被重置为 C:\Windows\System32，统一切回项目根目录，
+    # 使相对路径与直接以管理员身份启动时一致。
+    os.chdir(PATHS["root"])
     # 打包版不支持启动参数，避免双击或外部启动参数触发误导性提示。
     startup_args = (
         parse_startup_args([])
@@ -1927,6 +1935,7 @@ def main(show):
             print(f"异常退出，进程已结束,退出代码:{e.code}")
             input("按Enter键退出...")
 if __name__ == "__main__":
-    fault_log_file = open("logs/crash_dump.txt", "w", encoding="utf-8")
+    # 自提权实例的 cwd 是 C:\Windows\System32，崩溃转储按项目 logs 目录解析，不依赖启动目录。
+    fault_log_file = open(os.path.join(PATHS["logs"], "crash_dump.txt"), "w", encoding="utf-8")
     faulthandler.enable(file=fault_log_file)
     main(1)

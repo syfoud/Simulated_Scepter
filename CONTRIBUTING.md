@@ -115,7 +115,7 @@ uv sync
 
 Python 脚本通过 `uv run --no-sync python <脚本路径>` 执行，模块通过 `uv run --no-sync python -m <模块名>` 执行；将占位内容替换为实际目标。先确认相关测试的依赖与副作用，不能直接批量运行会接管键鼠的脚本，也不假定测试框架已经安装。
 
-用 `python -m unittest test.<模块名>` 或 `python -m unittest discover -s test -t .` 运行时才会先导入 `test` 包，从而隔离测试用的用户目录，并把测试日志写成 `test_log_年-月-日-时-分.txt`；直接 `python test/<脚本>.py` 不经过这层隔离。`test/__init__.py` 的 `MANUAL_TESTS` 登记不参与自动发现的手动脚本，这类脚本按原方式单独运行。
+用 `uv run --no-sync python -m unittest test.<模块名>` 或 `uv run --no-sync python -m unittest discover -s test -t .` 运行时才会先导入 `test` 包，从而隔离测试用的用户目录，并把测试日志写成 `test_log_年-月-日-时-分.txt`；直接运行 `test/<脚本>.py` 不经过这层隔离。`test/__init__.py` 的 `MANUAL_TESTS` 登记不参与自动发现的手动脚本，这类脚本按原方式单独运行。
 
 ---
 
@@ -124,8 +124,8 @@ Python 脚本通过 `uv run --no-sync python <脚本路径>` 执行，模块通�
 1. **检查分支与工作区**:先确认已有改动和当前分支，再根据任务需要同步上游；不要自动切换分支或覆盖用户工作。以下同步命令仅在确认分支与工作区允许后执行。
 
    ```bash
-   git checkout main
-   git pull upstream main
+   git checkout master
+   git pull upstream master
    ```
 
 2. **创建功能分支**:每个 PR 对应一个独立分支,分支名使用简短、描述性的名称。
@@ -221,7 +221,7 @@ git commit -m "docs: update installation guide"
 
 ### 提交 PR 前检查清单
 
-- [ ] 代码能通过所有质量检测测试
+- [ ] 代码通过相关测试与静态检查（CI 不覆盖全部实机行为）
 - [ ] 已补充必要的实机测试，并进行人工审查(非纯AI审查,AI做不到的)确认实现无误
 - [ ] 已遵循代码规范和提交信息规范
 - [ ] 已同步上游最新代码并解决冲突

@@ -2039,6 +2039,13 @@
                        </property>
                       </widget>
                      </item>
+                     <item>
+                      <widget class="QCheckBox" name="debug_overlay_checkbox">
+                       <property name="text">
+                        <string>在游戏画面上显示识别遮罩</string>
+                       </property>
+                      </widget>
+                     </item>
                      <property name="leftMargin">
                       <number>18</number>
                      </property>

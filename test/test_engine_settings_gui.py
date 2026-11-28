@@ -298,7 +298,11 @@ class EngineSettingsGuiTests(unittest.TestCase):
         from core.currency.priority_ui import CurrencyPriorityDialog
 
         path = self.paths["Currency"]
-        before = json.loads(path.read_text(encoding="utf-8"))
+        # 保存走 normalize_currency_settings，会把新字段（词缀采集/目标策略等）补成默认值，
+        # 所以基准也按同一套规则规整，否则比较的是"有无新字段"而不是"优先级是否被保留"
+        from core.currency.settings import normalize_currency_settings
+
+        before = normalize_currency_settings(json.loads(path.read_text(encoding="utf-8")))
         dialog = CurrencyPriorityDialog()
         self.addCleanup(dialog.deleteLater)
         values = dialog.collect_current()

@@ -18,6 +18,10 @@ DIFFICULTY_MODES = ("lowest", "top")
 DEFAULT_DIFFICULTY_MODE = "lowest"
 DEFAULT_GATHER_MODE = False
 DEFAULT_MAX_RUNS = 0
+DEFAULT_AUTO_EXIT_PLANE = False
+DEFAULT_AUTO_CLEAR_TARGETS = False
+# 「拿到佩佩就打到第 3 面终局」：默认关闭，需要时在货币战争设置里打开
+DEFAULT_PEPE_PLANE_BOOST = False
 
 
 PRIORITY_KEYS = (
@@ -97,6 +101,30 @@ def normalize_currency_settings(values=None):
         if isinstance(template, str) and isinstance(name, str) and name.strip()
     }
 
+    strategy_targets = values.get("strategy_targets", [])
+    if not isinstance(strategy_targets, list):
+        strategy_targets = []
+    strategy_targets = [n.strip() for n in strategy_targets if isinstance(n, str) and n.strip()]
+    strategy_targets = list(dict.fromkeys(strategy_targets))
+
+    strategy_avoid = values.get("strategy_avoid", [])
+    if not isinstance(strategy_avoid, list):
+        strategy_avoid = []
+    strategy_avoid = [n.strip() for n in strategy_avoid if isinstance(n, str) and n.strip()]
+    strategy_avoid = list(dict.fromkeys(strategy_avoid))
+
+    auto_exit_plane = values.get("auto_exit_plane", DEFAULT_AUTO_EXIT_PLANE)
+    if not isinstance(auto_exit_plane, bool):
+        auto_exit_plane = DEFAULT_AUTO_EXIT_PLANE
+
+    auto_clear_targets = values.get("auto_clear_targets", DEFAULT_AUTO_CLEAR_TARGETS)
+    if not isinstance(auto_clear_targets, bool):
+        auto_clear_targets = DEFAULT_AUTO_CLEAR_TARGETS
+
+    pepe_plane_boost = values.get("pepe_plane_boost", DEFAULT_PEPE_PLANE_BOOST)
+    if not isinstance(pepe_plane_boost, bool):
+        pepe_plane_boost = DEFAULT_PEPE_PLANE_BOOST
+
     gamemode = str(values.get("gamemode", DEFAULT_GAMEMODE)).strip().lower()
     if gamemode not in GAMEMODES:
         gamemode = DEFAULT_GAMEMODE
@@ -121,6 +149,11 @@ def normalize_currency_settings(values=None):
         affix_targets = []
 
     return {
+        "strategy_targets": strategy_targets,
+        "strategy_avoid": strategy_avoid,
+        "auto_exit_plane": auto_exit_plane,
+        "auto_clear_targets": auto_clear_targets,
+        "pepe_plane_boost": pepe_plane_boost,
         "exit_after_plane": exit_plane,
         "exit_if_no_prior": exit_if_no_prior,
         "prior_exit_plane": prior_exit_plane,
